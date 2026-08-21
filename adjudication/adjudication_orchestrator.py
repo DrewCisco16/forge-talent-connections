@@ -35,6 +35,8 @@ No vendor SDK is imported. Supply your own callables:
 from __future__ import annotations
 
 import ast
+import hashlib
+import itertools
 import json
 import math
 import operator
@@ -323,12 +325,311 @@ class Pass:
 
 
 DEFAULT_PASSES = [
-    Pass("p1", "Inversion",              "Enumerate how this could be wrong.",           True),
-    Pass("p2", "FMEA + FTA + FMEDA",     "Build the fault tree; identify necessary causes.", True),
-    Pass("p3", "IDOV",                   "Validate against design requirements.",        True),
-    Pass("p4", "Critical Thinking + TRIZ", "Surface contradictions and resolve them.",   True),
-    Pass("p5", "Bayesian calibration",   "Assign calibrated confidence to survivors.",   False),
+    Pass(
+        "p1",
+        "Inversion Analysis",
+        "Assume the artifact is WRONG. Enumerate every way it could be wrong and "
+        "what would have to be true for each. Do not defend it.",
+        True,
+    ),
+    Pass(
+        "p2",
+        "FMEA + FTA + FMEDA",
+        "Build the failure-mode table; then the fault tree reasoning from effect "
+        "back to necessary cause; then the diagnostic-coverage table. State which "
+        "failure modes are mechanically detectable and which are not.",
+        True,
+    ),
+    Pass(
+        "p3",
+        "IDOV",
+        "Identify, Design, Optimise, Validate. Check the artifact against its "
+        "stated design requirements and name every requirement it fails to meet.",
+        True,
+    ),
+    Pass(
+        "p4",
+        "Critical Skills Thinking + TRIZ + Quality Zero Defects",
+        "Surface the contradictions, resolve them with TRIZ separation "
+        "principles, then run the zero-defects checklist against what remains.",
+        True,
+    ),
+    Pass(
+        "p5",
+        "Bayesian + MCMC",
+        "Assign calibrated posterior confidence to each surviving candidate. "
+        "Sample the posterior and report the interval, never a point estimate.",
+        False,
+    ),
 ]
+"""
+The fixed five-pass framework. Order is part of the design.
+
+Each pass applies a DIFFERENT lens to the SAME artifact. Passes do not consume
+one another's output -- see BLINDING_CONTRACT below -- so the sequence is a
+sequence of independent lenses, not a relay.
+
+Pass 5 is the only non-eliminative stage. A Bayesian posterior never reaches
+zero from a nonzero prior, so MCMC sampling calibrates the survivors; it cannot
+rule a candidate out.
+"""
+
+
+# ===========================================================================
+# 3b. BLINDED SEAT LAYER
+# ===========================================================================
+
+BLINDING_CONTRACT = """
+A seat is shown EXACTLY three things: the artifact under review, the lens for
+the pass it is running, and the output format. It is never shown:
+
+  - any other seat's response, on this pass or any earlier one
+  - any gate verdict (accepted / rejected / escalated)
+  - any candidate's elimination status
+  - the pass number, or which passes have already run
+
+WHY. Showing results is what turns a panel of adversaries into a panel of
+agreers. A seat that sees a prior verdict anchors on it, and the errors it
+makes stop being independent of the errors already in the record. That is the
+mechanism behind the amplification numbers at the top of this module: seats
+that see each other converge, and convergence without independence is
+COLLAPSE, not corroboration.
+
+HOW IT IS ENFORCED. build_blinded_prompt() is the only constructor of seat
+input, and its signature accepts no history parameter of any kind. There is no
+argument through which a prior result could be passed, so the leak cannot be
+introduced by a caller mistake -- only by editing this function, which the
+test suite asserts against.
+
+WHAT THIS COSTS. Blinded seats cannot build on each other. Pass 2 does not
+refine pass 1; it re-examines the same artifact through a different lens. The
+orchestrator -- code, not a model -- is the only component that sees
+everything, and it decides by mechanical gate rather than by vote.
+"""
+
+
+@dataclass(frozen=True)
+class SeatPrompt:
+    """
+    The complete, immutable input to one seat for one pass.
+
+    Frozen so that a prompt cannot be mutated after construction, and so the
+    prompt log is a faithful record of what each seat was actually shown.
+    """
+    pass_id: str
+    pass_name: str
+    seat_id: str
+    artifact: str
+    instruction: str
+
+    def render(self) -> str:
+        return (
+            f"## Lens\n{self.pass_name}\n\n"
+            f"## Instruction\n{self.instruction}\n\n"
+            f"## Artifact under review\n{self.artifact}\n\n"
+            f"## Output format\n"
+            f"One line per claim, and nothing else:\n"
+            f"    CLAIM | <kind> | <warrant> | <text>\n"
+            f"where <kind> is one of: "
+            f"{', '.join(k.value for k in ClaimKind)}\n"
+            f"<warrant> is the mechanically checkable evidence -- an "
+            f"arithmetic expression as '<expr> = <result>', a DOI, a test "
+            f"command, or a JSON payload. Leave it EMPTY only if the claim "
+            f"genuinely has no mechanical warrant; such claims are escalated "
+            f"to a human, never auto-accepted.\n"
+        )
+
+
+def build_blinded_prompt(p: Pass, seat_id: str, artifact: str) -> SeatPrompt:
+    """
+    Construct the only thing a seat is ever shown.
+
+    This signature is the enforcement mechanism for BLINDING_CONTRACT: there is
+    no parameter for prior responses, prior verdicts, or pass history, so no
+    caller can pass them in. Adding such a parameter breaks the blinding and
+    the test suite is written to catch it.
+    """
+    return SeatPrompt(
+        pass_id=p.id,
+        pass_name=p.name,
+        seat_id=seat_id,
+        artifact=artifact,
+        instruction=p.instruction,
+    )
+
+
+@dataclass
+class SeatResponse:
+    seat_id: str
+    pass_id: str
+    raw: str
+    claims: List["Claim"] = field(default_factory=list)
+    error: Optional[str] = None
+
+
+def content_claim_id(kind: ClaimKind, warrant: Optional[str], text: str) -> str:
+    """
+    Content-addressed claim id: two seats that independently make the SAME
+    claim produce the SAME id.
+
+    This is what makes the capture-recapture statistics work. Orchestrator.
+    run_pass registers a detection against the seat BEFORE its duplicate check,
+    so both seats are credited with the catch while the claim is gated once.
+    Seat-scoped ids would make every claim a singleton and inflate the Chao1
+    estimate of what nobody caught.
+    """
+    material = f"{kind.value}|{(warrant or text).strip()}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
+_CLAIM_LINE = re.compile(r"^\s*CLAIM\s*\|([^|]*)\|([^|]*)\|(.*)$", re.IGNORECASE)
+
+
+def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> List["Claim"]:
+    """
+    Reference extractor for the documented output format.
+
+    FAIL-CLOSED: a line that announces itself as a CLAIM but does not parse,
+    or names a kind that does not exist, becomes a JUDGMENT claim with no
+    warrant. JUDGMENT has no applicable gate, so it escalates to a human. A
+    malformed claim is never silently dropped -- dropping it would let a model
+    smuggle an unverified assertion past the gates by writing it badly.
+    """
+    claims: List[Claim] = []
+    for line in raw.splitlines():
+        if not line.strip().upper().startswith("CLAIM"):
+            continue
+        m = _CLAIM_LINE.match(line)
+        if not m:
+            text = line.strip()
+            claims.append(Claim(
+                content_claim_id(ClaimKind.JUDGMENT, None, text),
+                text, ClaimKind.JUDGMENT, None, pass_id, seat_id,
+            ))
+            continue
+        kind_raw, warrant_raw, text = (g.strip() for g in m.groups())
+        try:
+            kind = ClaimKind(kind_raw.lower())
+        except ValueError:
+            claims.append(Claim(
+                content_claim_id(ClaimKind.JUDGMENT, None, line.strip()),
+                line.strip(), ClaimKind.JUDGMENT, None, pass_id, seat_id,
+            ))
+            continue
+        warrant = warrant_raw or None
+        claims.append(Claim(
+            content_claim_id(kind, warrant, text),
+            text, kind, warrant, pass_id, seat_id,
+        ))
+    return claims
+
+
+class BlindedSeatRunner:
+    """
+    Runs every seat on one pass, each in isolation.
+
+    seat_fns : {seat_id -> callable(prompt_text) -> raw_response}
+    extractor: callable(raw, seat_id, pass_id) -> List[Claim]
+
+    prompt_log records every SeatPrompt ever constructed, so an auditor (and
+    the test suite) can verify after the fact that no seat was shown a prior
+    result.
+    """
+
+    def __init__(self, seat_fns: Dict[str, Callable[[str], str]], extractor=line_claim_extractor):
+        if not seat_fns:
+            raise ValueError("at least one seat is required")
+        self.seat_fns = dict(seat_fns)
+        self.extractor = extractor
+        self.prompt_log: List[SeatPrompt] = []
+
+    def run(self, p: Pass, artifact: str) -> List[SeatResponse]:
+        out: List[SeatResponse] = []
+        for seat_id, fn in self.seat_fns.items():
+            prompt = build_blinded_prompt(p, seat_id, artifact)
+            self.prompt_log.append(prompt)
+            try:
+                raw = fn(prompt.render())
+            except Exception as exc:
+                # Fail closed: a seat that errors contributes no claims, and
+                # the failure is recorded rather than silently swallowed.
+                out.append(SeatResponse(seat_id, p.id, "", [], error=str(exc)))
+                continue
+            out.append(SeatResponse(seat_id, p.id, raw, self.extractor(raw, seat_id, p.id)))
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Divergence: disagreement is the expected state, not a failure
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PassDivergence:
+    pass_id: str
+    pass_name: str
+    n_seats: int
+    seats_responding: List[str]
+    seats_errored: List[str]
+    distinct_claim_sets: int
+    mean_pairwise_jaccard: float
+    unanimous: bool
+    collapse_warning: Optional[str] = None
+
+
+def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDivergence:
+    """
+    Quantify how much the blinded seats disagreed on one pass.
+
+    Claims are compared on CONTENT -- (kind, warrant) -- not on seat-assigned
+    labels, so two seats making the same substantive claim register as
+    agreement regardless of wording.
+
+    READING IT: on a non-trivial artifact, unanimity is the alarming result.
+    Independent seats examining custom code through the same lens will not
+    produce identical claim sets; if they do, they are not failing
+    independently, and the whole ensemble is worth roughly one seat. See
+    seat_independence.effective_seats for what that costs.
+    """
+    responding = [r for r in responses if r.error is None]
+    errored = [r.seat_id for r in responses if r.error is not None]
+    sets = [frozenset((c.kind.value, (c.warrant or c.text).strip()) for c in r.claims)
+            for r in responding]
+
+    if len(sets) < 2:
+        return PassDivergence(
+            p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
+            len(set(sets)), float("nan"), False, None,
+        )
+
+    jaccards = []
+    for a, b in itertools.combinations(sets, 2):
+        union = a | b
+        jaccards.append(1.0 if not union else len(a & b) / len(union))
+    mean_j = sum(jaccards) / len(jaccards)
+    unanimous = len(set(sets)) == 1
+
+    warning = None
+    if unanimous:
+        warning = (
+            f"All {len(sets)} seats returned an IDENTICAL claim set on "
+            f"'{p.name}'. On a non-trivial artifact this is a monoculture "
+            f"signal, not a confirmation: independently-failing seats do not "
+            f"agree exactly. Treat the agreement as evidence the seats share a "
+            f"failure mode and the panel is worth ~1 effective seat."
+        )
+    return PassDivergence(
+        p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
+        len(set(sets)), mean_j, unanimous, warning,
+    )
+
+
+@dataclass
+class SequentialPassResult:
+    pass_id: str
+    pass_name: str
+    record: "PassRecord"
+    divergence: PassDivergence
+    responses: List[SeatResponse] = field(default_factory=list)
 
 
 # ===========================================================================
@@ -439,6 +740,7 @@ class Orchestrator:
         self.history: List[PassRecord] = []
         self.detections_by_seat: Dict[str, set] = {}
         self._seen_claims: set = set()
+        self.divergence_by_pass: Dict[str, PassDivergence] = {}
 
     # -- verification -------------------------------------------------------
 
@@ -490,6 +792,47 @@ class Orchestrator:
         self.history.append(rec)
         return rec
 
+    # -- sequential, blinded execution --------------------------------------
+
+    def run_sequential(
+        self,
+        artifact: str,
+        candidates: List[Candidate],
+        runner: "BlindedSeatRunner",
+        passes: Optional[Sequence[Pass]] = None,
+    ) -> List["SequentialPassResult"]:
+        """
+        Run the five passes ONE AT A TIME against a single artifact.
+
+        Each pass: every seat is prompted in isolation via build_blinded_prompt
+        (see BLINDING_CONTRACT), the claims that come back are gated
+        mechanically, and the seats' disagreement is measured and recorded.
+
+        No seat is shown the previous pass's claims, verdicts, eliminations, or
+        the other seats' answers. The passes are sequential in TIME only; they
+        are independent in INFORMATION. That is deliberate -- a relay where
+        pass k+1 reads pass k's conclusions is the topology this module exists
+        to avoid.
+
+        Returns one SequentialPassResult per pass, in order.
+        """
+        chosen = list(passes) if passes is not None else list(self.passes)
+        results: List[SequentialPassResult] = []
+
+        for p in chosen:
+            responses = runner.run(p, artifact)
+            divergence = measure_divergence(p, responses)
+            self.divergence_by_pass[p.id] = divergence
+
+            claims: List[Claim] = []
+            for r in responses:
+                claims.extend(r.claims)
+
+            record = self.run_pass(p, candidates, claims)
+            results.append(SequentialPassResult(p.id, p.name, record, divergence, responses))
+
+        return results
+
     # -- convergence --------------------------------------------------------
 
     def survivors(self, candidates: List[Candidate]) -> List[Candidate]:
@@ -524,6 +867,11 @@ class Orchestrator:
     def report(self) -> Dict[str, Any]:
         return {
             "passes": [vars(r) for r in self.history],
+            "divergence_by_pass": {
+                pid: {
+                    k: v for k, v in vars(d).items()
+                } for pid, d in self.divergence_by_pass.items()
+            },
             "escalation_queue": [
                 {"id": c.id, "text": c.text, "kind": c.kind.value} for c in self.escalation_queue
             ],

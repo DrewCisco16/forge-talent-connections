@@ -860,3 +860,309 @@ class TestDiagnose:
             pass_detections=[("p1", {1, 2})],
         )
         _json.dumps(r)
+
+
+# ===========================================================================
+# 10. THE FIVE-PASS FRAMEWORK, BLINDING, AND DIVERGENCE
+#
+# Three properties are under test here:
+#   (a) the pass framework is exactly the five named lenses, in order;
+#   (b) a seat is never shown a prior result, another seat's answer, or a gate
+#       verdict -- and the blinding is enforced structurally, not by comment;
+#   (c) seat disagreement is measured as a first-class output, and UNANIMITY
+#       is treated as a defect signal rather than as confidence.
+# ===========================================================================
+
+import inspect as _inspect
+
+
+def _seat(text):
+    """A seat that ignores its prompt and returns a fixed response."""
+    return lambda _prompt: text
+
+
+class TestFivePassFramework:
+    def test_exact_names_and_order(self):
+        assert [p.name for p in AO.DEFAULT_PASSES] == [
+            "Inversion Analysis",
+            "FMEA + FTA + FMEDA",
+            "IDOV",
+            "Critical Skills Thinking + TRIZ + Quality Zero Defects",
+            "Bayesian + MCMC",
+        ]
+
+    def test_there_are_exactly_five_passes(self):
+        assert len(AO.DEFAULT_PASSES) == 5
+
+    def test_only_the_fifth_pass_is_non_eliminative(self):
+        # A Bayesian posterior never reaches zero from a nonzero prior, so
+        # pass 5 calibrates survivors and cannot rule a candidate out.
+        assert [p.eliminative for p in AO.DEFAULT_PASSES] == [
+            True, True, True, True, False
+        ]
+
+
+class TestBlinding:
+    def test_prompt_builder_accepts_no_history_parameter(self):
+        """The blinding holds because there is no argument through which a
+        prior result could be passed. Adding one breaks this test, which is
+        the point -- the contract is enforced by the signature, not by a
+        docstring asking callers to behave."""
+        assert list(_inspect.signature(AO.build_blinded_prompt).parameters) == [
+            "p", "seat_id", "artifact",
+        ]
+
+    def test_seat_prompt_is_immutable(self):
+        sp = AO.build_blinded_prompt(AO.DEFAULT_PASSES[0], "s1", "art")
+        with pytest.raises(Exception):
+            sp.artifact = "tampered"
+
+    def test_no_prior_pass_content_reaches_any_later_prompt(self):
+        """The canary: both seats emit a distinctive string on every pass. If
+        any later prompt contained a prior pass's output, the canary would
+        show up in prompt_log."""
+        canary = "CANARY-9f3a-PRIOR-RESULT"
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat(f"CLAIM | arithmetic | 1+1 = 3 | {canary}"),
+            "s2": _seat(f"CLAIM | judgment |  | {canary}"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("clean artifact", [], runner)
+        assert len(runner.prompt_log) == 10          # 5 passes x 2 seats
+        for sp in runner.prompt_log:
+            assert canary not in sp.render()
+
+    def test_gate_verdicts_do_not_reach_any_prompt(self):
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 50 | wrong total"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        # a real verdict was produced on pass 1 ...
+        assert o.history[0].auto_rejected == 1
+        # ... and none of its wording appears in any prompt, on any pass
+        for sp in runner.prompt_log:
+            rendered = sp.render()
+            assert "recomputed" not in rendered
+            assert "eliminated" not in rendered.lower()
+
+    def test_every_seat_on_a_pass_is_shown_identical_text(self):
+        """No seat is handed anything the others were not. Seat
+        differentiation lives in the callables, never in the prompt."""
+        runner = AO.BlindedSeatRunner(
+            {"s1": _seat(""), "s2": _seat(""), "s3": _seat("")}
+        )
+        runner.run(AO.DEFAULT_PASSES[1], "artifact")
+        assert len({sp.render() for sp in runner.prompt_log}) == 1
+
+    def test_prompt_carries_only_the_lens_and_the_artifact(self):
+        sp = AO.build_blinded_prompt(AO.DEFAULT_PASSES[0], "s1", "THE-ARTIFACT")
+        rendered = sp.render()
+        assert "Inversion Analysis" in rendered
+        assert "THE-ARTIFACT" in rendered
+        assert "p1" not in rendered                      # no pass number
+        for other in AO.DEFAULT_PASSES[1:]:              # no other lens
+            assert other.name not in rendered
+
+    def test_runner_requires_at_least_one_seat(self):
+        with pytest.raises(ValueError):
+            AO.BlindedSeatRunner({})
+
+
+class TestSequentialBlindedRun:
+    def test_runs_the_five_passes_in_order_one_at_a_time(self):
+        calls = []
+        runner = AO.BlindedSeatRunner({
+            "s1": lambda prompt: calls.append(prompt)
+            or "CLAIM | arithmetic | 1+1 = 2 | sum",
+        })
+        o = Orchestrator([ArithmeticGate()])
+        results = o.run_sequential("artifact", [], runner)
+        assert [r.pass_name for r in results] == [p.name for p in AO.DEFAULT_PASSES]
+        assert [r.pass_id for r in results] == ["p1", "p2", "p3", "p4", "p5"]
+        assert len(calls) == 5           # one seat, five sequential invocations
+        assert len(o.history) == 5
+
+    def test_a_subset_of_passes_can_be_run(self):
+        runner = AO.BlindedSeatRunner({"s1": _seat("CLAIM | arithmetic | 2+2 = 4 | s")})
+        o = Orchestrator([ArithmeticGate()])
+        results = o.run_sequential("art", [], runner, passes=AO.DEFAULT_PASSES[:2])
+        assert [r.pass_id for r in results] == ["p1", "p2"]
+
+    def test_two_seats_making_the_same_claim_are_both_credited_but_gated_once(self):
+        """Content-addressed ids are what make capture-recapture work: the
+        claim is adjudicated once, but BOTH seats are recorded as having
+        caught it. Seat-scoped ids would make every claim a singleton and
+        inflate the Chao1 estimate of what nobody caught."""
+        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | total")
+        runner = AO.BlindedSeatRunner({"s1": both, "s2": both})
+        o = Orchestrator([ArithmeticGate()])
+        rec = o.run_sequential("art", [], runner, passes=[AO.DEFAULT_PASSES[0]])[0].record
+        assert rec.proposed == 2          # two seats proposed it
+        assert rec.auto_accepted == 1     # the gate ran once
+        cid = AO.content_claim_id(ClaimKind.ARITHMETIC, "12 + 35 = 47", "total")
+        assert o.detections_by_seat["s1"] == {cid}
+        assert o.detections_by_seat["s2"] == {cid}
+        # one error, caught twice -> a doubleton, not two singletons
+        cr = chao1_lower_bound(o.detections_by_seat)
+        assert cr["observed"] == 1.0
+        assert cr["f1_singletons"] == 0.0
+        assert cr["f2_doubletons"] == 1.0
+
+    def test_report_includes_divergence_and_stays_serialisable(self):
+        runner = AO.BlindedSeatRunner({"s1": _seat("CLAIM | arithmetic | 1+1 = 2 | s")})
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("art", [], runner)
+        rep = o.report()
+        assert set(rep["divergence_by_pass"]) == {"p1", "p2", "p3", "p4", "p5"}
+        _json.dumps(rep)
+
+
+class TestDivergenceMeasurement:
+    def test_hand_computed_jaccard_for_two_disagreeing_seats(self):
+        # content keys are (kind, warrant), so:
+        #   s1 = {(arithmetic,"1+1 = 2"), (arithmetic,"2+2 = 4")}
+        #   s2 = {(arithmetic,"2+2 = 4"), (arithmetic,"3+3 = 7")}
+        #   intersection = 1, union = 3 -> Jaccard = 1/3
+        # one pair, so the mean is that same 1/3
+        p = AO.DEFAULT_PASSES[0]
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 1+1 = 2 | a\n"
+                        "CLAIM | arithmetic | 2+2 = 4 | b"),
+            "s2": _seat("CLAIM | arithmetic | 2+2 = 4 | b\n"
+                        "CLAIM | arithmetic | 3+3 = 7 | c"),
+        })
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.mean_pairwise_jaccard == pytest.approx(1 / 3)
+        assert d.distinct_claim_sets == 2
+        assert d.unanimous is False
+        assert d.collapse_warning is None
+
+    def test_hand_computed_jaccard_for_three_seats(self):
+        # A = {x, y}, B = {y, z}, C = {x, y}
+        #   A|B = |{y}| / |{x,y,z}| = 1/3
+        #   A|C = |{x,y}| / |{x,y}|  = 1
+        #   B|C = |{y}| / |{x,y,z}| = 1/3
+        #   mean = (1/3 + 1 + 1/3) / 3 = (5/3)/3 = 5/9
+        p = AO.DEFAULT_PASSES[0]
+        x = "CLAIM | arithmetic | 1+1 = 2 | x"
+        y = "CLAIM | arithmetic | 2+2 = 4 | y"
+        z = "CLAIM | arithmetic | 3+3 = 7 | z"
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat(f"{x}\n{y}"),
+            "s2": _seat(f"{y}\n{z}"),
+            "s3": _seat(f"{x}\n{y}"),
+        })
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.mean_pairwise_jaccard == pytest.approx(5 / 9)
+        assert d.distinct_claim_sets == 2      # s1 and s3 are identical
+        assert d.unanimous is False
+
+    def test_unanimous_seats_raise_a_collapse_warning(self):
+        """Identical claim sets from independent seats is a monoculture
+        signal, not a confirmation."""
+        p = AO.DEFAULT_PASSES[0]
+        same = _seat("CLAIM | arithmetic | 1+1 = 2 | sum")
+        runner = AO.BlindedSeatRunner({"s1": same, "s2": same, "s3": same})
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.unanimous is True
+        assert d.mean_pairwise_jaccard == pytest.approx(1.0)
+        assert d.distinct_claim_sets == 1
+        assert d.collapse_warning is not None
+        assert "monoculture" in d.collapse_warning
+
+    def test_total_disagreement_scores_zero(self):
+        p = AO.DEFAULT_PASSES[0]
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 1+1 = 2 | a"),
+            "s2": _seat("CLAIM | arithmetic | 3+3 = 7 | b"),
+        })
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.mean_pairwise_jaccard == pytest.approx(0.0)
+        assert d.unanimous is False
+
+    def test_a_single_seat_cannot_be_unanimous(self):
+        p = AO.DEFAULT_PASSES[0]
+        runner = AO.BlindedSeatRunner({"only": _seat("CLAIM | arithmetic | 1+1 = 2 | s")})
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.unanimous is False
+        assert math.isnan(d.mean_pairwise_jaccard)
+        assert d.collapse_warning is None
+
+    def test_a_seat_that_raises_is_recorded_not_swallowed(self):
+        def boom(_prompt):
+            raise ConnectionError("seat offline")
+        p = AO.DEFAULT_PASSES[0]
+        runner = AO.BlindedSeatRunner({
+            "good": _seat("CLAIM | arithmetic | 1+1 = 2 | s"),
+            "bad": boom,
+        })
+        responses = runner.run(p, "art")
+        by_seat = {r.seat_id: r for r in responses}
+        assert by_seat["bad"].error is not None
+        assert by_seat["bad"].claims == []
+        assert by_seat["good"].claims
+        d = AO.measure_divergence(p, responses)
+        assert d.n_seats == 2
+        assert d.seats_responding == ["good"]
+        assert d.seats_errored == ["bad"]
+
+
+class TestLineClaimExtractor:
+    def test_parses_the_documented_format(self):
+        claims = AO.line_claim_extractor(
+            "CLAIM | arithmetic | 12 + 35 = 47 | the total", "s1", "p1"
+        )
+        assert len(claims) == 1
+        c = claims[0]
+        assert c.kind is ClaimKind.ARITHMETIC
+        assert c.warrant == "12 + 35 = 47"
+        assert c.text == "the total"
+        assert c.source_seat == "s1" and c.source_pass == "p1"
+
+    def test_prose_around_the_claim_is_ignored(self):
+        raw = "Here is my analysis.\nCLAIM | arithmetic | 1+1 = 2 | sum\nHope that helps!"
+        assert len(AO.line_claim_extractor(raw, "s1", "p1")) == 1
+
+    def test_malformed_claim_line_fails_closed_to_judgment(self):
+        """A line that announces itself as a CLAIM but does not parse becomes
+        a JUDGMENT with no warrant, which has no gate and therefore escalates.
+        Dropping it would let a model smuggle an unverified assertion past the
+        gates by writing it badly."""
+        claims = AO.line_claim_extractor("CLAIM the answer is obviously 42", "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].kind is ClaimKind.JUDGMENT
+        assert claims[0].warrant is None
+
+    def test_unknown_kind_fails_closed_to_judgment(self):
+        claims = AO.line_claim_extractor("CLAIM | telepathy | x | y", "s1", "p1")
+        assert claims[0].kind is ClaimKind.JUDGMENT
+        assert claims[0].warrant is None
+
+    def test_malformed_claim_actually_reaches_the_escalation_queue(self):
+        claims = AO.line_claim_extractor("CLAIM trust me on this one", "s1", "p1")
+        o = Orchestrator([ArithmeticGate()])
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [], claims)
+        assert rec.escalated == 1
+        assert rec.auto_accepted == 0
+        assert len(o.escalation_queue) == 1
+
+    def test_empty_warrant_becomes_none(self):
+        claims = AO.line_claim_extractor(
+            "CLAIM | judgment |  | the framing is sound", "s1", "p1"
+        )
+        assert claims[0].warrant is None
+
+    def test_no_claim_lines_yields_nothing(self):
+        assert AO.line_claim_extractor("I have no claims to make.", "s1", "p1") == []
+
+    def test_identical_claims_from_different_seats_share_an_id(self):
+        a = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 4 | sum", "s1", "p1")[0]
+        b = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 4 | sum", "s2", "p3")[0]
+        assert a.id == b.id
+        assert a.source_seat != b.source_seat
+
+    def test_different_claims_get_different_ids(self):
+        a = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 4 | sum", "s1", "p1")[0]
+        b = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 5 | sum", "s1", "p1")[0]
+        assert a.id != b.id
