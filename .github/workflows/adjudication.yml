@@ -3,11 +3,19 @@ name: adjudication
 # The Cloudflare Pages check publishes the static site; it does not run this
 # suite. Without this workflow the tests gate nothing on push.
 on:
+  # Feature branches are covered by the pull_request trigger. Listing "**" here
+  # too ran the whole job twice on the same SHA -- observed on e6afa9c, run
+  # numbers 1 and 2, both green, both paid for.
   push:
-    branches: ["**"]
+    branches: [main]
     paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
   pull_request:
     paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+
+# A new push supersedes an in-flight run on the same ref.
+concurrency:
+  group: adjudication-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
