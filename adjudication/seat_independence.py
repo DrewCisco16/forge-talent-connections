@@ -1,0 +1,461 @@
+"""
+seat_independence.py
+====================
+Diagnostics for multi-seat / multi-pass LLM adjudication architectures.
+
+PURPOSE
+-------
+Distinguishes ELIMINATIVE convergence (seats with partially independent failure
+modes progressively remove wrong answers; the survivor is true) from COLLAPSE
+convergence (seats share failure modes; passes remove only *detectable*
+wrongness; the survivor is a plausible shared error).
+
+Both produce "one answer left." Only the statistics below tell them apart.
+
+INPUT SCHEMA
+------------
+You need, at minimum, ONE of these two structures:
+
+(A) For independence diagnostics -- a correctness matrix:
+      X : array, shape (n_items, n_seats), dtype int
+      X[i, j] = 1 if seat j got item i CORRECT, 0 if WRONG.
+    Requires items with known ground truth (seeded or held-out).
+
+(B) For capture-recapture -- detection records:
+      detections : dict[seat_id -> set[error_id]]
+      i.e. which seeded errors each seat caught.
+
+Optionally, for the strongest diagnostic:
+      answers : array, shape (n_items, n_seats), dtype object
+      the actual answer each seat gave (not just correct/incorrect),
+      plus `truth` : array, shape (n_items,)
+
+ASSUMPTIONS AND THEIR VIOLATION DIRECTIONS ARE DOCUMENTED PER FUNCTION.
+Read them. Several estimators are BOUNDS, not point estimates, under
+positive error correlation -- which is the expected regime here.
+
+References for the estimators (verify before citing):
+  - Kish design effect (cluster sampling) -> effective_seats()
+  - Lincoln-Petersen / Chapman -> lincoln_petersen()
+  - Chao (1987) Chao1 -> chao1()
+  - Eckhardt & Lee / Littlewood & Miller N-version models -> independence_gap()
+"""
+
+from __future__ import annotations
+
+import itertools
+from collections import Counter
+from dataclasses import dataclass, field
+from typing import Any, Dict, Hashable, List, Sequence, Set, Tuple
+
+import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# 1. ERROR CORRELATION AND EFFECTIVE SEAT COUNT
+# ---------------------------------------------------------------------------
+
+def pairwise_error_correlation(X: np.ndarray) -> np.ndarray:
+    """
+    Phi (Pearson on binary) correlation between seats' ERROR indicators.
+
+    Parameters
+    ----------
+    X : (n_items, n_seats) int array. 1 = correct, 0 = wrong.
+
+    Returns
+    -------
+    (n_seats, n_seats) array of pairwise correlations on the error indicator
+    E = 1 - X. Diagonal is 1.0.
+
+    NOTE: correlation on ERRORS, not on correctness. Two seats that are both
+    highly accurate will correlate on correctness trivially; what matters for
+    redundancy is whether they fail together.
+    """
+    X = np.asarray(X, dtype=float)
+    E = 1.0 - X
+    n_seats = E.shape[1]
+    C = np.eye(n_seats)
+    for a, b in itertools.combinations(range(n_seats), 2):
+        ea, eb = E[:, a], E[:, b]
+        # Guard against zero variance (a seat that never errs, or always errs)
+        if ea.std() == 0 or eb.std() == 0:
+            C[a, b] = C[b, a] = np.nan
+            continue
+        r = float(np.corrcoef(ea, eb)[0, 1])
+        C[a, b] = C[b, a] = r
+    return C
+
+
+def mean_error_correlation(X: np.ndarray) -> float:
+    """Mean off-diagonal pairwise error correlation (rho). NaNs ignored."""
+    C = pairwise_error_correlation(X)
+    n = C.shape[0]
+    off = C[~np.eye(n, dtype=bool)]
+    return float(np.nanmean(off))
+
+
+def effective_seats(n_seats: int, rho: float) -> float:
+    """
+    Kish design effect applied to seat redundancy.
+
+        n_eff = n / (1 + (n - 1) * rho)
+
+    Interpretation: the number of INDEPENDENT seats your correlated ensemble
+    is actually worth. At rho = 0.6 with 5 seats, n_eff ~= 1.47.
+
+    rho <= 0 is clamped to 0 (negative correlation would imply n_eff > n,
+    which is not a claim this function will make without direct evidence).
+    """
+    rho = max(0.0, float(rho))
+    if n_seats <= 1:
+        return float(n_seats)
+    return n_seats / (1.0 + (n_seats - 1) * rho)
+
+
+def conditional_agreement_given_error(
+    answers: Sequence[Sequence[Hashable]],
+    truth: Sequence[Hashable],
+) -> float:
+    """
+    P(two seats give the SAME wrong answer | both are wrong).
+
+    This is the sharpest monoculture diagnostic and the direct analogue of
+    the Kim et al. (2025, ICML) statistic. Compare against the chance
+    baseline you'd expect if wrong answers were drawn independently from the
+    plausible-distractor set.
+
+    Parameters
+    ----------
+    answers : (n_items, n_seats) of answer labels
+    truth   : (n_items,) of correct labels
+
+    Returns
+    -------
+    float in [0, 1]; NaN if no item had two wrong seats.
+
+    READING IT: near 1/k (k = number of plausible distractors) suggests
+    independent failure. Near 0.6+ suggests the seats share a failure mode
+    and are functioning as one channel.
+    """
+    agree = 0
+    both_wrong = 0
+    for row, t in zip(answers, truth):
+        wrong_idx = [j for j, a in enumerate(row) if a != t]
+        for a, b in itertools.combinations(wrong_idx, 2):
+            both_wrong += 1
+            if row[a] == row[b]:
+                agree += 1
+    if both_wrong == 0:
+        return float("nan")
+    return agree / both_wrong
+
+
+# ---------------------------------------------------------------------------
+# 2. CAPTURE-RECAPTURE: HOW MANY ERRORS DID NOBODY CATCH?
+# ---------------------------------------------------------------------------
+
+def lincoln_petersen(n1: int, n2: int, m: int, chapman: bool = True) -> float:
+    """
+    Two-seat capture-recapture estimate of TOTAL error population.
+
+    n1 : errors caught by seat 1
+    n2 : errors caught by seat 2
+    m  : errors caught by BOTH
+
+    chapman=True applies the Chapman bias correction, which is preferred for
+    small samples and is defined when m = 0.
+
+    ASSUMPTION VIOLATION: assumes independent capture. Positive correlation
+    between seats inflates m, which DEFLATES N_hat. Treat the result as a
+    LOWER BOUND on true error count.
+    """
+    if chapman:
+        return ((n1 + 1) * (n2 + 1) / (m + 1)) - 1
+    if m == 0:
+        return float("inf")
+    return n1 * n2 / m
+
+
+def chao1(detections: Dict[Any, Set[Any]]) -> Dict[str, float]:
+    """
+    Chao1 estimator of total error population from k >= 2 seats.
+
+        N_hat = S_obs + f1^2 / (2 * f2)          (f2 > 0)
+        N_hat = S_obs + f1 * (f1 - 1) / 2        (f2 == 0, bias-corrected)
+
+    where
+        S_obs = distinct errors caught by at least one seat
+        f1    = errors caught by EXACTLY ONE seat  ("singletons")
+        f2    = errors caught by EXACTLY TWO seats ("doubletons")
+
+    DIAGNOSTIC READING -- this is the part that matters:
+      A LARGE f1 means many errors were caught by only one seat. That is
+      simultaneously (a) what "each LLM caught what the others missed" feels
+      like from inside, and (b) strong quantitative evidence that MORE errors
+      remain uncaught. The subjective impression of the system working well
+      and the statistical signal of residual risk are the same signal.
+
+    ASSUMPTION VIOLATION: heterogeneous and positively-correlated capture
+    probabilities bias N_hat DOWNWARD. Report as a LOWER BOUND.
+    """
+    counts = Counter()
+    for caught in detections.values():
+        for err in caught:
+            counts[err] += 1
+
+    s_obs = len(counts)
+    f1 = sum(1 for c in counts.values() if c == 1)
+    f2 = sum(1 for c in counts.values() if c == 2)
+
+    if f2 > 0:
+        n_hat = s_obs + (f1 ** 2) / (2 * f2)
+    else:
+        n_hat = s_obs + f1 * (f1 - 1) / 2
+
+    return {
+        "S_obs": float(s_obs),
+        "f1_singletons": float(f1),
+        "f2_doubletons": float(f2),
+        "N_hat_lower_bound": float(n_hat),
+        "estimated_missed": float(n_hat - s_obs),
+        "singleton_fraction": float(f1 / s_obs) if s_obs else float("nan"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 3. PER-PASS MARGINAL YIELD (IS PASS 5 EARNING ITS COMPUTE?)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PassYield:
+    pass_id: Any
+    newly_caught: int
+    cumulative: int
+    marginal_yield: float          # new / total seeded
+    marginal_share: float          # new / cumulative after this pass
+
+
+def marginal_yield_by_pass(
+    pass_detections: List[Tuple[Any, Set[Any]]],
+    total_seeded: int | None = None,
+) -> List[PassYield]:
+    """
+    How many NEW errors each pass caught that no prior pass had caught.
+
+    pass_detections : ordered list of (pass_id, set_of_error_ids)
+                      ORDER MATTERS -- this is a sequential design.
+    total_seeded    : known number of seeded errors, if you have it.
+
+    USE: if marginal_yield -> ~0 by pass 4, pass 5 is not earning its compute
+    and the pass count k should be reduced. Do NOT assume k = 5; measure it.
+
+    CONFOUND WARNING: this is order-dependent. Pass 1 will always look most
+    productive. To separate FRAMEWORK effect from ORDER effect you must
+    randomize pass order across runs and average within framework.
+    """
+    seen: Set[Any] = set()
+    out: List[PassYield] = []
+    for pid, caught in pass_detections:
+        new = caught - seen
+        seen |= caught
+        denom = total_seeded if total_seeded else max(len(seen), 1)
+        out.append(
+            PassYield(
+                pass_id=pid,
+                newly_caught=len(new),
+                cumulative=len(seen),
+                marginal_yield=len(new) / denom,
+                marginal_share=len(new) / max(len(seen), 1),
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 4. SURVIVOR STABILITY (JACKKNIFE ON THE ARCHITECTURE)
+# ---------------------------------------------------------------------------
+
+def leave_one_seat_out_stability(
+    answers: Sequence[Sequence[Hashable]],
+    aggregator,
+) -> Dict[str, Any]:
+    """
+    Re-run the elimination with each seat removed in turn. Does the same
+    answer survive?
+
+    answers    : (n_items, n_seats) answer labels
+    aggregator : callable(list_of_answers_for_one_item) -> surviving answer.
+                 Pass in YOUR elimination logic here.
+
+    THIS IS THE CHEAPEST HIGH-VALUE TEST YOU CAN RUN and it needs no ground
+    truth. If the survivor changes when you drop one seat, the convergence is
+    driven by that seat rather than by elimination, and "only one answer left"
+    is an artifact of the panel composition.
+
+    Returns per-item flip rate and the identity of any decisive seat.
+    """
+    answers = [list(r) for r in answers]
+    n_items = len(answers)
+    n_seats = len(answers[0]) if n_items else 0
+
+    full = [aggregator(r) for r in answers]
+    flips_by_seat = {j: 0 for j in range(n_seats)}
+    flipped_items = {j: [] for j in range(n_seats)}
+
+    for j in range(n_seats):
+        for i, row in enumerate(answers):
+            reduced = [a for k, a in enumerate(row) if k != j]
+            if not reduced:
+                continue
+            if aggregator(reduced) != full[i]:
+                flips_by_seat[j] += 1
+                flipped_items[j].append(i)
+
+    total_flips = sum(flips_by_seat.values())
+    denom = max(n_items * n_seats, 1)
+    decisive = max(flips_by_seat, key=flips_by_seat.get) if n_seats else None
+
+    return {
+        "overall_flip_rate": total_flips / denom,
+        "flips_by_seat": flips_by_seat,
+        "flipped_items_by_seat": flipped_items,
+        "most_decisive_seat": decisive,
+        "interpretation": (
+            "flip_rate near 0 => survivor is robust to panel composition; "
+            "flip_rate high, concentrated on one seat => that seat is driving "
+            "convergence and the ensemble is decorative."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5. INDEPENDENCE GAP (HOW MUCH OF THE THEORETICAL GAIN ARE YOU CAPTURING?)
+# ---------------------------------------------------------------------------
+
+def independence_gap(X: np.ndarray) -> Dict[str, float]:
+    """
+    Compare OBSERVED majority-vote accuracy against the accuracy that WOULD
+    be achieved if seat failures were independent (the "independence line"
+    from N-version programming reliability analysis).
+
+    X : (n_items, n_seats) int, 1 = correct.
+
+    Returns observed accuracy, independence-predicted accuracy, best single
+    seat, and the fraction of the theoretical gain actually captured.
+
+    BENCHMARK: a published 12-model / 224-problem study reported that
+    realized gains stayed BELOW HALF the independence prediction, and that no
+    ensemble beat the best single model. If your capture_fraction is low and
+    ensemble_beats_best_single is False, the ensemble is costing compute for
+    nothing and the frameworks -- not the models -- are doing the work.
+    """
+    X = np.asarray(X, dtype=int)
+    n_items, n_seats = X.shape
+
+    obs_majority = (X.sum(axis=1) > n_seats / 2).mean()
+    per_seat_acc = X.mean(axis=0)
+    best_single = float(per_seat_acc.max())
+
+    # Independence prediction: Poisson-binomial over per-seat accuracies.
+    # P(majority correct) with independent Bernoulli(p_j).
+    probs = np.zeros(n_seats + 1)
+    probs[0] = 1.0
+    for p in per_seat_acc:
+        new = np.zeros_like(probs)
+        for k in range(n_seats, -1, -1):
+            if probs[k] == 0:
+                continue
+            new[k] += probs[k] * (1 - p)
+            if k + 1 <= n_seats:
+                new[k + 1] += probs[k] * p
+        probs = new
+    threshold = int(np.floor(n_seats / 2)) + 1
+    indep_majority = float(probs[threshold:].sum())
+
+    theoretical_gain = indep_majority - best_single
+    observed_gain = float(obs_majority) - best_single
+    capture = (observed_gain / theoretical_gain) if theoretical_gain > 1e-12 else float("nan")
+
+    return {
+        "observed_majority_accuracy": float(obs_majority),
+        "independence_predicted_accuracy": indep_majority,
+        "best_single_seat_accuracy": best_single,
+        "theoretical_gain_over_best_single": float(theoretical_gain),
+        "observed_gain_over_best_single": observed_gain,
+        "capture_fraction": float(capture),
+        "ensemble_beats_best_single": bool(obs_majority > best_single),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6. ONE-CALL REPORT
+# ---------------------------------------------------------------------------
+
+def diagnose(
+    X: np.ndarray | None = None,
+    detections: Dict[Any, Set[Any]] | None = None,
+    pass_detections: List[Tuple[Any, Set[Any]]] | None = None,
+    answers: Sequence[Sequence[Hashable]] | None = None,
+    truth: Sequence[Hashable] | None = None,
+    total_seeded: int | None = None,
+) -> Dict[str, Any]:
+    """Run whichever diagnostics the supplied data supports."""
+    report: Dict[str, Any] = {}
+
+    if X is not None:
+        X = np.asarray(X, dtype=int)
+        rho = mean_error_correlation(X)
+        report["mean_error_correlation_rho"] = rho
+        report["n_seats"] = int(X.shape[1])
+        report["effective_seats"] = effective_seats(X.shape[1], rho)
+        report["independence_gap"] = independence_gap(X)
+
+    if answers is not None and truth is not None:
+        report["conditional_agreement_given_error"] = (
+            conditional_agreement_given_error(answers, truth)
+        )
+
+    if detections is not None:
+        report["capture_recapture"] = chao1(detections)
+
+    if pass_detections is not None:
+        report["marginal_yield_by_pass"] = [
+            vars(p) for p in marginal_yield_by_pass(pass_detections, total_seeded)
+        ]
+
+    return report
+
+
+if __name__ == "__main__":
+    # Illustrative sanity check on SYNTHETIC data.
+    # These numbers demonstrate the estimators run; they are NOT findings
+    # about any real system.
+    rng = np.random.default_rng(7)
+    n_items, n_seats = 400, 5
+
+    # Simulate a correlated-failure regime: a shared latent difficulty factor Z
+    Z = rng.random(n_items) < 0.25          # 25% of items are "shared-hard"
+    X = np.zeros((n_items, n_seats), dtype=int)
+    for j in range(n_seats):
+        p = np.where(Z, 0.35, 0.92)         # all seats struggle on the same items
+        X[:, j] = (rng.random(n_items) < p).astype(int)
+
+    rho = mean_error_correlation(X)
+    print(f"[synthetic] mean error correlation rho = {rho:.3f}")
+    print(f"[synthetic] effective seats (of {n_seats}) = "
+          f"{effective_seats(n_seats, rho):.2f}")
+    gap = independence_gap(X)
+    print(f"[synthetic] observed majority acc  = {gap['observed_majority_accuracy']:.3f}")
+    print(f"[synthetic] independence predicted = {gap['independence_predicted_accuracy']:.3f}")
+    print(f"[synthetic] capture fraction       = {gap['capture_fraction']:.3f}")
+    print(f"[synthetic] beats best single seat = {gap['ensemble_beats_best_single']}")
+
+    det = {
+        "seatA": {1, 2, 3, 7, 9},
+        "seatB": {2, 3, 4, 10},
+        "seatC": {3, 5, 11},
+        "seatD": {1, 3, 6},
+        "seatE": {3, 12},
+    }
+    print("[synthetic] capture-recapture:", chao1(det))

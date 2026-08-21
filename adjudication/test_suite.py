@@ -434,3 +434,429 @@ class TestEndToEnd:
         assert o.survivors(cands)[0].id == "A"
         # one judgment claim remains unresolved -> must warn against committing
         assert o.should_stop(cands)["WARNING"] is not None
+
+
+# ===========================================================================
+# 9. SEAT_INDEPENDENCE — previously uncovered surface
+#
+# Everything below covers seat_independence.py functions the original suite
+# never exercised: chao1, marginal_yield_by_pass, leave_one_seat_out_stability,
+# independence_gap, diagnose, and the non-Chapman m == 0 branch of
+# lincoln_petersen.
+#
+# Every non-obvious expected value is derived in a comment so it can be checked
+# on paper without running the code.
+# ===========================================================================
+
+import json as _json
+import warnings as _warnings
+from collections import Counter as _Counter
+
+
+def _majority(row):
+    """
+    Deterministic majority vote, used as the aggregator in the
+    leave-one-seat-out tests.
+
+    Ties are broken by sorted order rather than by Counter internals, so every
+    expected value below is reproducible by hand.
+    """
+    counts = _Counter(row)
+    top = max(counts.values())
+    return sorted(k for k, v in counts.items() if v == top)[0]
+
+
+class TestChao1SeatIndependence:
+    """seat_independence.chao1 — same estimator as the orchestrator's
+    chao1_lower_bound, different output vocabulary."""
+
+    def test_hand_computed_case(self):
+        # per-error catch counts:
+        #   error 1 caught by a, c  -> 2
+        #   error 2 caught by a     -> 1
+        #   error 3 caught by a, b  -> 2
+        #   error 4 caught by b     -> 1
+        # S_obs = 4, f1 = |{2, 4}| = 2, f2 = |{1, 3}| = 2
+        # f2 > 0, so N_hat = S_obs + f1^2 / (2*f2) = 4 + 4/4 = 5.0
+        # estimated_missed   = 5.0 - 4 = 1.0
+        # singleton_fraction = f1 / S_obs = 2/4 = 0.5
+        r = SI.chao1({"a": {1, 2, 3}, "b": {3, 4}, "c": {1}})
+        assert r["S_obs"] == 4.0
+        assert r["f1_singletons"] == 2.0
+        assert r["f2_doubletons"] == 2.0
+        assert r["N_hat_lower_bound"] == pytest.approx(5.0)
+        assert r["estimated_missed"] == pytest.approx(1.0)
+        assert r["singleton_fraction"] == pytest.approx(0.5)
+
+    def test_key_names_differ_from_the_orchestrator_version(self):
+        """Two implementations of one estimator, with different key names.
+        Pinned so that unifying them later fails loudly instead of silently
+        breaking a caller's lookup."""
+        det = {"a": {1, 2}, "b": {2, 3}}
+        assert set(SI.chao1(det)) != set(chao1_lower_bound(det))
+        assert "S_obs" in SI.chao1(det)
+        assert "observed" in chao1_lower_bound(det)
+        # ...while the underlying number agrees
+        assert SI.chao1(det)["N_hat_lower_bound"] == pytest.approx(
+            chao1_lower_bound(det)["estimated_total_lower_bound"]
+        )
+
+    def test_empty_detections(self):
+        # S_obs = 0 -> f2 == 0 branch -> N_hat = 0 + 0*(0-1)/2 = 0.0
+        # singleton_fraction guards on S_obs == 0 and returns NaN
+        r = SI.chao1({})
+        assert r["S_obs"] == 0.0
+        assert r["N_hat_lower_bound"] == pytest.approx(0.0)
+        assert r["estimated_missed"] == pytest.approx(0.0)
+        assert math.isnan(r["singleton_fraction"])
+
+    def test_single_seat_is_all_singletons(self):
+        # one seat, 3 errors, every count = 1
+        # S_obs = 3, f1 = 3, f2 = 0 -> N_hat = 3 + 3*2/2 = 6.0
+        r = SI.chao1({"only": {1, 2, 3}})
+        assert r["S_obs"] == 3.0
+        assert r["f1_singletons"] == 3.0
+        assert r["f2_doubletons"] == 0.0
+        assert r["N_hat_lower_bound"] == pytest.approx(6.0)
+        assert r["estimated_missed"] == pytest.approx(3.0)
+        assert r["singleton_fraction"] == pytest.approx(1.0)
+
+    def test_all_identical_seats_have_no_singletons(self):
+        # three seats catching exactly the same errors: every count = 3,
+        # so f1 = f2 = 0 and N_hat collapses to S_obs
+        r = SI.chao1({"a": {1, 2, 3}, "b": {1, 2, 3}, "c": {1, 2, 3}})
+        assert r["f1_singletons"] == 0.0
+        assert r["estimated_missed"] == pytest.approx(0.0)
+        assert r["singleton_fraction"] == pytest.approx(0.0)
+
+
+class TestLincolnPetersenPlainBranch:
+    def test_plain_estimator_at_zero_overlap_is_infinite(self):
+        # n1*n2/m is undefined at m = 0; the plain branch returns inf rather
+        # than raising, so callers must test isfinite before using it.
+        assert SI.lincoln_petersen(10, 10, 0, chapman=False) == float("inf")
+
+    def test_chapman_at_zero_overlap_is_hand_computable(self):
+        # (n1+1)(n2+1)/(m+1) - 1 = (11*11)/1 - 1 = 120.0
+        assert SI.lincoln_petersen(10, 10, 0, chapman=True) == pytest.approx(120.0)
+
+
+class TestMarginalYieldByPass:
+    def test_hand_computed_with_known_seed_count(self):
+        # total_seeded = 10 throughout, so marginal_yield = new / 10
+        #
+        #  pass  caught     new         cumulative  yield      share
+        #  p1    {1,2,3}    {1,2,3} = 3     3       3/10 = 0.3  3/3 = 1.0
+        #  p2    {3,4}      {4}     = 1     4       1/10 = 0.1  1/4 = 0.25
+        #  p3    {1,2}      {}      = 0     4       0/10 = 0.0  0/4 = 0.0
+        out = SI.marginal_yield_by_pass(
+            [("p1", {1, 2, 3}), ("p2", {3, 4}), ("p3", {1, 2})], total_seeded=10
+        )
+        assert [p.pass_id for p in out] == ["p1", "p2", "p3"]
+        assert [p.newly_caught for p in out] == [3, 1, 0]
+        assert [p.cumulative for p in out] == [3, 4, 4]
+        assert [p.marginal_yield for p in out] == pytest.approx([0.3, 0.1, 0.0])
+        assert [p.marginal_share for p in out] == pytest.approx([1.0, 0.25, 0.0])
+
+    def test_without_total_seeded_yield_equals_share(self):
+        # The denominator falls back to the running cumulative, which is
+        # exactly what marginal_share divides by, so the two columns coincide.
+        #   p1 {1,2}    new 2, cum 2 -> 2/2 = 1.0
+        #   p2 {2,3,4}  new 2, cum 4 -> 2/4 = 0.5
+        out = SI.marginal_yield_by_pass([("p1", {1, 2}), ("p2", {2, 3, 4})])
+        assert [p.marginal_yield for p in out] == pytest.approx([1.0, 0.5])
+        assert [p.marginal_share for p in out] == pytest.approx([1.0, 0.5])
+
+    def test_total_seeded_zero_is_silently_treated_as_absent(self):
+        """0 is falsy, so the function falls back to the cumulative
+        denominator instead of dividing by zero or rejecting the input.
+        Pinned because the substitution is invisible at the call site."""
+        out = SI.marginal_yield_by_pass([("p1", {1, 2})], total_seeded=0)
+        assert out[0].marginal_yield == pytest.approx(1.0)   # 2/2, not 2/0
+
+    def test_empty_input_returns_empty_list(self):
+        assert SI.marginal_yield_by_pass([]) == []
+
+    def test_single_pass_catching_nothing(self):
+        # new = 0 and cumulative = 0; both denominators are guarded with
+        # max(..., 1), so this is 0.0 rather than ZeroDivisionError
+        out = SI.marginal_yield_by_pass([("p1", set())])
+        assert len(out) == 1
+        assert out[0].newly_caught == 0
+        assert out[0].cumulative == 0
+        assert out[0].marginal_yield == pytest.approx(0.0)
+        assert out[0].marginal_share == pytest.approx(0.0)
+
+    def test_yield_collapses_once_passes_stop_finding_anything(self):
+        # The documented use: if marginal_yield reaches ~0 by pass 4, pass 5
+        # is not earning its compute.
+        #   new per pass: 4, 2, 0, 0, 0
+        out = SI.marginal_yield_by_pass(
+            [("p1", {1, 2, 3, 4}), ("p2", {5, 6}), ("p3", {1, 5}),
+             ("p4", {2}), ("p5", set())],
+            total_seeded=8,
+        )
+        assert [p.newly_caught for p in out] == [4, 2, 0, 0, 0]
+        assert out[0].marginal_yield == pytest.approx(0.5)   # 4/8
+        assert out[-1].marginal_yield == pytest.approx(0.0)
+
+    def test_repeated_pass_adds_nothing(self):
+        # A pass that re-reports an earlier pass's findings has zero marginal
+        # yield -- the whole point of the diagnostic.
+        out = SI.marginal_yield_by_pass([("p1", {1, 2}), ("p2", {1, 2})], total_seeded=4)
+        assert out[1].newly_caught == 0
+        assert out[1].cumulative == 2
+
+
+class TestLeaveOneSeatOutStability:
+    def test_hand_computed_decisive_seat(self):
+        # aggregator = _majority (ties broken by sorted order)
+        #
+        # item 0: ["A","B","C"] -> all count 1 -> sorted first -> "A"
+        #   drop seat 0 -> ["B","C"] -> tie -> "B" != "A"  FLIP
+        #   drop seat 1 -> ["A","C"] -> tie -> "A" == "A"  no flip
+        #   drop seat 2 -> ["A","B"] -> tie -> "A" == "A"  no flip
+        # item 1: ["B","A","A"] -> A=2 -> "A"
+        #   drop seat 0 -> ["A","A"] -> "A"       no flip
+        #   drop seat 1 -> ["B","A"] -> tie -> "A" no flip
+        #   drop seat 2 -> ["B","A"] -> tie -> "A" no flip
+        #
+        # flips_by_seat    = {0: 1, 1: 0, 2: 0}
+        # overall_flip_rate = total_flips / (n_items * n_seats) = 1 / (2*3)
+        r = SI.leave_one_seat_out_stability(
+            [["A", "B", "C"], ["B", "A", "A"]], _majority
+        )
+        assert r["flips_by_seat"] == {0: 1, 1: 0, 2: 0}
+        assert r["flipped_items_by_seat"][0] == [0]
+        assert r["flipped_items_by_seat"][1] == []
+        assert r["flipped_items_by_seat"][2] == []
+        assert r["overall_flip_rate"] == pytest.approx(1 / 6)
+        assert r["most_decisive_seat"] == 0
+
+    def test_unanimous_panel_never_flips(self):
+        # every seat gives the same answer on every item, so dropping any one
+        # of them cannot change the survivor
+        r = SI.leave_one_seat_out_stability(
+            [["A", "A", "A"], ["B", "B", "B"]], _majority
+        )
+        assert r["overall_flip_rate"] == pytest.approx(0.0)
+        assert set(r["flips_by_seat"].values()) == {0}
+        assert r["flipped_items_by_seat"] == {0: [], 1: [], 2: []}
+
+    def test_empty_input(self):
+        # n_items = 0 -> n_seats = 0 -> denominator guarded to 1,
+        # and most_decisive_seat is None rather than a spurious seat 0
+        r = SI.leave_one_seat_out_stability([], _majority)
+        assert r["overall_flip_rate"] == pytest.approx(0.0)
+        assert r["flips_by_seat"] == {}
+        assert r["flipped_items_by_seat"] == {}
+        assert r["most_decisive_seat"] is None
+
+    def test_single_seat_cannot_be_dropped(self):
+        """With one seat the reduced panel is empty and the loop skips, so the
+        flip rate is 0 -- which is NOT evidence of robustness. Note that
+        most_decisive_seat still names seat 0 despite zero flips; pinned as a
+        caveat for anyone reading that field alone."""
+        r = SI.leave_one_seat_out_stability([["A"], ["B"]], _majority)
+        assert r["overall_flip_rate"] == pytest.approx(0.0)
+        assert r["flips_by_seat"] == {0: 0}
+        assert r["most_decisive_seat"] == 0
+
+    def test_every_seat_decisive_gives_flip_rate_one(self):
+        # item 0: ["A","B","C"] -> "A"; dropping seat 0 gives ["B","C"] -> "B"
+        # Build a panel where each of the 3 seats is the tie-break pivot on a
+        # different item, so exactly 1 of 3 drops flips each item.
+        rows = [["A", "B", "C"], ["A", "B", "C"], ["A", "B", "C"]]
+        r = SI.leave_one_seat_out_stability(rows, _majority)
+        # only dropping seat 0 changes the sorted-first survivor, on all 3 items
+        assert r["flips_by_seat"] == {0: 3, 1: 0, 2: 0}
+        assert r["overall_flip_rate"] == pytest.approx(3 / 9)
+
+    def test_interpretation_string_is_returned(self):
+        r = SI.leave_one_seat_out_stability([["A", "A"]], _majority)
+        assert "flip_rate" in r["interpretation"]
+
+
+class TestIndependenceGap:
+    # X rows are items, columns are seats; 1 means that seat got it right.
+
+    def test_hand_computed_collapse_case(self):
+        # Three seats that fail together: identical columns, 3 of 4 correct.
+        #   per-seat accuracy = 3/4 = 0.75 for all three -> best_single = 0.75
+        #   observed majority: row sums 3,3,3,0; > 1.5 on the first three
+        #                      -> 3/4 = 0.75
+        #   independence line: threshold = floor(3/2)+1 = 2
+        #     P(>=2 of 3 correct | p = 0.75 each)
+        #       = 3*(0.75^2)*(0.25) + 0.75^3
+        #       = 3*0.5625*0.25 + 0.421875
+        #       = 0.421875 + 0.421875
+        #       = 0.84375
+        #   theoretical_gain = 0.84375 - 0.75 = 0.09375
+        #   observed_gain    = 0.75    - 0.75 = 0.0
+        #   capture_fraction = 0.0 / 0.09375  = 0.0
+        X = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 0]])
+        g = SI.independence_gap(X)
+        assert g["best_single_seat_accuracy"] == pytest.approx(0.75)
+        assert g["observed_majority_accuracy"] == pytest.approx(0.75)
+        assert g["independence_predicted_accuracy"] == pytest.approx(0.84375)
+        assert g["theoretical_gain_over_best_single"] == pytest.approx(0.09375)
+        assert g["observed_gain_over_best_single"] == pytest.approx(0.0)
+        assert g["capture_fraction"] == pytest.approx(0.0)
+        assert g["ensemble_beats_best_single"] is False
+
+    def test_hand_computed_eliminative_case(self):
+        # Same per-seat accuracy (3/4 each) but the failures are spread so no
+        # two seats miss the same item.
+        #   column sums down: seat0 = 1+1+0+1 = 3, seat1 = 3, seat2 = 3 -> 0.75
+        #   row sums across:  2,2,2,3 -> all > 1.5 -> observed majority = 1.0
+        #   independence line and best_single unchanged (0.84375 / 0.75)
+        #   observed_gain    = 1.0 - 0.75 = 0.25
+        #   capture_fraction = 0.25 / 0.09375 = 8/3 = 2.666...
+        # capture > 1 means the panel beat the independence prediction, i.e.
+        # the errors are anti-correlated rather than merely uncorrelated.
+        X = np.array([[1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]])
+        g = SI.independence_gap(X)
+        assert g["best_single_seat_accuracy"] == pytest.approx(0.75)
+        assert g["observed_majority_accuracy"] == pytest.approx(1.0)
+        assert g["independence_predicted_accuracy"] == pytest.approx(0.84375)
+        assert g["observed_gain_over_best_single"] == pytest.approx(0.25)
+        assert g["capture_fraction"] == pytest.approx(8 / 3)
+        assert g["ensemble_beats_best_single"] is True
+
+    def test_single_seat_has_no_theoretical_gain(self):
+        # n_seats = 1 -> threshold = floor(1/2)+1 = 1 -> P(>=1) = p = 0.75,
+        # which equals best_single, so the gain is 0 and capture is NaN.
+        X = np.array([[1], [1], [0], [1]])
+        g = SI.independence_gap(X)
+        assert g["best_single_seat_accuracy"] == pytest.approx(0.75)
+        assert g["observed_majority_accuracy"] == pytest.approx(0.75)
+        assert g["independence_predicted_accuracy"] == pytest.approx(0.75)
+        assert g["theoretical_gain_over_best_single"] == pytest.approx(0.0)
+        assert math.isnan(g["capture_fraction"])
+        assert g["ensemble_beats_best_single"] is False
+
+    def test_identical_seats_where_majority_rule_actively_hurts(self):
+        # Two identical seats, each 1/2 correct.
+        #   threshold = floor(2/2)+1 = 2, so BOTH must be correct
+        #   P(both correct | p = 0.5 independent) = 0.25
+        # 0.25 is BELOW best_single (0.5), so theoretical_gain = -0.25.
+        # The guard is `theoretical_gain > 1e-12`, which rejects negative as
+        # well as zero -- so capture_fraction is NaN, not a negative ratio.
+        X = np.array([[1, 1], [0, 0]])
+        g = SI.independence_gap(X)
+        assert g["best_single_seat_accuracy"] == pytest.approx(0.5)
+        assert g["observed_majority_accuracy"] == pytest.approx(0.5)
+        assert g["independence_predicted_accuracy"] == pytest.approx(0.25)
+        assert g["theoretical_gain_over_best_single"] == pytest.approx(-0.25)
+        assert math.isnan(g["capture_fraction"])
+        assert g["ensemble_beats_best_single"] is False
+
+    def test_empty_item_set_returns_nan_without_raising(self):
+        """0 items, 3 seats. numpy means over an empty axis are NaN and the
+        function propagates them rather than raising -- but
+        ensemble_beats_best_single still comes back as a plain False, because
+        NaN > NaN is False. That reads like a real verdict, so callers must
+        check for NaN themselves."""
+        X = np.zeros((0, 3), dtype=int)
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore", RuntimeWarning)
+            g = SI.independence_gap(X)
+        assert math.isnan(g["observed_majority_accuracy"])
+        assert math.isnan(g["best_single_seat_accuracy"])
+        assert math.isnan(g["capture_fraction"])
+        assert g["ensemble_beats_best_single"] is False
+
+    def test_perfect_seats_leave_no_room_to_gain(self):
+        # every seat correct on every item: best_single = 1.0, independence
+        # prediction = 1.0, gain = 0 -> capture NaN
+        X = np.ones((5, 3), dtype=int)
+        g = SI.independence_gap(X)
+        assert g["observed_majority_accuracy"] == pytest.approx(1.0)
+        assert g["best_single_seat_accuracy"] == pytest.approx(1.0)
+        assert g["independence_predicted_accuracy"] == pytest.approx(1.0)
+        assert math.isnan(g["capture_fraction"])
+
+
+class TestDiagnose:
+    def test_no_data_returns_an_empty_report(self):
+        assert SI.diagnose() == {}
+
+    def test_hand_computed_effective_seats_from_X(self):
+        # Three seats that are always identical, so every pairwise error
+        # correlation is exactly 1.0 and rho = 1.0.
+        #   effective_seats(3, 1.0) = 3 / (1 + (3-1)*1.0) = 3/3 = 1.0
+        # Three seats that never disagree are worth exactly one seat.
+        X = np.array([[1, 1, 1], [0, 0, 0], [1, 1, 1], [0, 0, 0]])
+        r = SI.diagnose(X=X)
+        assert r["n_seats"] == 3
+        assert r["mean_error_correlation_rho"] == pytest.approx(1.0)
+        assert r["effective_seats"] == pytest.approx(1.0)
+        assert "independence_gap" in r
+
+    def test_X_alone_produces_only_the_X_sections(self):
+        r = SI.diagnose(X=np.array([[1, 0], [0, 1]]))
+        assert set(r) == {
+            "mean_error_correlation_rho", "n_seats",
+            "effective_seats", "independence_gap",
+        }
+
+    def test_detections_alone(self):
+        # same hand-computed Chao1 case as above: N_hat = 5.0
+        r = SI.diagnose(detections={"a": {1, 2, 3}, "b": {3, 4}, "c": {1}})
+        assert set(r) == {"capture_recapture"}
+        assert r["capture_recapture"]["N_hat_lower_bound"] == pytest.approx(5.0)
+
+    def test_pass_detections_are_flattened_to_plain_dicts(self):
+        # diagnose() calls vars() on each PassYield so the report stays
+        # JSON-serialisable.
+        #   p1: new {1,2} = 2 -> 2/4 = 0.5
+        #   p2: new {3}   = 1 -> 1/4 = 0.25
+        r = SI.diagnose(
+            pass_detections=[("p1", {1, 2}), ("p2", {2, 3})], total_seeded=4
+        )
+        rows = r["marginal_yield_by_pass"]
+        assert set(r) == {"marginal_yield_by_pass"}
+        assert all(isinstance(row, dict) for row in rows)
+        assert [row["marginal_yield"] for row in rows] == pytest.approx([0.5, 0.25])
+        _json.dumps(rows)
+
+    def test_answers_without_truth_is_skipped_entirely(self):
+        """Both arguments are required. Supplying one must not half-run the
+        diagnostic or raise."""
+        assert SI.diagnose(answers=[["A", "B"]]) == {}
+        assert SI.diagnose(truth=["A"]) == {}
+
+    def test_answers_with_truth_hand_computed(self):
+        # item 0: truth "A", answers ["X","X"] -> both wrong, they agree
+        # item 1: truth "A", answers ["X","Y"] -> both wrong, they differ
+        # P(same wrong answer | both wrong) = 1 agreeing pair / 2 pairs = 0.5
+        r = SI.diagnose(answers=[["X", "X"], ["X", "Y"]], truth=["A", "A"])
+        assert set(r) == {"conditional_agreement_given_error"}
+        assert r["conditional_agreement_given_error"] == pytest.approx(0.5)
+
+    def test_all_sections_together(self):
+        r = SI.diagnose(
+            X=np.array([[1, 1, 1], [0, 0, 0], [1, 1, 1], [0, 1, 0]]),
+            detections={"a": {1, 2}, "b": {2, 3}},
+            pass_detections=[("p1", {1, 2}), ("p2", {3})],
+            answers=[["X", "X", "A"], ["A", "A", "A"],
+                     ["A", "A", "A"], ["B", "A", "A"]],
+            truth=["A", "A", "A", "A"],
+            total_seeded=5,
+        )
+        assert set(r) == {
+            "mean_error_correlation_rho", "n_seats", "effective_seats",
+            "independence_gap", "conditional_agreement_given_error",
+            "capture_recapture", "marginal_yield_by_pass",
+        }
+
+    def test_report_is_json_serialisable_end_to_end(self):
+        """The whole point of a one-call report is that it can be persisted.
+        independence_gap embeds numpy-derived floats, so this pins that they
+        are cast to plain Python types before they reach the caller."""
+        r = SI.diagnose(
+            X=np.array([[1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]]),
+            detections={"a": {1, 2}, "b": {2, 3}},
+            pass_detections=[("p1", {1, 2})],
+        )
+        _json.dumps(r)
