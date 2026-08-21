@@ -388,20 +388,32 @@ class TestDecayAndStopping:
         assert fit_decay([7]) is None
 
     def test_stop_blocked_while_queue_is_dirty(self):
+        """SOP 9.1 step 8: commit ONLY if the queue is empty. This previously
+        asserted only that a WARNING string existed; the run still reported
+        stop=True. Now it asserts the block itself."""
         o = _orch()
         o.run_pass(ELIM, [], [Claim("j1", "t", ClaimKind.JUDGMENT, None)])
         s = o.should_stop([])
         assert s["escalations_pending"] == 1
         assert s["WARNING"] is not None
         assert "17.2" in s["WARNING"]
+        assert s["stop"] is False
+        assert any("judgment queue" in b for b in s["blockers"])
 
-    def test_stop_triggers_when_candidates_reduced(self):
+    def test_candidate_reduction_alone_does_not_trigger_a_stop(self):
+        """CHANGED against the SOP. This test previously asserted stop is True
+        as soon as the candidate set shrank. SOP 6.3 and 9.1 step 8 make the
+        rule a conjunction -- residual below tolerance AND an empty judgment
+        queue -- and list no candidate-count condition at all. A single pass
+        cannot establish decay, so the run has not converged."""
         o = _orch()
         bad = Claim("b", "t", ClaimKind.ARITHMETIC, "1+1 = 3")
         a, b = Candidate("A", "a", [bad]), Candidate("B", "b", [])
         o.run_pass(ELIM, [a, b], [bad])
         s = o.should_stop([a, b])
-        assert s["stop"] is True and s["surviving_candidates"] == 1
+        assert s["surviving_candidates"] == 1      # the elimination still happened
+        assert s["stop"] is False
+        assert any("not decaying" in x for x in s["blockers"])
 
     def test_report_is_serialisable(self):
         import json
@@ -1380,3 +1392,112 @@ class TestPanelConfiguration:
         assert AO.MAX_RECOMMENDED_SEATS == 3
         v = preflight(0.31, task_is_decomposable=True, requested_seats=5)
         assert v.recommended_seats == 3
+
+
+# ===========================================================================
+# 12. CONFORMANCE TO SOP MANUAL v1.0
+#
+# The manual is the specification; where code and manual disagreed, the manual
+# won. Section references are to "SOP Manual: Automated Disconfirmation
+# Adjudication, Version 1.0, 21 August 2026".
+# ===========================================================================
+
+class TestSOPStopRule:
+    def _run(self, rejects_per_pass, escalations=0, tol=0.5):
+        """Drive history directly so the decay series is exactly specified."""
+        o = Orchestrator([ArithmeticGate()], residual_tolerance=tol)
+        for k, n in enumerate(rejects_per_pass):
+            o.history.append(AO.PassRecord(f"p{k+1}", n, 0, n, 0))
+        for i in range(escalations):
+            o.escalation_queue.append(Claim(f"j{i}", "t", ClaimKind.JUDGMENT, None))
+        return o
+
+    def test_vcy_counts_corrections_not_confirmations(self):
+        """SOP 6.3: 'VCY_k = verified CORRECTIONS found in round k'. A pass that
+        accepted ten true claims and rejected nothing found no corrections; it
+        must not read as a yield of ten."""
+        o = Orchestrator([ArithmeticGate()])
+        o.history.append(AO.PassRecord("p1", 10, 10, 0, 0))   # 10 accepted, 0 rejected
+        o.history.append(AO.PassRecord("p2", 10, 10, 0, 0))
+        s = o.should_stop([])
+        # zero corrections in both passes -> no decay series -> cannot converge
+        assert s["extrapolated_residual"] is None
+        assert any("not decaying" in b for b in s["blockers"])
+
+    def test_decaying_corrections_with_empty_queue_stops(self):
+        # corrections 20, 7, 2.5 -> steep decay, residual well under tolerance
+        o = self._run([20, 7, 2, 1])
+        s = o.should_stop([])
+        assert s["extrapolated_residual"] is not None
+        assert s["extrapolated_residual"] < 0.5
+        assert s["blockers"] == []
+        assert s["stop"] is True
+
+    def test_same_run_with_one_queued_item_does_not_stop(self):
+        """The only difference from the previous test is a single unworked
+        judgment claim. SOP 10 lists an unworked queue as a do-not-build
+        condition."""
+        o = self._run([20, 7, 2, 1], escalations=1)
+        s = o.should_stop([])
+        assert s["extrapolated_residual"] < 0.5      # residual is fine
+        assert s["stop"] is False                    # ...and it still does not stop
+        assert any("judgment queue" in b for b in s["blockers"])
+
+    def test_flat_yields_do_not_stop(self):
+        """SOP 9.2: 'Yields are not decreasing -> Run more passes, do not commit'."""
+        s = self._run([5, 5, 5, 5]).should_stop([])
+        assert s["stop"] is False
+        assert any("not decaying" in b for b in s["blockers"])
+
+    def test_residual_above_tolerance_does_not_stop(self):
+        s = self._run([100, 90, 80, 70], tol=0.5).should_stop([])
+        assert s["stop"] is False
+        assert any("tolerance" in b for b in s["blockers"])
+
+    def test_singleton_alarm_is_uncalibrated_by_default_and_says_so(self):
+        """SOP 9.2 names a high singleton fraction as an abort signal but gives
+        no number, and SOP 8.4 makes thresholds the operator's to set. The
+        module does not invent one; it reports that the check is not armed."""
+        o = self._run([20, 7, 2, 1])
+        o.detections_by_seat = {"s1": {"e1"}, "s2": {"e2"}}   # all singletons
+        s = o.should_stop([])
+        assert s["singleton_alarm_calibrated"] is False
+        assert s["singleton_fraction"] == pytest.approx(1.0)
+        assert s["stop"] is True          # not armed, so not applied
+
+    def test_armed_singleton_alarm_blocks_the_stop(self):
+        o = Orchestrator([ArithmeticGate()], singleton_alarm=0.5)
+        for k, n in enumerate([20, 7, 2, 1]):
+            o.history.append(AO.PassRecord(f"p{k+1}", n, 0, n, 0))
+        o.detections_by_seat = {"s1": {"e1"}, "s2": {"e2"}}
+        s = o.should_stop([])
+        assert s["singleton_alarm_calibrated"] is True
+        assert s["stop"] is False
+        assert any("singleton fraction" in b for b in s["blockers"])
+
+
+class TestPermissiveResolverProbe:
+    """SOP 8.3 names a default-True resolver as the single most common way this
+    build fails, and its checklist requires probing with a fake identifier."""
+
+    def test_permissive_resolver_is_detected(self):
+        r = AO.probe_resolver(lambda i: True)
+        assert r.status is GateStatus.FAIL
+        assert "PERMISSIVE RESOLVER" in r.detail
+
+    def test_correctly_denying_resolver_passes(self):
+        r = AO.probe_resolver(lambda i: i == "10.1038/s42256-026-01268-y")
+        assert r.status is GateStatus.PASS
+
+    def test_raising_resolver_is_acceptable(self):
+        """The gate already fails closed on exceptions, so a resolver that
+        cannot reach the network is safe -- unlike one that guesses True."""
+        def offline(_i):
+            raise ConnectionError("no network")
+        assert AO.probe_resolver(offline).status is GateStatus.PASS
+
+    def test_the_probe_identifier_is_structurally_valid_but_inadmissible_free(self):
+        """The probe must look like a real DOI, or a resolver could reject it on
+        format alone and appear strict when it is not."""
+        assert AO.classify_source(AO.PERMISSIVE_RESOLVER_PROBE) is \
+            AO.SourceClass.PEER_REVIEWED

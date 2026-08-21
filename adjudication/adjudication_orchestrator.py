@@ -263,6 +263,36 @@ class CitationResolutionGate:
         )
 
 
+PERMISSIVE_RESOLVER_PROBE = "10.9999/probe-identifier-that-cannot-exist"
+"""A syntactically valid DOI that resolves nowhere. See probe_resolver."""
+
+
+def probe_resolver(resolver_fn: Callable[[str], bool]) -> GateResult:
+    """
+    SOP 8.3 names the single most common way this build fails: a resolver that
+    returns True by default. Its checklist requires "Resolver returns False on
+    failure -- verified with a fake identifier."
+
+    This performs that check. A resolver that confirms a DOI which cannot exist
+    is permissive, and a permissive resolver silently converts a verified system
+    back into an unverified ensemble. A resolver that RAISES is acceptable: the
+    gate already fails closed on exceptions.
+    """
+    try:
+        answered = resolver_fn(PERMISSIVE_RESOLVER_PROBE)
+    except Exception as exc:
+        return GateResult("resolver_probe", GateStatus.PASS,
+                          f"resolver raised rather than confirming: {exc}")
+    if answered:
+        return GateResult(
+            "resolver_probe", GateStatus.FAIL,
+            "PERMISSIVE RESOLVER: confirmed an identifier that cannot exist. "
+            "The citation gate is inert; every citation will pass.",
+        )
+    return GateResult("resolver_probe", GateStatus.PASS,
+                      "resolver correctly denied a non-existent identifier")
+
+
 class TestExecutionGate:
     """Runs the test command that a code claim asserts will pass."""
     name = "test_execution"
@@ -980,11 +1010,17 @@ class Orchestrator:
         passes: Sequence[Pass] = tuple(DEFAULT_PASSES),
         max_candidates_at_stop: int = 2,
         residual_tolerance: float = 0.5,
+        singleton_alarm: Optional[float] = None,
     ):
         self.gates = list(gates)
         self.passes = list(passes)
         self.max_candidates_at_stop = max_candidates_at_stop
         self.residual_tolerance = residual_tolerance
+        # SOP 9.2 lists 'singleton fraction very high' as an abort signal but
+        # names no number, and SOP 8.4 requires operators to set their own
+        # thresholds. None means UNCALIBRATED: the check is not applied and
+        # the report says so, rather than this module inventing a cutoff.
+        self.singleton_alarm = singleton_alarm
 
         self.escalation_queue: List[Claim] = []
         self.history: List[PassRecord] = []
@@ -1102,24 +1138,71 @@ class Orchestrator:
         return [c for c in candidates if not c.eliminated]
 
     def should_stop(self, candidates: List[Candidate]) -> Dict[str, Any]:
-        yields = [float(r.auto_rejected + r.auto_accepted) for r in self.history]
+        """
+        SOP Manual v1.0 sections 6.3, 9.1 step 8, and 9.2.
+
+        The manual's stop rule is a CONJUNCTION, and the queue is part of it:
+
+            "STOP when R_hat < tolerance AND your judgment queue is empty"   (6.3)
+            "Commit ONLY if the queue is empty AND the residual is below
+             tolerance"                                                      (9.1)
+
+        This method previously returned stop=True whenever EITHER the candidate
+        set had shrunk OR the residual was low, and ignored the escalation queue
+        entirely -- the queue produced an advisory WARNING string that nothing
+        acted on. SOP section 10 lists "you will not work the escalation queue"
+        as a do-not-build condition, because unworked judgment claims are
+        exactly the unverified-ensemble topology this system exists to avoid.
+        A stop decision that ignores the queue is therefore not a weaker
+        version of the rule; it is the failure mode.
+
+        VCY. Section 6.3 defines VCY_k as "verified CORRECTIONS found in round
+        k". A correction is a claim the gates found wrong -- auto_rejected. An
+        auto-accepted claim is a confirmation, not a correction. Feeding
+        accepted claims into the decay fit made a pass that found nothing look
+        maximally productive and kept the residual from ever decaying.
+        """
+        # VCY_k: verified corrections, i.e. gate REJECTIONS (SOP 6.3)
+        yields = [float(r.auto_rejected) for r in self.history]
         residual = residual_estimate(yields)
         alive = len(self.survivors(candidates))
+        queued = len(self.escalation_queue)
 
-        reasons = []
-        if alive <= self.max_candidates_at_stop:
-            reasons.append(f"candidate set reduced to {alive}")
-        if residual is not None and residual < self.residual_tolerance:
-            reasons.append(f"extrapolated residual {residual:.2f} < {self.residual_tolerance}")
+        capture = (chao1_lower_bound(self.detections_by_seat)
+                   if self.detections_by_seat else None)
+        singleton = capture["singleton_fraction"] if capture else float("nan")
+
+        blockers: List[str] = []
+        if queued:
+            blockers.append(
+                f"{queued} unresolved item(s) in the judgment queue (SOP 9.1 step 8)"
+            )
+        if residual is None:
+            blockers.append(
+                "yields are not decaying; convergence not established (SOP 9.2)"
+            )
+        elif residual >= self.residual_tolerance:
+            blockers.append(
+                f"extrapolated residual {residual:.2f} >= tolerance "
+                f"{self.residual_tolerance}"
+            )
+        if (self.singleton_alarm is not None
+                and singleton == singleton               # not NaN
+                and singleton > self.singleton_alarm):
+            blockers.append(
+                f"singleton fraction {singleton:.2f} > {self.singleton_alarm}: "
+                f"seats are not overlapping, more errors likely remain (SOP 9.2)"
+            )
 
         return {
-            "stop": bool(reasons),
-            "reasons": reasons,
+            "stop": not blockers,
+            "blockers": blockers,
             "surviving_candidates": alive,
             "extrapolated_residual": residual,
-            "escalations_pending": len(self.escalation_queue),
-            "capture_recapture": chao1_lower_bound(self.detections_by_seat)
-            if self.detections_by_seat else None,
+            "escalations_pending": queued,
+            "singleton_fraction": singleton,
+            "singleton_alarm_calibrated": self.singleton_alarm is not None,
+            "capture_recapture": capture,
             "WARNING": (
                 "Pending escalations are claims with NO mechanical warrant. "
                 "Committing while the queue is non-empty converts this run into "
