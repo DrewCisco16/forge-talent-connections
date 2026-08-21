@@ -26,6 +26,7 @@ import numpy as np
 import pytest
 
 import adjudication_orchestrator as AO
+import audit_log as AL
 import seat_independence as SI
 from adjudication_orchestrator import (
     ArithmeticGate,
@@ -43,6 +44,7 @@ from adjudication_orchestrator import (
     residual_estimate,
 )
 from adjudication_orchestrator import TestExecutionGate as ExecGate
+from audit_log import AuditChainError, AuditLog, verify_chain_integrity
 
 # ===================================================== 1. INDEPENDENCE MATH
 
@@ -1548,3 +1550,389 @@ class TestGatesFailClosedOnMissingWarrant:
         g = ExecGate(lambda c: called.append(c) or True)
         assert g.check(Claim("c", "t", ClaimKind.CODE_BEHAVIOR, None)).status is GateStatus.FAIL
         assert called == []
+
+
+# ===========================================================================
+# 13. AUDIT LOG  (SOP 8.5; sixteen-test template items 15 and 16)
+#
+# The chain must detect a modified payload, a reordered entry, a spliced
+# entry, a deleted middle entry, and a renumbered sequence. It provably
+# CANNOT detect tail truncation on its own -- that limitation is pinned by
+# test rather than left to the docstring.
+# ===========================================================================
+
+
+
+def _log_with(n=3, clock=None):
+    log = AuditLog("run-001", clock=clock)
+    log.record_artifact("the artifact under review")
+    for i in range(n):
+        log.append("pass", {"pass_id": f"p{i + 1}", "auto_rejected": 3 - i})
+    return log
+
+
+class TestAuditLogCreation:
+    """sixteen-test-template item 15: audit log creation."""
+
+    def test_genesis_entry_is_created_automatically(self):
+        log = AuditLog("run-001")
+        assert len(log) == 1
+        g = log.entries[0]
+        assert g.seq == 0
+        assert g.kind == "genesis"
+        assert g.prev_hash == AL.GENESIS_PREV_HASH
+        assert g.payload["run_id"] == "run-001"
+
+    def test_a_fresh_log_verifies(self):
+        assert AuditLog("run-001").verify().valid is True
+
+    def test_a_populated_log_verifies(self):
+        v = _log_with(3).verify()
+        assert v.valid is True
+        assert v.entries_checked == 5      # genesis + artifact + 3 passes
+        assert v.failures == []
+
+    def test_genesis_kind_is_reserved(self):
+        with pytest.raises(AuditChainError):
+            AuditLog("run-001").append("genesis", {})
+
+    def test_empty_run_id_is_refused(self):
+        with pytest.raises(AuditChainError):
+            AuditLog("")
+
+    def test_entries_view_cannot_be_used_to_append(self):
+        log = AuditLog("run-001")
+        assert isinstance(log.entries, tuple)
+        before = len(log)
+        with pytest.raises(AttributeError):
+            log.entries.append("nope")     # type: ignore[attr-defined]
+        assert len(log) == before
+
+    def test_artifact_is_committed_by_digest_not_by_text(self):
+        """A log of a RED run must not itself become RED."""
+        log = AuditLog("run-001")
+        log.record_artifact("SENSITIVE CLAIM TEXT")
+        p = log.entries[-1].payload
+        assert p["artifact_sha256"] == AL.digest("SENSITIVE CLAIM TEXT")
+        assert "artifact_text" not in p
+        assert "SENSITIVE" not in AL.canonical_json(p)
+
+    def test_full_text_only_on_explicit_opt_in(self):
+        log = AuditLog("run-001")
+        log.record_artifact("green artifact", include_text=True)
+        assert log.entries[-1].payload["artifact_text"] == "green artifact"
+
+
+class TestAuditChainTamperDetection:
+    def _tamper(self, log, idx, **changes):
+        """Replace one entry's payload, leaving every stored hash untouched."""
+        es = list(log.entries)
+        e = es[idx]
+        es[idx] = AL.AuditEntry(e.seq, e.prev_hash, e.kind,
+                                {**e.payload, **changes}, e.entry_hash)
+        return es
+
+    def test_modified_payload_is_detected(self):
+        """sixteen-test-template item 8: tampered payload."""
+        log = _log_with(3)
+        es = self._tamper(log, 2, auto_rejected=999)
+        v = verify_chain_integrity(es)
+        assert v.valid is False
+        assert any("hash mismatch" in f for f in v.failures)
+
+    def test_reordered_entries_are_detected(self):
+        log = _log_with(3)
+        es = list(log.entries)
+        es[2], es[3] = es[3], es[2]
+        v = verify_chain_integrity(es)
+        assert v.valid is False
+        assert any("seq is" in f for f in v.failures)
+        assert any("prev_hash" in f for f in v.failures)
+
+    def test_deleted_middle_entry_is_detected(self):
+        log = _log_with(3)
+        es = [e for i, e in enumerate(log.entries) if i != 2]
+        v = verify_chain_integrity(es)
+        assert v.valid is False
+        assert any("prev_hash" in f for f in v.failures)
+
+    def test_spliced_entry_is_detected(self):
+        log = _log_with(3)
+        es = list(log.entries)
+        forged = AL.AuditEntry(2, es[1].entry_hash, "pass",
+                               {"pass_id": "forged"}, "0" * 64)
+        es.insert(2, forged)
+        v = verify_chain_integrity(es)
+        assert v.valid is False
+
+    def test_renumbered_sequence_is_detected(self):
+        log = _log_with(2)
+        es = list(log.entries)
+        e = es[1]
+        es[1] = AL.AuditEntry(99, e.prev_hash, e.kind, e.payload, e.entry_hash)
+        v = verify_chain_integrity(es)
+        assert v.valid is False
+        assert any("seq is 99" in f for f in v.failures)
+
+    def test_a_valid_chain_reports_its_head(self):
+        log = _log_with(2)
+        v = log.verify()
+        assert v.head == log.head
+        assert bool(v) is True
+
+
+class TestAuditChainTruncation:
+    """The named check: 'verify_chain_integrity (empty-log truncation check)'."""
+
+    def test_empty_log_FAILS_rather_than_passing_vacuously(self):
+        v = verify_chain_integrity([])
+        assert v.valid is False
+        assert v.entries_checked == 0
+        assert v.head is None
+        assert any("empty log" in f for f in v.failures)
+
+    def test_tail_truncation_is_NOT_detectable_by_the_chain_alone(self):
+        """Pinned as a limitation, not asserted as a feature. Entries 0..2 of a
+        five-entry log are a perfectly valid three-entry chain, because nothing
+        inside the chain records how long it was supposed to be."""
+        log = _log_with(3)
+        truncated = list(log.entries)[:3]
+        assert verify_chain_integrity(truncated).valid is True
+
+    def test_tail_truncation_IS_detected_against_a_recorded_head(self):
+        log = _log_with(3)
+        real_head = log.head
+        truncated = list(log.entries)[:3]
+        v = verify_chain_integrity(truncated, expected_head=real_head)
+        assert v.valid is False
+        assert any("tail truncated" in f for f in v.failures)
+
+    def test_tail_truncation_IS_detected_against_a_recorded_length(self):
+        log = _log_with(3)
+        v = verify_chain_integrity(list(log.entries)[:3], expected_length=len(log))
+        assert v.valid is False
+        assert any("truncated" in f for f in v.failures)
+
+    def test_extension_is_also_detected_against_a_recorded_length(self):
+        log = _log_with(3)
+        v = verify_chain_integrity(list(log.entries), expected_length=3)
+        assert v.valid is False
+        assert any("extended" in f for f in v.failures)
+
+    def test_rehashed_tamper_is_self_consistent_but_fails_against_the_head(self):
+        """The strongest attack: edit a payload, then recompute every
+        downstream hash. The chain verifies internally -- only an
+        independently recorded head catches it."""
+        good = _log_with(3)
+        recorded_head = good.head
+
+        forged = AuditLog("run-001")
+        forged.record_artifact("the artifact under review")
+        forged.append("pass", {"pass_id": "p1", "auto_rejected": 0})   # was 3
+        forged.append("pass", {"pass_id": "p2", "auto_rejected": 2})
+        forged.append("pass", {"pass_id": "p3", "auto_rejected": 1})
+
+        assert forged.verify().valid is True                    # internally sound
+        assert forged.head != recorded_head                     # ...but not the same run
+        assert forged.verify(expected_head=recorded_head).valid is False
+
+
+class TestAuditDeterministicReplay:
+    """sixteen-test-template item 16: deterministic replay."""
+
+    def test_two_identical_runs_produce_identical_chains(self):
+        a, b = _log_with(3), _log_with(3)
+        assert a.head == b.head
+        assert a.to_jsonl() == b.to_jsonl()
+
+    def test_replay_recomputes_the_head_from_payloads_alone(self):
+        log = _log_with(3)
+        assert AL.replay(log.entries) == log.head
+
+    def test_replay_of_a_tampered_chain_diverges(self):
+        log = _log_with(3)
+        es = list(log.entries)
+        e = es[2]
+        es[2] = AL.AuditEntry(e.seq, e.prev_hash, e.kind,
+                              {**e.payload, "auto_rejected": 999}, e.entry_hash)
+        assert AL.replay(es) != log.head
+
+    def test_replay_refuses_an_empty_chain(self):
+        with pytest.raises(AuditChainError):
+            AL.replay([])
+
+    def test_the_log_never_reads_a_clock_by_default(self):
+        """Global rule 4: replay mode blocks all nondeterminism. With no clock
+        injected, no entry carries a timestamp and the chain is reproducible."""
+        log = _log_with(2)
+        assert all("at" not in e.payload for e in log.entries)
+
+    def test_an_injected_clock_is_recorded_and_makes_the_run_unique(self):
+        ticks = iter(["2026-08-21T16:00:00Z", "2026-08-21T16:00:01Z",
+                      "2026-08-21T16:00:02Z", "2026-08-21T16:00:03Z"])
+        log = AuditLog("run-001", clock=lambda: next(ticks))
+        log.append("pass", {"pass_id": "p1"})
+        assert log.entries[0].payload["at"] == "2026-08-21T16:00:00Z"
+        assert log.head != AuditLog("run-001").head
+        assert log.verify().valid is True
+
+
+class TestAuditSerialisation:
+    def test_jsonl_round_trip_preserves_the_chain(self):
+        log = _log_with(3)
+        parsed = AuditLog.parse_jsonl(log.to_jsonl())
+        assert [e.to_dict() for e in parsed] == [e.to_dict() for e in log.entries]
+        assert verify_chain_integrity(parsed, expected_head=log.head).valid is True
+
+    def test_blank_lines_are_tolerated(self):
+        log = _log_with(2)
+        assert len(AuditLog.parse_jsonl(log.to_jsonl() + "\n\n")) == len(log)
+
+    def test_malformed_json_fails_closed(self):
+        """sixteen-test-template item 9: malformed payload. A line that will
+        not parse is what a tampered log looks like; it is refused, not
+        skipped."""
+        log = _log_with(1)
+        with pytest.raises(AuditChainError) as exc:
+            AuditLog.parse_jsonl(log.to_jsonl() + "\n{not json")
+        assert "not valid JSON" in str(exc.value)
+
+    @pytest.mark.parametrize("bad,msg", [
+        ({"seq": 0, "prev_hash": "x", "kind": "k"},                "missing required keys"),
+        ({"seq": "0", "prev_hash": "x", "kind": "k",
+          "payload": {}, "entry_hash": "h"},                       "seq must be an integer"),
+        ({"seq": True, "prev_hash": "x", "kind": "k",
+          "payload": {}, "entry_hash": "h"},                       "seq must be an integer"),
+        ({"seq": 0, "prev_hash": "x", "kind": "k",
+          "payload": [], "entry_hash": "h"},                       "payload must be an object"),
+        ({"seq": 0, "prev_hash": 1, "kind": "k",
+          "payload": {}, "entry_hash": "h"},                       "prev_hash must be a string"),
+        ("not-an-object",                                          "not an object"),
+    ])
+    def test_invalid_schema_is_refused_at_the_boundary(self, bad, msg):
+        """sixteen-test-template item 2: invalid schema."""
+        with pytest.raises(AuditChainError) as exc:
+            AL.AuditEntry.from_dict(bad)
+        assert msg in str(exc.value)
+
+    def test_nan_is_scrubbed_so_the_entry_stays_canonicalisable(self):
+        """The diagnostics legitimately return NaN. It reaches the log as null,
+        because NaN is not valid JSON and does not equal itself, so a hash over
+        it would only be reproducible by accident."""
+        log = AuditLog("run-001")
+        log.append("divergence", {"jaccard": float("nan"), "inf": float("inf"),
+                                  "nested": {"x": [1.0, float("nan")]}})
+        p = log.entries[-1].payload
+        assert p["jaccard"] is None
+        assert p["inf"] is None
+        assert p["nested"]["x"] == [1.0, None]
+        AL.canonical_json(p)                       # must not raise
+        assert log.verify().valid is True
+
+    def test_canonical_json_refuses_raw_nan(self):
+        with pytest.raises(ValueError):
+            AL.canonical_json({"x": float("nan")})
+
+
+class TestAuditIntegratedWithARun:
+    def test_a_full_run_writes_artifact_passes_and_stop_decision(self):
+        log = AuditLog("run-e2e")
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 50 | wrong total"),
+            "s2": _seat("CLAIM | judgment |  | framing is sound"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("the artifact", [], runner, audit=log)
+
+        kinds = [e.kind for e in log.entries]
+        assert kinds[0] == "genesis"
+        assert kinds[1] == "artifact"
+        assert kinds.count("pass") == 5
+        assert kinds[-1] == "stop_decision"
+        assert log.verify().valid is True
+
+    def test_the_stop_decision_records_WHY_it_did_not_stop(self):
+        """SOP 9.1 step 8 makes an empty queue a precondition. The reason a run
+        did not stop is the part an auditor needs."""
+        log = AuditLog("run-e2e")
+        runner = AO.BlindedSeatRunner({"s1": _seat("CLAIM | judgment |  | unresolvable")})
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("the artifact", [], runner, audit=log)
+
+        stop = log.entries[-1].payload
+        assert stop["stop"] is False
+        assert stop["escalations_pending"] == 1
+        assert any("judgment queue" in b for b in stop["blockers"])
+
+    def test_pass_entries_carry_gate_outcomes_and_divergence(self):
+        log = AuditLog("run-e2e")
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | ok"),
+            "s2": _seat("CLAIM | arithmetic | 2+2 = 5 | wrong"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("art", [], runner, audit=log, passes=[AO.DEFAULT_PASSES[0]])
+
+        p = next(e.payload for e in log.entries if e.kind == "pass")
+        assert p["pass_name"] == "Inversion Analysis"
+        assert p["proposed"] == 2
+        assert p["auto_accepted"] == 1 and p["auto_rejected"] == 1
+        assert sorted(p["seats_responding"]) == ["s1", "s2"]
+        assert p["unanimous"] is False
+        assert len(p["claims"]) == 2
+
+    def test_a_silent_pass_logs_null_jaccard_not_nan(self):
+        log = AuditLog("run-e2e")
+        runner = AO.BlindedSeatRunner({"only": _seat("")})
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("art", [], runner, audit=log, passes=[AO.DEFAULT_PASSES[0]])
+        p = next(e.payload for e in log.entries if e.kind == "pass")
+        assert p["mean_pairwise_jaccard"] is None
+        assert log.verify().valid is True
+
+    def test_the_run_is_unchanged_when_no_audit_log_is_passed(self):
+        runner = AO.BlindedSeatRunner({"s1": _seat("CLAIM | arithmetic | 2+2 = 4 | ok")})
+        a = Orchestrator([ArithmeticGate()]).run_sequential("art", [], runner)
+        b = Orchestrator([ArithmeticGate()]).run_sequential(
+            "art", [], AO.BlindedSeatRunner({"s1": _seat("CLAIM | arithmetic | 2+2 = 4 | ok")}),
+            audit=AuditLog("r"))
+        assert [r.record.auto_accepted for r in a] == [r.record.auto_accepted for r in b]
+
+
+class TestCommitmentCoversEveryField:
+    """Found by mutation testing: removing seq from compute_entry_hash broke no
+    test, because the explicit `e.seq != i` check in verify still caught
+    renumbering. That is defence in depth right up until someone removes the
+    explicit check believing the hash covers it. These assert the commitment
+    directly, field by field, so each one is independently pinned."""
+
+    BASE: ClassVar[dict[str, object]] = {
+        "seq": 3, "prev_hash": "a" * 64, "kind": "pass", "payload": {"x": 1},
+    }
+
+    def _h(self, **over):
+        d = {**self.BASE, **over}
+        return AL.compute_entry_hash(d["seq"], d["prev_hash"], d["kind"], d["payload"])
+
+    def test_sequence_number_is_part_of_the_commitment(self):
+        assert self._h() != self._h(seq=4)
+
+    def test_predecessor_is_part_of_the_commitment(self):
+        assert self._h() != self._h(prev_hash="b" * 64)
+
+    def test_kind_is_part_of_the_commitment(self):
+        assert self._h() != self._h(kind="stop_decision")
+
+    def test_payload_is_part_of_the_commitment(self):
+        assert self._h() != self._h(payload={"x": 2})
+
+    def test_the_commitment_is_stable_for_identical_input(self):
+        assert self._h() == self._h()
+
+    def test_key_order_does_not_change_the_commitment(self):
+        """Canonicalisation sorts keys, so a re-serialised payload commits
+        identically. Without this, a round trip through any JSON library that
+        reorders keys would look like tampering."""
+        a = AL.compute_entry_hash(1, "c" * 64, "pass", {"alpha": 1, "beta": 2})
+        b = AL.compute_entry_hash(1, "c" * 64, "pass", {"beta": 2, "alpha": 1})
+        assert a == b

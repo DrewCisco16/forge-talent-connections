@@ -1119,6 +1119,7 @@ class Orchestrator:
         candidates: list[Candidate],
         runner: BlindedSeatRunner,
         passes: Sequence[Pass] | None = None,
+        audit: Any = None,
     ) -> list[SequentialPassResult]:
         """
         Run the five passes ONE AT A TIME against a single artifact.
@@ -1138,6 +1139,12 @@ class Orchestrator:
         chosen = list(passes) if passes is not None else list(self.passes)
         results: list[SequentialPassResult] = []
 
+        # SOP 8.5: every run writes an audit record. The artifact is committed
+        # by digest before any seat sees it, so the log proves WHICH artifact
+        # was adjudicated without copying its contents into the record.
+        if audit is not None:
+            audit.record_artifact(artifact)
+
         for p in chosen:
             responses = runner.run(p, artifact)
             divergence = measure_divergence(p, responses)
@@ -1148,7 +1155,13 @@ class Orchestrator:
                 claims.extend(r.claims)
 
             record = self.run_pass(p, candidates, claims)
-            results.append(SequentialPassResult(p.id, p.name, record, divergence, responses))
+            result = SequentialPassResult(p.id, p.name, record, divergence, responses)
+            results.append(result)
+            if audit is not None:
+                audit.record_pass(result)
+
+        if audit is not None:
+            audit.record_stop_decision(self.should_stop(candidates))
 
         return results
 

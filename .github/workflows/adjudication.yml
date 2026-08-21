@@ -52,7 +52,7 @@ jobs:
       - name: Tests with coverage
         run: |
           pytest test_suite.py \
-            --cov=seat_independence --cov=adjudication_orchestrator \
+            --cov=seat_independence --cov=adjudication_orchestrator --cov=audit_log \
             --cov-report=term-missing --cov-fail-under=90
 
       - name: Module demos execute
