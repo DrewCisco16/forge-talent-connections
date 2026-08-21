@@ -1200,3 +1200,183 @@ class TestSilenceIsNotCollapse:
         assert d.all_seats_silent is False
         assert d.mean_pairwise_jaccard == pytest.approx(0.0)
         assert d.collapse_warning is None
+
+
+# ===========================================================================
+# 11. EVIDENCE ADMISSIBILITY AND PANEL CONFIGURATION
+# ===========================================================================
+
+import os as _os
+
+
+class TestSourceAdmissibility:
+    g = AO.SourceAdmissibilityGate()
+
+    def _cite(self, warrant):
+        return Claim("c", "t", ClaimKind.CITATION, warrant)
+
+    @pytest.mark.parametrize("ident,expected", [
+        ("10.1038/s42256-026-01268-y", AO.SourceClass.PEER_REVIEWED),
+        ("PMID: 31452104",             AO.SourceClass.PEER_REVIEWED),
+        ("10.5281/zenodo.1234567",     AO.SourceClass.EMPIRICAL_DATA),
+        ("GSE12345",                   AO.SourceClass.EMPIRICAL_DATA),
+        ("ISO/IEC 27001:2022",         AO.SourceClass.TECHNICAL_MANUAL),
+        ("RFC 8446",                   AO.SourceClass.TECHNICAL_MANUAL),
+        ("NIST SP 800-53",             AO.SourceClass.TECHNICAL_MANUAL),
+        ("ISBN 978-0-262-03384-8",     AO.SourceClass.TECHNICAL_MANUAL),
+        ("https://arxiv.org/abs/2301.00001", AO.SourceClass.PREPRINT),
+    ])
+    def test_structural_classification(self, ident, expected):
+        assert AO.classify_source(ident) is expected
+
+    @pytest.mark.parametrize("ident", [
+        "https://medium.com/@someone/why-i-think-x",
+        "https://en.wikipedia.org/wiki/Bayes_theorem",
+        "https://news.ycombinator.com/item?id=1",
+        "https://vendor.example.com/product",
+        "a colleague told me",
+        "the model said so",
+        "",
+        "   ",
+    ])
+    def test_everything_else_is_inadmissible(self, ident):
+        """Fail closed. There is no 'probably fine' branch."""
+        assert AO.classify_source(ident) is AO.SourceClass.INADMISSIBLE
+        assert self.g.check(self._cite(ident)).status is GateStatus.FAIL
+
+    def test_scholarly_article_passes(self):
+        r = self.g.check(self._cite("10.1038/s42256-026-01268-y"))
+        assert r.status is GateStatus.PASS
+        assert "peer_reviewed" in r.detail
+
+    def test_preprint_is_rejected_by_default(self):
+        r = self.g.check(self._cite("https://arxiv.org/abs/2301.00001"))
+        assert r.status is GateStatus.FAIL
+        assert "not peer-reviewed" in r.detail
+
+    def test_preprint_opt_in_is_recorded_in_the_audit_detail(self):
+        """Admitting a preprint is allowed, but the concession has to be
+        visible in the record rather than buried in configuration."""
+        g = AO.SourceAdmissibilityGate(allow_preprints=True)
+        r = g.check(self._cite("https://arxiv.org/abs/2301.00001"))
+        assert r.status is GateStatus.PASS
+        assert "NOT peer reviewed" in r.detail
+
+    def test_classifier_exception_fails_closed(self):
+        def boom(_ident):
+            raise RuntimeError("registry down")
+        g = AO.SourceAdmissibilityGate(classifier=boom)
+        assert g.check(self._cite("10.1000/x")).status is GateStatus.FAIL
+
+    def test_does_not_apply_to_non_citation_claims(self):
+        assert not self.g.applies_to(Claim("c", "t", ClaimKind.ARITHMETIC, "1+1 = 2"))
+        assert not self.g.applies_to(Claim("c", "t", ClaimKind.CITATION, None))
+
+
+class TestConjunctiveRouting:
+    """A citation must be BOTH admissible in class AND actually resolve.
+    Passing one gate is not passing the other."""
+
+    def _orch(self, resolves):
+        return Orchestrator([
+            AO.SourceAdmissibilityGate(),
+            CitationResolutionGate(lambda i: resolves),
+        ])
+
+    def test_admissible_and_resolving_is_accepted(self):
+        o = self._orch(True)
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [],
+                         [Claim("c", "t", ClaimKind.CITATION, "10.1038/real")])
+        assert rec.auto_accepted == 1
+
+    def test_admissible_but_not_resolving_is_rejected(self):
+        o = self._orch(False)
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [],
+                         [Claim("c", "t", ClaimKind.CITATION, "10.1038/ghost")])
+        assert rec.auto_rejected == 1
+
+    def test_resolving_but_inadmissible_is_rejected(self):
+        """The blog post exists. That is not the question."""
+        o = self._orch(True)
+        claim = Claim("c", "t", ClaimKind.CITATION, "https://medium.com/@x/post")
+        cand = Candidate("A", "answer", [claim])
+        o.run_pass(AO.DEFAULT_PASSES[0], [cand], [claim])
+        assert cand.eliminated is True
+        assert "inadmissible" in cand.elimination_reason
+
+    def test_a_claim_with_no_applicable_gate_still_escalates(self):
+        o = self._orch(True)
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [],
+                         [Claim("j", "t", ClaimKind.JUDGMENT, None)])
+        assert rec.escalated == 1
+
+
+class TestPanelConfiguration:
+    ENV = {
+        "ADJ_SEAT_1_API_KEY": "k1", "ADJ_SEAT_2_API_KEY": "k2",
+        "ADJ_SEAT_3_API_KEY": "k3", "ADJ_SEAT_4_API_KEY": "k4",
+        "ADJ_SEAT_1_MODEL": "m1",
+    }
+
+    def test_five_seats_four_credentials_plus_claude(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        assert len(panel) == 5
+        assert [s.seat_id for s in panel] == [
+            "seat_1", "seat_2", "seat_3", "seat_4", "seat_5_claude"]
+        assert sum(1 for s in panel if not s.in_process) == 4
+        assert panel[-1].in_process is True
+        assert panel[-1].credential() is None
+
+    def test_missing_credential_fails_closed(self):
+        """A four-seat run reported as five misstates rho, effective_seats,
+        and the residual estimate. It must not start."""
+        env = dict(self.ENV)
+        del env["ADJ_SEAT_3_API_KEY"]
+        with pytest.raises(AO.MissingSeatCredential) as exc:
+            AO.load_panel(env=env)
+        assert "ADJ_SEAT_3_API_KEY" in str(exc.value)
+
+    def test_blank_credential_is_treated_as_missing(self):
+        env = dict(self.ENV)
+        env["ADJ_SEAT_2_API_KEY"] = "   "
+        with pytest.raises(AO.MissingSeatCredential):
+            AO.load_panel(env=env)
+
+    def test_all_missing_credentials_are_reported_at_once(self):
+        with pytest.raises(AO.MissingSeatCredential) as exc:
+            AO.load_panel(env={})
+        msg = str(exc.value)
+        assert all(f"ADJ_SEAT_{i}_API_KEY" in msg for i in (1, 2, 3, 4))
+
+    def test_credential_never_appears_in_repr(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        for seat in panel:
+            assert "k1" not in repr(seat)
+            assert "k1" not in str(seat)
+            assert "k1" not in f"{seat}"
+        assert panel[0].credential() == "k1"      # explicit accessor still works
+
+    def test_spec_has_no_field_that_could_hold_a_secret(self):
+        """SeatSpec carries the NAME of an environment variable and nothing
+        else. There is no field a credential could be pasted into, so a key
+        cannot reach source control through this dataclass."""
+        import dataclasses
+        fields = {f.name for f in dataclasses.fields(AO.SeatSpec)}
+        assert fields == {"seat_id", "api_key_env", "model_env"}
+        for spec in AO.PANEL_OF_FIVE[:4]:
+            assert spec.api_key_env.startswith("ADJ_SEAT_")
+            assert spec.api_key_env.endswith("_API_KEY")
+
+    def test_load_panel_defaults_to_the_process_environment(self):
+        """Default source is os.environ; the suite must not depend on it
+        being populated, so this only checks the wiring."""
+        assert AO.load_panel.__defaults__[1] is None
+        assert _os.environ is not None
+
+    def test_preflight_cap_is_not_silently_raised_by_the_five_seat_panel(self):
+        """PANEL_OF_FIVE is a deliberate override of this module's own
+        recommendation. preflight must still say 3."""
+        assert len(AO.PANEL_OF_FIVE) == 5
+        assert AO.MAX_RECOMMENDED_SEATS == 3
+        v = preflight(0.31, task_is_decomposable=True, requested_seats=5)
+        assert v.recommended_seats == 3

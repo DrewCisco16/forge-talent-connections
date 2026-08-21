@@ -40,6 +40,7 @@ import itertools
 import json
 import math
 import operator
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -305,6 +306,131 @@ class SchemaGate:
         return GateResult(self.name, GateStatus.PASS, "schema valid")
 
 
+# ---------------------------------------------------------------------------
+# Evidence admissibility: what may count as a warrant at all
+# ---------------------------------------------------------------------------
+
+class SourceClass(str, Enum):
+    PEER_REVIEWED = "peer_reviewed"        # scholarly article, published
+    EMPIRICAL_DATA = "empirical_data"      # dataset with provenance
+    TECHNICAL_MANUAL = "technical_manual"  # standard, specification, manual
+    PRIMARY_SOURCE = "primary_source"      # source literature, filings, records
+    PREPRINT = "preprint"                  # NOT peer reviewed
+    INADMISSIBLE = "inadmissible"
+
+
+ADMISSIBLE_CLASSES = frozenset({
+    SourceClass.PEER_REVIEWED,
+    SourceClass.EMPIRICAL_DATA,
+    SourceClass.TECHNICAL_MANUAL,
+    SourceClass.PRIMARY_SOURCE,
+})
+"""
+The only evidence classes that may support a claim: scholarly articles,
+empirical data, technical manuals, and primary source literature.
+
+PREPRINT is deliberately excluded. A preprint has not cleared peer review, so
+it is not a scholarly article in the sense this gate enforces; admitting one
+requires an explicit opt-in at construction, recorded in the gate's detail.
+"""
+
+_DATA_REPOSITORIES = ("zenodo", "dryad", "figshare", "osf.io", "icpsr",
+                      "datadryad", "pangaea", "dataverse")
+_PREPRINT_HOSTS = ("arxiv", "biorxiv", "medrxiv", "ssrn", "chemrxiv", "psyarxiv")
+_STANDARD_BODIES = ("ISO", "IEC", "IEEE", "RFC", "NIST", "ASTM", "ANSI",
+                    "MIL-STD", "ETSI", "ITU", "BS", "DIN", "SAE")
+
+_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
+_PMID_RE = re.compile(r"^PMID:\s*\d+$", re.IGNORECASE)
+_ISBN_RE = re.compile(r"^ISBN(?:-1[03])?:?\s*[\d\- ]{9,17}[\dXx]$", re.IGNORECASE)
+_STD_RE = re.compile(r"^(" + "|".join(_STANDARD_BODIES) + r")[\s\-/:]", re.IGNORECASE)
+_ACCESSION_RE = re.compile(r"^(GSE|SRR|PRJNA|E-MTAB|PDB)[-_]?\w+$", re.IGNORECASE)
+
+
+def classify_source(identifier: str) -> SourceClass:
+    """
+    Classify an evidence identifier by structure alone. No network call.
+
+    FAIL CLOSED: anything this function cannot positively place in an
+    admissible class is INADMISSIBLE. There is no "probably fine" branch. A
+    blog post, a vendor landing page, a wiki, a forum thread, a chat
+    transcript, and an unsupported model assertion all land in the same
+    bucket, which is the point -- none of them is source literature.
+    """
+    ident = (identifier or "").strip()
+    if not ident:
+        return SourceClass.INADMISSIBLE
+
+    low = ident.lower()
+
+    if any(h in low for h in _PREPRINT_HOSTS):
+        return SourceClass.PREPRINT
+    if _STD_RE.match(ident):
+        return SourceClass.TECHNICAL_MANUAL
+    if _ISBN_RE.match(ident):
+        return SourceClass.TECHNICAL_MANUAL
+    if _ACCESSION_RE.match(ident):
+        return SourceClass.EMPIRICAL_DATA
+    if _PMID_RE.match(ident):
+        return SourceClass.PEER_REVIEWED
+    if _DOI_RE.match(ident):
+        # a DOI minted by a data repository is data, not an article
+        if any(r in low for r in _DATA_REPOSITORIES):
+            return SourceClass.EMPIRICAL_DATA
+        return SourceClass.PEER_REVIEWED
+    return SourceClass.INADMISSIBLE
+
+
+class SourceAdmissibilityGate:
+    """
+    Enforces the evidence rule: only scholarly articles, empirical data,
+    technical manuals, and primary source literature may support a claim.
+
+    This gate decides ADMISSIBILITY, not existence. Pair it with
+    CitationResolutionGate, which decides whether the thing actually resolves.
+    Both apply to CITATION claims and Orchestrator._route requires every
+    applicable gate to pass, so a citation must be both admissible in class
+    and confirmed to exist.
+
+    allow_preprints=True admits PREPRINT and records that it was admitted by
+    explicit opt-in, so the concession is visible in the audit record rather
+    than buried in a config file.
+    """
+    name = "source_admissibility"
+
+    def __init__(self, allow_preprints: bool = False,
+                 classifier: Callable[[str], SourceClass] = classify_source):
+        self.allow_preprints = allow_preprints
+        self.classifier = classifier
+
+    def applies_to(self, claim: Claim) -> bool:
+        return claim.kind is ClaimKind.CITATION and bool(claim.warrant)
+
+    def check(self, claim: Claim) -> GateResult:
+        try:
+            cls = self.classifier(claim.warrant.strip())
+        except Exception as exc:
+            return GateResult(self.name, GateStatus.FAIL, f"classifier error: {exc}")
+
+        if cls in ADMISSIBLE_CLASSES:
+            return GateResult(self.name, GateStatus.PASS, f"admissible: {cls.value}")
+        if cls is SourceClass.PREPRINT and self.allow_preprints:
+            return GateResult(
+                self.name, GateStatus.PASS,
+                "preprint admitted by explicit opt-in; NOT peer reviewed",
+            )
+        if cls is SourceClass.PREPRINT:
+            return GateResult(
+                self.name, GateStatus.FAIL,
+                "preprint is not peer-reviewed; set allow_preprints to admit it",
+            )
+        return GateResult(
+            self.name, GateStatus.FAIL,
+            "inadmissible source: not a scholarly article, empirical dataset, "
+            "technical manual, or primary source",
+        )
+
+
 # ===========================================================================
 # 3. PASSES
 # ===========================================================================
@@ -560,6 +686,121 @@ class BlindedSeatRunner:
 
 
 # ---------------------------------------------------------------------------
+# Panel configuration: five seats, four external credentials plus Claude
+# ---------------------------------------------------------------------------
+
+class MissingSeatCredential(RuntimeError):
+    """Raised when a configured seat has no credential in the environment."""
+
+
+@dataclass(frozen=True)
+class SeatSpec:
+    """
+    Declares one seat. Holds the NAME of the environment variable carrying the
+    credential, never the credential itself -- nothing in this module reads a
+    key into a default argument, a class attribute, or a repr.
+
+    api_key_env=None marks the in-process Claude seat, which is reached through
+    the host session rather than an outbound API key.
+    """
+    seat_id: str
+    api_key_env: Optional[str]
+    model_env: Optional[str] = None
+
+
+PANEL_OF_FIVE = (
+    SeatSpec("seat_1", "ADJ_SEAT_1_API_KEY", "ADJ_SEAT_1_MODEL"),
+    SeatSpec("seat_2", "ADJ_SEAT_2_API_KEY", "ADJ_SEAT_2_MODEL"),
+    SeatSpec("seat_3", "ADJ_SEAT_3_API_KEY", "ADJ_SEAT_3_MODEL"),
+    SeatSpec("seat_4", "ADJ_SEAT_4_API_KEY", "ADJ_SEAT_4_MODEL"),
+    SeatSpec("seat_5_claude", None, "ADJ_SEAT_5_MODEL"),
+)
+"""
+Five seats: four reached by outbound API key, plus Claude in-process.
+
+CONFLICT WITH MAX_RECOMMENDED_SEATS. This module caps preflight at three seats
+and its own docstring places five past the knee of the turn-count curve. A
+five-seat panel is therefore a deliberate override of this module's own
+recommendation, not a configuration it endorses. preflight() still returns 3;
+nothing here silently raises that cap.
+
+CONFLICT WITH THE ORCHESTRATOR CONTRACT. The orchestrator is code, not a model.
+If the Claude session that runs the orchestrator is ALSO seat 5, that seat is
+not blind to the run: it can see the gate verdicts the orchestrator computes.
+Its errors are then correlated with the adjudication itself, which is the exact
+failure the blinding exists to prevent. Seat 5 must be a separate session or
+call with no visibility into orchestrator state, or the panel is four blind
+seats plus one that is not.
+"""
+
+
+class ResolvedSeat:
+    """A seat with its credential resolved. The credential never appears in
+    repr(), str(), or a formatted log line."""
+
+    __slots__ = ("seat_id", "model", "_secret", "in_process")
+
+    def __init__(self, seat_id: str, model: Optional[str],
+                 secret: Optional[str], in_process: bool = False):
+        self.seat_id = seat_id
+        self.model = model
+        self._secret = secret
+        self.in_process = in_process
+
+    def credential(self) -> Optional[str]:
+        """Explicit accessor. Reading a secret should look like reading a
+        secret at the call site."""
+        return self._secret
+
+    def __repr__(self) -> str:
+        held = "in-process" if self.in_process else (
+            "set" if self._secret else "MISSING")
+        return (f"ResolvedSeat(seat_id={self.seat_id!r}, "
+                f"model={self.model!r}, credential=<{held}>)")
+
+    __str__ = __repr__
+
+
+def load_panel(
+    specs: Sequence[SeatSpec] = PANEL_OF_FIVE,
+    env: Optional[Dict[str, str]] = None,
+) -> List[ResolvedSeat]:
+    """
+    Resolve every seat's credential from the environment.
+
+    FAIL CLOSED: a missing or blank credential raises MissingSeatCredential.
+    The panel does not quietly run short. Seat count is an input to
+    effective_seats, to the Chao1 estimate, and to what the residual
+    extrapolation means, so a four-seat run reported as a five-seat run
+    misstates every downstream number.
+
+    env defaults to os.environ; pass a dict to test without touching the
+    process environment.
+    """
+    source = os.environ if env is None else env
+    resolved: List[ResolvedSeat] = []
+    missing: List[str] = []
+
+    for spec in specs:
+        model = source.get(spec.model_env) if spec.model_env else None
+        if spec.api_key_env is None:
+            resolved.append(ResolvedSeat(spec.seat_id, model, None, in_process=True))
+            continue
+        secret = source.get(spec.api_key_env, "")
+        if not secret.strip():
+            missing.append(spec.api_key_env)
+            continue
+        resolved.append(ResolvedSeat(spec.seat_id, model, secret))
+
+    if missing:
+        raise MissingSeatCredential(
+            "seat credentials absent from the environment: "
+            + ", ".join(sorted(missing))
+        )
+    return resolved
+
+
+# ---------------------------------------------------------------------------
 # Divergence: disagreement is the expected state, not a failure
 # ---------------------------------------------------------------------------
 
@@ -754,10 +995,23 @@ class Orchestrator:
     # -- verification -------------------------------------------------------
 
     def _route(self, claim: Claim) -> Optional[GateResult]:
-        for gate in self.gates:
-            if gate.applies_to(claim):
-                return gate.check(claim)
-        return None  # no mechanical warrant -> escalate
+        """
+        Every applicable gate must pass. The first FAIL decides.
+
+        Conjunctive rather than first-match-wins: a citation is subject to both
+        SourceAdmissibilityGate (is this class of evidence allowed at all?) and
+        CitationResolutionGate (does it actually resolve?), and passing one is
+        not passing the other. Returns None only when NO gate applies, which
+        routes the claim to the human escalation queue.
+        """
+        applicable = [g for g in self.gates if g.applies_to(claim)]
+        if not applicable:
+            return None  # no mechanical warrant -> escalate
+        results = [g.check(claim) for g in applicable]
+        for r in results:
+            if r.status is not GateStatus.PASS:
+                return r
+        return results[0]
 
     def run_pass(
         self,
