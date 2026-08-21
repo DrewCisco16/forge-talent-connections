@@ -1,0 +1,41 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# BLE001 stays ENABLED. The blind excepts in this package are the fail-closed
+# handlers required by SOP Manual v1.1 -- every one carries a local noqa naming
+# the reason, so a new unjustified one is still reported.
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "RUF", "FURB", "PLR", "SIM", "C4"]
+ignore = [
+    "E501",     # line length is handled by the formatter
+    "PLR2004",  # magic values in tests are the expected values under test
+    "PLR0912",  # branch count: the gate router is deliberately explicit
+    "PLR0915",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_suite.py" = ["PLR0913", "B011"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["test_suite.py"]
+
+# --- deliberate exemptions, each with its reason -------------------------
+[tool.ruff.lint.extend-per-file-ignores]
+"adjudication_orchestrator.py" = [
+    "UP042",    # (str, Enum) is the existing contract; StrEnum changes str() output
+                # and the audit records serialise these values
+    "PLR0911",  # classify_source is a classifier: one explicit return per class
+                # beats a clever lookup that hides the fail-closed default
+]
+"seat_independence.py" = [
+    "PLR0913", "PLR0917",  # diagnose() takes six optional data sources by design
+    "SIM108",   # the chao1 f2>0 branch is clearer as if/else than as a ternary
+    "FURB110",  # the explicit ternary documents the intentional falsy-zero path
+]

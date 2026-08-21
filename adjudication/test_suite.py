@@ -13,20 +13,36 @@ Organised into six groups:
   6. Convergence + stopping (decay fit, residual, stop conditions)
 """
 
+import dataclasses
+import inspect as _inspect
+import json as _json
 import math
-import pytest
-
-import seat_independence as SI
-import adjudication_orchestrator as AO
-from adjudication_orchestrator import TestExecutionGate as ExecGate
-from adjudication_orchestrator import (
-    Claim, ClaimKind, Candidate, Pass, GateStatus,
-    ArithmeticGate, CitationResolutionGate, SchemaGate,
-    Orchestrator, preflight, fit_decay, residual_estimate, chao1_lower_bound,
-)
+import os as _os
+import warnings as _warnings
+from collections import Counter as _Counter
+from typing import ClassVar
 
 import numpy as np
+import pytest
 
+import adjudication_orchestrator as AO
+import seat_independence as SI
+from adjudication_orchestrator import (
+    ArithmeticGate,
+    Candidate,
+    CitationResolutionGate,
+    Claim,
+    ClaimKind,
+    GateStatus,
+    Orchestrator,
+    Pass,
+    SchemaGate,
+    chao1_lower_bound,
+    fit_decay,
+    preflight,
+    residual_estimate,
+)
+from adjudication_orchestrator import TestExecutionGate as ExecGate
 
 # ===================================================== 1. INDEPENDENCE MATH
 
@@ -460,9 +476,6 @@ class TestEndToEnd:
 # on paper without running the code.
 # ===========================================================================
 
-import json as _json
-import warnings as _warnings
-from collections import Counter as _Counter
 
 
 def _majority(row):
@@ -475,7 +488,7 @@ def _majority(row):
     """
     counts = _Counter(row)
     top = max(counts.values())
-    return sorted(k for k, v in counts.items() if v == top)[0]
+    return min(k for k, v in counts.items() if v == top)
 
 
 class TestChao1SeatIndependence:
@@ -885,7 +898,6 @@ class TestDiagnose:
 #       is treated as a defect signal rather than as confidence.
 # ===========================================================================
 
-import inspect as _inspect
 
 
 def _seat(text):
@@ -926,7 +938,7 @@ class TestBlinding:
 
     def test_seat_prompt_is_immutable(self):
         sp = AO.build_blinded_prompt(AO.DEFAULT_PASSES[0], "s1", "art")
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             sp.artifact = "tampered"
 
     def test_no_prior_pass_content_reaches_any_later_prompt(self):
@@ -1218,7 +1230,6 @@ class TestSilenceIsNotCollapse:
 # 11. EVIDENCE ADMISSIBILITY AND PANEL CONFIGURATION
 # ===========================================================================
 
-import os as _os
 
 
 class TestSourceAdmissibility:
@@ -1324,7 +1335,7 @@ class TestConjunctiveRouting:
 
 
 class TestPanelConfiguration:
-    ENV = {
+    ENV: ClassVar[dict[str, str]] = {
         "ADJ_SEAT_1_API_KEY": "k1", "ADJ_SEAT_2_API_KEY": "k2",
         "ADJ_SEAT_3_API_KEY": "k3", "ADJ_SEAT_4_API_KEY": "k4",
         "ADJ_SEAT_1_MODEL": "m1",
@@ -1501,3 +1512,39 @@ class TestPermissiveResolverProbe:
         format alone and appear strict when it is not."""
         assert AO.classify_source(AO.PERMISSIVE_RESOLVER_PROBE) is \
             AO.SourceClass.PEER_REVIEWED
+
+
+class TestGatesFailClosedOnMissingWarrant:
+    """Every gate's applies_to() already excludes a claim with no warrant, but
+    check() is public and the suite calls it directly. It previously relied on
+    an AttributeError being swallowed by the broad except; the guard is now
+    explicit, so the fail-closed path is stated rather than incidental."""
+
+    @pytest.mark.parametrize("gate,kind", [
+        (ArithmeticGate(),                      ClaimKind.ARITHMETIC),
+        (CitationResolutionGate(lambda i: True), ClaimKind.CITATION),
+        (ExecGate(lambda c: True),              ClaimKind.CODE_BEHAVIOR),
+        (SchemaGate([]),                        ClaimKind.SCHEMA),
+        (AO.SourceAdmissibilityGate(),          ClaimKind.CITATION),
+    ])
+    def test_none_warrant_fails_never_passes(self, gate, kind):
+        r = gate.check(Claim("c", "t", kind, None))
+        assert r.status is GateStatus.FAIL
+        assert "no warrant" in r.detail
+
+    @pytest.mark.parametrize("gate,kind", [
+        (ArithmeticGate(),                      ClaimKind.ARITHMETIC),
+        (CitationResolutionGate(lambda i: True), ClaimKind.CITATION),
+        (SchemaGate([]),                        ClaimKind.SCHEMA),
+        (AO.SourceAdmissibilityGate(),          ClaimKind.CITATION),
+    ])
+    def test_empty_warrant_fails_never_passes(self, gate, kind):
+        assert gate.check(Claim("c", "t", kind, "")).status is GateStatus.FAIL
+
+    def test_a_permissive_runner_cannot_rescue_a_missing_warrant(self):
+        """The runner returning True must not matter: with nothing to run, the
+        gate denies before the runner is reached."""
+        called = []
+        g = ExecGate(lambda c: called.append(c) or True)
+        assert g.check(Claim("c", "t", ClaimKind.CODE_BEHAVIOR, None)).status is GateStatus.FAIL
+        assert called == []

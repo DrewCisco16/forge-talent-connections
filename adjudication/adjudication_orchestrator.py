@@ -43,10 +43,10 @@ import operator
 import os
 import re
 from collections import Counter
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence
-
+from typing import Any, Protocol
 
 # ===========================================================================
 # 0. PREFLIGHT — the 45% capability-saturation gate
@@ -146,19 +146,19 @@ class Claim:
     id: str
     text: str
     kind: ClaimKind
-    warrant: Optional[str] = None   # expression, DOI, test command, schema...
-    source_pass: Optional[str] = None
-    source_seat: Optional[str] = None
+    warrant: str | None = None   # expression, DOI, test command, schema...
+    source_pass: str | None = None
+    source_seat: str | None = None
 
 
 @dataclass
 class Candidate:
     id: str
     content: str
-    claims: List[Claim] = field(default_factory=list)
+    claims: list[Claim] = field(default_factory=list)
     eliminated: bool = False
-    elimination_reason: Optional[str] = None
-    confidence: Optional[float] = None
+    elimination_reason: str | None = None
+    confidence: float | None = None
 
 
 # ===========================================================================
@@ -216,11 +216,15 @@ class ArithmeticGate:
         return claim.kind is ClaimKind.ARITHMETIC and bool(claim.warrant)
 
     def check(self, claim: Claim) -> GateResult:
+        warrant = claim.warrant
+        if not warrant:
+            return GateResult(self.name, GateStatus.FAIL,
+                              "no warrant supplied")
         try:
-            expr, claimed = claim.warrant.rsplit("=", 1)
+            expr, claimed = warrant.rsplit("=", 1)
             actual = _safe_eval(ast.parse(expr.strip(), mode="eval"))
             expected = float(claimed.strip())
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
             return GateResult(self.name, GateStatus.FAIL, f"unparseable warrant: {exc}")
 
         if math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-9):
@@ -249,12 +253,16 @@ class CitationResolutionGate:
         return claim.kind is ClaimKind.CITATION and bool(claim.warrant)
 
     def check(self, claim: Claim) -> GateResult:
-        ident = claim.warrant.strip()
+        warrant = claim.warrant
+        if not warrant:
+            return GateResult(self.name, GateStatus.FAIL,
+                              "no warrant supplied")
+        ident = warrant.strip()
         if not (self._DOI.match(ident) or ident.startswith("http")):
             return GateResult(self.name, GateStatus.FAIL, "malformed identifier")
         try:
             ok = self.resolver_fn(ident)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
             return GateResult(self.name, GateStatus.FAIL, f"resolver error: {exc}")
         return GateResult(
             self.name,
@@ -280,7 +288,7 @@ def probe_resolver(resolver_fn: Callable[[str], bool]) -> GateResult:
     """
     try:
         answered = resolver_fn(PERMISSIVE_RESOLVER_PROBE)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
         return GateResult("resolver_probe", GateStatus.PASS,
                           f"resolver raised rather than confirming: {exc}")
     if answered:
@@ -304,9 +312,13 @@ class TestExecutionGate:
         return claim.kind is ClaimKind.CODE_BEHAVIOR and bool(claim.warrant)
 
     def check(self, claim: Claim) -> GateResult:
+        warrant = claim.warrant
+        if not warrant:
+            return GateResult(self.name, GateStatus.FAIL,
+                              "no warrant supplied")
         try:
-            ok = self.test_runner_fn(claim.warrant)
-        except Exception as exc:
+            ok = self.test_runner_fn(warrant)
+        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
             return GateResult(self.name, GateStatus.FAIL, f"runner error: {exc}")
         return GateResult(
             self.name,
@@ -326,9 +338,13 @@ class SchemaGate:
         return claim.kind is ClaimKind.SCHEMA and bool(claim.warrant)
 
     def check(self, claim: Claim) -> GateResult:
+        warrant = claim.warrant
+        if not warrant:
+            return GateResult(self.name, GateStatus.FAIL,
+                              "no warrant supplied")
         try:
-            payload = json.loads(claim.warrant)
-        except Exception as exc:
+            payload = json.loads(warrant)
+        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
             return GateResult(self.name, GateStatus.FAIL, f"invalid JSON: {exc}")
         missing = [k for k in self.required_keys if k not in payload]
         if missing:
@@ -437,9 +453,13 @@ class SourceAdmissibilityGate:
         return claim.kind is ClaimKind.CITATION and bool(claim.warrant)
 
     def check(self, claim: Claim) -> GateResult:
+        warrant = claim.warrant
+        if not warrant:
+            return GateResult(self.name, GateStatus.FAIL,
+                              "no warrant supplied")
         try:
-            cls = self.classifier(claim.warrant.strip())
-        except Exception as exc:
+            cls = self.classifier(warrant.strip())
+        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
             return GateResult(self.name, GateStatus.FAIL, f"classifier error: {exc}")
 
         if cls in ADMISSIBLE_CLASSES:
@@ -619,11 +639,11 @@ class SeatResponse:
     seat_id: str
     pass_id: str
     raw: str
-    claims: List["Claim"] = field(default_factory=list)
-    error: Optional[str] = None
+    claims: list[Claim] = field(default_factory=list)
+    error: str | None = None
 
 
-def content_claim_id(kind: ClaimKind, warrant: Optional[str], text: str) -> str:
+def content_claim_id(kind: ClaimKind, warrant: str | None, text: str) -> str:
     """
     Content-addressed claim id: two seats that independently make the SAME
     claim produce the SAME id.
@@ -641,7 +661,7 @@ def content_claim_id(kind: ClaimKind, warrant: Optional[str], text: str) -> str:
 _CLAIM_LINE = re.compile(r"^\s*CLAIM\s*\|([^|]*)\|([^|]*)\|(.*)$", re.IGNORECASE)
 
 
-def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> List["Claim"]:
+def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     """
     Reference extractor for the documented output format.
 
@@ -651,7 +671,7 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> List["Claim"]:
     malformed claim is never silently dropped -- dropping it would let a model
     smuggle an unverified assertion past the gates by writing it badly.
     """
-    claims: List[Claim] = []
+    claims: list[Claim] = []
     for line in raw.splitlines():
         if not line.strip().upper().startswith("CLAIM"):
             continue
@@ -692,21 +712,21 @@ class BlindedSeatRunner:
     result.
     """
 
-    def __init__(self, seat_fns: Dict[str, Callable[[str], str]], extractor=line_claim_extractor):
+    def __init__(self, seat_fns: dict[str, Callable[[str], str]], extractor=line_claim_extractor):
         if not seat_fns:
             raise ValueError("at least one seat is required")
         self.seat_fns = dict(seat_fns)
         self.extractor = extractor
-        self.prompt_log: List[SeatPrompt] = []
+        self.prompt_log: list[SeatPrompt] = []
 
-    def run(self, p: Pass, artifact: str) -> List[SeatResponse]:
-        out: List[SeatResponse] = []
+    def run(self, p: Pass, artifact: str) -> list[SeatResponse]:
+        out: list[SeatResponse] = []
         for seat_id, fn in self.seat_fns.items():
             prompt = build_blinded_prompt(p, seat_id, artifact)
             self.prompt_log.append(prompt)
             try:
                 raw = fn(prompt.render())
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - fail-closed: seat error recorded  # noqa: BLE001 - fail-closed: any error denies
                 # Fail closed: a seat that errors contributes no claims, and
                 # the failure is recorded rather than silently swallowed.
                 out.append(SeatResponse(seat_id, p.id, "", [], error=str(exc)))
@@ -734,8 +754,8 @@ class SeatSpec:
     the host session rather than an outbound API key.
     """
     seat_id: str
-    api_key_env: Optional[str]
-    model_env: Optional[str] = None
+    api_key_env: str | None
+    model_env: str | None = None
 
 
 PANEL_OF_FIVE = (
@@ -768,16 +788,16 @@ class ResolvedSeat:
     """A seat with its credential resolved. The credential never appears in
     repr(), str(), or a formatted log line."""
 
-    __slots__ = ("seat_id", "model", "_secret", "in_process")
+    __slots__ = ("_secret", "in_process", "model", "seat_id")
 
-    def __init__(self, seat_id: str, model: Optional[str],
-                 secret: Optional[str], in_process: bool = False):
+    def __init__(self, seat_id: str, model: str | None,
+                 secret: str | None, in_process: bool = False):
         self.seat_id = seat_id
         self.model = model
         self._secret = secret
         self.in_process = in_process
 
-    def credential(self) -> Optional[str]:
+    def credential(self) -> str | None:
         """Explicit accessor. Reading a secret should look like reading a
         secret at the call site."""
         return self._secret
@@ -793,8 +813,8 @@ class ResolvedSeat:
 
 def load_panel(
     specs: Sequence[SeatSpec] = PANEL_OF_FIVE,
-    env: Optional[Dict[str, str]] = None,
-) -> List[ResolvedSeat]:
+    env: dict[str, str] | None = None,
+) -> list[ResolvedSeat]:
     """
     Resolve every seat's credential from the environment.
 
@@ -808,8 +828,8 @@ def load_panel(
     process environment.
     """
     source = os.environ if env is None else env
-    resolved: List[ResolvedSeat] = []
-    missing: List[str] = []
+    resolved: list[ResolvedSeat] = []
+    missing: list[str] = []
 
     for spec in specs:
         model = source.get(spec.model_env) if spec.model_env else None
@@ -839,13 +859,13 @@ class PassDivergence:
     pass_id: str
     pass_name: str
     n_seats: int
-    seats_responding: List[str]
-    seats_errored: List[str]
+    seats_responding: list[str]
+    seats_errored: list[str]
     distinct_claim_sets: int
     mean_pairwise_jaccard: float
     unanimous: bool
     all_seats_silent: bool = False
-    collapse_warning: Optional[str] = None
+    collapse_warning: str | None = None
 
 
 def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDivergence:
@@ -907,16 +927,16 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
 class SequentialPassResult:
     pass_id: str
     pass_name: str
-    record: "PassRecord"
+    record: PassRecord
     divergence: PassDivergence
-    responses: List[SeatResponse] = field(default_factory=list)
+    responses: list[SeatResponse] = field(default_factory=list)
 
 
 # ===========================================================================
 # 4. CONVERGENCE AND STOPPING
 # ===========================================================================
 
-def fit_decay(yields: Sequence[float]) -> Optional[tuple]:
+def fit_decay(yields: Sequence[float]) -> tuple | None:
     """
     Fit VCY_k = a * exp(-b*k) by least squares on log(yield).
     Returns (a, b) or None if fewer than two positive observations.
@@ -931,12 +951,12 @@ def fit_decay(yields: Sequence[float]) -> Optional[tuple]:
     denom = sum((x - mx) ** 2 for x in xs)
     if denom == 0:
         return None
-    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / denom
     intercept = my - slope * mx
     return math.exp(intercept), -slope
 
 
-def residual_estimate(yields: Sequence[float]) -> Optional[float]:
+def residual_estimate(yields: Sequence[float]) -> float | None:
     """
     Expected number of verified catches still to come after the passes run:
         R = a * e^(-b(K+1)) / (1 - e^(-b))
@@ -953,7 +973,7 @@ def residual_estimate(yields: Sequence[float]) -> Optional[float]:
     return a * math.exp(-b * (K + 1)) / (1 - math.exp(-b))
 
 
-def chao1_lower_bound(detections_by_seat: Dict[str, set]) -> Dict[str, float]:
+def chao1_lower_bound(detections_by_seat: dict[str, set]) -> dict[str, float]:
     """
     Capture-recapture lower bound on errors NO seat caught.
 
@@ -961,7 +981,7 @@ def chao1_lower_bound(detections_by_seat: Dict[str, set]) -> Dict[str, float]:
     missed' feels like from inside, AND is the signal that more errors remain.
     Positive error correlation biases this DOWNWARD: it is a LOWER BOUND.
     """
-    counts = Counter()
+    counts: Counter = Counter()
     for caught in detections_by_seat.values():
         for e in caught:
             counts[e] += 1
@@ -990,7 +1010,7 @@ class PassRecord:
     auto_accepted: int
     auto_rejected: int
     escalated: int
-    eliminated_candidates: List[str] = field(default_factory=list)
+    eliminated_candidates: list[str] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -1010,7 +1030,7 @@ class Orchestrator:
         passes: Sequence[Pass] = tuple(DEFAULT_PASSES),
         max_candidates_at_stop: int = 2,
         residual_tolerance: float = 0.5,
-        singleton_alarm: Optional[float] = None,
+        singleton_alarm: float | None = None,
     ):
         self.gates = list(gates)
         self.passes = list(passes)
@@ -1022,15 +1042,15 @@ class Orchestrator:
         # the report says so, rather than this module inventing a cutoff.
         self.singleton_alarm = singleton_alarm
 
-        self.escalation_queue: List[Claim] = []
-        self.history: List[PassRecord] = []
-        self.detections_by_seat: Dict[str, set] = {}
+        self.escalation_queue: list[Claim] = []
+        self.history: list[PassRecord] = []
+        self.detections_by_seat: dict[str, set] = {}
         self._seen_claims: set = set()
-        self.divergence_by_pass: Dict[str, PassDivergence] = {}
+        self.divergence_by_pass: dict[str, PassDivergence] = {}
 
     # -- verification -------------------------------------------------------
 
-    def _route(self, claim: Claim) -> Optional[GateResult]:
+    def _route(self, claim: Claim) -> GateResult | None:
         """
         Every applicable gate must pass. The first FAIL decides.
 
@@ -1052,8 +1072,8 @@ class Orchestrator:
     def run_pass(
         self,
         p: Pass,
-        candidates: List[Candidate],
-        proposed_claims: List[Claim],
+        candidates: list[Candidate],
+        proposed_claims: list[Claim],
     ) -> PassRecord:
         rec = PassRecord(p.id, len(proposed_claims), 0, 0, 0)
 
@@ -1096,10 +1116,10 @@ class Orchestrator:
     def run_sequential(
         self,
         artifact: str,
-        candidates: List[Candidate],
-        runner: "BlindedSeatRunner",
-        passes: Optional[Sequence[Pass]] = None,
-    ) -> List["SequentialPassResult"]:
+        candidates: list[Candidate],
+        runner: BlindedSeatRunner,
+        passes: Sequence[Pass] | None = None,
+    ) -> list[SequentialPassResult]:
         """
         Run the five passes ONE AT A TIME against a single artifact.
 
@@ -1116,14 +1136,14 @@ class Orchestrator:
         Returns one SequentialPassResult per pass, in order.
         """
         chosen = list(passes) if passes is not None else list(self.passes)
-        results: List[SequentialPassResult] = []
+        results: list[SequentialPassResult] = []
 
         for p in chosen:
             responses = runner.run(p, artifact)
             divergence = measure_divergence(p, responses)
             self.divergence_by_pass[p.id] = divergence
 
-            claims: List[Claim] = []
+            claims: list[Claim] = []
             for r in responses:
                 claims.extend(r.claims)
 
@@ -1134,10 +1154,10 @@ class Orchestrator:
 
     # -- convergence --------------------------------------------------------
 
-    def survivors(self, candidates: List[Candidate]) -> List[Candidate]:
+    def survivors(self, candidates: list[Candidate]) -> list[Candidate]:
         return [c for c in candidates if not c.eliminated]
 
-    def should_stop(self, candidates: List[Candidate]) -> Dict[str, Any]:
+    def should_stop(self, candidates: list[Candidate]) -> dict[str, Any]:
         """
         SOP Manual v1.0 sections 6.3, 9.1 step 8, and 9.2.
 
@@ -1172,7 +1192,7 @@ class Orchestrator:
                    if self.detections_by_seat else None)
         singleton = capture["singleton_fraction"] if capture else float("nan")
 
-        blockers: List[str] = []
+        blockers: list[str] = []
         if queued:
             blockers.append(
                 f"{queued} unresolved item(s) in the judgment queue (SOP 9.1 step 8)"
@@ -1187,7 +1207,7 @@ class Orchestrator:
                 f"{self.residual_tolerance}"
             )
         if (self.singleton_alarm is not None
-                and singleton == singleton               # not NaN
+                and not math.isnan(singleton)
                 and singleton > self.singleton_alarm):
             blockers.append(
                 f"singleton fraction {singleton:.2f} > {self.singleton_alarm}: "
@@ -1210,13 +1230,11 @@ class Orchestrator:
             ) if self.escalation_queue else None,
         }
 
-    def report(self) -> Dict[str, Any]:
+    def report(self) -> dict[str, Any]:
         return {
             "passes": [vars(r) for r in self.history],
             "divergence_by_pass": {
-                pid: {
-                    k: v for k, v in vars(d).items()
-                } for pid, d in self.divergence_by_pass.items()
+                pid: dict(vars(d)) for pid, d in self.divergence_by_pass.items()
             },
             "escalation_queue": [
                 {"id": c.id, "text": c.text, "kind": c.kind.value} for c in self.escalation_queue
@@ -1233,7 +1251,7 @@ if __name__ == "__main__":
     print(f"PREFLIGHT: run_ensemble={verdict.run_ensemble} seats={verdict.recommended_seats}")
     print(f"  {verdict.reason}\n")
 
-    gates = [
+    gates: list[Gate] = [
         ArithmeticGate(),
         CitationResolutionGate(resolver_fn=lambda ident: ident.startswith("10.1038")),
         SchemaGate(required_keys=["id", "value"]),

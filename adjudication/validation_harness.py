@@ -21,7 +21,6 @@ and re-running against defects seeded in real work.
 Run: python validation_harness.py
 """
 
-from typing import Dict, Set
 
 import numpy as np
 
@@ -31,10 +30,10 @@ from adjudication_orchestrator import ArithmeticGate, Orchestrator
 
 # Twelve seeded defects with known ground truth. Each warrant is real arithmetic
 # so the deterministic gates actually fire rather than being stubbed.
-SEEDED: Dict[str, str] = {f"E{i}": f"{i} + {i} = {2 * i}" for i in range(1, 13)}
+SEEDED: dict[str, str] = {f"E{i}": f"{i} + {i} = {2 * i}" for i in range(1, 13)}
 
 # Which pass each defect is discoverable in (index into DEFAULT_PASSES).
-PASS_OF: Dict[str, int] = {
+PASS_OF: dict[str, int] = {
     "E1": 0, "E2": 0, "E7": 0, "E9": 0,
     "E3": 1, "E8": 1, "E10": 1,
     "E4": 2, "E11": 2,
@@ -43,7 +42,7 @@ PASS_OF: Dict[str, int] = {
 }
 
 
-def make_seat(caught: Set[str]):
+def make_seat(caught: set[str]):
     """A synthetic seat that catches a fixed subset, reporting per pass.
 
     It reads the lens out of its own prompt -- which is all the blinding gives
@@ -60,7 +59,7 @@ def make_seat(caught: Set[str]):
     return seat
 
 
-def run(label: str, catches: Dict[str, Set[str]]) -> Orchestrator:
+def run(label: str, catches: dict[str, set[str]]) -> Orchestrator:
     print(f"\n{'=' * 78}\n{label}\n{'=' * 78}")
     runner = AO.BlindedSeatRunner({s: make_seat(c) for s, c in catches.items()})
     orch = Orchestrator([ArithmeticGate()])

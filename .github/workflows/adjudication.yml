@@ -1,0 +1,66 @@
+name: adjudication
+
+# The Cloudflare Pages check publishes the static site; it does not run this
+# suite. Without this workflow the tests gate nothing on push.
+on:
+  push:
+    branches: ["**"]
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+  pull_request:
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: adjudication
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: adjudication/requirements-dev.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # SOP Manual v1.1 section 8.4: the non-AI verification layer. These fail
+      # independently of the models, which is the entire point of running them.
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Tests with coverage
+        run: |
+          pytest test_suite.py \
+            --cov=seat_independence --cov=adjudication_orchestrator \
+            --cov-report=term-missing --cov-fail-under=90
+
+      - name: Module demos execute
+        run: |
+          python seat_independence.py > /dev/null
+          python adjudication_orchestrator.py > /dev/null
+          python validation_harness.py > /dev/null
+
+      # A permissive resolver silently converts the whole system back into an
+      # unverified ensemble. SOP 8.3 calls this the most common build failure.
+      - name: Resolver probe self-check
+        run: |
+          python -c "
+          import sys
+          from adjudication_orchestrator import probe_resolver, GateStatus
+          assert probe_resolver(lambda i: True).status is GateStatus.FAIL, 'probe failed to catch a permissive resolver'
+          assert probe_resolver(lambda i: False).status is GateStatus.PASS
+          print('resolver probe behaves correctly')
+          "

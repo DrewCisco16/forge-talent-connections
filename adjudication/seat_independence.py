@@ -45,11 +45,11 @@ from __future__ import annotations
 
 import itertools
 from collections import Counter
-from dataclasses import dataclass, field
-from typing import Any, Dict, Hashable, List, Sequence, Set, Tuple
+from collections.abc import Hashable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # 1. ERROR CORRELATION AND EFFECTIVE SEAT COUNT
@@ -140,7 +140,7 @@ def conditional_agreement_given_error(
     """
     agree = 0
     both_wrong = 0
-    for row, t in zip(answers, truth):
+    for row, t in zip(answers, truth, strict=True):
         wrong_idx = [j for j, a in enumerate(row) if a != t]
         for a, b in itertools.combinations(wrong_idx, 2):
             both_wrong += 1
@@ -177,7 +177,7 @@ def lincoln_petersen(n1: int, n2: int, m: int, chapman: bool = True) -> float:
     return n1 * n2 / m
 
 
-def chao1(detections: Dict[Any, Set[Any]]) -> Dict[str, float]:
+def chao1(detections: dict[Any, set[Any]]) -> dict[str, float]:
     """
     Chao1 estimator of total error population from k >= 2 seats.
 
@@ -199,7 +199,7 @@ def chao1(detections: Dict[Any, Set[Any]]) -> Dict[str, float]:
     ASSUMPTION VIOLATION: heterogeneous and positively-correlated capture
     probabilities bias N_hat DOWNWARD. Report as a LOWER BOUND.
     """
-    counts = Counter()
+    counts: Counter = Counter()
     for caught in detections.values():
         for err in caught:
             counts[err] += 1
@@ -237,9 +237,9 @@ class PassYield:
 
 
 def marginal_yield_by_pass(
-    pass_detections: List[Tuple[Any, Set[Any]]],
+    pass_detections: list[tuple[Any, set[Any]]],
     total_seeded: int | None = None,
-) -> List[PassYield]:
+) -> list[PassYield]:
     """
     How many NEW errors each pass caught that no prior pass had caught.
 
@@ -254,8 +254,8 @@ def marginal_yield_by_pass(
     productive. To separate FRAMEWORK effect from ORDER effect you must
     randomize pass order across runs and average within framework.
     """
-    seen: Set[Any] = set()
-    out: List[PassYield] = []
+    seen: set[Any] = set()
+    out: list[PassYield] = []
     for pid, caught in pass_detections:
         new = caught - seen
         seen |= caught
@@ -279,7 +279,7 @@ def marginal_yield_by_pass(
 def leave_one_seat_out_stability(
     answers: Sequence[Sequence[Hashable]],
     aggregator,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Re-run the elimination with each seat removed in turn. Does the same
     answer survive?
@@ -300,8 +300,12 @@ def leave_one_seat_out_stability(
     n_seats = len(answers[0]) if n_items else 0
 
     full = [aggregator(r) for r in answers]
-    flips_by_seat = {j: 0 for j in range(n_seats)}
-    flipped_items = {j: [] for j in range(n_seats)}
+    flips_by_seat = dict.fromkeys(range(n_seats), 0)
+    # Must stay a comprehension: dict.fromkeys(range(n), []) would bind ONE list
+    # object to every key, so appending for one seat would append for all of them.
+    flipped_items: dict[int, list[int]] = {
+        j: [] for j in range(n_seats)
+    }
 
     for j in range(n_seats):
         for i, row in enumerate(answers):
@@ -314,7 +318,7 @@ def leave_one_seat_out_stability(
 
     total_flips = sum(flips_by_seat.values())
     denom = max(n_items * n_seats, 1)
-    decisive = max(flips_by_seat, key=flips_by_seat.get) if n_seats else None
+    decisive = max(flips_by_seat, key=lambda j: flips_by_seat[j]) if n_seats else None
 
     return {
         "overall_flip_rate": total_flips / denom,
@@ -333,7 +337,7 @@ def leave_one_seat_out_stability(
 # 5. INDEPENDENCE GAP (HOW MUCH OF THE THEORETICAL GAIN ARE YOU CAPTURING?)
 # ---------------------------------------------------------------------------
 
-def independence_gap(X: np.ndarray) -> Dict[str, float]:
+def independence_gap(X: np.ndarray) -> dict[str, float]:
     """
     Compare OBSERVED majority-vote accuracy against the accuracy that WOULD
     be achieved if seat failures were independent (the "independence line"
@@ -351,7 +355,7 @@ def independence_gap(X: np.ndarray) -> Dict[str, float]:
     nothing and the frameworks -- not the models -- are doing the work.
     """
     X = np.asarray(X, dtype=int)
-    n_items, n_seats = X.shape
+    n_seats = X.shape[1]
 
     obs_majority = (X.sum(axis=1) > n_seats / 2).mean()
     per_seat_acc = X.mean(axis=0)
@@ -394,14 +398,14 @@ def independence_gap(X: np.ndarray) -> Dict[str, float]:
 
 def diagnose(
     X: np.ndarray | None = None,
-    detections: Dict[Any, Set[Any]] | None = None,
-    pass_detections: List[Tuple[Any, Set[Any]]] | None = None,
+    detections: dict[Any, set[Any]] | None = None,
+    pass_detections: list[tuple[Any, set[Any]]] | None = None,
     answers: Sequence[Sequence[Hashable]] | None = None,
     truth: Sequence[Hashable] | None = None,
     total_seeded: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run whichever diagnostics the supplied data supports."""
-    report: Dict[str, Any] = {}
+    report: dict[str, Any] = {}
 
     if X is not None:
         X = np.asarray(X, dtype=int)
