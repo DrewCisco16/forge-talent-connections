@@ -41,9 +41,11 @@ explicit opt-in, and only when you know the artifact is GREEN.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import math
+import os
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -392,3 +394,262 @@ def replay(entries: Iterable[AuditEntry]) -> str:
     if seq == 0:
         raise AuditChainError("cannot replay an empty chain")
     return prev
+
+
+# ===========================================================================
+# DURABLE STORE
+#
+# An in-memory chain proves nothing after the process exits. SOP 8.5 requires
+# the record to survive the run, which means the append itself has to be safe
+# against two things that actually happen: the process dying mid-write, and a
+# second writer appending at the same moment.
+# ===========================================================================
+
+HEAD_SUFFIX = ".head"
+"""
+Sidecar carrying the head hash and length.
+
+This is the "independently recorded head" the chain needs to detect tail
+truncation. Being honest about its strength: it defends against accidental
+truncation, a crash, and a partial copy. It does NOT defend against an attacker
+with write access to both files, who can simply rewrite the sidecar to match.
+Real tamper-evidence needs the head recorded somewhere this process cannot
+reach -- a separate host, an append-only bucket, a printed page.
+"""
+
+
+class AuditStoreError(AuditChainError):
+    """Raised when the on-disk store cannot be used safely."""
+
+
+class TornAppendError(AuditStoreError):
+    """
+    The final line of the log is incomplete: an append began and did not finish.
+
+    This is the recoverable case. The torn entry was never committed, so the
+    correct state is the log as it stood before that append -- the rollback.
+    Recovery is explicit (recover=True) rather than automatic, because silently
+    discarding a trailing line is indistinguishable from silently discarding
+    evidence.
+    """
+
+
+def _read_head_sidecar(path: str) -> tuple[str, int] | None:
+    side = path + HEAD_SUFFIX
+    if not os.path.exists(side):
+        return None
+    with open(side, encoding="utf-8") as fh:
+        raw = fh.read().strip()
+    if not raw:
+        return None
+    try:
+        obj = json.loads(raw)
+        return str(obj["head"]), int(obj["length"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise AuditStoreError(f"head sidecar is unreadable: {exc}") from exc
+
+
+def _split_committed(text: str) -> tuple[list[str], str | None]:
+    """
+    Separate fully-written lines from a torn trailing one.
+
+    A committed line ends with a newline. Anything after the last newline is a
+    write that did not finish.
+    """
+    if not text:
+        return [], None
+    idx = text.rfind("\n")
+    if idx == -1:
+        return [], text
+    committed = [ln for ln in text[: idx + 1].splitlines() if ln.strip()]
+    tail = text[idx + 1 :]
+    return committed, (tail if tail.strip() else None)
+
+
+class DurableAuditLog:
+    """
+    Append-only audit chain persisted to a JSONL file.
+
+    Every append is: take an exclusive lock, re-read the committed tail, chain
+    onto whatever is actually on disk, write the line with a single write(),
+    fsync, update the head sidecar, release. Only then does the entry become
+    visible in memory.
+
+    That ordering is the rollback guarantee. If the write or the fsync raises,
+    the in-memory chain is untouched and the on-disk chain still ends at the
+    last committed entry, so a failed append leaves no half-state behind.
+
+    POSIX only: uses fcntl.flock.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        run_id: str | None = None,
+        clock: Callable[[], str] | None = None,
+        recover: bool = False,
+    ):
+        self.path = path
+        self.clock = clock
+        self._entries: list[AuditEntry] = []
+
+        exists = os.path.exists(path) and os.path.getsize(path) > 0
+        if exists:
+            self._entries = self._load(recover=recover)
+            if run_id is not None and self._entries[0].payload.get("run_id") != run_id:
+                raise AuditStoreError(
+                    f"log at {path} belongs to run "
+                    f"{self._entries[0].payload.get('run_id')!r}, not {run_id!r}"
+                )
+        else:
+            if not run_id:
+                raise AuditStoreError("run_id is required to create a new log")
+            self._commit("genesis", {"run_id": run_id})
+
+    # -- loading ------------------------------------------------------------
+
+    def _load(self, recover: bool) -> list[AuditEntry]:
+        """
+        Read under an exclusive lock.
+
+        Without the lock a reader can land between the log write and the
+        sidecar write and see a log of N+1 entries against a sidecar still
+        claiming N -- reported as "extended", which looks exactly like
+        tampering. Found by running parallel writers; a threaded test missed it
+        because the window is only a few microseconds wide.
+        """
+        lock_fd = os.open(self.path, os.O_RDONLY)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            with open(self.path, encoding="utf-8") as fh:
+                committed, torn = _split_committed(fh.read())
+            side = _read_head_sidecar(self.path)
+
+            if torn is not None and not recover:
+                raise TornAppendError(
+                    f"{self.path}: the final line is incomplete ({len(torn)} bytes, "
+                    f"no newline). An append did not finish. The entry was never "
+                    f"committed; reopen with recover=True to roll back to the last "
+                    f"committed entry."
+                )
+            if torn is not None:
+                self._truncate_to(len("\n".join(committed)) + 1 if committed else 0)
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+
+        entries = [AuditEntry.from_dict(json.loads(ln)) for ln in committed]
+        if not entries:
+            raise AuditStoreError(f"{self.path}: no committed entries")
+
+        verdict = verify_chain_integrity(
+            entries,
+            expected_head=side[0] if side else None,
+            expected_length=side[1] if side else None,
+        )
+        if not verdict.valid:
+            raise AuditStoreError(
+                f"{self.path}: chain does not verify: " + "; ".join(verdict.failures)
+            )
+        return entries
+
+    def _truncate_to(self, size: int) -> None:
+        fd = os.open(self.path, os.O_WRONLY)
+        try:
+            os.ftruncate(fd, size)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    # -- appending ----------------------------------------------------------
+
+    def _make(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
+        body = scrub_nan(dict(payload))
+        if self.clock is not None:
+            body["at"] = self.clock()
+        seq = len(self._entries)
+        prev = GENESIS_PREV_HASH if seq == 0 else self._entries[-1].entry_hash
+        return AuditEntry(seq, prev, kind, body, compute_entry_hash(seq, prev, kind, body))
+
+    def _commit(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
+        """
+        The only way an entry reaches disk.
+
+        Under one exclusive lock: re-read the committed tail, chain onto it,
+        write, fsync, update the sidecar. Holding the lock across BOTH writes
+        is what stops a reader seeing the log and the sidecar disagree.
+
+        The in-memory chain is extended only after the durable write returns,
+        so a failed append is a no-op rather than a half-entry -- the rollback.
+        """
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            with open(self.path, encoding="utf-8") as fh:
+                committed, _ = _split_committed(fh.read())
+            if committed:
+                self._entries = [AuditEntry.from_dict(json.loads(ln)) for ln in committed]
+
+            entry = self._make(kind, payload)
+            line = (canonical_json(entry.to_dict()) + "\n").encode("utf-8")
+            os.lseek(fd, 0, os.SEEK_END)
+            written = os.write(fd, line)
+            if written != len(line):
+                raise AuditStoreError(
+                    f"short write: {written} of {len(line)} bytes; not committed"
+                )
+            os.fsync(fd)
+
+            self._entries.append(entry)
+            self._write_head_sidecar()
+            return entry
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def _write_head_sidecar(self) -> None:
+        side = self.path + HEAD_SUFFIX
+        tmp = side + ".tmp"
+        body = canonical_json({"head": self.head, "length": len(self._entries)})
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(body)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, side)            # atomic; the sidecar is never half-written
+
+    def append(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
+        """Append one entry durably. See _commit for the locking contract."""
+        if kind == "genesis":
+            raise AuditStoreError("'genesis' is reserved for the first entry")
+        return self._commit(kind, payload)
+
+    # -- the same recording helpers as the in-memory log --------------------
+
+    record_artifact = AuditLog.record_artifact
+    record_pass = AuditLog.record_pass
+    record_stop_decision = AuditLog.record_stop_decision
+
+    # -- inspection ---------------------------------------------------------
+
+    @property
+    def entries(self) -> tuple[AuditEntry, ...]:
+        return tuple(self._entries)
+
+    @property
+    def head(self) -> str:
+        return self._entries[-1].entry_hash
+
+    @property
+    def run_id(self) -> str:
+        return str(self._entries[0].payload["run_id"])
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def verify(self, check_sidecar: bool = True) -> ChainVerdict:
+        side = _read_head_sidecar(self.path) if check_sidecar else None
+        return verify_chain_integrity(
+            self._entries,
+            expected_head=side[0] if side else None,
+            expected_length=side[1] if side else None,
+        )

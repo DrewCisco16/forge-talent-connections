@@ -1936,3 +1936,317 @@ class TestCommitmentCoversEveryField:
         a = AL.compute_entry_hash(1, "c" * 64, "pass", {"alpha": 1, "beta": 2})
         b = AL.compute_entry_hash(1, "c" * 64, "pass", {"beta": 2, "alpha": 1})
         assert a == b
+
+
+# ===========================================================================
+# 14. DURABLE AUDIT STORE
+#     sixteen-test-template item 11 (rollback) and item 12 (concurrent commit)
+# ===========================================================================
+
+class TestDurableAuditStore:
+    def test_creates_verifies_and_reopens(self, tmp_path):
+        p = str(tmp_path / "run.jsonl")
+        log = AL.DurableAuditLog(p, run_id="r1")
+        log.record_artifact("the artifact")
+        log.append("pass", {"pass_id": "p1", "auto_rejected": 3})
+        head, n = log.head, len(log)
+
+        reopened = AL.DurableAuditLog(p)
+        assert len(reopened) == n
+        assert reopened.head == head
+        assert reopened.run_id == "r1"
+        assert reopened.verify().valid is True
+
+    def test_reopened_log_continues_the_same_chain(self, tmp_path):
+        p = str(tmp_path / "run.jsonl")
+        a = AL.DurableAuditLog(p, run_id="r1")
+        a.append("pass", {"pass_id": "p1"})
+        prev_head = a.head
+
+        b = AL.DurableAuditLog(p)
+        e = b.append("pass", {"pass_id": "p2"})
+        assert e.prev_hash == prev_head          # chained onto disk, not onto a fresh log
+        assert b.verify().valid is True
+
+    def test_new_log_requires_a_run_id(self, tmp_path):
+        with pytest.raises(AL.AuditStoreError):
+            AL.DurableAuditLog(str(tmp_path / "run.jsonl"))
+
+    def test_opening_with_the_wrong_run_id_is_refused(self, tmp_path):
+        p = str(tmp_path / "run.jsonl")
+        AL.DurableAuditLog(p, run_id="r1").append("pass", {})
+        with pytest.raises(AL.AuditStoreError) as exc:
+            AL.DurableAuditLog(p, run_id="r2")
+        assert "belongs to run" in str(exc.value)
+
+    def test_genesis_is_reserved_on_the_durable_log_too(self, tmp_path):
+        log = AL.DurableAuditLog(str(tmp_path / "run.jsonl"), run_id="r1")
+        with pytest.raises(AL.AuditStoreError):
+            log.append("genesis", {})
+
+    def test_a_corrupted_line_refuses_to_load(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        lines = p.read_text().splitlines()
+        obj = _json.loads(lines[1])
+        obj["payload"]["pass_id"] = "tampered"
+        lines[1] = _json.dumps(obj)
+        p.write_text("\n".join(lines) + "\n")
+        with pytest.raises(AL.AuditStoreError) as exc:
+            AL.DurableAuditLog(str(p))
+        assert "does not verify" in str(exc.value)
+
+
+class TestDurableRollback:
+    """sixteen-test-template item 11: rollback. A failed append must leave the
+    log at its last committed state, never in a half-written one."""
+
+    def test_a_torn_final_line_refuses_to_load(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        good_head, good_len = log.head, len(log)
+
+        with p.open("a") as fh:                       # an append that died mid-write
+            fh.write('{"seq": 2, "prev_hash": "aa", "kind": "pa')
+
+        with pytest.raises(AL.TornAppendError) as exc:
+            AL.DurableAuditLog(str(p))
+        assert "did not finish" in str(exc.value)
+        assert "recover=True" in str(exc.value)
+        assert good_head and good_len                 # the good state is still on disk
+
+    def test_recover_rolls_back_to_the_last_committed_entry(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        good_head, good_len = log.head, len(log)
+
+        with p.open("a") as fh:
+            fh.write('{"seq": 2, "prev_hash": "aa", "kind": "pa')
+
+        recovered = AL.DurableAuditLog(str(p), recover=True)
+        assert len(recovered) == good_len
+        assert recovered.head == good_head
+        assert recovered.verify().valid is True
+
+    def test_the_log_is_usable_again_after_recovery(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        with p.open("a") as fh:
+            fh.write("{partial")
+
+        recovered = AL.DurableAuditLog(str(p), recover=True)
+        recovered.append("pass", {"pass_id": "p2"})
+        assert AL.DurableAuditLog(str(p)).verify().valid is True
+
+    def test_recovery_is_never_automatic(self, tmp_path):
+        """Silently discarding a trailing line is indistinguishable from
+        silently discarding evidence, so it takes an explicit flag."""
+        p = tmp_path / "run.jsonl"
+        AL.DurableAuditLog(str(p), run_id="r1").append("pass", {})
+        with p.open("a") as fh:
+            fh.write("{partial")
+        with pytest.raises(AL.TornAppendError):
+            AL.DurableAuditLog(str(p))                # default: refuse
+
+    def test_a_failed_write_leaves_no_half_entry(self, tmp_path, monkeypatch):
+        """The rollback proper: os.write raises mid-append. The in-memory chain
+        and the on-disk chain must both be unchanged, and the next append must
+        succeed."""
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        before_head, before_len = log.head, len(log)
+        before_bytes = p.read_bytes()
+
+        real_write = _os.write
+
+        def exploding(fd, data):
+            if b'"p2"' in data:
+                raise OSError("disk full")
+            return real_write(fd, data)
+
+        monkeypatch.setattr(AL.os, "write", exploding)
+        with pytest.raises(OSError, match="disk full"):
+            log.append("pass", {"pass_id": "p2"})
+        monkeypatch.undo()
+
+        assert len(log) == before_len                 # in-memory unchanged
+        assert log.head == before_head
+        assert p.read_bytes() == before_bytes         # on-disk unchanged
+        log.append("pass", {"pass_id": "p3"})         # and still usable
+        assert AL.DurableAuditLog(str(p)).verify().valid is True
+
+    def test_a_short_write_is_treated_as_a_failure(self, tmp_path, monkeypatch):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        before = len(log)
+        monkeypatch.setattr(AL.os, "write", lambda fd, data: 3)
+        with pytest.raises(AL.AuditStoreError, match="short write"):
+            log.append("pass", {"pass_id": "p1"})
+        monkeypatch.undo()
+        assert len(log) == before
+
+
+class TestDurableConcurrentCommit:
+    """sixteen-test-template item 12: concurrent commit attempt."""
+
+    def test_a_stale_handle_chains_onto_disk_not_onto_its_own_view(self, tmp_path):
+        """The deterministic version of the concurrency guarantee, and the one
+        that actually bites.
+
+        Two handles open the same log, so both hold the same view. One appends,
+        which makes the other's in-memory tail stale. The stale handle must
+        re-read the committed tail inside the lock and chain onto what is
+        ACTUALLY on disk. Without that it emits an entry claiming the old head
+        as its predecessor, forking the chain.
+
+        Written this way on purpose: a threaded version passed whether or not
+        the re-read existed, because tiny operations under the GIL rarely
+        interleave. That made it a test of nothing.
+        """
+        p = str(tmp_path / "run.jsonl")
+        AL.DurableAuditLog(p, run_id="r1")
+        a = AL.DurableAuditLog(p)
+        b = AL.DurableAuditLog(p)
+        assert a.head == b.head                       # both start from the same view
+
+        first = a.append("pass", {"writer": "a"})     # b is now stale
+        second = b.append("pass", {"writer": "b"})
+
+        assert second.prev_hash == first.entry_hash   # chained onto disk...
+        assert second.seq == first.seq + 1            # ...not onto b's stale view
+        final = AL.DurableAuditLog(p)
+        assert len(final) == 3
+        assert final.verify().valid is True
+
+    def test_parallel_processes_do_not_fork_the_chain(self, tmp_path):
+        """Real contention: separate processes, so flock is genuinely exercised
+        rather than serialised by the GIL. A barrier releases every writer at
+        the same instant."""
+        import multiprocessing as mp
+
+        p = str(tmp_path / "run.jsonl")
+        AL.DurableAuditLog(p, run_id="r1")
+        writers, per_writer = 4, 5
+        ctx = mp.get_context("fork")
+        barrier = ctx.Barrier(writers)
+
+        def child(w, path, bar, per):
+            bar.wait()
+            h = AL.DurableAuditLog(path)
+            for i in range(per):
+                h.append("pass", {"writer": w, "i": i})
+
+        procs = [ctx.Process(target=child, args=(w, p, barrier, per_writer))
+                 for w in range(writers)]
+        for proc in procs:
+            proc.start()
+        for proc in procs:
+            proc.join(timeout=30)
+        assert all(proc.exitcode == 0 for proc in procs), \
+            [proc.exitcode for proc in procs]
+
+        final = AL.DurableAuditLog(p)
+        assert len(final) == writers * per_writer + 1
+        assert final.verify().valid is True
+        assert [e.seq for e in final.entries] == list(range(len(final)))
+        prevs = [e.prev_hash for e in final.entries[1:]]
+        assert len(set(prevs)) == len(prevs)          # no two entries share a predecessor
+        seen = {(e.payload["writer"], e.payload["i"])
+                for e in final.entries if e.kind == "pass"}
+        assert seen == {(w, i) for w in range(writers) for i in range(per_writer)}
+
+    def test_threaded_writers_also_converge(self, tmp_path):
+        import threading
+
+        p = str(tmp_path / "run.jsonl")
+        AL.DurableAuditLog(p, run_id="r1")
+        writers, per_writer = 4, 6
+        errors: list[BaseException] = []
+
+        def worker(w):
+            try:
+                handle = AL.DurableAuditLog(p)
+                for i in range(per_writer):
+                    handle.append("pass", {"writer": w, "i": i})
+            except BaseException as exc:       # noqa: BLE001 - surfaced below
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(w,)) for w in range(writers)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        final = AL.DurableAuditLog(p)
+        assert len(final) == writers * per_writer + 1     # genesis + every append
+        assert final.verify().valid is True
+
+        seqs = [e.seq for e in final.entries]
+        assert seqs == list(range(len(final)))            # contiguous, no fork
+        prevs = [e.prev_hash for e in final.entries[1:]]
+        assert len(set(prevs)) == len(prevs)              # no shared predecessor
+
+    def test_every_concurrent_append_is_present_exactly_once(self, tmp_path):
+        import threading
+
+        p = str(tmp_path / "run.jsonl")
+        AL.DurableAuditLog(p, run_id="r1")
+
+        def worker(w):
+            h = AL.DurableAuditLog(p)
+            for i in range(5):
+                h.append("pass", {"writer": w, "i": i})
+
+        threads = [threading.Thread(target=worker, args=(w,)) for w in range(3)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        final = AL.DurableAuditLog(p)
+        seen = {(e.payload["writer"], e.payload["i"]) for e in final.entries if e.kind == "pass"}
+        assert seen == {(w, i) for w in range(3) for i in range(5)}   # none lost, none duplicated
+
+
+class TestDurableHeadSidecar:
+    def test_the_sidecar_records_head_and_length(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {"pass_id": "p1"})
+        side = _json.loads((tmp_path / ("run.jsonl" + AL.HEAD_SUFFIX)).read_text())
+        assert side["head"] == log.head
+        assert side["length"] == len(log)
+
+    def test_tail_truncation_is_caught_by_the_sidecar(self, tmp_path):
+        """The chain alone cannot see this; the recorded head can."""
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        for i in range(3):
+            log.append("pass", {"pass_id": f"p{i}"})
+
+        lines = p.read_text().splitlines()
+        p.write_text("\n".join(lines[:2]) + "\n")          # drop the last two entries
+
+        with pytest.raises(AL.AuditStoreError) as exc:
+            AL.DurableAuditLog(str(p))
+        msg = str(exc.value)
+        assert "truncated" in msg or "tail truncated" in msg
+
+    def test_an_unreadable_sidecar_is_refused(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        AL.DurableAuditLog(str(p), run_id="r1").append("pass", {})
+        (tmp_path / ("run.jsonl" + AL.HEAD_SUFFIX)).write_text("{not json")
+        with pytest.raises(AL.AuditStoreError, match="sidecar is unreadable"):
+            AL.DurableAuditLog(str(p))
+
+    def test_verify_can_be_asked_to_ignore_the_sidecar(self, tmp_path):
+        p = tmp_path / "run.jsonl"
+        log = AL.DurableAuditLog(str(p), run_id="r1")
+        log.append("pass", {})
+        assert log.verify(check_sidecar=False).valid is True
