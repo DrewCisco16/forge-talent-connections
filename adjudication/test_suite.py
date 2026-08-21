@@ -1166,3 +1166,37 @@ class TestLineClaimExtractor:
         a = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 4 | sum", "s1", "p1")[0]
         b = AO.line_claim_extractor("CLAIM | arithmetic | 2+2 = 5 | sum", "s1", "p1")[0]
         assert a.id != b.id
+
+
+class TestSilenceIsNotCollapse:
+    """Found by running the seeded-error harness: three seats that all return
+    NOTHING have trivially identical claim sets, and were being flagged as a
+    monoculture. Unanimous silence is the marginal-yield signal (this pass
+    found nothing), not the collapse signal."""
+
+    def test_all_silent_seats_do_not_raise_a_collapse_warning(self):
+        p = AO.DEFAULT_PASSES[4]
+        runner = AO.BlindedSeatRunner(
+            {"s1": _seat(""), "s2": _seat(""), "s3": _seat("")}
+        )
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.all_seats_silent is True
+        assert d.unanimous is True            # the sets ARE identical
+        assert d.collapse_warning is None     # ...but that is not monoculture
+
+    def test_unanimous_non_empty_still_warns(self):
+        p = AO.DEFAULT_PASSES[0]
+        same = _seat("CLAIM | arithmetic | 1+1 = 2 | sum")
+        runner = AO.BlindedSeatRunner({"s1": same, "s2": same, "s3": same})
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.all_seats_silent is False
+        assert d.collapse_warning is not None
+
+    def test_partial_silence_is_not_silence(self):
+        p = AO.DEFAULT_PASSES[0]
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat(""), "s2": _seat("CLAIM | arithmetic | 1+1 = 2 | sum")})
+        d = AO.measure_divergence(p, runner.run(p, "art"))
+        assert d.all_seats_silent is False
+        assert d.mean_pairwise_jaccard == pytest.approx(0.0)
+        assert d.collapse_warning is None

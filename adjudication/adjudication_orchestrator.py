@@ -573,6 +573,7 @@ class PassDivergence:
     distinct_claim_sets: int
     mean_pairwise_jaccard: float
     unanimous: bool
+    all_seats_silent: bool = False
     collapse_warning: Optional[str] = None
 
 
@@ -589,16 +590,24 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
     produce identical claim sets; if they do, they are not failing
     independently, and the whole ensemble is worth roughly one seat. See
     seat_independence.effective_seats for what that costs.
+
+    SILENCE IS NOT COLLAPSE. If every seat returned an EMPTY claim set the
+    sets are trivially identical, but that is the marginal-yield signal --
+    this pass found nothing -- not a monoculture signal. all_seats_silent
+    records it and collapse_warning is suppressed, because a warning that
+    fires on every empty pass is a warning operators learn to ignore.
     """
     responding = [r for r in responses if r.error is None]
     errored = [r.seat_id for r in responses if r.error is not None]
     sets = [frozenset((c.kind.value, (c.warrant or c.text).strip()) for c in r.claims)
             for r in responding]
 
+    silent = bool(sets) and all(len(s) == 0 for s in sets)
+
     if len(sets) < 2:
         return PassDivergence(
             p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
-            len(set(sets)), float("nan"), False, None,
+            len(set(sets)), float("nan"), False, silent, None,
         )
 
     jaccards = []
@@ -609,7 +618,7 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
     unanimous = len(set(sets)) == 1
 
     warning = None
-    if unanimous:
+    if unanimous and not silent:
         warning = (
             f"All {len(sets)} seats returned an IDENTICAL claim set on "
             f"'{p.name}'. On a non-trivial artifact this is a monoculture "
@@ -619,7 +628,7 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
         )
     return PassDivergence(
         p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
-        len(set(sets)), mean_j, unanimous, warning,
+        len(set(sets)), mean_j, unanimous, silent, warning,
     )
 
 
