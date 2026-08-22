@@ -2737,3 +2737,362 @@ class TestNoUnsourcedBenchmarkClaims:
         body = self._module_source(SI)
         assert "validation_harness.py" in body
         assert "synthetic seats" in body
+
+
+# ===========================================================================
+# CORRECTNESS MATRIX -- the join between a run and the diagnostics
+#
+# This is the number the whole system exists to produce, so the tests below
+# are hand-computable end to end. Every X, every rho, and every effective-seat
+# figure asserted here can be recomputed on paper from the seat outputs.
+# ===========================================================================
+
+from correctness_matrix import (  # noqa: E402
+    AdjudicationConflict,
+    build_correctness_matrix,
+    build_detections,
+    build_pass_detections,
+    diagnose_run,
+)
+
+_TRUE_A = "CLAIM | arithmetic | 2 + 2 = 4 | 2 + 2 = 4"
+_TRUE_B = "CLAIM | arithmetic | 3 * 3 = 9 | 3 * 3 = 9"
+_FALSE_A = "CLAIM | arithmetic | 2 + 2 = 5 | 2 + 2 = 5"
+_JUDGMENT = "CLAIM | judgment | the prose is unclear |"
+
+
+def _fixed(text):
+    """A seat that returns the same thing for every prompt."""
+    return lambda _prompt: text
+
+
+def _run(seat_texts, passes=None, gates=None):
+    """Run a panel and hand back (results, orchestrator)."""
+    orch = AO.Orchestrator(gates if gates is not None else [ArithmeticGate()])
+    runner = AO.BlindedSeatRunner({k: _fixed(v) for k, v in seat_texts.items()})
+    results = orch.run_sequential("artifact", [], runner, passes=passes)
+    return results, orch
+
+
+_ONE_PASS = (Pass("p1", "Inversion Analysis", "invert it", True),)
+
+
+class TestTheSemanticTable:
+    """correct = (seat asserted it) == (the claim is true). All four cells."""
+
+    def test_true_claim_asserted_scores_correct(self):
+        results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.item_truth == (True,)
+        assert m.X.tolist() == [[1, 1]]
+
+    def test_true_claim_missed_scores_wrong(self):
+        results, orch = _run({"s1": _TRUE_A, "s2": ""}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.seats == ("s1", "s2")
+        assert m.item_truth == (True,)
+        # s1 found it, s2 stayed silent on a real finding -> a miss
+        assert m.X.tolist() == [[1, 0]]
+
+    def test_false_claim_asserted_scores_wrong(self):
+        results, orch = _run({"s1": _FALSE_A, "s2": _FALSE_A}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.item_truth == (False,)
+        assert m.X.tolist() == [[0, 0]]
+
+    def test_false_claim_not_repeated_scores_correct(self):
+        results, orch = _run({"s1": _FALSE_A, "s2": ""}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.item_truth == (False,)
+        # s1 asserted a falsehood; s2 was right not to
+        assert m.X.tolist() == [[0, 1]]
+
+
+class TestTheTwoExtremesThatMakeTheNumberMeanSomething:
+    """A construction that got these backwards would still return a plausible
+    float. These are worked by hand in the assertions."""
+
+    def test_maximum_divergence_reads_as_maximum_independence(self):
+        results, orch = _run(
+            {"s1": _TRUE_A, "s2": _TRUE_B, "s3": _FALSE_A}, passes=_ONE_PASS
+        )
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.seats == ("s1", "s2", "s3")
+        # rows in adjudication order: 2+2=4 (true), 3*3=9 (true), 2+2=5 (false)
+        assert m.X.tolist() == [
+            [1, 0, 0],   # s1 found it; s2, s3 missed it
+            [0, 1, 0],   # s2 found it; s1, s3 missed it
+            [1, 1, 0],   # s3 asserted a falsehood; s1 and s2 did not
+        ]
+        # E = 1 - X. Column s3 = (1,1,1) is constant -> its pairs are NaN and
+        # drop out. The only live pair is (s1, s2):
+        #   e_s1 = (0,1,0), e_s2 = (1,0,0), each mean 1/3, var 2/9
+        #   cov = 0 - 1/9 = -1/9  ->  r = (-1/9) / (2/9) = -0.5
+        rho = SI.mean_error_correlation(m.X)
+        assert rho == pytest.approx(-0.5)
+        # negative correlation is clamped at 0: never claim MORE independence
+        # than there are seats
+        assert SI.effective_seats(3, rho) == pytest.approx(3.0)
+
+    def test_total_collapse_reads_as_one_effective_seat(self):
+        both = f"{_TRUE_A}\n{_FALSE_A}"
+        results, orch = _run({"s1": both, "s2": both, "s3": both}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.X.tolist() == [
+            [1, 1, 1],   # all three found the true one
+            [0, 0, 0],   # all three asserted the same falsehood
+        ]
+        # every error column is (0,1) -> identical -> r = 1.0 for all pairs
+        rho = SI.mean_error_correlation(m.X)
+        assert rho == pytest.approx(1.0)
+        assert SI.effective_seats(3, rho) == pytest.approx(1.0)  # 3/(1+2*1)
+
+    def test_the_two_extremes_are_actually_distinguished(self):
+        """The point of the exercise: these must not report the same thing."""
+        div, div_o = _run({"s1": _TRUE_A, "s2": _TRUE_B, "s3": _FALSE_A},
+                          passes=_ONE_PASS)
+        both = f"{_TRUE_A}\n{_FALSE_A}"
+        col, col_o = _run({"s1": both, "s2": both, "s3": both}, passes=_ONE_PASS)
+        d_rep = diagnose_run(div, div_o.verdicts)
+        c_rep = diagnose_run(col, col_o.verdicts)
+        assert d_rep["effective_seats"] > c_rep["effective_seats"]
+        assert d_rep["effective_seats"] == pytest.approx(3.0)
+        assert c_rep["effective_seats"] == pytest.approx(1.0)
+
+
+class TestEscalatedClaimsAreExcludedNotDefaulted:
+
+    def test_an_escalated_claim_never_enters_the_matrix(self):
+        results, orch = _run({"s1": _JUDGMENT, "s2": ""}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.coverage.n_claims_adjudicated == 1
+        assert m.coverage.n_excluded_unadjudicated == 1
+        assert m.coverage.n_items == 0
+        assert m.measurable is False
+
+    def test_exclusion_is_counted_so_the_operator_sees_the_hole(self):
+        results, orch = _run(
+            {"s1": f"{_TRUE_A}\n{_JUDGMENT}", "s2": _TRUE_A}, passes=_ONE_PASS
+        )
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.coverage.n_items == 1
+        assert m.coverage.n_excluded_unadjudicated == 1
+        assert m.coverage.gate_coverage == pytest.approx(0.5)
+        assert "escalated" in m.coverage.summary()
+
+    def test_a_human_adjudication_resolves_an_escalated_claim(self):
+        results, orch = _run({"s1": _JUDGMENT, "s2": ""}, passes=_ONE_PASS)
+        escalated = next(iter(orch.verdicts))
+        m = build_correctness_matrix(results, orch.verdicts, {escalated: True})
+        assert m.coverage.n_items == 1
+        assert m.coverage.n_items_from_human_adjudication == 1
+        assert m.coverage.n_items_from_gates == 0
+        assert m.X.tolist() == [[1, 0]]   # s1 raised it, s2 missed it
+
+    def test_a_human_adjudication_may_not_override_a_gate(self):
+        """Authority stays with the mechanical bottleneck."""
+        results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
+        gated = next(iter(orch.verdicts))
+        with pytest.raises(AdjudicationConflict, match="decided by gate"):
+            build_correctness_matrix(results, orch.verdicts, {gated: False})
+
+    def test_an_adjudication_for_an_unknown_claim_raises(self):
+        """Otherwise a typo is silently ignored and the operator believes the
+        queue was cleared."""
+        results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
+        with pytest.raises(AdjudicationConflict, match="unknown claim"):
+            build_correctness_matrix(results, orch.verdicts, {"no-such-id": True})
+
+
+class TestASeatErrorInvalidatesThatPassRatherThanTheSeat:
+
+    def test_items_from_a_pass_with_a_seat_error_are_dropped(self):
+        def boom(_prompt):
+            raise RuntimeError("transport died")
+
+        orch = AO.Orchestrator([ArithmeticGate()])
+        runner = AO.BlindedSeatRunner({"s1": _fixed(_TRUE_A), "s2": boom})
+        results = orch.run_sequential("artifact", [], runner, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.coverage.errored_passes == ("p1",)
+        assert m.coverage.n_excluded_seat_error == 1
+        assert m.coverage.n_items == 0
+        assert m.measurable is False
+        assert "seat error" in m.coverage.summary()
+
+    def test_the_errored_seat_still_appears_as_a_column_elsewhere(self):
+        """The seat is not deleted from the panel -- only the pass it missed is
+        dropped. Deleting the seat would change n and misstate every downstream
+        number."""
+        calls = {"n": 0}
+
+        def flaky(_prompt):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("transient")
+            return _TRUE_B
+
+        two = (Pass("p1", "Inversion Analysis", "x", True),
+               Pass("p2", "FMEA + FTA + FMEDA", "y", True))
+        orch = AO.Orchestrator([ArithmeticGate()])
+        runner = AO.BlindedSeatRunner({"s1": _fixed(_TRUE_A), "s2": flaky})
+        results = orch.run_sequential("artifact", [], runner, passes=two)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.seats == ("s1", "s2")
+        assert m.coverage.errored_passes == ("p1",)
+        # p1's claim dropped; p2's 3*3=9 survives
+        assert m.coverage.n_items == 1
+        assert m.coverage.n_excluded_seat_error == 1
+
+
+class TestFailsClosed:
+
+    def test_no_adjudicated_claim_yields_no_diagnosis(self):
+        results, orch = _run({"s1": _JUDGMENT, "s2": _JUDGMENT}, passes=_ONE_PASS)
+        report = diagnose_run(results, orch.verdicts)
+        assert report["measurable"] is False
+        assert report["blockers"]
+        for key in ("mean_error_correlation_rho", "effective_seats",
+                    "independence_gap", "capture_recapture"):
+            assert key not in report, f"{key} reported on an unmeasurable run"
+
+    def test_a_single_seat_panel_is_blocked(self):
+        results, orch = _run({"s1": _TRUE_A}, passes=_ONE_PASS)
+        m = build_correctness_matrix(results, orch.verdicts)
+        assert m.measurable is False
+        assert any("two seats" in b for b in m.blockers)
+
+    def test_an_undefined_rho_is_named_not_rounded(self):
+        """Every seat identical AND every item the same verdict -> no variance
+        in any pair. NaN is the honest answer; the reading must say so rather
+        than let a NaN print as a value."""
+        results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
+        report = diagnose_run(results, orch.verdicts)
+        assert math.isnan(report["mean_error_correlation_rho"])
+        assert "absence of a measurement" in report["reading"]
+
+
+class TestDetectionsExcludeFalseAssertions:
+
+    def test_chao1_input_counts_only_verified_findings(self):
+        """Orchestrator.detections_by_seat records every proposal including the
+        rejected ones. Chao1 estimates uncaught REAL defects, so feeding it
+        false assertions inflates S_obs and the singleton count."""
+        results, orch = _run(
+            {"s1": f"{_TRUE_A}\n{_FALSE_A}", "s2": _TRUE_A}, passes=_ONE_PASS
+        )
+        raw = orch.detections_by_seat
+        clean = build_detections(results, orch.verdicts)
+        assert len(raw["s1"]) == 2          # both proposals
+        assert len(clean["s1"]) == 1        # only the verified one
+        assert clean["s1"] == clean["s2"]
+
+    def test_a_seat_that_found_nothing_true_gets_an_empty_set(self):
+        results, orch = _run({"s1": _TRUE_A, "s2": _FALSE_A}, passes=_ONE_PASS)
+        clean = build_detections(results, orch.verdicts)
+        assert clean["s2"] == set()
+        assert "s2" in clean, "a seat with no true findings must still be listed"
+
+    def test_pass_detections_are_ordered_and_true_only(self):
+        two = (Pass("p1", "Inversion Analysis", "x", True),
+               Pass("p2", "FMEA + FTA + FMEDA", "y", True))
+        calls = {"n": 0}
+
+        def by_pass(_prompt):
+            calls["n"] += 1
+            return _TRUE_A if calls["n"] <= 2 else f"{_TRUE_B}\n{_FALSE_A}"
+
+        orch = AO.Orchestrator([ArithmeticGate()])
+        runner = AO.BlindedSeatRunner({"s1": by_pass, "s2": by_pass})
+        results = orch.run_sequential("artifact", [], runner, passes=two)
+        pd = build_pass_detections(results, orch.verdicts)
+        assert [pid for pid, _ in pd] == ["p1", "p2"]
+        assert len(pd[0][1]) == 1     # 2+2=4
+        assert len(pd[1][1]) == 1     # 3*3=9; the false claim is not a detection
+
+
+class TestCoverageAccountingIsComplete:
+
+    def test_every_adjudicated_claim_is_either_used_or_counted_as_excluded(self):
+        results, orch = _run(
+            {"s1": f"{_TRUE_A}\n{_FALSE_A}\n{_JUDGMENT}", "s2": _TRUE_B},
+            passes=_ONE_PASS,
+        )
+        c = build_correctness_matrix(results, orch.verdicts).coverage
+        assert (c.n_items + c.n_excluded_unadjudicated + c.n_excluded_seat_error
+                == c.n_claims_adjudicated)
+        assert c.n_items_from_gates + c.n_items_from_human_adjudication == c.n_items
+
+    def test_the_summary_names_human_adjudication_when_it_was_used(self):
+        """The operator must be able to see, from the summary line alone, that
+        part of this diagnosis rests on a judgement call rather than a gate."""
+        results, orch = _run({"s1": _JUDGMENT, "s2": ""}, passes=_ONE_PASS)
+        escalated = next(iter(orch.verdicts))
+        c = build_correctness_matrix(results, orch.verdicts, {escalated: True}).coverage
+        assert "1 from human adjudication" in c.summary()
+        assert "0 from gates" in c.summary()
+
+    def test_gate_coverage_is_nan_when_nothing_was_adjudicated(self):
+        results, orch = _run({"s1": "", "s2": ""}, passes=_ONE_PASS)
+        c = build_correctness_matrix(results, orch.verdicts).coverage
+        assert c.n_claims_adjudicated == 0
+        assert math.isnan(c.gate_coverage)
+
+
+class TestVerdictsAreRetainedByTheOrchestrator:
+
+    def test_each_distinct_claim_has_exactly_one_verdict(self):
+        results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
+        assert len(orch.verdicts) == 1
+        v = next(iter(orch.verdicts.values()))
+        assert v.status is GateStatus.PASS
+        assert v.verified_true is True
+        assert v.pass_id == "p1"
+        assert len(results) == 1
+
+    def test_an_escalated_claim_records_a_verdict_with_no_status(self):
+        _, orch = _run({"s1": _JUDGMENT, "s2": ""}, passes=_ONE_PASS)
+        v = next(iter(orch.verdicts.values()))
+        assert v.status is None
+        assert v.verified_true is None, "absence of a gate is not a False verdict"
+
+    def test_a_reproposed_claim_is_not_readjudicated(self):
+        """A claim seen in pass 1 keeps pass 1's verdict when pass 2 repeats
+        it, so the pass attribution stays honest."""
+        two = (Pass("p1", "Inversion Analysis", "x", True),
+               Pass("p2", "FMEA + FTA + FMEDA", "y", True))
+        orch = AO.Orchestrator([ArithmeticGate()])
+        runner = AO.BlindedSeatRunner({"s1": _fixed(_TRUE_A), "s2": _fixed(_TRUE_A)})
+        orch.run_sequential("artifact", [], runner, passes=two)
+        assert len(orch.verdicts) == 1
+        assert next(iter(orch.verdicts.values())).pass_id == "p1"
+
+    def test_claims_from_an_errored_response_are_never_counted(self):
+        """The reference runner returns no claims alongside an error, so this
+        path is unreachable through it -- and build_detections does NOT apply
+        the errored-pass exclusion that covers the matrix, so a custom runner
+        returning both would put a half-finished response into the chao1 input.
+        Found by mutation: deleting the guard broke no test.
+        """
+        claim = Claim(
+            id="c-partial",
+            text="2 + 2 = 4",
+            kind=ClaimKind.ARITHMETIC,
+            warrant="2 + 2 = 4",
+            source_pass="p1",
+            source_seat="s2",
+        )
+        good = AO.SeatResponse("s1", "p1", "raw", [claim])
+        # a seat that errored AND returned something: the response is partial
+        partial = AO.SeatResponse("s2", "p1", "raw", [claim], error="died mid-stream")
+        result = AO.SequentialPassResult(
+            "p1", "Inversion Analysis",
+            AO.PassRecord("p1", 1, 1, 0, 0),
+            AO.measure_divergence(_ONE_PASS[0], [good, partial]),
+            [good, partial],
+        )
+        verdicts = {"c-partial": AO.ClaimVerdict("c-partial", "p1", GateStatus.PASS,
+                                                 "ArithmeticGate", "confirmed")}
+        det = build_detections([result], verdicts)
+        assert det["s1"] == {"c-partial"}
+        assert det["s2"] == set(), "an errored seat must not be credited with a find"

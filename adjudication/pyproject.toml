@@ -23,7 +23,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
-files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py"]
+files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

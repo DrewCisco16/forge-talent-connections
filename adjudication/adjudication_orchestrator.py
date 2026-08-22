@@ -1032,6 +1032,36 @@ class PassRecord:
     eliminated_candidates: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ClaimVerdict:
+    """
+    The adjudicated outcome of ONE claim, retained for the whole run.
+
+    PassRecord counts outcomes; it does not say WHICH claim got which verdict.
+    That is enough to fit the decay curve and nothing else. The independence
+    diagnostics need per-claim ground truth -- whether the proposition a seat
+    asserted turned out to be true -- so the verdict is kept here rather than
+    reduced to a tally at the moment it is produced.
+
+    status is None for an ESCALATED claim: no gate applied, so the run has no
+    mechanical opinion about it. That is not a soft "unknown" to be filled in
+    with a default. It is the absence of a measurement, and correctness_matrix
+    excludes such claims unless a human adjudication is supplied.
+    """
+    claim_id: str
+    pass_id: str
+    status: GateStatus | None
+    gate: str | None = None
+    detail: str = ""
+
+    @property
+    def verified_true(self) -> bool | None:
+        """True/False for a gated claim, None when nothing adjudicated it."""
+        if self.status is None:
+            return None
+        return self.status is GateStatus.PASS
+
+
 class Orchestrator:
     """
     Sequential, gate-first adjudication. The orchestrator is CODE, not a model.
@@ -1066,6 +1096,10 @@ class Orchestrator:
         self.detections_by_seat: dict[str, set] = {}
         self._seen_claims: set = set()
         self.divergence_by_pass: dict[str, PassDivergence] = {}
+        # claim_id -> ClaimVerdict, one entry per DISTINCT claim. A claim is
+        # adjudicated once, in the pass that first saw it; later re-proposals
+        # by other seats do not re-run the gates and do not overwrite this.
+        self.verdicts: dict[str, ClaimVerdict] = {}
 
     # -- verification -------------------------------------------------------
 
@@ -1109,7 +1143,12 @@ class Orchestrator:
             if result is None:
                 self.escalation_queue.append(claim)
                 rec.escalated += 1
+                self.verdicts[claim.id] = ClaimVerdict(claim.id, p.id, None)
                 continue
+
+            self.verdicts[claim.id] = ClaimVerdict(
+                claim.id, p.id, result.status, result.gate, result.detail
+            )
 
             if result.status is GateStatus.PASS:
                 rec.auto_accepted += 1
