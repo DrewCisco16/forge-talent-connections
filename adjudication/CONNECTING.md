@@ -11,8 +11,16 @@ running in-process and needs no key.
 ## 1. Credentials
 
 ```
+cd adjudication
 cp .env.example .env
 ```
+
+`.env` must sit **in the `adjudication/` folder**, right beside `.env.example`
+— that is the only place the tool looks. Run
+`python run_adjudication.py --env /some/other/path` to point somewhere else.
+
+Every run prints which file it read (`env: loaded /path/to/.env`) so you never
+have to guess whether your keys were picked up.
 
 Fill in `ADJ_SEAT_1..4_API_KEY` and the five `ADJ_SEAT_*_MODEL` ids. `.env` is
 gitignored. Never paste a key into a document, a screenshot, a chat window, or

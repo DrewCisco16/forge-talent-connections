@@ -4060,3 +4060,61 @@ class TestTheCliSurvivesOrdinaryShellUsage:
         assert opened and closed == opened, (
             f"opened {opened} but closed {closed}"
         )
+
+
+class TestTheEnvFileIsActuallyRead:
+    """python-dotenv was a pinned dependency nothing ever called. load_panel
+    read os.environ, so a filled-in .env was silently ignored and the operator
+    got "credential missing" for a file sitting right there with the key in it.
+    Found when the user asked where .env goes."""
+
+    def test_a_real_env_file_reaches_the_environment(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ADJ_SEAT_1_API_KEY", raising=False)
+        p = tmp_path / ".env"
+        p.write_text("ADJ_SEAT_1_API_KEY=from-the-file\n")
+        msg = RA.load_env_file(str(p))
+        assert str(p) in msg and "loaded" in msg
+        assert _os.environ["ADJ_SEAT_1_API_KEY"] == "from-the-file"
+        _os.environ.pop("ADJ_SEAT_1_API_KEY", None)
+
+    def test_a_real_environment_variable_wins_over_the_file(self, tmp_path, monkeypatch):
+        """A shell export or a CI secret is deliberate and current; a .env line
+        may be a stale leftover. Overriding the deliberate one with the stale
+        one is the wrong way round."""
+        monkeypatch.setenv("ADJ_SEAT_1_API_KEY", "from-the-shell")
+        p = tmp_path / ".env"
+        p.write_text("ADJ_SEAT_1_API_KEY=from-the-file\n")
+        RA.load_env_file(str(p))
+        assert _os.environ["ADJ_SEAT_1_API_KEY"] == "from-the-shell"
+
+    def test_a_missing_file_says_where_it_looked(self, tmp_path):
+        missing = str(tmp_path / "nope.env")
+        msg = RA.load_env_file(missing)
+        assert missing in msg
+        assert "no .env found" in msg
+
+    def test_it_does_not_crash_without_the_file(self, tmp_path):
+        RA.load_env_file(str(tmp_path / "absent"))   # must not raise
+
+    def test_the_default_location_sits_beside_env_example(self):
+        """.env.example is what the operator copies, so .env must land in the
+        same folder or the copy lands somewhere the tool never looks."""
+        assert _os.path.basename(RA.DEFAULT_ENV_FILE) == ".env"
+        assert _os.path.dirname(RA.DEFAULT_ENV_FILE) == _os.path.dirname(
+            _os.path.abspath(RA.__file__))
+        assert _os.path.exists(_os.path.join(
+            _os.path.dirname(RA.DEFAULT_ENV_FILE), ".env.example"))
+
+    def test_the_credential_error_names_the_env_path_it_checked(
+            self, tmp_path, capsys, monkeypatch):
+        """'credential missing' with no path is the message that wastes an hour."""
+        for i in range(1, 6):
+            monkeypatch.delenv(f"ADJ_SEAT_{i}_API_KEY", raising=False)
+            monkeypatch.delenv(f"ADJ_SEAT_{i}_MODEL", raising=False)
+        prof = tmp_path / "p.json"
+        prof.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
+        envp = tmp_path / "nothing.env"
+        assert RA.main(["--profiles", str(prof), "--env", str(envp)]) == 2
+        err = capsys.readouterr().err
+        assert str(envp) in err
+        assert ".env.example" in err

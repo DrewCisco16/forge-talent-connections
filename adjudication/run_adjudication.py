@@ -369,6 +369,37 @@ def _default_gates() -> list[Gate]:
 
 
 
+DEFAULT_ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+
+
+def load_env_file(path: str | None = None) -> str:
+    """
+    Read .env into the process environment, and SAY what happened.
+
+    python-dotenv was a pinned dependency that nothing ever called, so
+    load_panel read os.environ and a filled-in .env was silently ignored: the
+    operator got "credential missing" for a file sitting right there with the
+    key in it. The fix is this function; the reason it reports rather than
+    returning None is that "which .env did you actually read" is the first
+    question anyone asks when a key does not take.
+
+    A real environment variable WINS over the file. A shell export or a CI
+    secret is deliberate and current; a .env line may be a stale leftover, and
+    silently overriding the deliberate one with the stale one is the wrong way
+    round.
+    """
+    target = path or DEFAULT_ENV_FILE
+    if not os.path.exists(target):
+        return f"no .env found at {target} (using the shell environment only)"
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return (f"found {target} but python-dotenv is not installed, so it was "
+                f"NOT read. Run: pip install -r requirements.txt")
+    load_dotenv(target, override=False)
+    return f"loaded {target}"
+
+
 def live_seats(
     profiles_path: str,
     env: Mapping[str, str] | None = None,
@@ -534,6 +565,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="path to profiles.json -- runs the REAL panel")
     ap.add_argument("--check-profiles", metavar="PATH",
                     help="validate a profiles file offline and exit; spends nothing")
+    ap.add_argument("--env", metavar="PATH",
+                    help=f"path to the .env holding your keys (default: {DEFAULT_ENV_FILE})")
     args = ap.parse_args(argv)
 
     if args.check_profiles:
@@ -597,12 +630,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             adjudications = {k: bool(v) for k, v in json.load(fh).items()}
 
     if args.profiles:
+        print(f"env: {load_env_file(args.env)}", file=sys.stderr)
         try:
             seat_fns = live_seats(args.profiles)
         except MissingSeatCredential as exc:
             print(f"credential missing: {exc}\n"
-                  f"Set it in .env or the environment. load_panel refuses to run "
-                  f"a short panel because it would misstate every statistic.",
+                  f"Looked for a .env at: {args.env or DEFAULT_ENV_FILE}\n"
+                  f"Put the key there (copy .env.example to .env), or export it "
+                  f"in your shell. load_panel refuses to run a short panel "
+                  f"because it would misstate every statistic.",
                   file=sys.stderr)
             return 2
         except ProfileConfigError as exc:
