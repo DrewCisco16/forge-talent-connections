@@ -2250,3 +2250,40 @@ class TestDurableHeadSidecar:
         log = AL.DurableAuditLog(str(p), run_id="r1")
         log.append("pass", {})
         assert log.verify(check_sidecar=False).valid is True
+
+
+class TestPropertyTestRegressions:
+    """Three defects found by property tests in test_properties.py, pinned here
+    as example-based regressions so they are covered by the primary suite too."""
+
+    def test_effective_seats_clamps_rho_above_one(self):
+        """effective_seats(2, 2.0) returned 0.67 -- fewer than one effective
+        seat. rho > 1 is impossible for a correlation, and SOP 6.1 reads this
+        number in plain language, so a nonsense value reads as meaningful."""
+        assert SI.effective_seats(2, 2.0) == pytest.approx(1.0)
+        assert SI.effective_seats(5, 17.0) == pytest.approx(1.0)
+        assert SI.effective_seats(5, 1.0) == pytest.approx(1.0)
+
+    def test_lincoln_petersen_rejects_impossible_overlap(self):
+        """lincoln_petersen(0, 0, 1) returned -0.5. An error caught by BOTH
+        seats was caught by each, so m can never exceed either sample, and a
+        negative population estimate is not a bound on anything."""
+        with pytest.raises(ValueError, match="contradictory"):
+            SI.lincoln_petersen(0, 0, 1)
+        with pytest.raises(ValueError, match="contradictory"):
+            SI.lincoln_petersen(10, 4, 5)
+        with pytest.raises(ValueError, match="non-negative"):
+            SI.lincoln_petersen(-1, 5, 0)
+        assert SI.lincoln_petersen(10, 4, 4) >= 0.0        # the boundary is valid
+
+    def test_mean_error_correlation_is_quiet_when_there_are_no_pairs(self):
+        """A single seat has no pair to correlate. NaN is right; the
+        "Mean of empty slice" warning that came with it is not."""
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error", RuntimeWarning)
+            assert math.isnan(SI.mean_error_correlation(np.array([[1], [0], [1]])))
+
+    def test_mean_error_correlation_is_quiet_when_every_seat_is_constant(self):
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error", RuntimeWarning)
+            assert math.isnan(SI.mean_error_correlation(np.ones((6, 3), dtype=int)))

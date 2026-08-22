@@ -16,6 +16,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "test_suite.py" = ["PLR0913", "B011"]
+# Property tests intentionally reach into module internals and use
+# broad strategies; the assertions are the contract, not the style.
+"test_properties.py" = ["PLR0913", "B011", "PLR2004", "PLC0415"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -24,7 +27,7 @@ files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_har
 
 [tool.pytest.ini_options]
 addopts = "-q"
-testpaths = ["test_suite.py"]
+testpaths = ["test_suite.py", "test_properties.py"]
 
 # --- deliberate exemptions, each with its reason -------------------------
 [tool.ruff.lint.extend-per-file-ignores]
@@ -39,3 +42,8 @@ testpaths = ["test_suite.py"]
     "SIM108",   # the chao1 f2>0 branch is clearer as if/else than as a ternary
     "FURB110",  # the explicit ternary documents the intentional falsy-zero path
 ]
+
+[tool.bandit]
+# Scans the engine modules. The test suite is excluded: it deliberately
+# constructs hostile payloads, and flagging those is noise, not signal.
+exclude_dirs = [".venv"]

@@ -166,7 +166,11 @@ class Candidate:
 # ===========================================================================
 
 class GateStatus(str, Enum):
-    PASS = "pass"
+    # B105 below is a false positive: "pass" is a gate verdict, not a
+    # credential. Bandit flags it only because the member is named PASS.
+    # Keep the reason OFF the nosec line -- bandit parses everything after
+    # "nosec" as test ids and warns about each prose word.
+    PASS = "pass"  # nosec B105
     FAIL = "fail"
     INAPPLICABLE = "inapplicable"
 

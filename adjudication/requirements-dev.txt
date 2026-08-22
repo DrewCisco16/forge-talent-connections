@@ -5,3 +5,8 @@ pytest-cov==7.1.0
 coverage==7.15.4
 ruff==0.16.4
 mypy==2.3.1
+# Non-AI verification layer, SOP 8.4 / sixteen-test template:
+# property tests and fuzzing, plus dependency and security scans.
+hypothesis==6.165.10
+pip-audit==2.10.1
+bandit==1.9.4

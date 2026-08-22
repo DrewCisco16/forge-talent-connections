@@ -88,10 +88,23 @@ def pairwise_error_correlation(X: np.ndarray) -> np.ndarray:
 
 
 def mean_error_correlation(X: np.ndarray) -> float:
-    """Mean off-diagonal pairwise error correlation (rho). NaNs ignored."""
+    """
+    Mean off-diagonal pairwise error correlation (rho). NaNs ignored.
+
+    Returns NaN when there is nothing to average: a single seat has no pairs,
+    and a panel of constant seats has no variance in any pair. Both cases are
+    handled explicitly rather than left to np.nanmean, which returns NaN with a
+    "Mean of empty slice" warning -- the right answer arrived at noisily, and
+    noise in a diagnostic is how a real signal gets tuned out. Found by
+    property test.
+    """
     C = pairwise_error_correlation(X)
     n = C.shape[0]
+    if n < 2:
+        return float("nan")
     off = C[~np.eye(n, dtype=bool)]
+    if off.size == 0 or bool(np.all(np.isnan(off))):
+        return float("nan")
     return float(np.nanmean(off))
 
 
@@ -104,10 +117,18 @@ def effective_seats(n_seats: int, rho: float) -> float:
     Interpretation: the number of INDEPENDENT seats your correlated ensemble
     is actually worth. At rho = 0.6 with 5 seats, n_eff ~= 1.47.
 
-    rho <= 0 is clamped to 0 (negative correlation would imply n_eff > n,
-    which is not a claim this function will make without direct evidence).
+    rho is clamped to [0, 1], and both ends matter.
+
+    Below 0: negative correlation would imply n_eff > n, and this function will
+    not claim more independence than there are seats.
+
+    Above 1: a Pearson correlation cannot exceed 1, so any such input is a
+    measurement or plumbing error. Left unclamped it produces n_eff < 1 --
+    effective_seats(2, 2.0) returned 0.67 -- and SOP 6.1 reads this number in
+    plain language ("5 seats behave like 1.47"), so "0.67 seats" would be read
+    as meaningful rather than as the nonsense it is. Found by property test.
     """
-    rho = max(0.0, float(rho))
+    rho = min(1.0, max(0.0, float(rho)))
     if n_seats <= 1:
         return float(n_seats)
     return n_seats / (1.0 + (n_seats - 1) * rho)
@@ -169,7 +190,20 @@ def lincoln_petersen(n1: int, n2: int, m: int, chapman: bool = True) -> float:
     ASSUMPTION VIOLATION: assumes independent capture. Positive correlation
     between seats inflates m, which DEFLATES N_hat. Treat the result as a
     LOWER BOUND on true error count.
+
+    FAIL CLOSED on contradictory input. m cannot exceed either sample: an error
+    caught by BOTH seats was caught by each of them. Left unchecked, the
+    Chapman form quietly returns a NEGATIVE population estimate --
+    lincoln_petersen(0, 0, 1) returned -0.5 -- which is not a bound on
+    anything. Found by property test.
     """
+    if n1 < 0 or n2 < 0 or m < 0:
+        raise ValueError(f"counts must be non-negative: n1={n1}, n2={n2}, m={m}")
+    if m > min(n1, n2):
+        raise ValueError(
+            f"overlap m={m} exceeds a sample (n1={n1}, n2={n2}): an error caught "
+            f"by both seats was caught by each, so this input is contradictory"
+        )
     if chapman:
         return ((n1 + 1) * (n2 + 1) / (m + 1)) - 1
     if m == 0:
