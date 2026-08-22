@@ -2287,3 +2287,51 @@ class TestPropertyTestRegressions:
         with _warnings.catch_warnings():
             _warnings.simplefilter("error", RuntimeWarning)
             assert math.isnan(SI.mean_error_correlation(np.ones((6, 3), dtype=int)))
+
+
+class TestBooleanLiteralsAreNotArithmetic:
+    """Found by a fuzz property on CI's random seed, not by any example.
+
+    bool subclasses int, so `isinstance(True, (int, float))` is True and the
+    warrant "True = 1" evaluated to True, compared equal to 1.0, and returned
+    PASS with the detail "True confirmed". A seat could have attached that to
+    any arithmetic claim and been auto-accepted -- a warrant that proves
+    nothing, which is the arithmetic-gate equivalent of a permissive resolver.
+    """
+
+    g = ArithmeticGate()
+
+    def _check(self, warrant):
+        return self.g.check(Claim("c", "t", ClaimKind.ARITHMETIC, warrant))
+
+    @pytest.mark.parametrize("warrant", [
+        "True = 1",
+        "False = 0",
+        "True + True = 2",
+        "True * 5 = 5",
+        "False + 1 = 1",
+        "-True = -1",
+    ])
+    def test_boolean_literals_never_satisfy_an_arithmetic_warrant(self, warrant):
+        r = self._check(warrant)
+        assert r.status is GateStatus.FAIL
+        assert "unsupported expression" in r.detail
+
+    @pytest.mark.parametrize("warrant,expected", [
+        ("12 + 35 = 47", "47"),
+        ("2 ** 10 = 1024", "1024"),
+        ("1 = 1", "1"),
+        ("0 = 0", "0"),
+        ("1/3 = 0.3333333333333333", "0.333"),
+    ])
+    def test_real_numeric_literals_still_pass(self, warrant, expected):
+        """The fix must not cost genuine arithmetic, including the integers 1
+        and 0 that True and False were masquerading as."""
+        r = self._check(warrant)
+        assert r.status is GateStatus.PASS
+        assert expected in r.detail
+
+    def test_safe_eval_rejects_a_bare_boolean_constant(self):
+        import ast
+        with pytest.raises(ValueError, match="unsupported expression"):
+            AO._safe_eval(ast.parse("True", mode="eval"))

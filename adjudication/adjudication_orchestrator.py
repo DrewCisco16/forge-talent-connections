@@ -196,10 +196,22 @@ _SAFE_OPS = {
 
 
 def _safe_eval(node):
-    """Evaluate an arithmetic AST without exec/eval on arbitrary code."""
+    """
+    Evaluate an arithmetic AST without exec/eval on arbitrary code.
+
+    bool is EXCLUDED even though it is a subclass of int. Without that, the
+    literal True satisfies isinstance(value, (int, float)), so the warrant
+    "True = 1" evaluated to True, compared equal to 1.0, and the gate returned
+    PASS with the detail "True confirmed". That is a vacuous warrant: a seat
+    could attach it to any arithmetic claim and be auto-accepted, which is the
+    arithmetic-gate equivalent of the permissive resolver SOP 8.3 warns about.
+    Found by a fuzz property on CI's random seed, not by any example.
+    """
     if isinstance(node, ast.Expression):
         return _safe_eval(node.body)
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+    if (isinstance(node, ast.Constant)
+            and isinstance(node.value, (int, float))
+            and not isinstance(node.value, bool)):
         return node.value
     if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
         return _SAFE_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
