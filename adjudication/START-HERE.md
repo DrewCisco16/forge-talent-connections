@@ -4,43 +4,71 @@ Everything you need, in order. Nothing here assumes you know Python.
 
 ---
 
-## Step 1 — Get everything onto your Mac (one command)
+## Step 1 — Get everything onto your Mac
 
-Open **Terminal** (press ⌘+Space, type `Terminal`, hit Enter). Paste this
-whole block and press Enter:
+There are **two routes**. Pick ONE. They produce the same thing in different
+places, and doing both just leaves you with two copies to confuse yourself with.
+
+### Route A — the zip (easiest, no Terminal needed)
+
+If you have `EliminationProtocolFive.zip` in your Downloads:
+
+1. Double-click the zip. You get a folder called `EliminationProtocolFive`.
+2. Open that folder.
+3. **Double-click `SETUP.command`.**
+
+That script does everything: checks Python, builds the environment, installs
+the libraries, creates your two editable files, and runs a demo to prove the
+machinery works. Then it opens the folder and prints where everything is.
+
+⚠️ The first time, macOS will say *"cannot be opened because it is from an
+unidentified developer."* **Right-click `SETUP.command` → Open → Open.** Once
+only. This is the step where people give up; it is not a problem with the file.
+
+Your folder is then:
+```
+/Users/YOUR-NAME/Downloads/EliminationProtocolFive/
+```
+
+**Skip to Step 3.** Step 2 already ran inside the script.
+
+### Route B — from GitHub (keeps up to date)
+
+Better if you want to pull future changes with `git pull`. Open **Terminal**
+(⌘+Space, type `Terminal`, Enter) and paste this whole block:
 
 ```bash
 cd ~
 git clone -b claude/adjudication-test-suite-w27c3h \
   https://github.com/DrewCisco16/forge-talent-connections.git
 cd forge-talent-connections/adjudication
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+./SETUP.command
 ```
 
-That downloads the whole project and installs what it needs. It takes a
-minute or two.
-
-### Where everything now lives
-
+Your folder is then:
 ```
 /Users/YOUR-NAME/forge-talent-connections/adjudication/
 ```
 
-To open that folder in Finder, paste this into Terminal:
+To open either folder in Finder, paste the matching line into Terminal:
 
 ```bash
-open ~/forge-talent-connections/adjudication
+open ~/Downloads/EliminationProtocolFive              # Route A
+open ~/forge-talent-connections/adjudication          # Route B
 ```
 
-**Everything below is inside that one folder.**
+**Everything below is inside whichever folder you chose.** Where this guide
+says "the folder", it means that one.
 
----
+## Step 2 — Check it works (skip if SETUP.command already ran)
 
-## Step 2 — Check it works before touching anything
+`SETUP.command` does this for you. Only run it by hand if you set things up
+some other way:
 
 ```bash
-cd ~/forge-talent-connections/adjudication
+cd "the folder"
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 .venv/bin/python run_adjudication.py --demo
 ```
 
@@ -59,7 +87,7 @@ These are the only two files that need you. Both are already in the folder.
 ### 3a. `.env` — your five API keys
 
 ```bash
-cd ~/forge-talent-connections/adjudication
+cd "the folder you chose in Step 1"
 cp .env.example .env
 open -e .env
 ```
@@ -147,7 +175,7 @@ provisional until you've seen that number.
 Ready-made bundles are generated into a `review/` folder:
 
 ```bash
-cd ~/forge-talent-connections/adjudication
+cd "the folder you chose in Step 1"
 python3 make_review_bundles.py
 open review
 ```

@@ -8,9 +8,16 @@
     "was never asked. Vendor API docs are technical manuals and admissible",
     "under SOP 8.3; recollection is not.",
     "",
-    "Keys named here must match the seat ids in PANEL_OF_FIVE:",
-    "seat_1, seat_2, seat_3, seat_4. seat_5_claude is in-process and needs no",
-    "profile.",
+    "Keys named here must match the seat ids in the panel spec being run.",
+    "The DEFAULT is PANEL_OF_FIVE_EXTERNAL: seat_1, seat_2, seat_3, seat_4,",
+    "seat_5 -- ALL FIVE reached by API key, all five blinded identically, so",
+    "ALL FIVE need a profile block here.",
+    "",
+    "Only if you run with --seat5 in-process does the panel become",
+    "PANEL_OF_FIVE, whose fifth seat id is seat_5_claude and which needs no",
+    "profile because a separate session supplies it. That arrangement carries",
+    "a blinding hazard PANEL_OF_FIVE's own docstring records; the default",
+    "shape exists to remove it.",
     "",
     "PLACEHOLDERS, substituted into body:",
     "  {{prompt}}       the blinded prompt      -> string",
@@ -25,9 +32,8 @@
     "string the seat FAILS rather than returning empty -- a missing",
     "measurement and a measurement of zero are opposite facts.",
     "",
-    "Check it before spending anything:  python seat_profiles.py profiles.json",
-    "",
-    "Check it before spending anything:  python seat_profiles.py profiles.json",
+    "Check it before spending anything:",
+    "  python run_adjudication.py --check-profiles profiles.json",
     "Keys starting with _ are comments: ignored by the checker and by loading."
   ],
   "seat_1": {
@@ -99,6 +105,32 @@
     "auth_header": "authorization",
     "auth_template": "Bearer {key}",
     "extra_headers": {},
+    "body": {
+      "model": "{{model}}",
+      "max_tokens": "{{max_tokens}}",
+      "temperature": "{{temperature}}",
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
+    },
+    "text_path": [
+      "FILL-IN",
+      0,
+      "FILL-IN"
+    ]
+  },
+  "seat_5": {
+    "_note": "Anthropic. Reached by key like every other seat. Some vendors require a version header as well as the key -- if this one does, its name and value go in extra_headers; if it does not, delete the extra_headers entry entirely rather than leaving a FILL-IN in it.",
+    "name": "FILL-IN",
+    "endpoint": "https://FILL-IN.example.com/v1/FILL-IN",
+    "auth_header": "FILL-IN header name",
+    "auth_template": "{key}",
+    "extra_headers": {
+      "FILL-IN-version-header": "FILL-IN value if the vendor requires one"
+    },
     "body": {
       "model": "{{model}}",
       "max_tokens": "{{max_tokens}}",
