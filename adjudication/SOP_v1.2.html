@@ -1,0 +1,899 @@
+<title>Disconfirmation Adjudication SOP</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#F3F5F3; --raise:#FFFFFF; --ink:#171C22; --ink-2:#4A555C; --ink-3:#77838A;
+  --rule:#D6DCD8; --rule-2:#E7EBE8;
+  --accent:#2F5D57; --accent-soft:#E4EDEA;
+  --pass:#2C6A4E; --pass-soft:#E3EFE7;
+  --warn:#8A600D; --warn-soft:#F4EBD8;
+  --fail:#8C2438; --fail-soft:#F5E3E6;
+  --measure:68ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#11151A; --raise:#181D23; --ink:#DDE3E0; --ink-2:#9DA9AE; --ink-3:#77838A;
+    --rule:#2A3138; --rule-2:#212830;
+    --accent:#7FB3A8; --accent-soft:#1B2A28;
+    --pass:#6FB08C; --pass-soft:#16241C;
+    --warn:#D3A63F; --warn-soft:#282112;
+    --fail:#D97A8A; --fail-soft:#2A1519;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11151A; --raise:#181D23; --ink:#DDE3E0; --ink-2:#9DA9AE; --ink-3:#77838A;
+  --rule:#2A3138; --rule-2:#212830;
+  --accent:#7FB3A8; --accent-soft:#1B2A28;
+  --pass:#6FB08C; --pass-soft:#16241C;
+  --warn:#D3A63F; --warn-soft:#282112;
+  --fail:#D97A8A; --fail-soft:#2A1519;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:Spectral,Georgia,serif; font-size:17px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 96px}
+h1,h2,h3,h4{font-family:Archivo,"Helvetica Neue",Arial,sans-serif;text-wrap:balance;margin:0}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+/* ---- cover ---- */
+.cover{padding:72px 0 40px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);font-weight:600}
+.cover h1{font-size:clamp(34px,5.4vw,58px);line-height:1.04;font-weight:700;margin:18px 0 10px;letter-spacing:-.015em}
+.cover .sub{font-size:clamp(18px,2.4vw,23px);color:var(--ink-2);font-style:italic;max-width:40ch}
+.meta{display:flex;flex-wrap:wrap;gap:8px 32px;margin-top:32px;
+  font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-2)}
+.meta b{color:var(--ink);font-weight:500}
+
+/* ---- layout with revision gutter ---- */
+section{display:grid;grid-template-columns:104px minmax(0,1fr);gap:0 28px;
+  padding:44px 0;border-bottom:1px solid var(--rule-2)}
+.gutter{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);padding-top:7px;display:flex;
+  flex-direction:column;gap:8px;align-items:flex-start}
+.num{font-size:22px;letter-spacing:0;color:var(--ink);font-weight:600;line-height:1}
+.flag{padding:2px 7px;border:1px solid currentColor;border-radius:2px;font-weight:600;font-size:10px}
+.flag.rev{color:var(--warn)} .flag.new{color:var(--pass)} .flag.same{color:var(--ink-3)}
+.body{min-width:0;max-width:var(--measure)}
+section h2{font-size:clamp(23px,3vw,31px);font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+section h3{font-size:18px;font-weight:600;margin:30px 0 8px;color:var(--ink)}
+section h4{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);margin:24px 0 8px;font-weight:600}
+p{margin:0 0 14px} .body>p:last-child{margin-bottom:0}
+a{color:var(--accent)}
+ul,ol{margin:0 0 14px;padding-left:20px} li{margin-bottom:6px}
+strong{font-weight:600}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--rule-2);
+  padding:1px 5px;border-radius:3px}
+
+/* ---- notices ---- */
+.notice{border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:14px 18px;margin:18px 0;border-radius:0 3px 3px 0}
+.notice.pass{border-color:var(--pass);background:var(--pass-soft)}
+.notice.warn{border-color:var(--warn);background:var(--warn-soft)}
+.notice.fail{border-color:var(--fail);background:var(--fail-soft)}
+.notice .lab{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;font-weight:600;display:block;margin-bottom:6px;color:var(--accent)}
+.notice.pass .lab{color:var(--pass)} .notice.warn .lab{color:var(--warn)}
+.notice.fail .lab{color:var(--fail)}
+.notice p:last-child{margin-bottom:0}
+
+/* ---- data ---- */
+.scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--rule);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:14.5px;
+  font-family:Archivo,sans-serif;font-variant-numeric:tabular-nums}
+th{background:var(--rule-2);text-align:left;font-weight:600;font-size:11.5px;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);padding:9px 13px;white-space:nowrap}
+td{padding:9px 13px;border-top:1px solid var(--rule-2);vertical-align:top}
+td.n{text-align:right;font-family:"IBM Plex Mono",monospace}
+pre{font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.55;
+  background:var(--raise);border:1px solid var(--rule);border-radius:3px;
+  padding:14px 16px;overflow-x:auto;margin:18px 0}
+
+/* ---- fillable ---- */
+.check{display:flex;gap:11px;align-items:flex-start;padding:7px 0;
+  border-bottom:1px solid var(--rule-2)}
+.check:last-of-type{border-bottom:none}
+.check input{margin:5px 0 0;width:15px;height:15px;accent-color:var(--accent);flex:none;cursor:pointer}
+.check label{cursor:pointer;font-size:15.5px;line-height:1.5}
+.check input:checked+label{color:var(--ink-3);text-decoration:line-through}
+.note{margin:16px 0}
+.note span{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:6px;font-weight:600}
+textarea{width:100%;min-height:74px;background:var(--raise);color:var(--ink);
+  border:1px solid var(--rule);border-radius:3px;padding:10px 12px;resize:vertical;
+  font-family:Spectral,serif;font-size:15px;line-height:1.55}
+textarea:focus,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- toc ---- */
+.toc{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--rule);
+  padding:11px 0;display:flex;gap:16px;overflow-x:auto;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.06em}
+.toc a{color:var(--ink-2);text-decoration:none;white-space:nowrap;text-transform:uppercase}
+.toc a:hover{color:var(--accent)}
+.saved{color:var(--ink-3);font-style:italic;font-size:13px;margin-left:auto;white-space:nowrap}
+@media (max-width:720px){
+  section{grid-template-columns:1fr;gap:14px}
+  .gutter{flex-direction:row;align-items:center;padding-top:0}
+  .num{font-size:17px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="cover">
+  <div class="eyebrow">Standard Operating Procedure &middot; Internal Build Specification</div>
+  <h1>Automated Disconfirmation Adjudication</h1>
+  <p class="sub">A multi-model sequential verification system with a preserved human bottleneck.</p>
+  <div class="meta">
+    <span><b>Version</b> 1.2</span>
+    <span><b>Supersedes</b> 1.1 (22 Aug 2026)</span>
+    <span><b>Author</b> Andrew Francisco</span>
+    <span><b>Org</b> FORGE Talent Connections</span>
+  </div>
+  <div class="notice" style="margin-top:28px">
+    <span class="lab">Scope</span>
+    <p>A build-and-operate specification for an internal tool. It is not part of, and makes no claim upon, any dissertation work. Checkboxes and note areas on this page save to your browser as you type; notes written against v1.1 carry over unchanged.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#changelog">Changelog</a><a href="#s1">1 Intro</a><a href="#s2">2 Primer</a>
+  <a href="#s3">3 Constructs</a><a href="#s5">5 Hypotheses</a><a href="#s6">6 Math</a>
+  <a href="#s7">7 Evidence</a><a href="#s8">8 Build</a><a href="#s9">9 Daily</a>
+  <a href="#s10">10 Do Not Use</a><a href="#s11">11 References</a><a href="#s12">12 Defect Log</a>
+  <span class="saved" id="saved"></span>
+</nav>
+
+<section id="changelog">
+  <div class="gutter"><span class="num">&#8710;</span><span class="flag new">New</span></div>
+  <div class="body">
+    <h2>What changed in 1.2, and why</h2>
+    <p>v1.1 was written while the tool was being built. v1.2 is written from a tool that
+    <b>runs</b>. Every row below came from executing the code, and five of them are defects the
+    implementation exposed in v1.1 or in the code itself. The defect log in &sect;12 gives each
+    one in full.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>&sect;</th><th>Change</th><th>Cause</th></tr></thead>
+      <tbody>
+      <tr><td class="mono">2.3, 8.6, 9.1</td><td>The tool is now a <b>command</b>, not a library</td><td>Until now every module was reachable only from a demo block with hardcoded data</td></tr>
+      <tr><td class="mono">6.6</td><td>New: the <b>correctness matrix</b> &mdash; how a run becomes a rho</td><td><span class="mono">diagnose()</span> was defined, tested and <b>unreachable</b>; no run produced the eliminative-vs-collapse verdict the system exists for</td></tr>
+      <tr><td class="mono">6.7</td><td>New: seat count is the efficiency lever. <b>Pass count is not.</b></td><td>Measured: the residual is a function of pass <i>order</i>, not of what is left to find. The same yields reordered give R = 1.64, R = 16.95, and no fit at all</td></tr>
+      <tr><td class="mono">9.3</td><td>New: <b>holes</b> are part of the answer, not an appendix</td><td>One surviving candidate with an open judgment queue is a shortlist; shipping it as a conclusion is the failure this section prevents</td></tr>
+      <tr><td class="mono">8.3</td><td>Revised: the admissibility gate is <b>never</b> the only citation gate</td><td>Defect. Alone it accepted the invented DOI <span class="mono">10.1038/s41586-000-0000-0</span> as &ldquo;admissible: peer_reviewed&rdquo;</td></tr>
+      <tr><td class="mono">8.3</td><td>Added: the claim line is <span class="mono">CLAIM | kind | warrant | text</span>, in that order</td><td>Defect. Warrant and text reversed put prose where the gate expects an expression; every arithmetic claim was then rejected for the wrong reason</td></tr>
+      <tr><td class="mono">7</td><td>Removed: the unnamed multi-model benchmark claim</td><td>It named no author, venue, year, or identifier &mdash; the admissibility gate in &sect;8.3 would reject the same warrant from a seat</td></tr>
+      <tr><td class="mono">10.1</td><td>Restated: <b>no real seat has ever run</b></td><td>Every measurement in this manual is from synthetic seats. Said once, plainly, rather than implied</td></tr>
+      <tr><td class="mono">12</td><td>New: the defect log</td><td>Nine defects the non-AI verification layer caught. It is the evidence the layer works</td></tr>
+      <tr><td class="mono">11</td><td>Unchanged and still blocking: Chao (1987) and Kish (1965)</td><td>Every authoritative route out of the build environment is refused by egress policy. Not resolved, not quietly dropped</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice pass">
+      <span class="lab">What did not change</span>
+      <p>The five passes, their order, the blinding contract, and the human bottleneck are
+      identical to v1.1. Nothing in the build gave a reason to move them.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <div class="gutter"><span class="num">1</span><span class="flag same">Unchanged</span></div>
+  <div class="body">
+    <h2>Introduction</h2>
+    <h3>1.1 The problem this solves</h3>
+    <p>When you ask one AI model to check its own work, it usually says the work is fine. It cannot reliably see its own blind spots. The obvious fix is to ask several models and compare. That fix works, but only under specific conditions &mdash; and it fails badly outside them. This manual specifies those conditions precisely so the tool is built to help rather than to feel helpful.</p>
+    <h3>1.2 The single most important finding</h3>
+    <div class="notice fail">
+      <span class="lab">Blind models alone make things worse</span>
+      <p>Kim et al. (2026) ran 260 controlled configurations with matched compute. Parallel models that never see each other's work and have no verifier amplified errors by <b>17.2&times;</b>. The same models with a verifier that checks claims before combining them amplified errors by <b>4.4&times;</b>. The verifier is the entire difference.</p>
+    </div>
+    <p>This is why the tool is not five models voting. It is five models proposing corrections, and a verification layer &mdash; part code, part you &mdash; deciding which corrections are real. Removing the verification layer converts a working system into the worst-performing design measured.</p>
+    <h3>1.3 How to read it</h3>
+    <ul>
+      <li>&sect;2 for the plain-English version with a worked example.</li>
+      <li>&sect;3&ndash;5 for constructs, models, and hypotheses.</li>
+      <li>&sect;6&ndash;7 for the math and the evidence behind the numbers.</li>
+      <li>&sect;8 to build it today. &sect;9 every time you run it.</li>
+    </ul>
+    <div class="notice warn">
+      <span class="lab">Scope limit &mdash; stated once, applies throughout</span>
+      <p>This tool is not a truth machine. It reduces certain classes of error under certain conditions. &sect;10 lists the conditions under which you should not run it at all.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="gutter"><span class="num">2</span><span class="flag rev">Revised</span></div>
+  <div class="body">
+    <h2>Plain-Language Primer</h2>
+    <h3>2.1 The homework analogy</h3>
+    <p>Imagine you wrote a report and want to catch every mistake before turning it in. You ask five friends to check it. Each reads it alone, without seeing what the others said. Then you collect all their notes.</p>
+    <div class="notice warn">
+      <span class="lab">The catch most people miss</span>
+      <p>If all five friends went to the same school and had the same teacher, they will tend to make the <b>same</b> mistakes. Five friends who all learned the same wrong thing will all miss the same error &mdash; and worse, they will all agree, which makes you feel more confident, not less.</p>
+      <p>This is exactly what happens with AI models. Kim, Garg, Peng, and Garg (2025) tested more than 350 models and found they agreed with each other <b>60%</b> of the time when both were wrong. The stronger the models, the more their errors matched.</p>
+    </div>
+    <h3>2.2 The fix: a calculator and a library card</h3>
+    <p>Some things do not require an opinion at all. If a friend says "12 plus 35 equals 50," you do not need a vote. You need a calculator. If a friend says "this fact comes from this source," you do not need agreement. You need to look the source up.</p>
+    <div class="notice pass">
+      <span class="lab">The core idea of the whole tool</span>
+      <p>A calculator never makes the same mistake an AI makes. A library catalog never hallucinates a citation. These are <b>deterministic gates</b>. They are the most valuable part of the system because their errors are completely unrelated to the models' errors.</p>
+    </div>
+    <h3>2.3 What the tool does, step by step</h3>
+    <ol>
+      <li>It checks whether it should run at all. If one good model already handles this task class well, it tells you to skip the whole thing and save your money.</li>
+      <li>It sends the work to <b>five</b> models. Each proposes corrections <b>without seeing the others, and without seeing any earlier round's results</b>.</li>
+      <li>Every proposed correction is sorted. Can a machine check it? Math, citations, code tests, and data formats can be.</li>
+      <li>Machine-checkable claims are checked by machine. Passed claims are accepted. Failed claims eliminate that answer. No AI opinion involved.</li>
+      <li>Claims a machine cannot check &mdash; judgment, interpretation, framing &mdash; go into a short list for <b>you</b>. This is the only part that needs a human.</li>
+      <li>It repeats with a different lens each round: <b>five passes, four of which can eliminate</b>. The fifth calibrates confidence and cannot rule anything out. In order: Inversion Analysis; FMEA + FTA + FMEDA; IDOV; <b>Critical Systems Thinking (CST)</b> + TRIZ + Quality Zero Defects; Bayesian + MCMC.</li>
+      <li>It measures whether new errors are still being found, and it measures how much the five models <b>disagreed</b>. When the yield decays and your queue is empty, it stops.</li>
+      <li class="mono" style="font-size:15px">New in 1.2 &mdash; it reports the <b>answer</b>: the candidates still standing, why each of the others was removed, and every <b>hole</b> it could not close, each with what would close it.</li>
+    </ol>
+    <div class="notice pass">
+      <span class="lab">New in 1.2 &mdash; the answer is what survives</span>
+      <p>Nothing is selected, scored, or preferred. Candidates are only ever <b>removed</b>, and
+      only by a gate that failed. If two survive, the run reports two and does not break the tie
+      &mdash; a tie broken by anything other than evidence is the vote this whole design exists to
+      avoid. If none survives, the true answer was not in the set, or a gate is wrong.</p>
+    </div>
+    <div class="notice">
+      <span class="lab">Why pass 4 pairs CST with TRIZ</span>
+      <p>Critical Systems Thinking supplies the meta-theoretical frame: it forces the boundary
+      judgements into the open &mdash; what the artifact includes, what it excludes, and whose
+      perspective its framing privileges &mdash; and it holds those competing perspectives as
+      pluralism rather than collapsing them to one view. That is what surfaces the <i>hidden</i>
+      contradictions, the ones a checklist walks straight past.</p>
+      <p>TRIZ then does the resolving. Its separation principles dissolve a contradiction instead
+      of trading one half of it away, which is the failure mode of ordinary compromise. Quality
+      Zero Defects checks whatever survives that. Run in any other order the pass degrades into a
+      style review.</p>
+    </div>
+
+    <h3>2.4 A worked example</h3>
+    <p class="mono" style="font-size:13px;color:var(--ink-3)">Revised in 1.1. The arithmetic below reproduces; v1.0's did not.</p>
+<pre>You submit:  a 3-page market analysis, 14 citations, one revenue projection.
+
+PREFLIGHT    baseline 0.31, task decomposes      -> RUN, 5 seats
+
+PASS 1  Inversion Analysis          31 claims proposed
+          19 machine-checked -> 7 pass, 12 FAIL   <- 12 corrections
+          12 judgment calls  -> YOUR QUEUE
+PASS 2  FMEA + FTA + FMEDA          14 claims proposed
+          11 machine-checked -> 7 pass,  4 FAIL   <-  4 corrections
+           3 judgment calls  -> YOUR QUEUE
+PASS 3  IDOV                         4 claims  -> 3 pass, 1 FAIL
+PASS 4  CST + TRIZ + Zero Defects    2 claims  -> 1 pass, 1 FAIL
+PASS 5  Bayesian + MCMC              calibration only, eliminates nothing
+
+CONVERGENCE  VCY = 12, 4, 1, 1   (corrections, i.e. gate FAILURES)
+             fit  a = 24.00,  b = 0.884
+             R_hat = 24.00 * e^(-0.884*5) / (1 - e^(-0.884)) = 0.492
+             0.492 < tolerance 0.50                      -> residual OK
+
+DIVERGENCE   mean pairwise Jaccard by pass: 0.41, 0.38, 0.22, 0.15
+             no pass unanimous                           -> no collapse flag
+
+QUEUE        15 judgment items                           -> NOT EMPTY
+
+VERDICT      DO NOT COMMIT. Work the queue, then re-check.</pre>
+    <div class="notice fail">
+      <span class="lab">Read the last two lines again</span>
+      <p>The residual passed. The divergence passed. The run still does not stop, because fifteen judgment items are unworked. Under &sect;6.3 the stop rule is a conjunction and the queue is part of it. A residual below tolerance is <b>not</b> permission to commit.</p>
+    </div>
+    <div class="note"><span>My notes on &sect;2</span><textarea data-k="n2"></textarea></div>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="gutter"><span class="num">3&ndash;4</span><span class="flag same">Unchanged</span></div>
+  <div class="body">
+    <h2>Constructs, Definitions, and Models</h2>
+    <p>Carried forward from v1.0 without change. Each construct has a definition, the literature it rests on, and what it explicitly excludes; excluding things is what keeps a construct from becoming vague.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Construct</th><th>Definition (abbreviated)</th><th>Excludes</th></tr></thead>
+      <tbody>
+      <tr><td><b>DAC</b><br><span class="mono" style="font-size:11px">Disconfirmation Architecture Configuration</span></td><td>Structural properties determining whether, how independently, and how verifiably a system generates evidence <i>against</i> its own candidate output before a human commits. Rests on Power (2008) and Marakas (2003, Ch. 3).</td><td>Operator behavior, output accuracy, any property of the evaluation harness</td></tr>
+      <tr><td><b>AR</b><br><span class="mono" style="font-size:11px">Adjudication Rigor</span></td><td>Verification actions performed on a candidate output within one session, prior to commit. A behavior, governed by Ajzen (1991); DAC raises AR through perceived behavioral control.</td><td>Self-reported confidence and thoroughness. Enacted behavior only.</td></tr>
+      <tr><td><b>SDE</b><br><span class="mono" style="font-size:11px">Surviving Decision Error</span></td><td>Proportion of decision-relevant errors present in the candidate that remain uncorrected in the committed decision. Scored against seeded ground truth, never self-report.</td><td>Any assertion of <i>elimination</i> &mdash; Magesh et al. (2025) found tools marketed hallucination-free hallucinated in 17&ndash;33% of queries</td></tr>
+      <tr><td><b>FC</b><br><span class="mono" style="font-size:11px">Frontier Calibration</span></td><td>Accuracy with which an operator predicts, before engaging, whether a task falls inside the system's capability boundary. Replaces domain expertise deliberately.</td><td>Domain expertise as a proxy &mdash; Dell'Acqua et al. (2026) found expertise did not protect operators</td></tr>
+      <tr><td><b>BAC</b><br><span class="mono" style="font-size:11px">Base-Agent Capability</span></td><td>Measured accuracy of one strong seat on the task class. Required covariate and the input to the &sect;6.4 gate.</td><td>Estimates. It must be measured.</td></tr>
+      </tbody>
+    </table></div>
+    <p>The three conceptual models are unchanged: the structural model (DAC&rarr;AR&rarr;SDE, FC as moderator, BAC as covariate), the operational pipeline (the escalation path <i>is</i> the verification bottleneck), and the deployment selection model (only Quadrant I justifies the ensemble).</p>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="gutter"><span class="num">5</span><span class="flag same">Unchanged</span></div>
+  <div class="body">
+    <h2>Hypotheses and Predicted Answers</h2>
+    <p><i>Predicted</i> means what the verified literature leads us to expect. These are predictions to be tested, not findings. Predictions expected to fail are included deliberately &mdash; dropping a hypothesis after it fails is a research integrity violation.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Hypothesis</th><th>Predicted</th><th>Conf.</th></tr></thead>
+      <tbody>
+      <tr><td class="mono">H1</td><td>DAC is positively associated with AR</td><td>Supported, driven by Warrant Resolvability</td><td>Med-High</td></tr>
+      <tr><td class="mono">H2</td><td>AR is negatively associated with SDE</td><td>Supported &mdash; best-supported path</td><td>High</td></tr>
+      <tr><td class="mono">H3</td><td>AR mediates DAC to SDE</td><td>Partial mediation, not full</td><td>Medium</td></tr>
+      <tr><td class="mono">H4</td><td>FC moderates DAC to AR</td><td><b>Null or weak &mdash; expect this to fail</b></td><td>Med-High</td></tr>
+      <tr><td class="mono">H5</td><td>DAC has a direct effect on SDE</td><td>Supported and small</td><td>Medium</td></tr>
+      <tr><td class="mono">H6</td><td>BAC predicts whether the ensemble helps at all</td><td>Strongly supported</td><td>High</td></tr>
+      <tr><td class="mono">H7</td><td>Task decomposability moderates AR to SDE</td><td>Supported, large</td><td>High</td></tr>
+      <tr><td class="mono">H8</td><td>Baseline above ~0.45 nullifies ensemble gain</td><td>Supported</td><td>High</td></tr>
+      <tr><td class="mono">H9</td><td>Framework diversity decorrelates more than model diversity</td><td><b>Uncertain</b></td><td>Low</td></tr>
+      <tr><td class="mono">H10</td><td>Wrong answers that survive are rated more coherent</td><td>Supported &mdash; the core risk</td><td>Med-High</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice warn">
+      <span class="lab">H9 is the open question the whole architecture rests on</span>
+      <p>Model diversity is established as failing to decorrelate errors (Kim, Garg, Peng, &amp; Garg, 2025). Whether <b>method</b> diversity &mdash; Inversion versus FMEA versus IDOV versus TRIZ &mdash; decorrelates is unknown. Mechanically your passes are prompts, and preprint evidence suggests prompting strategy has negligible effect on failure diversity. <b>Test:</b> compute error correlation separately for each pass. Flat across passes means the frameworks are cosmetic.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="gutter"><span class="num">6</span><span class="flag rev">Revised</span></div>
+  <div class="body">
+    <h2>The Math, Explained Simply</h2>
+    <p>Five formulas run this system. Each is given plainly first, then formally.</p>
+
+    <h3>6.1 Effective seat count &mdash; how many models you really have</h3>
+    <p><b>Plain:</b> if your models make the same mistakes, having five of them is like having one and a half. This tells you how many you effectively have.</p>
+<pre>n_eff = n / (1 + (n - 1) * rho)
+
+  n   = number of seats
+  rho = how similarly they fail (0 = totally different, 1 = identical)
+
+  rho = 0.0  ->  5 seats behave like 5.00
+  rho = 0.2  ->  5 seats behave like 2.78
+  rho = 0.4  ->  5 seats behave like 1.92
+  rho = 0.6  ->  5 seats behave like 1.47   &lt;- observed regime
+  rho = 0.8  ->  5 seats behave like 1.19
+  rho = 1.0  ->  5 seats behave like 1.00</pre>
+    <div class="notice">
+      <span class="lab">Why this matters for your wallet</span>
+      <p>At rho&nbsp;=&nbsp;0.6, going from five seats to six moves effective seats from 1.47 to 1.51. You pay 20% more for a 3% gain. This formula is the argument for spending on deterministic gates instead of more models.</p>
+    </div>
+
+    <h3>6.2 Capture-recapture &mdash; how many errors nobody caught</h3>
+    <p><b>Plain:</b> if lots of errors were spotted by only one model, the models are not seeing much of what is there, so more errors are probably still hiding. Same math biologists use to count fish in a lake.</p>
+<pre>N_hat = S_obs + (f1 * f1) / (2 * f2)
+
+  S_obs = total distinct errors anyone found
+  f1    = errors found by exactly ONE seat   (singletons)
+  f2    = errors found by exactly TWO seats  (doubletons)</pre>
+    <div class="notice warn">
+      <span class="lab">The uncomfortable double meaning</span>
+      <p>A high singleton count is exactly what "each model caught what the others missed" feels like from the inside. It is also the statistical signal that more errors remain uncaught. Your impression that the system is working and the evidence of residual risk are the same number.</p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">New in 1.1 &mdash; the estimator goes silent exactly when you are most exposed</span>
+      <p>v1.0 said to report this as a lower bound. That is true but not sufficient, because the bound can be <b>zero</b>. Correlated seats catch the same things, which produces no singletons, which makes the estimator conclude nothing was missed.</p>
+      <p>Measured on twelve seeded defects with three seats:</p>
+      <div class="scroll"><table>
+        <thead><tr><th></th><th class="n">divergent panel</th><th class="n">collapsed panel</th></tr></thead>
+        <tbody>
+        <tr><td>mean error correlation rho</td><td class="n">+0.500</td><td class="n">+1.000</td></tr>
+        <tr><td>effective seats (of 3)</td><td class="n">1.50</td><td class="n">1.00</td></tr>
+        <tr><td>defects caught</td><td class="n">6 / 12</td><td class="n">4 / 12</td></tr>
+        <tr><td>truly missed</td><td class="n">6</td><td class="n">8</td></tr>
+        <tr><td><b>Chao1 says missed</b></td><td class="n"><b>1.0</b></td><td class="n"><b>0.0</b></td></tr>
+        <tr><td>singleton fraction</td><td class="n">0.333</td><td class="n">0.000</td></tr>
+        </tbody>
+      </table></div>
+      <p>The collapsed panel reported <b>zero</b> missing while eight of twelve defects walked, and its singleton fraction of 0.000 reads as complete coverage. <b>Never read this estimator without rho beside it.</b> At rho&nbsp;=&nbsp;1.0 its output carries no information at all.</p>
+    </div>
+
+    <h3>6.3 The decay curve &mdash; when to stop</h3>
+    <p><b>Plain:</b> each pass finds fewer new problems than the one before. Fit that shrinking pattern to a curve, then use the curve to estimate how many problems are still out there.</p>
+<pre>Fit:        VCY_k = a * e^(-b * k)          for k = 1, 2, ... K
+Remaining:  R_hat = a * e^(-b*(K+1)) / (1 - e^(-b))</pre>
+    <div class="notice warn">
+      <span class="lab">Revised in 1.1 &mdash; two ambiguities that changed the answer</span>
+      <p><b>VCY means corrections, and a correction is a gate FAILURE.</b> v1.0 defined VCY as "verified corrections found in round k" while its worked example fitted the curve to total claims <i>proposed</i>. Those are different series. A claim that passes the gate is a confirmation &mdash; the artifact was right. A claim that fails is a correction &mdash; a real defect was found. Only failures count. Fitting accepted claims makes a pass that found nothing look maximally productive and stops the residual from ever decaying.</p>
+      <p><b>k starts at 1, not 0.</b> v1.0 left this unstated. On the same yields, zero-based indexing gives <span class="mono">a&nbsp;=&nbsp;11.76, R&nbsp;=&nbsp;0.330</span> and one-based gives <span class="mono">a&nbsp;=&nbsp;26.94, R&nbsp;=&nbsp;0.757</span> &mdash; a 2.3&times; difference in the number that decides whether you stop. At tolerance 0.5 the two indexings disagree about whether to commit. <b>This manual specifies k&nbsp;=&nbsp;1&hellip;K.</b></p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">The stop rule is a conjunction, and the queue is part of it</span>
+<pre style="background:transparent;border:none;padding:0;margin:8px 0">STOP only when ALL of these hold:
+
+  1. b &gt; 0                       yields are actually decaying
+  2. R_hat &lt; your tolerance      residual is acceptable
+  3. judgment queue is EMPTY     every escalation worked
+  4. singleton fraction below    your own calibrated alarm
+     your threshold              (&sect;9.2; you must set it)</pre>
+      <p>A low residual is not permission to commit. &sect;10 lists an unworked queue as a do-not-build condition, because unworked judgment claims are precisely the unverified-ensemble topology this system exists to avoid.</p>
+    </div>
+
+    <h3>6.4 The 0.45 gate &mdash; should you run at all</h3>
+    <p><b>Plain:</b> measure how well <b>one</b> good model does on your task. If it already scores above about 45%, adding models will not help and will probably hurt. Run one model plus gates instead.</p>
+    <div class="notice warn">
+      <span class="lab">Re-estimate this threshold for your own work</span>
+      <p>0.45 comes from six agentic benchmarks in Kim et al. (2026). Their leave-one-domain-out R&sup2; was <b>&minus;2.09</b>, meaning the model could not predict absolute performance in an unseen domain. Treat 0.45 as a starting prior and re-measure once you have 30+ scored tasks.</p>
+    </div>
+
+    <h3>6.5 Seat divergence &mdash; is the panel actually a panel?</h3>
+    <p class="mono" style="font-size:13px;color:var(--pass)">New in 1.1.</p>
+    <p><b>Plain:</b> measure how much the five seats disagreed. On a hard problem they should. If they agree exactly, they are not five seats.</p>
+<pre>J(A,B) = |A intersect B| / |A union B|      per seat pair, per pass
+divergence_k = mean of J over all pairs in pass k
+
+  Claim sets are compared on CONTENT -- (kind, warrant) -- not on
+  seat-assigned labels, so two seats phrasing the same finding
+  differently register as agreement.</pre>
+    <div class="notice warn">
+      <span class="lab">Unanimity is an alarm, not a result</span>
+      <p>On a non-trivial artifact, independent seats do not produce identical claim sets. If they do, they share a failure mode and the panel is worth roughly one effective seat. Raise a collapse flag and check rho before trusting anything the run produced.</p>
+    </div>
+    <div class="notice pass">
+      <span class="lab">Silence is not collapse</span>
+      <p>If every seat returns an <b>empty</b> claim set, the sets are trivially identical &mdash; but that is the marginal-yield signal (this pass found nothing), not a monoculture signal. Suppress the collapse flag when all seats are silent. A warning that fires on every empty pass is one operators learn to ignore.</p>
+    </div>
+    <h3>6.6 The correctness matrix &mdash; how a run becomes a rho</h3>
+    <p class="mono" style="font-size:13px;color:var(--pass)">New in 1.2.</p>
+    <p><b>Plain:</b> every number in &sect;6.1 and &sect;6.2 needs a table of who got what right.
+    Until 1.2 nothing built that table, so the run reported which claims failed and never
+    reported whether the panel was eliminating or collapsing.</p>
+    <p>The table is strict 1/0 &mdash; there is no cell meaning &ldquo;this seat had no opinion.&rdquo;
+    An item is one proposition, and a seat&rsquo;s position on it is always observed: it either
+    asserted the proposition or it did not.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Gate verdict on the claim</th><th>Seat asserted it</th><th>Seat stayed silent</th></tr></thead>
+      <tbody>
+      <tr><td><b>PASS</b> &mdash; verified true</td><td class="mono" style="color:var(--pass)">1 &mdash; found it</td><td class="mono" style="color:var(--fail)">0 &mdash; MISSED it</td></tr>
+      <tr><td><b>FAIL</b> &mdash; false assertion</td><td class="mono" style="color:var(--fail)">0 &mdash; asserted a falsehood</td><td class="mono" style="color:var(--pass)">1 &mdash; right not to</td></tr>
+      <tr><td><b>Escalated</b> &mdash; no gate ran</td><td colspan="2">EXCLUDED, unless you adjudicate it yourself</td></tr>
+      </tbody>
+    </table></div>
+<pre>correct = (the seat asserted it) == (the claim is true)</pre>
+    <div class="notice">
+      <span class="lab">Why silence counts against a seat</span>
+      <p>A seat asked to find defects that does not report a real one has <b>missed</b> it. That is
+      capture-recapture read on the same event. Scoring it neutral would hide precisely the shared
+      blind spot &sect;6.1 exists to measure.</p>
+    </div>
+    <div class="notice warn">
+      <span class="lab">Why escalated claims are dropped rather than defaulted</span>
+      <p>An escalated claim has no mechanical ground truth. Defaulting it invents a measurement,
+      and the direction of the invention biases rho in a known way: default-true makes every
+      silent seat look wrong together, default-false makes every asserting seat look wrong
+      together. Both <b>fabricate correlation</b>. They are dropped and <b>counted</b>, so you see
+      the size of the hole. Adjudicate them and re-run to fold your decisions in.</p>
+      <p>Your adjudication may resolve only a claim <b>no gate decided</b>. Overriding a gate moves
+      authority from the mechanical bottleneck back to a judgement call, which is the failure this
+      architecture prevents; the tool refuses.</p>
+    </div>
+    <h4>The two extremes, worked by hand</h4>
+    <p>A construction that got these backwards would still return a plausible number, so both are
+    pinned by test.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Panel</th><th>rho</th><th>Effective seats (of 3)</th><th>Reads as</th></tr></thead>
+      <tbody>
+      <tr><td>Three seats, each finding a <i>different</i> true defect</td><td class="n">&minus;0.500 &rarr; clamped 0</td><td class="n">3.00</td><td>maximum independence</td></tr>
+      <tr><td>Three seats asserting an identical set, same false claim included</td><td class="n">+1.000</td><td class="n">1.00</td><td>total collapse</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice fail">
+      <span class="lab">Fail closed</span>
+      <p>With no adjudicated claim, or fewer than two seats, the run reports <b>blockers and no
+      diagnostic numbers at all</b> &mdash; not a NaN you would read as a small number. A rho that
+      is genuinely undefined is named in words.</p>
+    </div>
+
+    <h3>6.7 What to cut when it costs too much</h3>
+    <p class="mono" style="font-size:13px;color:var(--pass)">New in 1.2.</p>
+    <p><b>Cut seats. Never cut passes.</b> Cost is seats &times; passes, so five-by-five is 25
+    seat-calls. There are two ways to save 40% and they are not equivalent.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Configuration</th><th>Calls</th><th>Effective seats at rho=0.5</th><th>Lenses kept</th></tr></thead>
+      <tbody>
+      <tr><td>5 seats &times; 5 passes</td><td class="n">25</td><td class="n">1.67</td><td class="n">5</td></tr>
+      <tr><td><b>3 seats &times; 5 passes</b></td><td class="n">15</td><td class="n">1.50</td><td class="n"><b>5</b></td></tr>
+      <tr><td>5 seats &times; 3 passes</td><td class="n">15</td><td class="n">1.67</td><td class="n">3</td></tr>
+      </tbody>
+    </table></div>
+    <p>Dropping seats costs 10% of effective capacity &mdash; bounded and computable. Dropping
+    passes costs two whole lenses, and the loss is <b>unbounded</b> because you cannot know what
+    they would have caught.</p>
+    <div class="notice fail">
+      <span class="lab">Measured &mdash; the residual cannot tell you to stop early</span>
+      <p>The stopping residual is order-dependent, not exhaustion-dependent. The identical
+      per-pass yields <span class="mono">{8,5,3,2,1}</span> give <span class="mono">R = 1.64</span>
+      as run, <span class="mono">R = 16.95</span> shuffled, and <b>no fit at all</b> reversed. A
+      statistic that moves 10&times; when you reorder the lenses cannot justify truncating them.
+      This is the confound &sect;6.3 warns about, measured.</p>
+    </div>
+    <h4>Choosing n once you have measured rho</h4>
+    <div class="scroll"><table>
+      <thead><tr><th>rho</th><th>n=2</th><th>n=3</th><th>n=4</th><th>n=5</th><th>The 5th seat buys</th><th>Run</th></tr></thead>
+      <tbody>
+      <tr><td class="n">0.0</td><td class="n">2.00</td><td class="n">3.00</td><td class="n">4.00</td><td class="n">5.00</td><td class="n">+1.000</td><td>5</td></tr>
+      <tr><td class="n">0.1</td><td class="n">1.82</td><td class="n">2.50</td><td class="n">3.08</td><td class="n">3.57</td><td class="n">+0.495</td><td>5</td></tr>
+      <tr><td class="n">0.2</td><td class="n">1.67</td><td class="n">2.14</td><td class="n">2.50</td><td class="n">2.78</td><td class="n">+0.278</td><td>4</td></tr>
+      <tr><td class="n">0.3</td><td class="n">1.54</td><td class="n">1.88</td><td class="n">2.11</td><td class="n">2.27</td><td class="n">+0.167</td><td>4</td></tr>
+      <tr><td class="n">0.5</td><td class="n">1.33</td><td class="n">1.50</td><td class="n">1.60</td><td class="n">1.67</td><td class="n">+0.067</td><td>3</td></tr>
+      <tr><td class="n">0.7</td><td class="n">1.18</td><td class="n">1.25</td><td class="n">1.29</td><td class="n">1.32</td><td class="n">+0.025</td><td>3</td></tr>
+      <tr><td class="n">1.0</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">+0.000</td><td>stop &mdash; fix the panel</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice warn">
+      <span class="lab">This resolves the five-seat conflict &sect;8.2 records</span>
+      <p>Five seats is justified only if measured rho is at or below roughly 0.2. Above that you
+      are paying five times for under twice. The order of operations is forced: you cannot choose
+      n before measuring rho, and rho needs real seats &mdash; so the <b>first live run is a
+      five-seat calibration run</b>, and every run after it is cheaper for good.</p>
+      <p>Efficiency alone is not the objective. Effective seats per call keeps rising as n falls,
+      because the Kish curve is concave &mdash; it drives you to one seat, which is maximally
+      efficient and useless. Pick the smallest n that clears the capacity you actually need.</p>
+    </div>
+    <div class="note"><span>My measured numbers &mdash; baseline, rho, b, tolerance, singleton alarm</span><textarea data-k="n6"></textarea></div>
+  </div>
+</section>
+
+<section id="s7">
+  <div class="gutter"><span class="num">7</span><span class="flag same">Unchanged</span></div>
+  <div class="body">
+    <h2>Evidence Base</h2>
+    <p>Every number used in this manual, with its source and what it does and does not support.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Finding</th><th>Number</th><th>Source</th></tr></thead>
+      <tbody>
+      <tr><td>Error amplification, independent topology</td><td class="n">17.2&times; [14.3&ndash;20.1]</td><td>Kim et al. (2026)</td></tr>
+      <tr><td>Error amplification, centralized topology</td><td class="n">4.4&times; [3.8&ndash;5.0]</td><td>Kim et al. (2026)</td></tr>
+      <tr><td>Error reduction with verification present</td><td class="n">22.7% [20.1&ndash;25.3]</td><td>Kim et al. (2026)</td></tr>
+      <tr><td>Overall mean multi-agent gain</td><td class="n">0.0% [&minus;58.7, 77.2]</td><td>Kim et al. (2026)</td></tr>
+      <tr><td>Capability-saturation threshold</td><td class="n">~0.45, 94% sign match</td><td>Kim et al. (2026)</td></tr>
+      <tr><td>Model agreement when both wrong</td><td class="n">60%</td><td>Kim, Garg, Peng, &amp; Garg (2025)</td></tr>
+      <tr><td>Human augmentation effect</td><td class="n">g = 0.64 [0.53&ndash;0.74]</td><td>Vaccaro et al. (2024)</td></tr>
+      <tr><td>Quality gain inside capability frontier</td><td class="n">+33.9%</td><td>Dell'Acqua et al. (2026)</td></tr>
+      <tr><td>Correctness loss outside frontier</td><td class="n">&minus;0.245 / &minus;0.139</td><td>Dell'Acqua et al. (2026)</td></tr>
+      <tr><td>Confidence in AI predicts less scrutiny</td><td class="n">&beta; = &minus;0.69, p &lt; .001</td><td>Lee et al. (2025)</td></tr>
+      <tr><td>Devil's advocate improves reliance</td><td class="n">&beta; = 0.135, p = .047</td><td>Chiang et al. (2024)</td></tr>
+      <tr><td>RAG legal tools still hallucinate</td><td class="n">17&ndash;33% of queries</td><td>Magesh et al. (2025)</td></tr>
+      </tbody>
+    </table></div>
+    <h3>7.1 Evidence that argues against this system</h3>
+    <p>Recorded as fully as the supporting evidence, per the standing evidence protocol.</p>
+    <ul>
+      <li>Overall mean multi-agent improvement across six benchmarks was <b>0.0%</b>. The average system gains nothing; only correctly selected deployments gain.</li>
+      <li>On software engineering tasks, <b>every</b> multi-agent architecture underperformed a single agent, from &minus;1.3% to &minus;12.8%, because baselines exceeded 0.45.</li>
+      <li>Mixing model vendors did not help: heterogeneous configurations underperformed strong homogeneous ones by <b>12.6 percentage points</b>.</li>
+      <li>Vaccaro et al. (2024) found human-AI combinations <b>underperformed</b> the better of human or AI alone (g = &minus;0.23, p = .005) on decision tasks. Only augmentation of a human baseline was positive.</li>
+    </ul>
+    <div class="notice">
+      <span class="lab">What this evidence permits you to claim</span>
+      <p>That a correctly-scoped, gate-verified, human-adjudicated pipeline reduces certain error classes on decomposable tasks with low single-agent baselines. It does <b>not</b> permit claiming that more models produce better answers in general. The evidence says the opposite.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s8">
+  <div class="gutter"><span class="num">8</span><span class="flag rev">Revised</span></div>
+  <div class="body">
+    <h2>Build Checklist</h2>
+    <p>Work top to bottom. Do not skip Stage 0 &mdash; it saves the most money.</p>
+
+    <h3>8.1 Stage 0 &mdash; before you write any code</h3>
+    <div class="check"><input type="checkbox" id="c01"><label for="c01">Write down, in one sentence, the exact task class this tool will handle.</label></div>
+    <div class="check"><input type="checkbox" id="c02"><label for="c02">Decide whether that task <b>decomposes</b> or is <b>sequential</b>. Sequential: STOP, do not build this.</label></div>
+    <div class="check"><input type="checkbox" id="c03"><label for="c03">Collect 30 real examples with known-correct answers.</label></div>
+    <div class="check"><input type="checkbox" id="c04"><label for="c04">Run ONE strong model on all 30. Score it. This is your BAC baseline.</label></div>
+    <div class="check"><input type="checkbox" id="c05"><label for="c05">If baseline &gt; 0.45: STOP. Build one model plus gates. You just saved months.</label></div>
+    <div class="note"><span>Stage 0 &mdash; my task, my baseline, my decision</span><textarea data-k="s0"></textarea></div>
+
+    <h3>8.2 Stage 1 &mdash; accounts and API keys</h3>
+    <div class="notice warn">
+      <span class="lab">Revised in 1.1 &mdash; five seats, and what it costs you</span>
+      <p>v1.0 said "three is the recommended maximum" while &sect;6.1's worked table assumed five. This version standardizes on <b>five seats: four reached by outbound API key, plus one in-process.</b></p>
+      <p>Record what that overrides. Turn count scales as <span class="mono">T = 2.72(n + 0.5)^1.724</span>, so five seats sit past the knee of the curve, and per-seat reasoning capacity thins under a fixed budget. The preflight gate still returns 3 as its recommendation and nothing raises that cap silently &mdash; five is a deliberate operator decision, taken with the cost visible.</p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">The in-process seat cannot be the orchestrator</span>
+      <p>The orchestrator is code, not a model, precisely so it can see everything while the seats see nothing. If the session running the orchestrator is also a seat, that seat can see gate verdicts &mdash; its errors then correlate with the adjudication itself, which is the exact failure blinding exists to prevent. Run it as a separate session or call with no visibility into orchestrator state. Otherwise you have four blind seats plus one that is not, and your rho is understated.</p>
+    </div>
+    <div class="check"><input type="checkbox" id="c10"><label for="c10">Five seats provisioned: four provider accounts plus one in-process.</label></div>
+    <div class="check"><input type="checkbox" id="c11"><label for="c11">Keys generated in each provider's <b>own</b> console &mdash; never a third-party reseller.</label></div>
+    <div class="check"><input type="checkbox" id="c12"><label for="c12"><b>Hard spend limit</b> set in every console. Now, not later.</label></div>
+    <div class="check"><input type="checkbox" id="c13"><label for="c13"><code>.env</code> created, one <code>KEY=value</code> per line; <code>.env</code> listed in <code>.gitignore</code>.</label></div>
+    <div class="check"><input type="checkbox" id="c14"><label for="c14"><code>git status</code> confirms <code>.env</code> is NOT tracked.</label></div>
+    <div class="check"><input type="checkbox" id="c15"><label for="c15">Loader fails closed: a missing or blank key raises rather than running a short panel.</label></div>
+    <div class="check"><input type="checkbox" id="c16"><label for="c16">Credentials redacted from every log line, <code>repr</code>, and error message.</label></div>
+    <div class="check"><input type="checkbox" id="c17"><label for="c17">Test call succeeds from each provider.</label></div>
+    <div class="notice fail">
+      <span class="lab">Key safety &mdash; non-negotiable</span>
+      <p>Never paste a key into a chat window, document, screenshot, or source file. Never commit <code>.env</code>. If a key is exposed, revoke it in the console immediately. A leaked key is someone else spending your money.</p>
+    </div>
+    <div class="note"><span>Stage 1 &mdash; which providers, which limits, what broke</span><textarea data-k="s1"></textarea></div>
+
+    <h3>8.3 Stage 2 &mdash; install and wire the orchestrator</h3>
+    <div class="check"><input type="checkbox" id="c20"><label for="c20">Python 3.11+, virtual environment, dependencies installed.</label></div>
+    <div class="check"><input type="checkbox" id="c21"><label for="c21">Modules in place: <code>adjudication_orchestrator.py</code>, <code>seat_independence.py</code>.</label></div>
+    <div class="check"><input type="checkbox" id="c22"><label for="c22">A seat function written per provider: takes a prompt string, returns text.</label></div>
+    <div class="check"><input type="checkbox" id="c23"><label for="c23"><b>Blinding verified structurally.</b> The prompt builder takes no history argument, and a canary test proves no pass-1 output reaches any later prompt.</label></div>
+    <div class="check"><input type="checkbox" id="c24"><label for="c24">Citation resolver wired to a REAL lookup.</label></div>
+    <div class="check"><input type="checkbox" id="c25"><label for="c25"><b>Resolver probed with a fake identifier</b> and confirmed to return False.</label></div>
+    <div class="check"><input type="checkbox" id="c26"><label for="c26"><b>Evidence admissibility gate enabled</b> and its inadmissible list reviewed.</label></div>
+    <div class="check"><input type="checkbox" id="c27"><label for="c27">Test runner wired to a real command.</label></div>
+    <div class="check"><input type="checkbox" id="c28"><label for="c28">Demo runs end to end.</label></div>
+    <div class="check"><input type="checkbox" id="c90"><label for="c90"><b>New in 1.2.</b> The admissibility gate is paired with a resolver, never routed alone.</label></div>
+    <div class="check"><input type="checkbox" id="c91"><label for="c91"><b>New in 1.2.</b> Seat prompts use <code>CLAIM | kind | warrant | text</code> in that order, confirmed against a parsed claim.</label></div>
+    <div class="check"><input type="checkbox" id="c92"><label for="c92"><b>New in 1.2.</b> The durable audit log is written to a file, reopened, and verified.</label></div>
+    <div class="notice fail">
+      <span class="lab">The single most common way this build fails</span>
+      <p>A resolver function that returns True by default. If your citation checker cannot reach the source, it <b>must</b> return False. A permissive resolver silently converts your verified system back into an unverified ensemble, and you will not notice. Probe it with an identifier that cannot exist and confirm it says no.</p>
+    </div>
+    <div class="notice">
+      <span class="lab">New in 1.1 &mdash; admissible evidence</span>
+      <p>Only <b>scholarly articles, empirical data, technical manuals, and primary source literature</b> may support a claim. DOIs, PMIDs, standards (ISO, IEC, IEEE, RFC, NIST, ASTM), ISBNs, and repository accessions are placed; a DOI minted by a data repository classifies as data, not as an article. Everything else is inadmissible &mdash; there is no permissive fallback branch. Preprints are a distinct class and are rejected by default; admitting one is an explicit opt-in that must be recorded in the audit trail.</p>
+      <p>Note that a citation must be <b>both</b> admissible in class <b>and</b> confirmed to resolve. Passing one check is not passing the other.</p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">New in 1.2 &mdash; never route the admissibility gate alone</span>
+      <p>That gate answers &ldquo;is this the <b>right kind</b> of source.&rdquo; It never answers
+      &ldquo;does this source <b>exist</b>.&rdquo; Routed as the only citation gate it accepted the
+      invented DOI <span class="mono">10.1038/s41586-000-0000-0</span> as &ldquo;admissible:
+      peer_reviewed&rdquo; &mdash; a seat could fabricate any well-formed identifier and be
+      believed. It is safe only <b>conjoined</b> with a resolver, which is why routing requires
+      every applicable gate to pass. With no resolver configured, citation claims must
+      <b>escalate</b>, not pass.</p>
+    </div>
+    <div class="notice warn">
+      <span class="lab">New in 1.2 &mdash; the claim line field order</span>
+      <p>Seats are told to emit <span class="mono">CLAIM | kind | warrant | text</span>. Reversing
+      the last two puts prose where the gate expects an expression, so every arithmetic claim is
+      rejected for the wrong reason and nothing gets eliminated &mdash; a run that looks strict and
+      is measuring nothing. Verify the order against a parsed claim, not by reading the prompt.</p>
+    </div>
+    <div class="note"><span>Stage 2 &mdash; setup problems and fixes</span><textarea data-k="s2"></textarea></div>
+
+    <h3>8.4 Stage 3 &mdash; calibrate on your own data</h3>
+    <div class="check"><input type="checkbox" id="c30"><label for="c30">Plant known errors of varying plausibility in your 30 scored examples.</label></div>
+    <div class="check"><input type="checkbox" id="c31"><label for="c31">Run <b>five seats across five passes</b> (four eliminative, one calibration) on all 30.</label></div>
+    <div class="check"><input type="checkbox" id="c32"><label for="c32">Log per pass: proposed, auto-accepted, auto-rejected, escalated, <b>divergence</b>.</label></div>
+    <div class="check"><input type="checkbox" id="c33"><label for="c33">Compute rho. Compute it <b>separately for each pass</b> &mdash; this tests H9.</label></div>
+    <div class="check"><input type="checkbox" id="c34"><label for="c34">Compute n_eff. Below 2.0: add deterministic gates rather than models.</label></div>
+    <div class="check"><input type="checkbox" id="c35"><label for="c35">Fit the decay curve on <b>gate failures only</b>. Record your b constant.</label></div>
+    <div class="check"><input type="checkbox" id="c36"><label for="c36">Set your stopping tolerance from your own risk appetite.</label></div>
+    <div class="check"><input type="checkbox" id="c37"><label for="c37"><b>Set your singleton-fraction alarm.</b> Until you do, that check is not armed.</label></div>
+    <div class="check"><input type="checkbox" id="c38"><label for="c38">Re-estimate your own capability-saturation threshold; do not inherit 0.45.</label></div>
+    <div class="note"><span>Stage 3 &mdash; my rho, n_eff, b, tolerance, singleton alarm</span><textarea data-k="s3"></textarea></div>
+
+    <h3 id="s86">8.5 Stage 4 &mdash; go live</h3>
+    <div class="check"><input type="checkbox" id="c40"><label for="c40">Preflight gate runs automatically on every submission.</label></div>
+    <div class="check"><input type="checkbox" id="c41"><label for="c41">Escalation queue is visible and <b>blocks commit</b> until empty.</label></div>
+    <div class="check"><input type="checkbox" id="c42"><label for="c42">Every run writes an audit record: inputs, claims, gate results, decisions, divergence.</label></div>
+    <div class="check"><input type="checkbox" id="c43"><label for="c43">Cost per run logged and compared against the single-model baseline cost.</label></div>
+    <div class="check"><input type="checkbox" id="c44"><label for="c44">Monthly review re-measures baseline &mdash; models improve and may cross 0.45.</label></div>
+    <div class="note"><span>Stage 4 &mdash; go-live issues</span><textarea data-k="s4"></textarea></div>
+  </div>
+</section>
+
+<section id="s9">
+  <div class="gutter"><span class="num">9</span><span class="flag rev">Revised</span></div>
+  <div class="body">
+    <h2>Daily Operating Procedure</h2>
+    <p>Use this every time you run the tool. It should take under a minute to follow.</p>
+    <h3>9.1 The run sequence</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Step</th><th>Action</th></tr></thead>
+      <tbody>
+      <tr><td class="mono">1</td><td>Confirm the task decomposes. If strictly sequential, stop and use one model.</td></tr>
+      <tr><td class="mono">2</td><td>Confirm the task class baseline is still below your threshold.</td></tr>
+      <tr><td class="mono">3</td><td>Run it. The five passes execute one at a time against the artifact.</td></tr>
+      <tr><td class="mono">4</td><td><b>Do NOT read the model outputs yet. Read the GATE RESULTS first.</b></td></tr>
+      <tr><td class="mono">5</td><td>Read the <b>answer</b>: which candidates survived, and why each of the others was removed.</td></tr>
+      <tr><td class="mono">6</td><td><b>Read the HOLES.</b> Every one carries what would close it. See &sect;9.3.</td></tr>
+      <tr><td class="mono">7</td><td>Work your escalation queue. These are the judgment items only you can decide.</td></tr>
+      <tr><td class="mono">8</td><td>Re-run with your adjudications folded in, so they enter the rho calculation.</td></tr>
+      <tr><td class="mono">9</td><td>Check rho and effective seats. Eliminative, or collapsed?</td></tr>
+      <tr><td class="mono">10</td><td>Check the residual, the singleton fraction, and the per-pass divergence.</td></tr>
+      <tr><td class="mono">11</td><td><b>Commit ONLY when one candidate survives AND no holes remain.</b> Both halves.</td></tr>
+      <tr><td class="mono">12</td><td>Log the run. Verify the audit chain. Add the outcome to your calibration set.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice">
+      <span class="lab">The discipline that makes this work</span>
+      <p>Read gate results before model prose. Gate results are facts; model prose is persuasion. Dell'Acqua et al. (2026) showed wrong answers from AI users were graded <b>more</b> coherent &mdash; reading the prose first is how a polished error gets committed.</p>
+    </div>
+    <div class="notice pass">
+      <span class="lab">New in 1.2 &mdash; the run tells you its own exit state</span>
+      <p>The tool exits non-zero while any hole remains. One surviving candidate with an open
+      judgment queue is a <b>shortlist</b>, not an answer, and the exit code says so without
+      requiring you to read anything.</p>
+    </div>
+    <h3>9.2 Stop conditions &mdash; abort the run if any occur</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Signal</th><th>What it means</th><th>Action</th></tr></thead>
+      <tbody>
+      <tr><td>Yields are not decreasing</td><td>You have not converged</td><td>Run more passes, do not commit</td></tr>
+      <tr><td>Escalation queue non-empty</td><td>Unverified judgment claims remain</td><td>Work the queue first</td></tr>
+      <tr><td>Singleton fraction above your alarm</td><td>Seats are not overlapping; more errors hide</td><td>Add a gate, do not add a model</td></tr>
+      <tr><td>Chao1 reports zero missed <b>and</b> rho is high</td><td class="mono" style="color:var(--fail)">New in 1.1</td><td>The estimator is uninformative here. Do not read it as coverage.</td></tr>
+      <tr><td>Any pass unanimous with non-empty claims</td><td>Correlated failure, not consensus</td><td>Check rho before trusting anything</td></tr>
+      <tr><td>All seats silent on a pass</td><td class="mono" style="color:var(--pass)">New in 1.1</td><td>Marginal-yield signal, <b>not</b> collapse. Do not flag it as one.</td></tr>
+      <tr><td>Answer feels unusually polished</td><td>H10 risk zone</td><td>Verify harder, not less</td></tr>
+      </tbody>
+    </table></div>
+        <h3>9.3 Reading the holes</h3>
+    <p class="mono" style="font-size:13px;color:var(--pass)">New in 1.2.</p>
+    <p>A hole is something the run could not close. It is part of the answer, not an appendix to
+    it, and each one names its own remedy &mdash; a hole you cannot act on is a disclaimer.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Hole</th><th>What it means</th><th>What closes it</th></tr></thead>
+      <tbody>
+      <tr><td>every candidate eliminated</td><td>The true answer was not in your set, or a gate is wrong</td><td>Read the elimination reasons. If a gate misfired, <b>fix the gate</b> &mdash; do not reinstate the candidate</td></tr>
+      <tr><td>not narrowed to one</td><td>Several candidates survive; nothing refuted them</td><td>Supply claims that distinguish them, or accept the set as the honest result. The tool will not break the tie</td></tr>
+      <tr><td>unadjudicated claims</td><td>Claims reached no gate and escalated to you</td><td>Decide them, then re-run with your adjudications so they enter rho</td></tr>
+      <tr><td>seat error</td><td>A seat failed; that whole pass is excluded from the diagnosis</td><td>Fix the seat and re-run the pass. Its silence is neither agreement nor a miss</td></tr>
+      <tr><td>collapse warning</td><td>The seats agreed completely &mdash; what a shared failure mode looks like</td><td>Change seat composition and re-run that pass</td></tr>
+      <tr><td>convergence not measurable</td><td>Too few adjudicated claims or seats to compute rho</td><td>Treat the surviving answer as <b>unverified</b> until it can be computed</td></tr>
+      <tr><td>stop rule</td><td>A &sect;6.3 precondition is unmet</td><td>The run is not complete while it holds</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice fail">
+      <span class="lab">The rule that makes this section matter</span>
+      <p>An answer is <b>resolved</b> only when one candidate survives <b>and</b> no holes remain.
+      Both halves. Reporting a lone survivor while thirty claims sit unadjudicated is how a
+      shortlist gets shipped as a conclusion.</p>
+    </div>
+    <div class="note"><span>Holes I hit on this run, and how I closed them</span><textarea data-k="n93"></textarea></div>
+<div class="note"><span>Run log &mdash; date, task, residual, divergence, queue size, outcome</span><textarea data-k="log"></textarea></div>
+  </div>
+</section>
+
+<section id="s10">
+  <div class="gutter"><span class="num">10</span><span class="flag same">Unchanged</span></div>
+  <div class="body">
+    <h2>When NOT to Use This</h2>
+    <p>Each condition is backed by measured evidence, not caution.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Condition</th><th>Why</th><th>Do instead</th></tr></thead>
+      <tbody>
+      <tr><td>Task is strictly sequential</td><td>Coordination overhead exceeds task complexity; measured &minus;70%</td><td>One model, one pass</td></tr>
+      <tr><td>Single-model baseline above ~0.45</td><td>Capability saturation; measured zero-to-negative gain</td><td>One model plus gates</td></tr>
+      <tr><td>No ground truth available</td><td>You cannot measure SDE or calibrate</td><td>Build ground truth first</td></tr>
+      <tr><td>No deterministic gates possible</td><td>Verification collapses to opinion</td><td>Human review, unaided</td></tr>
+      <tr><td>Time-critical single decision</td><td>Coordination adds 1.6&ndash;6.2&times; more reasoning turns</td><td>One model</td></tr>
+      <tr><td><b>You will not work the escalation queue</b></td><td>Becomes the 17.2&times; independent topology</td><td><b>Do not build this</b></td></tr>
+      </tbody>
+    </table></div>
+    <h3>10.1 Honest limitations of this manual</h3>
+    <ul>
+      <li>The 0.45 threshold comes from six agentic benchmarks and did not generalize across domains (leave-one-domain-out R&sup2; = &minus;2.09). Re-estimate locally.</li>
+      <li>The decay-based stopping rule is standard in software inspection but has <b>not</b> been validated on LLM critique chains. Calibrate against your own data.</li>
+      <li>Whether framework diversity decorrelates errors (H9) is unresolved. If it does not, the multi-pass structure may be cosmetic.</li>
+      <li>Capture-recapture assumes independent detection, which is violated here. All residual estimates are lower bounds, and &sect;6.2 shows the bound can be zero.</li>
+      <li>None of the cited studies tested this exact architecture. Every number is transferred from an adjacent design and should be re-measured.</li>
+      <li class="mono" style="font-size:14px;color:var(--warn)">New in 1.1: the divergence findings in &sect;6.2 and &sect;6.5 were measured against <b>synthetic</b> seats. They validate the machinery, not the behaviour of any real model.</li>
+      <li class="mono" style="font-size:14px;color:var(--fail)"><b>New in 1.2, and the most important line in this section: no real seat has ever run.</b> Every number in this manual &mdash; every rho, every effective-seat count, every capture estimate &mdash; comes from scripted synthetic seats. The machinery is verified. The behaviour of a real five-model panel is <b>unmeasured</b>, and the first live run exists to measure it, not to be trusted.</li>
+      <li class="mono" style="font-size:14px;color:var(--fail)">New in 1.2: no provider profile ships with the tool. Endpoints and response paths must be transcribed from each vendor&rsquo;s own API reference, which is a technical manual and admissible under &sect;8.3. Written from memory they are the same unverified assertion this system exists to catch.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s11">
+  <div class="gutter"><span class="num">11</span><span class="flag rev">Revised</span></div>
+  <div class="body">
+    <h2>References and Verification Status</h2>
+    <p>Tiers: <b>[A]</b> full text read and page-located &middot; <b>[B]</b> metadata verified against publisher, content beyond abstract not read &middot; <b>[C]</b> preprint, not peer reviewed &middot; <b>[D]</b> cited from working knowledge, bibliographic details NOT confirmed.</p>
+    <div class="notice fail">
+      <span class="lab">Revised in 1.1 &mdash; two tier [D] sources are load-bearing</span>
+      <p><b>Chao (1987)</b> and <b>Kish (1965)</b> are the two estimators &sect;6.1 and &sect;6.2 are built on, and both are tier [D&nbsp;&mdash;&nbsp;verify]. Every effective-seat and capture-recapture number this system produces rests on two references whose bibliographic details have not been confirmed. <b>Verify both before any external use of this manual's output.</b></p>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Reference</th><th>Tier</th></tr></thead>
+      <tbody>
+      <tr><td>Ajzen, I. (1991). The theory of planned behavior. <i>Organizational Behavior and Human Decision Processes, 50</i>(2), 179&ndash;211.</td><td class="mono">A</td></tr>
+      <tr><td><b>Chao, A. (1987).</b> Estimating the population size for capture-recapture data with unequal catchability. <i>Biometrics, 43</i>(4), 783&ndash;791.</td><td class="mono" style="color:var(--fail)">D &mdash; verify</td></tr>
+      <tr><td>Chiang, C.-W., Lu, Z., Li, Z., &amp; Yin, M. (2024). Enhancing AI-assisted group decision making through LLM-powered devil's advocate. <i>IUI '24</i>, 103&ndash;119.</td><td class="mono">A</td></tr>
+      <tr><td>Dell'Acqua, F., et al. (2026). Navigating the jagged technological frontier. <i>Organization Science, 37</i>(2), 403&ndash;423.</td><td class="mono">A</td></tr>
+      <tr><td>Kamoi, R., et al. (2024). When can LLMs actually correct their own mistakes? <i>TACL, 12</i>, 1417&ndash;1440.</td><td class="mono">B</td></tr>
+      <tr><td>Kim, E., Garg, A., Peng, K., &amp; Garg, N. (2025). Correlated errors in large language models. <i>ICML</i>, PMLR 267, 30038&ndash;30066.</td><td class="mono">B</td></tr>
+      <tr><td>Kim, Y., et al. (2026). Capable language models can outgrow the benefits of collaboration. <i>Nature Machine Intelligence, 8</i>(7), 1157&ndash;1172.</td><td class="mono">A</td></tr>
+      <tr><td><b>Kish, L. (1965).</b> <i>Survey sampling.</i> Wiley.</td><td class="mono" style="color:var(--fail)">D &mdash; verify</td></tr>
+      <tr><td>Lee, H.-P., et al. (2025). The impact of generative AI on critical thinking. <i>CHI '25</i>.</td><td class="mono">A</td></tr>
+      <tr><td>Magesh, V., et al. (2025). Hallucination-free? <i>Journal of Empirical Legal Studies, 22</i>(2), 216&ndash;242.</td><td class="mono">B</td></tr>
+      <tr><td>Marakas, G. M. (2003). <i>Decision support systems in the 21st century</i> (2nd ed.). Prentice Hall.</td><td class="mono">A &mdash; Ch. 3</td></tr>
+      <tr><td>Peter, J. P. (1981). Construct validity. <i>Journal of Marketing Research, 18</i>(2), 133&ndash;145.</td><td class="mono">A</td></tr>
+      <tr><td>Power, D. J. (2008). Understanding data-driven decision support systems. <i>Information Systems Management, 25</i>(2), 149&ndash;154.</td><td class="mono">A</td></tr>
+      <tr><td>Straub, D. W. (1989). Validating instruments in MIS research. <i>MIS Quarterly, 13</i>(2), 147&ndash;169.</td><td class="mono">A</td></tr>
+      <tr><td>Vaccaro, M., Almaatouq, A., &amp; Malone, T. (2024). When combinations of humans and AI are useful. <i>Nature Human Behaviour, 8</i>(12), 2293&ndash;2303.</td><td class="mono">A</td></tr>
+      <tr><td>Whetten, D. A. (1989). What constitutes a theoretical contribution? <i>Academy of Management Review, 14</i>(4), 490&ndash;495.</td><td class="mono">A</td></tr>
+      </tbody>
+    </table></div>
+    <h3>11.1 Preprints &mdash; label as non-peer-reviewed at every point of use</h3>
+    <ul>
+      <li>Vallecillos-Ruiz, F., Hort, M., &amp; Moonen, L. (2025). Popularity trap [Preprint]. arXiv:2510.21513. <span class="mono">[C]</span></li>
+      <li>A systematic methodology for evaluating failure independence in LLM-generated code [Preprint]. arXiv:2607.02808. <span class="mono">[C &mdash; author list not confirmed]</span></li>
+    </ul>
+    <div class="notice warn">
+      <span class="lab">Removed in 1.2 &mdash; a claim this manual could not source</span>
+      <p>Earlier drafts asserted, on the authority of an unnamed multi-model study, that realized
+      ensemble gains stay below half the independence prediction. That citation carried no author,
+      venue, year, or identifier, so the admissibility gate in &sect;8.3 could not classify it and
+      the tool would reject the same warrant arriving from a seat. <b>A manual that cites what its
+      own gate refuses is the failure this project exists to catch</b>, so the claim is removed
+      rather than softened &mdash; rewriting it as &ldquo;some studies suggest&rdquo; would keep the
+      same unsupported claim behind vaguer language. It may return with an identifier that
+      resolves.</p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">Quarantined &mdash; do not cite</span>
+      <p>Costello, T. H., Pennycook, G., &amp; Rand, D. G. (2024). <i>Science, 385</i>, eadq1814. Subject to an Editorial Expression of Concern (<i>Science</i>, 11 June 2026). Do not cite in any document.</p>
+    </div>
+    <div class="note"><span>Sources I still need to verify myself</span><textarea data-k="refs"></textarea></div>
+  </div>
+</section>
+
+<section id="s12">
+  <div class="gutter"><span class="num">12</span><span class="flag new">New</span></div>
+  <div class="body">
+    <h2>Defect Log</h2>
+    <p>Nine defects the non-AI verification layer caught while this tool was built. They are
+    recorded because they are the <b>evidence the layer works</b> &mdash; &sect;8.4 asks for a
+    verification layer whose failures are uncorrelated with the models, and this is what that
+    layer actually found. Four were caught by tests written before the code, three by fuzzing or
+    property tests, two by deliberately breaking the code to see whether any test noticed.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Defect</th><th>Found by</th><th>Why it mattered</th></tr></thead>
+      <tbody>
+      <tr><td class="mono">1</td><td><span class="mono">ArithmeticGate</span> accepted the warrant <span class="mono">&ldquo;True = 1&rdquo;</span></td><td>Fuzz property, on CI&rsquo;s random seed</td><td><span class="mono">bool</span> subclasses <span class="mono">int</span>, so the literal passed the numeric check. A seat could attach it to <b>any</b> arithmetic claim and be auto-accepted. It had been present the entire life of the branch, so every &ldquo;clean&rdquo; run before it was measured through a hole in the gate</td></tr>
+      <tr><td class="mono">2</td><td>The admissibility gate accepted an invented DOI</td><td>A runner test, on code written minutes earlier</td><td>It answers &ldquo;right <i>kind</i> of source&rdquo;, never &ldquo;does it <i>exist</i>&rdquo;. Routed alone it re-opened the single-gate fail-open that conjunctive routing exists to close</td></tr>
+      <tr><td class="mono">3</td><td><span class="mono">effective_seats(2, 2.0)</span> returned <b>0.67</b></td><td>Property test</td><td>Fewer than one effective seat is not a meaningful quantity, and &sect;6.1 reads this number in plain language, so it would have been read as one</td></tr>
+      <tr><td class="mono">4</td><td><span class="mono">lincoln_petersen(0, 0, 1)</span> returned <b>&minus;0.5</b></td><td>Property test</td><td>A negative population estimate from contradictory input, returned rather than refused</td></tr>
+      <tr><td class="mono">5</td><td>The stop rule stopped on <i>either</i> condition, and ignored the queue</td><td>Reading &sect;6.3 against the code</td><td>&sect;6.3 and &sect;9.1 make stopping a conjunction. A run could commit with the judgment queue full</td></tr>
+      <tr><td class="mono">6</td><td>The decay fit was fed accepted <i>and</i> rejected claims</td><td>Reading &sect;6.3 against the code</td><td>&sect;6.3 defines yield as verified <b>corrections</b>. A pass that confirmed ten true claims and caught nothing reported a yield of ten, so the residual never decayed</td></tr>
+      <tr><td class="mono">7</td><td>The durable audit log could not be used at all</td><td>Writing the runner</td><td>The three record methods existed only on the in-memory log, so a real run wrote a chain that vanished with the process, or a file with nothing in it. Both are worse than no audit log because both look like one</td></tr>
+      <tr><td class="mono">8</td><td>A concurrency test that passed whether or not the protection existed</td><td>Mutation testing</td><td>Two deliberate breaks &mdash; removing the lock, removing the re-read &mdash; both survived. Replacing it with real processes behind a barrier immediately exposed a genuine sidecar race</td></tr>
+      <tr><td class="mono">9</td><td>Claim-line field order reversed in a demo</td><td>Running the demo and checking the result</td><td>Prose landed where the gate expects an expression, so every arithmetic claim was rejected for the wrong reason and nothing was eliminated: a run that looks strict and measures nothing. The earlier tests used self-symmetric claim lines and <b>could not</b> have caught it</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notice">
+      <span class="lab">The pattern worth taking from this table</span>
+      <p>Not one of these was found by asking a model to review the code. Every one came from an
+      executable check &mdash; a property, a fuzz case, a mutation, a run &mdash; whose failure mode
+      is uncorrelated with the models. That is the whole argument for &sect;8.4 stated as evidence
+      rather than as principle.</p>
+    </div>
+    <div class="notice warn">
+      <span class="lab">Two of these were mine, found the same day I wrote them</span>
+      <p>Defects 2 and 9 were introduced while building the runner and caught within minutes by
+      tests written alongside it. That is the system behaving correctly, and it is worth stating
+      plainly: the tests are not decoration on finished code, they are what finds the defect
+      before it becomes a habit.</p>
+    </div>
+    <div class="notice fail">
+      <span class="lab">What the layer has NOT caught, because it cannot</span>
+      <p>Every defect above is mechanical. None of them tells you whether the five frameworks
+      actually decorrelate model errors (H9), whether the 0.45 threshold holds in your domain, or
+      whether a real panel collapses. Those need real seats and measured data. The verification
+      layer proves the tool does what it says; it cannot prove that what it says is worth
+      doing.</p>
+    </div>
+    <div class="note"><span>Defects my own runs exposed &mdash; date, symptom, root cause, the test that now pins it</span><textarea data-k="n12"></textarea></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var K='sop11:', el=document.getElementById('saved'), t;
+  function flash(){ if(!el) return; el.textContent='saved'; clearTimeout(t);
+    t=setTimeout(function(){el.textContent='';},1400); }
+  function get(k){ try{ return localStorage.getItem(K+k); }catch(e){ return null; } }
+  function set(k,v){ try{ localStorage.setItem(K+k,v); flash(); }catch(e){} }
+  document.querySelectorAll('.check input[type=checkbox]').forEach(function(b){
+    if(get(b.id)==='1') b.checked=true;
+    b.addEventListener('change',function(){ set(b.id, b.checked?'1':'0'); });
+  });
+  document.querySelectorAll('textarea[data-k]').forEach(function(a){
+    var v=get(a.dataset.k); if(v) a.value=v;
+    a.addEventListener('input',function(){ set(a.dataset.k, a.value); });
+  });
+})();
+</script>
