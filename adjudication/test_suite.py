@@ -3096,3 +3096,300 @@ class TestVerdictsAreRetainedByTheOrchestrator:
         det = build_detections([result], verdicts)
         assert det["s1"] == {"c-partial"}
         assert det["s2"] == set(), "an errored seat must not be credited with a find"
+
+
+# ===========================================================================
+# THE RUNNER -- five passes one at a time, elimination, and the holes
+# ===========================================================================
+
+import run_adjudication as RA  # noqa: E402
+from run_adjudication import (  # noqa: E402
+    AdjudicationAnswer,
+    CandidateFileError,
+    load_candidates,
+    parse_candidates,
+    render_report,
+    run_adjudication,
+)
+
+# Field order is CLAIM | kind | WARRANT | text, per build_blinded_prompt.
+_R_TRUE = "CLAIM | arithmetic | 2 + 2 = 4 | the total is 4"
+_R_FALSE = "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"
+_R_JUDGE = "CLAIM | judgment |  | the framing is one-sided"
+
+
+def _cand(cid, text, warrant):
+    claim = Claim(AO.content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
+                  text, ClaimKind.ARITHMETIC, warrant)
+    return Candidate(cid, text, [claim])
+
+
+def _seats(*texts):
+    return {f"s{i}": (lambda _p, t=t: t) for i, t in enumerate(texts, 1)}
+
+
+class TestTheClaimLineFieldOrder:
+    """A demo written as kind|text|warrant put prose where the gate expects an
+    expression, so every arithmetic claim was rejected for the wrong reason and
+    no candidate was eliminated. The earlier matrix tests used self-symmetric
+    lines and could not have caught it."""
+
+    def test_the_third_field_is_the_warrant_not_the_text(self):
+        claims = AO.line_claim_extractor(_R_TRUE, "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].warrant == "2 + 2 = 4"
+        assert claims[0].text == "the total is 4"
+
+    def test_the_prompt_documents_the_order_the_extractor_parses(self):
+        prompt = AO.build_blinded_prompt(_ONE_PASS[0], "s1", "artifact").render()
+        assert "CLAIM | <kind> | <warrant> | <text>" in prompt
+
+    def test_reversing_warrant_and_text_fails_the_gate(self):
+        reversed_line = "CLAIM | arithmetic | the total is 4 | 2 + 2 = 4"
+        claim = AO.line_claim_extractor(reversed_line, "s1", "p1")[0]
+        assert ArithmeticGate().check(claim).status is GateStatus.FAIL
+
+
+class TestFivePassesOneAtATime:
+
+    def test_all_five_frameworks_run_in_order(self):
+        answer = run_adjudication("artifact", [], _seats(_R_TRUE, _R_TRUE))
+        assert [p.pass_name for p in answer.passes] == [
+            "Inversion Analysis",
+            "FMEA + FTA + FMEDA",
+            "IDOV",
+            "Critical Systems Thinking + TRIZ + Quality Zero Defects",
+            "Bayesian + MCMC",
+        ]
+
+    def test_no_seat_is_shown_a_previous_pass(self):
+        """The runner must not weaken the blinding the orchestrator enforces."""
+        seen: list[str] = []
+
+        def recorder(prompt):
+            seen.append(prompt)
+            return _R_TRUE + "\nCANARY-9f3b"
+
+        run_adjudication("artifact", [], {"s1": recorder, "s2": recorder})
+        assert len(seen) == 10  # 5 passes x 2 seats
+        assert not any("CANARY-9f3b" in p for p in seen[2:]), (
+            "a pass-1 response reached a later prompt"
+        )
+
+
+class TestTheAnswerIsWhatSurvives:
+
+    def test_a_failed_gate_eliminates_the_candidate_that_stands_on_it(self):
+        cands = [_cand("c_true", "the total is 4", "2 + 2 = 4"),
+                 _cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands,
+                                  _seats(_R_TRUE, f"{_R_TRUE}\n{_R_FALSE}"))
+        assert [c.id for c in answer.survivors] == ["c_true"]
+        assert [c.id for c in answer.eliminated] == ["c_false"]
+        assert "recomputed 4" in answer.eliminated[0].elimination_reason
+
+    def test_elimination_happens_on_the_pass_that_first_sees_the_claim(self):
+        cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands, _seats(_R_FALSE, _R_FALSE))
+        assert answer.passes[0].record.eliminated_candidates == ["c_false"]
+        for later in answer.passes[1:]:
+            assert later.record.eliminated_candidates == []
+
+    def test_nothing_is_ever_selected_only_removed(self):
+        """Two candidates, neither refuted -> both survive. No tie is broken."""
+        cands = [_cand("c1", "the total is 4", "2 + 2 = 4"),
+                 _cand("c2", "the sum is 4", "1 + 3 = 4")]
+        answer = run_adjudication("artifact", cands, _seats(_R_TRUE, _R_TRUE))
+        assert len(answer.survivors) == 2
+        assert answer.resolved is False
+        assert any(h.kind == "not narrowed to one" for h in answer.holes)
+
+    def test_every_candidate_eliminated_is_reported_as_a_hole(self):
+        cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands, _seats(_R_FALSE, _R_FALSE))
+        assert answer.survivors == []
+        hole = next(h for h in answer.holes if h.kind == "every candidate eliminated")
+        assert "not among them" in hole.detail
+        assert "fix the gate" in hole.remedy
+
+
+class TestHolesArePartOfTheAnswer:
+
+    def test_resolved_needs_one_survivor_AND_no_holes(self):
+        """One survivor with an open queue is a shortlist, not an answer."""
+        cands = [_cand("c_true", "the total is 4", "2 + 2 = 4"),
+                 _cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication(
+            "artifact", cands, _seats(f"{_R_TRUE}\n{_R_FALSE}\n{_R_JUDGE}", _R_TRUE)
+        )
+        assert len(answer.survivors) == 1
+        assert answer.holes
+        assert answer.resolved is False
+
+    def test_an_escalated_claim_becomes_an_actionable_hole(self):
+        answer = run_adjudication("artifact", [], _seats(_R_JUDGE, _R_JUDGE))
+        hole = next(h for h in answer.holes if h.kind == "unadjudicated claims")
+        assert "judgment" in hole.detail
+        assert "--adjudications" in hole.remedy
+
+    def test_a_seat_error_is_a_hole_naming_the_seat(self):
+        def boom(_p):
+            raise RuntimeError("transport died")
+
+        answer = run_adjudication("artifact", [], {"s1": _fixed(_R_TRUE), "s2": boom})
+        hole = next(h for h in answer.holes if h.kind == "seat error")
+        assert "s2" in hole.detail
+        assert "cannot be read as agreement" in hole.remedy
+
+    def test_a_collapse_warning_is_a_hole(self):
+        answer = run_adjudication("artifact", [], _seats(_R_TRUE, _R_TRUE, _R_TRUE))
+        assert any(h.kind == "collapse warning" for h in answer.holes)
+
+    def test_every_hole_carries_a_remedy(self):
+        answer = run_adjudication("artifact", [], _seats(_R_JUDGE, _R_TRUE))
+        assert answer.holes
+        for h in answer.holes:
+            assert h.remedy.strip(), f"hole {h.kind!r} has no remedy"
+
+
+class TestDefaultGatesDoNotShipAPermissiveResolver:
+
+    def test_citation_and_test_gates_are_absent_by_default(self):
+        """Both take an operator-supplied callable, and a default returning
+        True is the permissive resolver SOP 8.3 names as the most common way
+        this build fails. A citation claim escalates instead."""
+        names = [type(g).__name__ for g in RA._default_gates()]
+        assert "CitationResolutionGate" not in names
+        assert "TestExecutionGate" not in names
+
+    def test_admissibility_alone_would_accept_a_fabricated_doi(self):
+        """The reason SourceAdmissibilityGate is not a default, pinned as a
+        fact rather than left as a comment. It answers 'is this the right KIND
+        of source', never 'does this source exist'. As the sole citation gate
+        it reintroduces the single-gate fail-open that conjunctive routing was
+        built to close. Found when a runner test failed on code I had just
+        written."""
+        invented = "10.1038/s41586-000-0000-0"
+        claim = Claim(AO.content_claim_id(ClaimKind.CITATION, invented, "x"),
+                      "x", ClaimKind.CITATION, invented)
+        assert AO.classify_source(invented) is AO.SourceClass.PEER_REVIEWED
+        assert AO.SourceAdmissibilityGate().check(claim).status is GateStatus.PASS
+        assert not any(isinstance(g, AO.SourceAdmissibilityGate)
+                       for g in RA._default_gates())
+
+    def test_a_citation_claim_escalates_rather_than_being_waved_through(self):
+        cite = "CLAIM | citation | 10.1038/s41586-000-0000-0 | the source says so"
+        answer = run_adjudication("artifact", [], _seats(cite, cite))
+        assert answer.passes[0].record.auto_accepted == 0
+        assert any(h.kind == "unadjudicated claims" for h in answer.holes)
+
+
+class TestCandidateFileParsing:
+
+    def test_the_documented_shape_round_trips(self, tmp_path):
+        path = tmp_path / "c.json"
+        path.write_text(_json.dumps([
+            {"id": "c1", "content": "four",
+             "claims": [{"kind": "arithmetic", "text": "the total is 4",
+                         "warrant": "2 + 2 = 4"}]}
+        ]))
+        cands = load_candidates(str(path))
+        assert [c.id for c in cands] == ["c1"]
+        assert cands[0].claims[0].warrant == "2 + 2 = 4"
+
+    def test_a_duplicate_id_raises(self):
+        with pytest.raises(CandidateFileError, match="duplicate candidate id"):
+            parse_candidates([{"id": "c1"}, {"id": "c1"}])
+
+    def test_an_unknown_claim_kind_raises_and_lists_the_valid_ones(self):
+        with pytest.raises(CandidateFileError, match="unknown kind"):
+            parse_candidates([{"id": "c1", "claims": [{"kind": "vibes"}]}])
+
+    def test_a_non_list_raises(self):
+        with pytest.raises(CandidateFileError, match="expected a JSON list"):
+            parse_candidates({"id": "c1"})
+
+    def test_a_missing_id_raises(self):
+        with pytest.raises(CandidateFileError, match="no usable 'id'"):
+            parse_candidates([{"content": "x"}])
+
+    def test_invalid_json_names_the_file(self, tmp_path):
+        path = tmp_path / "bad.json"
+        path.write_text("{not json")
+        with pytest.raises(CandidateFileError, match="not valid JSON"):
+            load_candidates(str(path))
+
+
+class TestTheRunnerWritesADurableAuditLog:
+
+    def test_the_chain_survives_the_run_and_verifies(self, tmp_path):
+        """RunRecorder was defined only on AuditLog, so DurableAuditLog raised
+        AttributeError on the first record_artifact and no real run could
+        persist its chain at all."""
+        path = str(tmp_path / "audit.jsonl")
+        cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands, _seats(_R_FALSE, _R_FALSE),
+                                  audit_path=path)
+        reopened = AL.DurableAuditLog(path)
+        assert reopened.verify().valid is True
+        assert reopened.head == answer.audit_head
+        kinds = [e.kind for e in reopened.entries]
+        assert kinds.count("pass") == 5
+        assert "artifact" in kinds and "stop_decision" in kinds
+
+    def test_the_artifact_is_committed_by_digest_not_text(self, tmp_path):
+        path = str(tmp_path / "audit.jsonl")
+        run_adjudication("SENSITIVE-RED-TEXT", [], _seats(_R_TRUE, _R_TRUE),
+                         audit_path=path)
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        assert "SENSITIVE-RED-TEXT" not in body
+
+
+class TestTheReport:
+
+    def test_the_report_names_the_survivor_and_every_hole(self):
+        cands = [_cand("c_true", "the total is 4", "2 + 2 = 4"),
+                 _cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands,
+                                  _seats(f"{_R_TRUE}\n{_R_FALSE}", _R_TRUE))
+        text = render_report(answer)
+        assert "SURVIVOR: c_true" in text
+        assert "removed c_false" in text
+        for h in answer.holes:
+            assert h.detail in text
+        assert "NOT RESOLVED" in text
+
+    def test_a_nan_capture_fraction_is_not_printed_as_a_number(self):
+        answer = run_adjudication("artifact", [], _seats(_R_TRUE, _R_TRUE))
+        assert "nan" not in render_report(answer)
+
+    def test_the_report_never_contains_a_raw_seat_response(self):
+        """The console is for the operator, but a verbatim seat dump would
+        make the report itself a blinding leak if it were ever fed back."""
+        marker = "SEAT-VERBATIM-4c1a"
+        answer = run_adjudication("artifact", [],
+                                  _seats(f"{_R_TRUE}\n{marker}", _R_TRUE))
+        assert marker not in render_report(answer)
+
+
+class TestTheCliFailsClosedWithoutSeats:
+
+    def test_no_demo_flag_refuses_to_run(self, capsys):
+        assert RA.main([]) == 2
+        err = capsys.readouterr().err
+        assert "no seats configured" in err
+        assert "ProviderProfile" in err
+
+    def test_demo_runs_end_to_end_and_reports_unresolved(self, capsys):
+        assert RA.main(["--demo"]) == 1     # an escalated judgment claim remains
+        out = capsys.readouterr().out
+        assert "SURVIVOR: c_true" in out
+        assert "HOLES" in out
+
+    def test_the_exit_code_is_nonzero_while_holes_remain(self):
+        answer = AdjudicationAnswer(
+            artifact_digest="x", passes=[], survivors=[Candidate("c1", "")],
+            eliminated=[], stop={}, diagnosis={}, holes=[],
+        )
+        assert answer.resolved is True

@@ -231,46 +231,21 @@ def verify_chain_integrity(
     )
 
 
-class AuditLog:
+class RunRecorder:
     """
-    Append-only hash chain for one adjudication run.
+    The three things a run writes, shared by every log that can append.
 
-    There is no update and no delete. The only mutation is append, which is the
-    property that makes the chain meaningful.
+    These were defined on AuditLog alone, so DurableAuditLog -- the only log
+    that survives the process -- could not be passed to run_sequential at all:
+    the first call to record_artifact raised AttributeError. A real run could
+    therefore write an in-memory chain that vanished, or a durable chain with
+    nothing in it. Both are worse than no audit log, because both look like
+    one. Every method here is a thin wrapper over append(), which both classes
+    already implement identically.
     """
-
-    def __init__(self, run_id: str, clock: Callable[[], str] | None = None):
-        """
-        clock : optional callable returning a timestamp string. Left as None,
-                the log records no time at all and two runs over identical
-                inputs produce byte-identical chains -- required for
-                deterministic replay under global rule 4. Supply a real clock
-                in production, and swap it out to replay.
-        """
-        if not run_id:
-            raise AuditChainError("run_id is required")
-        self.run_id = run_id
-        self.clock = clock
-        self._entries: list[AuditEntry] = []
-        self._append("genesis", {"run_id": run_id})
-
-    # -- construction -------------------------------------------------------
-
-    def _append(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
-        body = scrub_nan(dict(payload))
-        if self.clock is not None:
-            body["at"] = self.clock()
-        seq = len(self._entries)
-        prev = GENESIS_PREV_HASH if seq == 0 else self._entries[-1].entry_hash
-        entry = AuditEntry(seq, prev, kind, body, compute_entry_hash(seq, prev, kind, body))
-        self._entries.append(entry)
-        return entry
 
     def append(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
-        """Append an arbitrary record. 'genesis' is reserved for entry 0."""
-        if kind == "genesis":
-            raise AuditChainError("'genesis' is reserved for the first entry")
-        return self._append(kind, payload)
+        raise NotImplementedError
 
     def record_artifact(self, artifact: str, *, include_text: bool = False) -> AuditEntry:
         """
@@ -330,6 +305,49 @@ class AuditLog:
                 "singleton_alarm_calibrated": decision.get("singleton_alarm_calibrated"),
             },
         )
+
+
+
+class AuditLog(RunRecorder):
+    """
+    Append-only hash chain for one adjudication run.
+
+    There is no update and no delete. The only mutation is append, which is the
+    property that makes the chain meaningful.
+    """
+
+    def __init__(self, run_id: str, clock: Callable[[], str] | None = None):
+        """
+        clock : optional callable returning a timestamp string. Left as None,
+                the log records no time at all and two runs over identical
+                inputs produce byte-identical chains -- required for
+                deterministic replay under global rule 4. Supply a real clock
+                in production, and swap it out to replay.
+        """
+        if not run_id:
+            raise AuditChainError("run_id is required")
+        self.run_id = run_id
+        self.clock = clock
+        self._entries: list[AuditEntry] = []
+        self._append("genesis", {"run_id": run_id})
+
+    # -- construction -------------------------------------------------------
+
+    def _append(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
+        body = scrub_nan(dict(payload))
+        if self.clock is not None:
+            body["at"] = self.clock()
+        seq = len(self._entries)
+        prev = GENESIS_PREV_HASH if seq == 0 else self._entries[-1].entry_hash
+        entry = AuditEntry(seq, prev, kind, body, compute_entry_hash(seq, prev, kind, body))
+        self._entries.append(entry)
+        return entry
+
+    def append(self, kind: str, payload: dict[str, Any]) -> AuditEntry:
+        """Append an arbitrary record. 'genesis' is reserved for entry 0."""
+        if kind == "genesis":
+            raise AuditChainError("'genesis' is reserved for the first entry")
+        return self._append(kind, payload)
 
     # -- inspection ---------------------------------------------------------
 
@@ -466,7 +484,7 @@ def _split_committed(text: str) -> tuple[list[str], str | None]:
     return committed, (tail if tail.strip() else None)
 
 
-class DurableAuditLog:
+class DurableAuditLog(RunRecorder):
     """
     Append-only audit chain persisted to a JSONL file.
 

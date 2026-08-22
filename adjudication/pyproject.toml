@@ -23,7 +23,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
-files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py"]
+files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py", "run_adjudication.py"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -40,6 +40,13 @@ testpaths = ["test_suite.py", "test_properties.py"]
 "seat_adapter.py" = [
     "PLR0913",  # HttpSeat's constructor is keyword-only configuration; collapsing
                 # it into a config object would hide which knobs exist
+]
+"run_adjudication.py" = [
+    "PLR0913", "PLR0917",  # run_adjudication and collect_holes take the run's
+                # inputs one per parameter. Bundling them into a config object
+                # would hide which of them are optional and which are the
+                # fail-closed ones, and this is the operator-facing entry point
+                # where that has to be legible at the call site.
 ]
 "seat_independence.py" = [
     "PLR0913", "PLR0917",  # diagnose() takes six optional data sources by design
