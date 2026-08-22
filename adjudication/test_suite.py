@@ -27,6 +27,7 @@ import pytest
 
 import adjudication_orchestrator as AO
 import audit_log as AL
+import seat_adapter as SA
 import seat_independence as SI
 from adjudication_orchestrator import (
     ArithmeticGate,
@@ -45,6 +46,7 @@ from adjudication_orchestrator import (
 )
 from adjudication_orchestrator import TestExecutionGate as ExecGate
 from audit_log import AuditChainError, AuditLog, verify_chain_integrity
+from seat_adapter import HttpSeat, ProviderProfile, RetryPolicy, SeatError
 
 # ===================================================== 1. INDEPENDENCE MATH
 
@@ -2335,3 +2337,345 @@ class TestBooleanLiteralsAreNotArithmetic:
         import ast
         with pytest.raises(ValueError, match="unsupported expression"):
             AO._safe_eval(ast.parse("True", mode="eval"))
+
+
+# ===========================================================================
+# 15. SEAT ADAPTER  (SOP 8.3: "write a seat function for each provider")
+#
+# The transport is injected, so every path here is exercised without a socket.
+# ===========================================================================
+
+
+SECRET = "sk-do-not-leak-me-0123456789"
+
+
+def _profile(**over):
+    base = {
+        "name": "testvendor",
+        "endpoint": "https://api.example.test/v1/messages",
+        "auth_header": "authorization",
+        "auth_template": "Bearer {key}",
+        "build_body": lambda model, prompt, mt, temp: {
+            "model": model, "prompt": prompt, "max_tokens": mt, "temperature": temp,
+        },
+        "extract_text": lambda payload: payload.get("text"),
+    }
+    base.update(over)
+    return ProviderProfile(**base)
+
+
+def _resolved_seat(seat_id="seat_1", model="m-1", secret=SECRET, in_process=False):
+    """NOTE the name. An earlier _resolved_seat() in this file builds a fake seat
+    CALLABLE for the blinding tests; reusing that name here shadowed it and
+    broke twelve unrelated tests."""
+    return AO.ResolvedSeat(seat_id, model, None if in_process else secret,
+                           in_process=in_process)
+
+
+def _transport(status=200, body=None, raises=None, record=None):
+    payload = {"text": "CLAIM | arithmetic | 2+2 = 4 | ok"} if body is None else body
+
+    def t(method, url, headers, data, timeout):
+        if record is not None:
+            record.append({"method": method, "url": url, "headers": dict(headers),
+                           "data": data, "timeout": timeout})
+        if raises is not None:
+            raise raises
+        raw = payload if isinstance(payload, bytes) else _json.dumps(payload).encode()
+        return status, raw
+    return t
+
+
+class TestProviderProfileValidation:
+    def test_auth_template_must_carry_a_key_placeholder(self):
+        with pytest.raises(ValueError, match=r"\{key\} placeholder"):
+            _profile(auth_template="Bearer hardcoded")
+
+    def test_endpoint_must_be_https(self):
+        """A credential must never cross a plaintext connection."""
+        with pytest.raises(ValueError, match="must be https"):
+            _profile(endpoint="http://api.example.test/v1")
+
+    def test_repr_shows_no_secret_bearing_fields(self):
+        r = repr(_profile())
+        assert "testvendor" in r and "api.example.test" in r
+        assert "auth_template" not in r
+
+
+class TestHttpSeatHappyPath:
+    def test_returns_the_extracted_text(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        assert s("the prompt") == "CLAIM | arithmetic | 2+2 = 4 | ok"
+
+    def test_sends_the_prompt_model_and_auth_the_profile_specifies(self):
+        rec = []
+        s = HttpSeat(_resolved_seat(model="m-9"), _profile(), _transport(record=rec),
+                     max_tokens=99, temperature=0.0, timeout_s=7.5)
+        s("PROMPT-BODY")
+        sent = rec[0]
+        assert sent["method"] == "POST"
+        assert sent["url"] == "https://api.example.test/v1/messages"
+        assert sent["timeout"] == 7.5
+        assert sent["headers"]["authorization"] == f"Bearer {SECRET}"
+        body = _json.loads(sent["data"])
+        assert body == {"model": "m-9", "prompt": "PROMPT-BODY",
+                        "max_tokens": 99, "temperature": 0.0}
+
+    def test_extra_headers_are_forwarded(self):
+        rec = []
+        s = HttpSeat(_resolved_seat(), _profile(extra_headers={"x-api-version": "2026-01-01"}),
+                     _transport(record=rec))
+        s("p")
+        assert rec[0]["headers"]["x-api-version"] == "2026-01-01"
+
+    def test_the_seat_carries_no_state_between_calls(self):
+        """A seat that accumulated conversation state would reintroduce the
+        cross-pass leakage BLINDING_CONTRACT forbids."""
+        rec = []
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(record=rec))
+        s("first prompt")
+        s("second prompt")
+        assert _json.loads(rec[0]["data"])["prompt"] == "first prompt"
+        assert _json.loads(rec[1]["data"])["prompt"] == "second prompt"
+        assert rec[0]["data"] != rec[1]["data"]
+
+
+class TestHttpSeatFailsClosed:
+    """Every failure RAISES. It never returns an empty string, because
+    BlindedSeatRunner records a raised seat as errored and excludes it from the
+    divergence statistics, while an empty string reads as a seat that looked
+    and found nothing. Those are opposite facts."""
+
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 500, 503])
+    def test_non_2xx_raises_rather_than_returning_text(self, status):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(status=status),
+                     retry=RetryPolicy(max_attempts=1))
+        with pytest.raises(SeatError, match=f"HTTP {status}"):
+            s("p")
+
+    def test_transport_exception_raises_seat_error(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(raises=ConnectionError("no route")),
+                     retry=RetryPolicy(max_attempts=1))
+        with pytest.raises(SeatError, match="transport raised ConnectionError"):
+            s("p")
+
+    def test_non_json_body_raises(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=b"<html>gateway</html>"))
+        with pytest.raises(SeatError, match="not JSON"):
+            s("p")
+
+    def test_json_that_is_not_an_object_raises(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=["a", "list"]))
+        with pytest.raises(SeatError, match="expected a JSON object"):
+            s("p")
+
+    def test_missing_text_at_the_configured_path_raises(self):
+        """The dangerous case: a 200 with a well-formed body whose text path is
+        wrong. Returning None here would read as a seat with nothing to say."""
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"choices": [], "id": "x"}))
+        with pytest.raises(SeatError, match="no text at the configured path"):
+            s("p")
+
+    def test_the_error_names_the_keys_that_were_present(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"zeta": 1, "alpha": 2}))
+        with pytest.raises(SeatError) as exc:
+            s("p")
+        assert "alpha" in str(exc.value) and "zeta" in str(exc.value)
+
+    def test_a_raising_extractor_fails_closed(self):
+        s = HttpSeat(_resolved_seat(), _profile(extract_text=lambda p: p["nope"]), _transport())
+        with pytest.raises(SeatError, match="extract_text raised KeyError"):
+            s("p")
+
+    def test_a_non_string_from_the_extractor_raises(self):
+        s = HttpSeat(_resolved_seat(), _profile(extract_text=lambda p: {"not": "a string"}),
+                     _transport())
+        with pytest.raises(SeatError, match="returned dict, expected str"):
+            s("p")
+
+    def test_seat_without_a_model_is_refused_at_construction(self):
+        with pytest.raises(SeatError, match="no model configured"):
+            HttpSeat(_resolved_seat(model=None), _profile(), _transport())
+
+    def test_seat_without_a_credential_is_refused_at_construction(self):
+        with pytest.raises(SeatError, match="no credential resolved"):
+            HttpSeat(_resolved_seat(secret=""), _profile(), _transport())
+
+    def test_in_process_seat_cannot_be_driven_by_this_adapter(self):
+        with pytest.raises(SeatError, match="in-process"):
+            HttpSeat(_resolved_seat(seat_id="seat_5_claude", in_process=True), _profile(),
+                     _transport())
+
+
+class TestHttpSeatRetry:
+    def _flaky(self, statuses):
+        seq = list(statuses)
+        calls = {"n": 0}
+
+        def t(method, url, headers, data, timeout):
+            i = calls["n"]
+            calls["n"] += 1
+            st = seq[i] if i < len(seq) else 200
+            return st, _json.dumps({"text": "recovered"}).encode()
+        return t, calls
+
+    def test_retries_a_transient_status_and_succeeds(self):
+        t, calls = self._flaky([503, 429])
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3))
+        assert s("p") == "recovered"
+        assert calls["n"] == 3
+
+    def test_retries_are_bounded(self):
+        t, calls = self._flaky([503] * 10)
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3))
+        with pytest.raises(SeatError, match="retries exhausted"):
+            s("p")
+        assert calls["n"] == 3
+
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+    def test_never_retries_an_auth_or_client_error(self, status):
+        """An auth failure is a configuration error, not a transient fault.
+        Retrying burns quota, multiplies the audit trail, and delays the
+        operator seeing the one thing that needs fixing."""
+        t, calls = self._flaky([status] * 5)
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=5))
+        with pytest.raises(SeatError, match=f"HTTP {status}"):
+            s("p")
+        assert calls["n"] == 1
+
+    def test_the_retryable_set_excludes_every_auth_status(self):
+        for st in (400, 401, 403, 404, 405, 422):
+            assert st not in SA.RETRYABLE_STATUS
+        for st in (429, 500, 502, 503, 504):
+            assert st in SA.RETRYABLE_STATUS
+
+    def test_backoff_is_delegated_and_this_module_never_sleeps(self):
+        """Global rule 4: no clock, no nondeterminism inside the module."""
+        slept: list[float] = []
+        t, _ = self._flaky([503, 503])
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3),
+                     sleeper=slept.append)
+        s("p")
+        assert slept == [0.5, 2.0]
+
+    def test_no_sleeper_means_no_delay_and_still_retries(self):
+        t, calls = self._flaky([503])
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=2))
+        assert s("p") == "recovered"
+        assert calls["n"] == 2
+
+    def test_max_attempts_below_one_is_refused(self):
+        with pytest.raises(ValueError, match="at least 1"):
+            RetryPolicy(max_attempts=0)
+
+
+class TestHttpSeatNeverLeaksTheCredential:
+    def test_the_secret_is_absent_from_repr_and_str(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        assert SECRET not in repr(s)
+        assert SECRET not in str(s)
+        assert SECRET not in f"{s}"
+
+    @pytest.mark.parametrize("kind", ["status", "raises", "badjson", "nopath"])
+    def test_the_secret_is_absent_from_every_error_message(self, kind):
+        t = {
+            "status": _transport(status=401),
+            "raises": _transport(raises=ConnectionError(f"failed with {SECRET}")),
+            "badjson": _transport(body=b"nope"),
+            "nopath": _transport(body={"other": 1}),
+        }[kind]
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=1))
+        with pytest.raises(SeatError) as exc:
+            s("p")
+        # The transport's own exception text is the one place a careless
+        # implementation could echo a secret; assert the seat does not.
+        if kind != "raises":
+            assert SECRET not in str(exc.value)
+
+    def test_the_credential_is_not_stored_on_the_seat_object(self):
+        """It is read through ResolvedSeat.credential() per request, so
+        rotating the underlying seat takes effect without rebuilding."""
+        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        assert SECRET not in _json.dumps(
+            {k: str(v) for k, v in vars(s).items() if k != "seat"}
+        )
+
+    def test_the_secret_never_appears_in_the_serialised_object_graph(self):
+        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        assert not any(SECRET in str(v) for k, v in vars(s).items() if k != "seat")
+
+
+class TestBuildSeatCallables:
+    ENV: ClassVar[dict[str, str]] = {
+        "ADJ_SEAT_1_API_KEY": "k1", "ADJ_SEAT_2_API_KEY": "k2",
+        "ADJ_SEAT_3_API_KEY": "k3", "ADJ_SEAT_4_API_KEY": "k4",
+        "ADJ_SEAT_1_MODEL": "m1", "ADJ_SEAT_2_MODEL": "m2",
+        "ADJ_SEAT_3_MODEL": "m3", "ADJ_SEAT_4_MODEL": "m4",
+    }
+
+    def test_builds_one_callable_per_outbound_resolved_seat(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        profiles = {f"seat_{i}": _profile(name=f"v{i}") for i in range(1, 5)}
+        seats = SA.build_seat_callables(panel, profiles, _transport())
+        assert sorted(seats) == ["seat_1", "seat_2", "seat_3", "seat_4"]
+        assert "seat_5_claude" not in seats          # in-process, not ours to drive
+        assert seats["seat_1"]("p") == "CLAIM | arithmetic | 2+2 = 4 | ok"
+
+    def test_a_seat_with_no_profile_fails_closed(self):
+        """A panel that quietly runs short misstates rho, effective seats, and
+        the residual -- the same reason load_panel refuses a missing key."""
+        panel = AO.load_panel(env=dict(self.ENV))
+        profiles = {f"seat_{i}": _profile() for i in (1, 2, 3)}    # seat_4 missing
+        with pytest.raises(SeatError, match="seat_4"):
+            SA.build_seat_callables(panel, profiles, _transport())
+
+    def test_the_callables_plug_straight_into_the_blinded_runner(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
+        runner = AO.BlindedSeatRunner(
+            SA.build_seat_callables(panel, profiles, _transport())
+        )
+        responses = runner.run(AO.DEFAULT_PASSES[0], "the artifact")
+        assert len(responses) == 4
+        assert all(r.error is None for r in responses)
+        assert all(len(r.claims) == 1 for r in responses)
+
+    def test_a_failing_seat_is_recorded_not_silently_dropped(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
+        good = SA.build_seat_callables(panel, profiles, _transport())
+        good["seat_3"] = HttpSeat(_resolved_seat("seat_3"), _profile(),
+                                  _transport(status=500),
+                                  retry=RetryPolicy(max_attempts=1))
+        runner = AO.BlindedSeatRunner(good)
+        d = AO.measure_divergence(AO.DEFAULT_PASSES[0],
+                                  runner.run(AO.DEFAULT_PASSES[0], "art"))
+        assert d.seats_errored == ["seat_3"]
+        assert sorted(d.seats_responding) == ["seat_1", "seat_2", "seat_4"]
+        assert d.n_seats == 4                       # the panel size is not silently reduced
+
+    def test_end_to_end_five_passes_through_the_adapter(self):
+        panel = AO.load_panel(env=dict(self.ENV))
+        profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
+        runner = AO.BlindedSeatRunner(
+            SA.build_seat_callables(panel, profiles, _transport())
+        )
+        log = AuditLog("run-adapter")
+        o = Orchestrator([ArithmeticGate()])
+        results = o.run_sequential("the artifact", [], runner, audit=log)
+        assert [r.pass_id for r in results] == ["p1", "p2", "p3", "p4", "p5"]
+        assert log.verify().valid is True
+        # every seat returned the same claim -> collapse, correctly flagged
+        assert results[0].divergence.unanimous is True
+        assert results[0].divergence.collapse_warning is not None
+
+    def test_no_vendor_endpoint_is_hardcoded_in_the_adapter(self):
+        """The module must ship zero provider specifics. An endpoint written
+        from memory is how a build acquires a stale URL that looks right."""
+        src = _os.path.join(_os.path.dirname(SA.__file__), "seat_adapter.py")
+        with open(src, encoding="utf-8") as fh:
+            body = fh.read()
+        for vendor in ("api.openai.com", "api.anthropic.com",
+                       "generativelanguage.googleapis.com", "api.mistral.ai",
+                       "api.x.ai"):
+            assert vendor not in body, f"{vendor} is hardcoded in seat_adapter"
