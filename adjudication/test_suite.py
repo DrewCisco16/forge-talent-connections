@@ -913,7 +913,7 @@ class TestFivePassFramework:
             "Inversion Analysis",
             "FMEA + FTA + FMEDA",
             "IDOV",
-            "Critical Skills Thinking + TRIZ + Quality Zero Defects",
+            "Critical Systems Thinking + TRIZ + Quality Zero Defects",
             "Bayesian + MCMC",
         ]
 

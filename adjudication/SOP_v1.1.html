@@ -159,6 +159,7 @@ textarea:focus,input:focus-visible,a:focus-visible{outline:2px solid var(--accen
       <tbody>
       <tr><td class="mono">2.3, 2.4, 8.2, 8.4</td><td>Seat count fixed at <b>five</b> throughout</td><td>v1.0 contradicted itself: &sect;6.1's worked table is n=5 while &sect;8.2 capped at three</td></tr>
       <tr><td class="mono">2.3, 8.4</td><td>Pass count stated as <b>five</b> &mdash; four eliminative plus one calibration</td><td>v1.0 said "four rounds" and never named the Bayesian stage</td></tr>
+      <tr><td class="mono">2.3</td><td>Pass 4 named in full: <b>Critical Systems Thinking</b> + TRIZ + Quality Zero Defects</td><td>The abbreviation CST appeared in &sect;2.4 and was expanded nowhere; an earlier draft misread it as "Critical Skills Thinking"</td></tr>
       <tr><td class="mono">2.4</td><td>Worked example replaced; its arithmetic now reproduces</td><td>v1.0's stated <span class="mono">b&nbsp;=&nbsp;0.79</span>, <span class="mono">R&nbsp;=&nbsp;0.31</span> does not follow from its own yields under any reading</td></tr>
       <tr><td class="mono">6.2</td><td>Added: the estimator reads <b>zero</b> when the panel has collapsed</td><td>Measured. 8 of 12 seeded defects missed, Chao1 reported 0.0</td></tr>
       <tr><td class="mono">6.3</td><td>VCY defined unambiguously; pass index pinned to <span class="mono">k&nbsp;=&nbsp;1&hellip;K</span>; stop rule restated as a conjunction</td><td>Ambiguous definition; indexing unstated and worth 2.3&times; in the residual</td></tr>
@@ -223,9 +224,22 @@ textarea:focus,input:focus-visible,a:focus-visible{outline:2px solid var(--accen
       <li>Every proposed correction is sorted. Can a machine check it? Math, citations, code tests, and data formats can be.</li>
       <li>Machine-checkable claims are checked by machine. Passed claims are accepted. Failed claims eliminate that answer. No AI opinion involved.</li>
       <li>Claims a machine cannot check &mdash; judgment, interpretation, framing &mdash; go into a short list for <b>you</b>. This is the only part that needs a human.</li>
-      <li>It repeats with a different lens each round: <b>five passes, four of which can eliminate</b>. The fifth calibrates confidence and cannot rule anything out.</li>
+      <li>It repeats with a different lens each round: <b>five passes, four of which can eliminate</b>. The fifth calibrates confidence and cannot rule anything out. In order: Inversion Analysis; FMEA + FTA + FMEDA; IDOV; <b>Critical Systems Thinking (CST)</b> + TRIZ + Quality Zero Defects; Bayesian + MCMC.</li>
       <li>It measures whether new errors are still being found, and it measures how much the five models <b>disagreed</b>. When the yield decays and your queue is empty, it stops.</li>
     </ol>
+    <div class="notice">
+      <span class="lab">Why pass 4 pairs CST with TRIZ</span>
+      <p>Critical Systems Thinking supplies the meta-theoretical frame: it forces the boundary
+      judgements into the open &mdash; what the artifact includes, what it excludes, and whose
+      perspective its framing privileges &mdash; and it holds those competing perspectives as
+      pluralism rather than collapsing them to one view. That is what surfaces the <i>hidden</i>
+      contradictions, the ones a checklist walks straight past.</p>
+      <p>TRIZ then does the resolving. Its separation principles dissolve a contradiction instead
+      of trading one half of it away, which is the failure mode of ordinary compromise. Quality
+      Zero Defects checks whatever survives that. Run in any other order the pass degrades into a
+      style review.</p>
+    </div>
+
     <h3>2.4 A worked example</h3>
     <p class="mono" style="font-size:13px;color:var(--ink-3)">Revised in 1.1. The arithmetic below reproduces; v1.0's did not.</p>
 <pre>You submit:  a 3-page market analysis, 14 citations, one revenue projection.

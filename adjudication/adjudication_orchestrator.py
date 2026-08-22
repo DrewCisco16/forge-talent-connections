@@ -541,9 +541,12 @@ DEFAULT_PASSES = [
     ),
     Pass(
         "p4",
-        "Critical Skills Thinking + TRIZ + Quality Zero Defects",
-        "Surface the contradictions, resolve them with TRIZ separation "
-        "principles, then run the zero-defects checklist against what remains.",
+        "Critical Systems Thinking + TRIZ + Quality Zero Defects",
+        "Name the boundary judgements the artifact makes: what it includes, "
+        "what it excludes, and whose perspective its framing privileges. State "
+        "the contradictions that surfaces, and resolve them by TRIZ separation "
+        "rather than by compromise. Then run the zero-defects checklist against "
+        "what survives.",
         True,
     ),
     Pass(
