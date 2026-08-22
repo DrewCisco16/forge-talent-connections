@@ -45,6 +45,8 @@ from typing import Any
 
 from adjudication_orchestrator import (
     DEFAULT_PASSES,
+    PANEL_OF_FIVE,
+    PANEL_OF_FIVE_EXTERNAL,
     ArithmeticGate,
     BlindedSeatRunner,
     Candidate,
@@ -404,6 +406,7 @@ def live_seats(
     profiles_path: str,
     env: Mapping[str, str] | None = None,
     transport: Any = None,
+    specs: Any = None,
     **kwargs: Any,
 ) -> dict[str, Callable[[str], str]]:
     """
@@ -415,12 +418,18 @@ def live_seats(
     operator errors with three different fixes, and collapsing them into
     "could not start" costs an hour.
 
-    Seat 5 is in-process and is NOT returned here. It must be supplied by a
-    separate session with no visibility into orchestrator state -- a seat that
-    can see gate verdicts is not blind, and its errors correlate with the
-    adjudication itself.
+    Defaults to PANEL_OF_FIVE_EXTERNAL: all five seats reached by API key,
+    including Claude. That is the recommended shape, because it removes the
+    in-process hazard rather than documenting it -- a seat driven by the same
+    session as the orchestrator can see gate verdicts, is therefore not blind,
+    and its errors correlate with the adjudication itself.
+
+    Pass specs=PANEL_OF_FIVE for the in-process arrangement, where seat 5 is
+    NOT returned here and the caller must supply it from a genuinely separate
+    session.
     """
-    panel = load_panel(env=dict(env) if env is not None else None)
+    panel = load_panel(specs=specs or PANEL_OF_FIVE_EXTERNAL,
+                       env=dict(env) if env is not None else None)
     profiles = load_profiles(profiles_path)
     return build_seat_callables(
         panel, profiles, transport or urllib_transport, **kwargs
@@ -565,6 +574,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="path to profiles.json -- runs the REAL panel")
     ap.add_argument("--check-profiles", metavar="PATH",
                     help="validate a profiles file offline and exit; spends nothing")
+    ap.add_argument("--seat5", choices=("external", "in-process"),
+                    default="external",
+                    help="how Claude is reached. 'external' (default) gives it "
+                         "its own API key so all five seats are blinded "
+                         "identically; 'in-process' expects a separate session "
+                         "to supply it.")
     ap.add_argument("--env", metavar="PATH",
                     help=f"path to the .env holding your keys (default: {DEFAULT_ENV_FILE})")
     args = ap.parse_args(argv)
@@ -632,7 +647,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.profiles:
         print(f"env: {load_env_file(args.env)}", file=sys.stderr)
         try:
-            seat_fns = live_seats(args.profiles)
+            seat_fns = live_seats(
+                args.profiles,
+                specs=(PANEL_OF_FIVE if args.seat5 == "in-process"
+                       else PANEL_OF_FIVE_EXTERNAL),
+            )
         except MissingSeatCredential as exc:
             print(f"credential missing: {exc}\n"
                   f"Looked for a .env at: {args.env or DEFAULT_ENV_FILE}\n"

@@ -819,6 +819,38 @@ seats plus one that is not.
 """
 
 
+PANEL_OF_FIVE_EXTERNAL = (
+    SeatSpec("seat_1", "ADJ_SEAT_1_API_KEY", "ADJ_SEAT_1_MODEL"),
+    SeatSpec("seat_2", "ADJ_SEAT_2_API_KEY", "ADJ_SEAT_2_MODEL"),
+    SeatSpec("seat_3", "ADJ_SEAT_3_API_KEY", "ADJ_SEAT_3_MODEL"),
+    SeatSpec("seat_4", "ADJ_SEAT_4_API_KEY", "ADJ_SEAT_4_MODEL"),
+    SeatSpec("seat_5", "ADJ_SEAT_5_API_KEY", "ADJ_SEAT_5_MODEL"),
+)
+"""
+All five seats reached by API key, including Claude. THE RECOMMENDED SHAPE.
+
+PANEL_OF_FIVE above makes seat 5 in-process, and its own docstring records why
+that is a problem: the orchestrator is code, but if the session DRIVING the
+orchestrator is also seat 5, that seat can see gate verdicts. It is then not
+blind, and its errors correlate with the adjudication itself -- the exact
+failure the blinding exists to prevent. The docstring could warn about it; it
+could not stop it.
+
+This spec removes the hazard rather than documenting it. Seat 5 becomes an
+ordinary outbound call with its own credential, prompted through
+build_blinded_prompt like every other seat, with no access to orchestrator
+state of any kind. All five seats are then blinded IDENTICALLY, and there is no
+special case for a future reader to reason about incorrectly.
+
+The cost is one more API key. That is a smaller price than a rho computed over
+a panel where one seat was not actually blind, because that number would look
+exactly like a valid measurement.
+
+Both specs remain available: PANEL_OF_FIVE for a genuinely separate in-process
+seat driven by a different session, this one for the ordinary case.
+"""
+
+
 class ResolvedSeat:
     """A seat with its credential resolved. The credential never appears in
     repr(), str(), or a formatted log line."""

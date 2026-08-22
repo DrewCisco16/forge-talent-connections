@@ -3659,26 +3659,25 @@ class TestLiveSeatsAssembly:
         the residual."""
         path = tmp_path / "p.json"
         path.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
-        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         with pytest.raises(SA.SeatError, match="no ProviderProfile"):
             RA.live_seats(str(path), env=env)
 
     def test_a_complete_panel_yields_one_callable_per_external_seat(self, tmp_path):
         path = tmp_path / "p.json"
-        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 5)}))
-        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
-        assert sorted(fns) == ["seat_1", "seat_2", "seat_3", "seat_4"]
-        assert "seat_5_claude" not in fns, (
-            "seat 5 is in-process and must come from a separate session"
+        assert sorted(fns) == [f"seat_{i}" for i in range(1, 6)], (
+            "the default panel is five external seats, all blinded identically"
         )
 
     def test_a_bad_profile_file_raises_the_profile_error_not_a_seat_error(self, tmp_path):
         path = tmp_path / "p.json"
         path.write_text(_json.dumps({"seat_1": {"endpoint": "http://x.invalid"}}))
-        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         with pytest.raises(ProfileConfigError):
             RA.live_seats(str(path), env=env)
@@ -3782,9 +3781,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
 
     def test_a_malformed_profile_points_at_check_profiles(
             self, tmp_path, capsys, monkeypatch):
-        for i in range(1, 5):
-            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
         for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": {"endpoint": "http://x.invalid"}})
         assert RA.main(["--profiles", path]) == 2
@@ -3793,9 +3791,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         assert "--check-profiles" in err
 
     def test_a_seat_without_a_profile_is_named(self, tmp_path, capsys, monkeypatch):
-        for i in range(1, 5):
-            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
         for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
         assert RA.main(["--profiles", path]) == 2
@@ -3806,12 +3803,11 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
     def test_a_full_panel_runs_the_five_passes_over_a_fake_network(
             self, tmp_path, monkeypatch, capsys):
         """The complete connect path, with only the vendor's server faked."""
-        for i in range(1, 5):
-            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
         for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(
-            tmp_path, {f"seat_{i}": _GOOD_PROFILE for i in range(1, 5)})
+            tmp_path, {f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)})
 
         reply = {"choices": [{"message": {
             "content": "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"}}]}
@@ -3826,7 +3822,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         artifact.write_text("the total is 5")
         rc = RA.main([str(artifact), "--profiles", path])
         out = capsys.readouterr().out
-        assert calls["n"] == 20, "4 external seats x 5 passes"
+        assert calls["n"] == 25, "5 external seats x 5 passes"
         assert "PASSES, ONE AT A TIME (5)" in out
         # c_false stands on "2 + 2 = 5" and the gate refutes it; nothing
         # refutes c_true, so it survives by elimination.
@@ -4118,3 +4114,71 @@ class TestTheEnvFileIsActuallyRead:
         err = capsys.readouterr().err
         assert str(envp) in err
         assert ".env.example" in err
+
+
+class TestAllFiveSeatsAreBlindedIdentically:
+    """PANEL_OF_FIVE makes seat 5 in-process, and its own docstring records the
+    hazard: a seat driven by the same session as the orchestrator can see gate
+    verdicts, so it is not blind and its errors correlate with the adjudication
+    itself. A docstring can warn about that; it cannot stop it.
+    PANEL_OF_FIVE_EXTERNAL removes it."""
+
+    def test_every_seat_in_the_external_panel_carries_its_own_key(self):
+        for spec in AO.PANEL_OF_FIVE_EXTERNAL:
+            assert spec.api_key_env, f"{spec.seat_id} has no credential env var"
+        assert len(AO.PANEL_OF_FIVE_EXTERNAL) == 5
+
+    def test_no_seat_in_the_external_panel_is_in_process(self):
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        panel = AO.load_panel(specs=AO.PANEL_OF_FIVE_EXTERNAL, env=env)
+        assert len(panel) == 5
+        assert not any(s.in_process for s in panel), (
+            "an in-process seat can see orchestrator state and is not blind"
+        )
+
+    def test_the_runner_returns_all_five_as_callables(self, tmp_path):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        assert sorted(fns) == [f"seat_{i}" for i in range(1, 6)], (
+            "all five seats must be driven the same way"
+        )
+
+    def test_the_external_panel_is_the_runner_default(self, tmp_path):
+        """The recommended shape has to be what happens when nobody chooses."""
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        assert "seat_5" in fns
+
+    def test_the_in_process_arrangement_is_still_available(self, tmp_path):
+        """Not removed — a genuinely separate session is a valid setup."""
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 5)}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        fns = RA.live_seats(str(path), env=env, specs=AO.PANEL_OF_FIVE,
+                            transport=lambda *a: (200, b"{}"))
+        assert sorted(fns) == [f"seat_{i}" for i in range(1, 5)]
+        assert "seat_5_claude" not in fns
+
+    def test_the_env_template_asks_for_five_keys(self):
+        path = _os.path.join(_os.path.dirname(RA.__file__), ".env.example")
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        for i in range(1, 6):
+            assert f"ADJ_SEAT_{i}_API_KEY=" in body, f"seat {i} key line missing"
+        assert "NEVER paste a key into a chat window" in body
+
+    def test_the_env_template_still_ships_every_value_blank(self):
+        path = _os.path.join(_os.path.dirname(RA.__file__), ".env.example")
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if "=" in line and not line.strip().startswith("#"):
+                    assert line.split("=", 1)[1].strip() == "", (
+                        f"{line.strip()!r} ships with a value")
