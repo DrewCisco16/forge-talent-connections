@@ -53,13 +53,13 @@ jobs:
         run: |
           pytest test_suite.py test_properties.py \
             --cov=seat_independence --cov=adjudication_orchestrator --cov=audit_log --cov=seat_adapter \
-            --cov=correctness_matrix --cov=run_adjudication \
+            --cov=correctness_matrix --cov=run_adjudication --cov=seat_profiles \
             --cov-report=term-missing --cov-fail-under=90
 
       # SOP 8.4 non-AI verification layer. These fail independently of the
       # models, which is the whole reason for running them.
       - name: Security scan
-        run: bandit -q -r seat_independence.py adjudication_orchestrator.py audit_log.py validation_harness.py seat_adapter.py correctness_matrix.py run_adjudication.py
+        run: bandit -q -r seat_independence.py adjudication_orchestrator.py audit_log.py validation_harness.py seat_adapter.py correctness_matrix.py run_adjudication.py seat_profiles.py
 
       - name: Dependency audit
         run: |
@@ -77,6 +77,9 @@ jobs:
           # assert the ANSWER rather than the exit code -- "|| true"
           # would swallow a crash just as happily as a hole.
           python run_adjudication.py --demo | grep "SURVIVOR: c_true" > /dev/null
+          # The shipped template MUST fail validation while unfilled.
+          # It validating clean is the fail-open this layer exists to stop.
+          python run_adjudication.py --check-profiles profiles.example.json && exit 1 || true
 
       # A permissive resolver silently converts the whole system back into an
       # unverified ensemble. SOP 8.3 calls this the most common build failure.

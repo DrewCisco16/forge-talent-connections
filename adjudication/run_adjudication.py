@@ -49,14 +49,18 @@ from adjudication_orchestrator import (
     Claim,
     ClaimKind,
     Gate,
+    MissingSeatCredential,
     Orchestrator,
     Pass,
     SchemaGate,
     SequentialPassResult,
     content_claim_id,
+    load_panel,
 )
 from audit_log import AuditLog, DurableAuditLog, digest
 from correctness_matrix import diagnose_run
+from seat_adapter import SeatError, build_seat_callables
+from seat_profiles import ProfileConfigError, describe, load_profiles
 
 
 class CandidateFileError(ValueError):
@@ -92,6 +96,52 @@ class AdjudicationAnswer:
         shortlist gets shipped as a conclusion.
         """
         return len(self.survivors) == 1 and not self.holes
+
+
+
+# ---------------------------------------------------------------------------
+# transport
+# ---------------------------------------------------------------------------
+
+def urllib_transport(
+    method: str, url: str, headers: Mapping[str, str], body: bytes, timeout: float
+) -> tuple[int, bytes]:
+    """
+    The one place this tool touches the network. Standard library only.
+
+    HttpSeat takes the transport as an argument precisely so the 400+ tests
+    can drive it without a socket; this is the production implementation and
+    nothing else in the codebase performs I/O.
+
+    A non-2xx response is RETURNED with its body, not raised: HttpSeat decides
+    what is retryable, and it needs the status to do that. Only a transport
+    failure -- DNS, TLS, connection, timeout -- raises, and HttpSeat treats
+    that as a failed attempt.
+    """
+    import urllib.error
+    import urllib.request
+
+    # DEFENCE IN DEPTH against B310. urlopen honours file:// and ftp://, so a
+    # profile whose endpoint slipped past validation would read a local file
+    # and hand its bytes back as a seat's answer. ProviderProfile already
+    # refuses a non-https endpoint and so does validate_config, but this is the
+    # call that would actually do the damage, so it checks for itself rather
+    # than trusting two layers above it.
+    if not url.startswith("https://"):
+        raise ValueError(
+            f"refusing a non-https endpoint: {url!r}. A credential must never "
+            f"cross a plaintext connection, and urlopen would honour file:// "
+            f"or ftp:// here."
+        )
+
+    req = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
+    try:
+        # The https scheme is enforced immediately above; nosec is on the next
+        # line because bandit reads everything after it as test ids.
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +366,34 @@ def _default_gates() -> list[Gate]:
     return [ArithmeticGate(), SchemaGate()]
 
 
+
+def live_seats(
+    profiles_path: str,
+    env: Mapping[str, str] | None = None,
+    transport: Any = None,
+    **kwargs: Any,
+) -> dict[str, Callable[[str], str]]:
+    """
+    The real panel: credentials from the environment, request shapes from the
+    profile file, and one callable per external seat.
+
+    FAILS CLOSED at each step and says which one. A missing credential, a
+    malformed profile, and a seat with no profile are three different
+    operator errors with three different fixes, and collapsing them into
+    "could not start" costs an hour.
+
+    Seat 5 is in-process and is NOT returned here. It must be supplied by a
+    separate session with no visibility into orchestrator state -- a seat that
+    can see gate verdicts is not blind, and its errors correlate with the
+    adjudication itself.
+    """
+    panel = load_panel(env=dict(env) if env is not None else None)
+    profiles = load_profiles(profiles_path)
+    return build_seat_callables(
+        panel, profiles, transport or urllib_transport, **kwargs
+    )
+
+
 # ---------------------------------------------------------------------------
 # report
 # ---------------------------------------------------------------------------
@@ -450,20 +528,53 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="JSON file of {claim_id: true|false} for escalated claims")
     ap.add_argument("--demo", action="store_true",
                     help="run with three scripted synthetic seats and no credentials")
+    ap.add_argument("--profiles",
+                    help="path to profiles.json -- runs the REAL panel")
+    ap.add_argument("--check-profiles", metavar="PATH",
+                    help="validate a profiles file offline and exit; spends nothing")
     args = ap.parse_args(argv)
 
-    if not args.demo:
+    if args.check_profiles:
+        try:
+            with open(args.check_profiles, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        except OSError as exc:
+            print(f"cannot read {args.check_profiles}: {exc}", file=sys.stderr)
+            return 2
+        except json.JSONDecodeError as exc:
+            print(f"{args.check_profiles} is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+        from seat_profiles import validate_config
+        print(describe(cfg))
+        return 0 if not validate_config(cfg) else 1
+
+    if args.profiles and args.demo:
+        print("--demo and --profiles are mutually exclusive: one runs scripted "
+              "seats, the other spends real quota.", file=sys.stderr)
+        return 2
+
+    if not args.demo and not args.profiles:
         # FAIL CLOSED. A real panel needs configured seats, and this tool will
         # not invent one. seat_adapter.build_seat_callables takes the provider
         # profiles the operator supplies from vendor API documentation.
         print(
-            "no seats configured.\n"
-            "  --demo runs three scripted synthetic seats end to end.\n"
-            "  For a real panel: set ADJ_SEAT_1..4_API_KEY, build a "
-            "ProviderProfile per seat\n"
-            "  from that vendor's API reference, and pass "
-            "seat_adapter.build_seat_callables(...)\n"
-            "  into run_adjudication(). Nothing here ships a vendor endpoint.",
+            "no seats configured.\n\n"
+            "  --demo                     three scripted synthetic seats, no "
+            "credentials, spends nothing\n"
+            "  --check-profiles PATH      validate a profiles file offline, "
+            "spends nothing\n"
+            "  --profiles PATH            run the REAL five-seat panel\n\n"
+            "To connect the panel:\n"
+            "  1. cp .env.example .env            and fill in "
+            "ADJ_SEAT_1..4_API_KEY and the model ids\n"
+            "  2. cp profiles.example.json profiles.json\n"
+            "  3. fill every FILL-IN from that vendor's own API reference "
+            "-- never from memory\n"
+            "  4. python run_adjudication.py --check-profiles profiles.json\n"
+            "  5. python run_adjudication.py ARTIFACT --profiles profiles.json "
+            "--candidates c.json\n\n"
+            "Nothing in this codebase ships a vendor endpoint, request shape, "
+            "or response path.",
             file=sys.stderr,
         )
         return 2
@@ -483,8 +594,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         with open(args.adjudications, encoding="utf-8") as fh:
             adjudications = {k: bool(v) for k, v in json.load(fh).items()}
 
+    if args.profiles:
+        try:
+            seat_fns = live_seats(args.profiles)
+        except MissingSeatCredential as exc:
+            print(f"credential missing: {exc}\n"
+                  f"Set it in .env or the environment. load_panel refuses to run "
+                  f"a short panel because it would misstate every statistic.",
+                  file=sys.stderr)
+            return 2
+        except ProfileConfigError as exc:
+            print(f"profiles unusable:\n{exc}\n\n"
+                  f"Run --check-profiles {args.profiles} to see every problem at once.",
+                  file=sys.stderr)
+            return 2
+        except SeatError as exc:
+            print(f"panel incomplete: {exc}", file=sys.stderr)
+            return 2
+        if not seat_fns:
+            print("no external seats resolved; a panel of one in-process seat "
+                  "cannot produce an error correlation.", file=sys.stderr)
+            return 2
+    else:
+        seat_fns = _demo_seats()
+
     answer = run_adjudication(
-        artifact, candidates, _demo_seats(),
+        artifact, candidates, seat_fns,
         audit_path=args.audit, run_id=args.run_id, adjudications=adjudications,
     )
     print(render_report(answer))

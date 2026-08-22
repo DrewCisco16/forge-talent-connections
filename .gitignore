@@ -1,0 +1,5 @@
+
+# never commit real credentials
+.env
+adjudication/.env
+adjudication/profiles.json

@@ -23,7 +23,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
-files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py", "run_adjudication.py"]
+files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py", "run_adjudication.py", "seat_profiles.py"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -41,7 +41,16 @@ testpaths = ["test_suite.py", "test_properties.py"]
     "PLR0913",  # HttpSeat's constructor is keyword-only configuration; collapsing
                 # it into a config object would hide which knobs exist
 ]
+"seat_profiles.py" = [
+    "PLR0911",  # _substitute returns one branch per placeholder type. The
+                # explicit branches are what make the native-typing rule
+                # readable; a lookup table would hide that "{{max_tokens}}"
+                # alone returns an int while an embedded one returns a string.
+]
 "run_adjudication.py" = [
+    "PLR0911",  # main() is a CLI: one early return per operator error, each
+                # with the message that names the fix. Collapsing them costs
+                # the specific diagnosis, which is the whole value.
     "PLR0913", "PLR0917",  # run_adjudication and collect_holes take the run's
                 # inputs one per parameter. Bundling them into a config object
                 # would hide which of them are optional and which are the

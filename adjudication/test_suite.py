@@ -3376,10 +3376,17 @@ class TestTheReport:
 class TestTheCliFailsClosedWithoutSeats:
 
     def test_no_demo_flag_refuses_to_run(self, capsys):
+        """DELIBERATE CHANGE. This asserted the word "ProviderProfile" back when
+        connecting a panel meant writing one in Python. It is config now, so the
+        message gives the procedure instead. The assertion is STRENGTHENED
+        rather than relaxed: it pins the file the operator must fill and the
+        rule that keeps this build honest, not one identifier."""
         assert RA.main([]) == 2
         err = capsys.readouterr().err
         assert "no seats configured" in err
-        assert "ProviderProfile" in err
+        assert "profiles.example.json" in err
+        assert "never from memory" in err
+        assert "ships a vendor endpoint" in err
 
     def test_demo_runs_end_to_end_and_reports_unresolved(self, capsys):
         assert RA.main(["--demo"]) == 1     # an escalated judgment claim remains
@@ -3393,3 +3400,443 @@ class TestTheCliFailsClosedWithoutSeats:
             eliminated=[], stop={}, diagnosis={}, holes=[],
         )
         assert answer.resolved is True
+
+
+# ===========================================================================
+# SEAT PROFILES -- the last step is transcription, not code
+# ===========================================================================
+
+from seat_profiles import (  # noqa: E402
+    ProfileConfigError,
+    load_profiles,
+    profiles_from_config,
+    validate_config,
+)
+
+_GOOD_PROFILE = {
+    "name": "acme",
+    "endpoint": "https://api.acme.invalid/v1/chat",
+    "auth_header": "authorization",
+    "auth_template": "Bearer {key}",
+    "body": {
+        "model": "{{model}}",
+        "max_tokens": "{{max_tokens}}",
+        "temperature": "{{temperature}}",
+        "messages": [{"role": "user", "content": "{{prompt}}"}],
+    },
+    "text_path": ["choices", 0, "message", "content"],
+}
+
+
+def _cfg(**overrides):
+    c = _json.loads(_json.dumps(_GOOD_PROFILE))
+    c.update(overrides)
+    return {"seat_1": c}
+
+
+class TestPlaceholderSubstitutionTypesValues:
+
+    def test_a_whole_value_placeholder_keeps_its_native_type(self):
+        """{"max_tokens": "{{max_tokens}}"} must send the NUMBER. A vendor that
+        type-checks rejects the string; one that does not may truncate it."""
+        prof = profiles_from_config(_cfg())["seat_1"]
+        body = prof.build_body("m-1", "the prompt", 4096, 0.0)
+        assert body["max_tokens"] == 4096
+        assert isinstance(body["max_tokens"], int)
+        assert body["temperature"] == 0.0
+        assert isinstance(body["temperature"], float)
+
+    def test_an_embedded_placeholder_interpolates_as_text(self):
+        c = _cfg()
+        c["seat_1"]["body"]["messages"][0]["content"] = "Context.\n\n{{prompt}}"
+        prof = profiles_from_config(c)["seat_1"]
+        body = prof.build_body("m-1", "ARTIFACT", 10, 0.0)
+        assert body["messages"][0]["content"] == "Context.\n\nARTIFACT"
+
+    def test_the_prompt_reaches_the_body_intact(self):
+        prof = profiles_from_config(_cfg())["seat_1"]
+        body = prof.build_body("m-1", "line one\nline two", 10, 0.0)
+        assert body["messages"][0]["content"] == "line one\nline two"
+
+    def test_substitution_reaches_nested_lists_and_dicts(self):
+        c = _cfg(body={"a": [{"b": {"c": "{{prompt}}"}}]})
+        prof = profiles_from_config(c)["seat_1"]
+        assert prof.build_body("m", "P", 1, 0.0)["a"][0]["b"]["c"] == "P"
+
+    def test_non_string_literals_pass_through_untouched(self):
+        c = _cfg(body={"stream": False, "n": 1, "stop": None,
+                       "messages": [{"content": "{{prompt}}"}]})
+        body = profiles_from_config(c)["seat_1"].build_body("m", "P", 1, 0.0)
+        assert body["stream"] is False and body["n"] == 1 and body["stop"] is None
+
+
+class TestValidationRefusesBeforeSpendingAnything:
+
+    def test_a_body_without_the_prompt_is_refused(self):
+        """The highest-value check here. A body missing the prompt is still
+        well-formed, the vendor still answers, and the seat's reply reads like
+        a considered opinion about an artifact it never saw."""
+        c = _cfg(body={"model": "{{model}}", "messages": [{"content": "hello"}]})
+        problems = validate_config(c)
+        assert any("{{prompt}}" in p and "never sent" in p for p in problems)
+
+    def test_a_misspelled_placeholder_is_named(self):
+        c = _cfg(body={"messages": [{"content": "{{promt}} {{prompt}}"}]})
+        problems = validate_config(c)
+        assert any("{{promt}}" in p for p in problems)
+
+    def test_a_plaintext_endpoint_is_refused(self):
+        problems = validate_config(_cfg(endpoint="http://api.acme.invalid/v1"))
+        assert any("must be https" in p for p in problems)
+
+    def test_an_auth_template_without_the_key_slot_is_refused(self):
+        problems = validate_config(_cfg(auth_template="Bearer hardcoded"))
+        assert any("{key} placeholder" in p for p in problems)
+
+    def test_an_unfilled_template_is_refused(self):
+        """Caught on the freshly written profiles.example.json, which validated
+        clean while every value was still a placeholder -- the exact fail-open
+        this module exists to prevent."""
+        problems = validate_config(_cfg(endpoint="https://FILL-IN.example.com/v1"))
+        assert any("unfilled template" in p for p in problems)
+
+    def test_the_shipped_example_does_not_validate(self):
+        """It must fail until the operator fills it in."""
+        path = _os.path.join(_os.path.dirname(RA.__file__), "profiles.example.json")
+        with open(path, encoding="utf-8") as fh:
+            raw = _json.load(fh)
+        assert validate_config(raw), "profiles.example.json validated while unfilled"
+
+    def test_every_problem_is_reported_not_just_the_first(self):
+        """An operator transcribing five vendors should get five reports, not
+        five round trips."""
+        c = _cfg(endpoint="http://x.invalid", auth_template="Bearer nokey")
+        del c["seat_1"]["text_path"]
+        assert len(validate_config(c)) >= 3
+
+    def test_a_missing_required_field_names_the_field(self):
+        c = _cfg()
+        del c["seat_1"]["endpoint"]
+        assert any("'endpoint'" in p for p in validate_config(c))
+
+    def test_a_bad_text_path_step_is_refused(self):
+        assert any("string key" in p for p in validate_config(_cfg(text_path=[1.5])))
+
+    def test_a_boolean_text_path_step_is_refused(self):
+        """bool subclasses int, so True would index a list at position 1. The
+        same trap the arithmetic gate fell into."""
+        assert any("string key" in p for p in validate_config(_cfg(text_path=[True])))
+
+    def test_an_empty_text_path_is_refused(self):
+        assert any("non-empty" in p for p in validate_config(_cfg(text_path=[])))
+
+    def test_profiles_from_config_raises_rather_than_returning_partial(self):
+        with pytest.raises(ProfileConfigError, match="problem"):
+            profiles_from_config(_cfg(endpoint="http://x.invalid"))
+
+    def test_a_non_object_config_is_refused(self):
+        assert any("expected a JSON object" in p for p in validate_config([]))
+
+    def test_an_empty_config_is_refused(self):
+        assert any("no seat entries" in p for p in validate_config({}))
+
+
+class TestCommentKeys:
+
+    def test_underscore_keys_are_comments_not_seats(self):
+        """JSON has no comments and an operator needs to leave notes. Without
+        this the README block in the shipped example validates as a malformed
+        seat, and the checker's first message is a false alarm."""
+        c = _cfg()
+        c["_note"] = ["anything at all", {"nested": True}]
+        assert validate_config(c) == []
+        assert set(profiles_from_config(c)) == {"seat_1"}
+
+
+class TestResponseExtractionFailsClosed:
+
+    def _extract(self, payload, path=None):
+        c = _cfg() if path is None else _cfg(text_path=path)
+        return profiles_from_config(c)["seat_1"].extract_text(payload)
+
+    def test_the_documented_path_resolves(self):
+        payload = {"choices": [{"message": {"content": "the reply"}}]}
+        assert self._extract(payload) == "the reply"
+
+    def test_a_missing_key_yields_none_not_empty_string(self):
+        """None makes HttpSeat raise. An empty string would read as a seat that
+        examined the artifact and found nothing -- the opposite fact."""
+        assert self._extract({"choices": [{"message": {}}]}) is None
+
+    def test_an_index_past_the_end_yields_none(self):
+        assert self._extract({"choices": []}) is None
+
+    def test_a_non_string_leaf_yields_none(self):
+        payload = {"choices": [{"message": {"content": {"parts": ["x"]}}}]}
+        assert self._extract(payload) is None
+
+    def test_a_wrong_shaped_response_yields_none(self):
+        assert self._extract({"choices": {"not": "a list"}}) is None
+
+    def test_a_negative_index_is_supported(self):
+        assert self._extract({"c": ["a", "b"]}, path=["c", -1]) == "b"
+
+
+class TestTheWholeChainWorksAgainstAFakeTransport:
+    """Everything between the profile file and the vendor's server. The only
+    untested link left is the server itself."""
+
+    def _run(self, response_payload, status=200):
+        captured = {}
+
+        def transport(method, url, headers, body, timeout):
+            captured["method"] = method
+            captured["url"] = url
+            captured["headers"] = dict(headers)
+            captured["body"] = _json.loads(body)
+            return status, _json.dumps(response_payload).encode()
+
+        profiles = profiles_from_config(_cfg())
+        seat = AO.ResolvedSeat("seat_1", "model-x", "SECRET-KEY-9f3b")
+        fn = SA.build_seat_callables([seat], profiles, transport)["seat_1"]
+        return fn, captured
+
+    def test_a_profile_file_becomes_a_working_seat_callable(self):
+        fn, captured = self._run(
+            {"choices": [{"message": {"content": "seat says this"}}]}
+        )
+        assert fn("THE BLINDED PROMPT") == "seat says this"
+        assert captured["url"] == "https://api.acme.invalid/v1/chat"
+        assert captured["method"] == "POST"
+        assert captured["body"]["model"] == "model-x"
+        assert captured["body"]["messages"][0]["content"] == "THE BLINDED PROMPT"
+        assert captured["headers"]["authorization"] == "Bearer SECRET-KEY-9f3b"
+
+    def test_the_credential_never_appears_in_an_error(self):
+        fn, _ = self._run({"choices": []})
+        with pytest.raises(SA.SeatError) as exc:
+            fn("prompt")
+        assert "SECRET-KEY-9f3b" not in str(exc.value)
+
+    def test_an_unresolvable_response_path_raises_rather_than_returning_empty(self):
+        fn, _ = self._run({"unexpected": "shape"})
+        with pytest.raises(SA.SeatError):
+            fn("prompt")
+
+    def test_a_configured_panel_drives_a_full_five_pass_run(self):
+        """The end of the line: profiles.json -> seats -> five passes ->
+        elimination -> holes, with only the network faked."""
+        claim = "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"
+
+        def transport(method, url, headers, body, timeout):
+            return 200, _json.dumps(
+                {"choices": [{"message": {"content": claim}}]}
+            ).encode()
+
+        profiles = profiles_from_config(
+            {"seat_1": _GOOD_PROFILE, "seat_2": _GOOD_PROFILE}
+        )
+        panel = [AO.ResolvedSeat("seat_1", "m", "k1"),
+                 AO.ResolvedSeat("seat_2", "m", "k2")]
+        seat_fns = SA.build_seat_callables(panel, profiles, transport)
+        cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
+        answer = run_adjudication("artifact", cands, seat_fns)
+        assert len(answer.passes) == 5
+        assert answer.survivors == []
+        assert any(h.kind == "every candidate eliminated" for h in answer.holes)
+
+
+class TestLiveSeatsAssembly:
+
+    def test_a_missing_credential_fails_closed_before_any_profile_work(self, tmp_path):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
+        with pytest.raises(AO.MissingSeatCredential):
+            RA.live_seats(str(path), env={})
+
+    def test_a_seat_with_a_credential_but_no_profile_fails_closed(self, tmp_path):
+        """A panel that quietly runs short misstates rho, effective seats, and
+        the residual."""
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        with pytest.raises(SA.SeatError, match="no ProviderProfile"):
+            RA.live_seats(str(path), env=env)
+
+    def test_a_complete_panel_yields_one_callable_per_external_seat(self, tmp_path):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 5)}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        assert sorted(fns) == ["seat_1", "seat_2", "seat_3", "seat_4"]
+        assert "seat_5_claude" not in fns, (
+            "seat 5 is in-process and must come from a separate session"
+        )
+
+    def test_a_bad_profile_file_raises_the_profile_error_not_a_seat_error(self, tmp_path):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({"seat_1": {"endpoint": "http://x.invalid"}}))
+        env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
+        env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
+        with pytest.raises(ProfileConfigError):
+            RA.live_seats(str(path), env=env)
+
+    def test_invalid_json_names_the_file(self, tmp_path):
+        path = tmp_path / "p.json"
+        path.write_text("{not json")
+        with pytest.raises(ProfileConfigError, match="not valid JSON"):
+            load_profiles(str(path))
+
+
+class TestTheCliConnectPath:
+
+    def test_check_profiles_reports_and_exits_nonzero_on_the_template(self, capsys):
+        path = _os.path.join(_os.path.dirname(RA.__file__), "profiles.example.json")
+        assert RA.main(["--check-profiles", path]) == 1
+        assert "unfilled template" in capsys.readouterr().out
+
+    def test_check_profiles_exits_zero_on_a_filled_file(self, tmp_path, capsys):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
+        assert RA.main(["--check-profiles", str(path)]) == 0
+        out = capsys.readouterr().out
+        assert "PROFILES OK" in out
+        assert "does NOT confirm the endpoint" in out, (
+            "an offline check must not be read as a connectivity check"
+        )
+
+    def test_demo_and_profiles_together_are_refused(self, capsys):
+        assert RA.main(["--demo", "--profiles", "p.json"]) == 2
+        assert "mutually exclusive" in capsys.readouterr().err
+
+    def test_the_no_seats_message_gives_the_whole_connect_procedure(self, capsys):
+        assert RA.main([]) == 2
+        err = capsys.readouterr().err
+        for step in (".env.example", "profiles.example.json", "--check-profiles",
+                     "--profiles"):
+            assert step in err
+        assert "never from memory" in err
+
+    def test_a_missing_profiles_file_exits_two_not_a_traceback(self, capsys):
+        assert RA.main(["--check-profiles", "/nonexistent/p.json"]) == 2
+        assert "cannot read" in capsys.readouterr().err
+
+
+class TestNoVendorSpecificsAnywhere:
+
+    def test_no_module_hardcodes_a_vendor_host(self):
+        """The rule that has held since seat_adapter, now covering the profile
+        layer and the shipped template."""
+        base = _os.path.dirname(RA.__file__)
+        targets = ["seat_adapter.py", "seat_profiles.py", "run_adjudication.py",
+                   "profiles.example.json", ".env.example"]
+        vendors = ("api.openai.com", "api.anthropic.com", "api.mistral.ai",
+                   "api.x.ai", "generativelanguage.googleapis.com")
+        for fname in targets:
+            with open(_os.path.join(base, fname), encoding="utf-8") as fh:
+                body = fh.read()
+            for vendor in vendors:
+                assert vendor not in body, f"{vendor} is hardcoded in {fname}"
+
+    def test_the_env_example_carries_no_actual_credential(self):
+        path = _os.path.join(_os.path.dirname(RA.__file__), ".env.example")
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if "=" in line and not line.strip().startswith("#"):
+                    assert line.split("=", 1)[1].strip() == "", (
+                        f"{line.strip()!r} has a value; .env.example must ship blank"
+                    )
+
+    def test_the_transport_refuses_a_non_https_url_itself(self):
+        """Defence in depth. urlopen honours file:// and ftp://, so a profile
+        that slipped past validation would read a local file and return its
+        bytes as a seat's answer. Two layers above already refuse it; this is
+        the call that would do the damage, so it checks for itself."""
+        for bad in ("file:///etc/passwd", "http://api.invalid/v1",
+                    "ftp://api.invalid/x"):
+            with pytest.raises(ValueError, match="non-https"):
+                RA.urllib_transport("POST", bad, {}, b"{}", 1.0)
+
+
+class TestTheCliDiagnosesEachConnectFailureDistinctly:
+    """A missing credential, a malformed profile, and a seat with no profile
+    are three different operator errors with three different fixes. Collapsing
+    them into "could not start" costs an hour."""
+
+    def _profiles(self, tmp_path, payload):
+        path = tmp_path / "p.json"
+        path.write_text(_json.dumps(payload))
+        return str(path)
+
+    def test_a_missing_credential_names_the_fix(self, tmp_path, capsys, monkeypatch):
+        for i in range(1, 6):
+            monkeypatch.delenv(f"ADJ_SEAT_{i}_API_KEY", raising=False)
+            monkeypatch.delenv(f"ADJ_SEAT_{i}_MODEL", raising=False)
+        path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
+        assert RA.main(["--profiles", path]) == 2
+        err = capsys.readouterr().err
+        assert "credential missing" in err
+        assert ".env" in err
+
+    def test_a_malformed_profile_points_at_check_profiles(
+            self, tmp_path, capsys, monkeypatch):
+        for i in range(1, 5):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
+        for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
+        path = self._profiles(tmp_path, {"seat_1": {"endpoint": "http://x.invalid"}})
+        assert RA.main(["--profiles", path]) == 2
+        err = capsys.readouterr().err
+        assert "profiles unusable" in err
+        assert "--check-profiles" in err
+
+    def test_a_seat_without_a_profile_is_named(self, tmp_path, capsys, monkeypatch):
+        for i in range(1, 5):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
+        for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
+        path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
+        assert RA.main(["--profiles", path]) == 2
+        err = capsys.readouterr().err
+        assert "panel incomplete" in err
+        assert "seat_2" in err
+
+    def test_a_full_panel_runs_the_five_passes_over_a_fake_network(
+            self, tmp_path, monkeypatch, capsys):
+        """The complete connect path, with only the vendor's server faked."""
+        for i in range(1, 5):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
+        for i in range(1, 6):
+            monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
+        path = self._profiles(
+            tmp_path, {f"seat_{i}": _GOOD_PROFILE for i in range(1, 5)})
+
+        reply = {"choices": [{"message": {
+            "content": "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"}}]}
+        calls = {"n": 0}
+
+        def fake_transport(method, url, headers, body, timeout):
+            calls["n"] += 1
+            return 200, _json.dumps(reply).encode()
+
+        monkeypatch.setattr(RA, "urllib_transport", fake_transport)
+        artifact = tmp_path / "a.txt"
+        artifact.write_text("the total is 5")
+        rc = RA.main([str(artifact), "--profiles", path])
+        out = capsys.readouterr().out
+        assert calls["n"] == 20, "4 external seats x 5 passes"
+        assert "PASSES, ONE AT A TIME (5)" in out
+        # c_false stands on "2 + 2 = 5" and the gate refutes it; nothing
+        # refutes c_true, so it survives by elimination.
+        assert "SURVIVOR: c_true" in out
+        assert "removed c_false" in out
+        assert "recomputed 4" in out
+        # Four seats scripted IDENTICALLY are a monoculture, and the run says
+        # so on every pass rather than reading the agreement as confirmation.
+        assert out.count("[collapse warning]") == 5
+        assert "rho is undefined" in out
+        # A lone survivor with six open holes is a shortlist, not an answer.
+        assert rc == 1
+        assert "NOT RESOLVED" in out
