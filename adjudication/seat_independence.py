@@ -382,11 +382,37 @@ def independence_gap(X: np.ndarray) -> dict[str, float]:
     Returns observed accuracy, independence-predicted accuracy, best single
     seat, and the fraction of the theoretical gain actually captured.
 
-    BENCHMARK: a published 12-model / 224-problem study reported that
-    realized gains stayed BELOW HALF the independence prediction, and that no
-    ensemble beat the best single model. If your capture_fraction is low and
-    ensemble_beats_best_single is False, the ensemble is costing compute for
-    nothing and the frameworks -- not the models -- are doing the work.
+    HOW TO READ capture_fraction. The independence line is an upper bound
+    that assumes seat failures are uncorrelated. Real panels never reach it,
+    because seats trained on overlapping corpora fail on overlapping inputs.
+    A low capture_fraction with ensemble_beats_best_single False means the
+    ensemble is costing compute for nothing and the frameworks -- not the
+    models -- are doing the work.
+
+    Never read this number alone. It says how much of the theoretical gain
+    was captured; it does not say why the gain was small. Read it beside
+    mean_error_correlation, which names the cause. A capture_fraction near
+    zero with rho near zero is a hard problem; the same number with rho near
+    one is a monoculture.
+
+    NO EXTERNAL BENCHMARK IS CITED HERE. An earlier draft asserted, on the
+    authority of an unnamed multi-model study, that realized ensemble gains
+    stay below half the independence prediction. That citation carried no
+    author, venue, year, or identifier, so SourceAdmissibilityGate could not
+    classify it, and the orchestrator would have rejected the same warrant
+    arriving from a seat. A module that cites what its own gate refuses is
+    the failure this project exists to catch, so the claim is removed rather
+    than dressed up. It may return with an identifier that resolves.
+    TestNoUnsourcedBenchmarkClaims keeps it out until then, and asserts the
+    gate's verdict rather than restating this paragraph.
+
+    The one empirical anchor available here is this repository's own, and it
+    is reproducible: validation_harness.py, twelve seeded defects over three
+    synthetic seats, measured a collapsed panel (rho = +1.000) at 1.00
+    effective seats catching 4 of 12 defects against a divergent panel
+    (rho = +0.500) at 1.50 effective seats catching 6 of 12. That is a
+    property of those synthetic seats, not of any production model, and it
+    is stated as such.
     """
     X = np.asarray(X, dtype=int)
     n_seats = X.shape[1]

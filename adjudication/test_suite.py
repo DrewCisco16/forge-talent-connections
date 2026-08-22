@@ -2679,3 +2679,61 @@ class TestBuildSeatCallables:
                        "generativelanguage.googleapis.com", "api.mistral.ai",
                        "api.x.ai"):
             assert vendor not in body, f"{vendor} is hardcoded in seat_adapter"
+
+
+# ===========================================================================
+# THE MODULES MUST NOT CITE WHAT THEIR OWN GATE WOULD REJECT
+#
+# independence_gap once carried a BENCHMARK paragraph crediting "a published
+# 12-model / 224-problem study" for the claim that realized ensemble gains
+# stay below half the independence prediction. No author, no venue, no year,
+# no identifier. SourceAdmissibilityGate would have refused that warrant from
+# a seat, and the module asserted it in a docstring an operator reads as
+# established fact. These tests keep it out.
+# ===========================================================================
+
+class TestNoUnsourcedBenchmarkClaims:
+
+    def _module_source(self, mod):
+        with open(mod.__file__, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_unnamed_study_is_gone_from_seat_independence(self):
+        body = self._module_source(SI)
+        for fragment in ("12-model", "224-problem", "224 problem"):
+            assert fragment not in body, (
+                f"{fragment!r} is back in seat_independence. The study it "
+                "refers to has no identifier and cannot clear the "
+                "admissibility gate; re-source it or leave it out."
+            )
+
+    def test_the_gate_itself_rejects_the_way_that_study_was_cited(self):
+        """The prose claim 'our own gate would reject this' is worth nothing
+        unless the gate actually does. This asserts the verdict rather than
+        restating the assertion."""
+        for how_it_was_cited in (
+            "a published 12-model / 224-problem study",
+            "12-model / 224-problem study",
+            "a published study",
+            "prior work",
+        ):
+            assert AO.classify_source(how_it_was_cited) is AO.SourceClass.INADMISSIBLE
+
+    def test_a_seat_submitting_that_warrant_is_rejected_end_to_end(self):
+        """Same claim, arriving the way a seat would send it."""
+        gate = AO.SourceAdmissibilityGate()
+        claim = Claim(
+            id="c-unsourced",
+            text="ensembles capture under half the independence prediction",
+            kind=ClaimKind.CITATION,
+            warrant="a published 12-model / 224-problem study",
+        )
+        assert gate.applies_to(claim) is True
+        assert gate.check(claim).status is not GateStatus.PASS
+
+    def test_the_replacement_anchor_is_this_repositorys_own_measurement(self):
+        """What replaced it must be reproducible here, not another citation.
+        validation_harness.py produces these numbers on demand."""
+        body = self._module_source(SI)
+        assert "validation_harness.py" in body
+        assert "synthetic seats" in body
