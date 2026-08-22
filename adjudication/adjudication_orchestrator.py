@@ -43,7 +43,7 @@ import operator
 import os
 import re
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol
@@ -188,14 +188,24 @@ class Gate(Protocol):
     def check(self, claim: Claim) -> GateResult: ...
 
 
-_SAFE_OPS = {
+# Binary and unary operators are SEPARATE tables, not one merged dict.
+# Merged, `type(node.op) in _SAFE_OPS` on a BinOp also matched ast.USub and
+# ast.UAdd, so the lookup would hand operator.neg two arguments. CPython's
+# parser never builds that node, so it was unreachable rather than wrong --
+# but the arity was enforced by the grammar rather than by this table, and
+# the only thing catching a mismatch was the broad except in the caller.
+# Split, each table's domain is its arity, and mypy can type both.
+_BINARY_OPS: dict[type[ast.operator], Callable[[float, float], float]] = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
     ast.Div: operator.truediv, ast.Pow: operator.pow, ast.Mod: operator.mod,
-    ast.FloorDiv: operator.floordiv, ast.USub: operator.neg, ast.UAdd: operator.pos,
+    ast.FloorDiv: operator.floordiv,
+}
+_UNARY_OPS: dict[type[ast.unaryop], Callable[[float], float]] = {
+    ast.USub: operator.neg, ast.UAdd: operator.pos,
 }
 
 
-def _safe_eval(node):
+def _safe_eval(node: ast.AST) -> float:
     """
     Evaluate an arithmetic AST without exec/eval on arbitrary code.
 
@@ -213,10 +223,12 @@ def _safe_eval(node):
             and isinstance(node.value, (int, float))
             and not isinstance(node.value, bool)):
         return node.value
-    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
-        return _SAFE_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
-    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
-        return _SAFE_OPS[type(node.op)](_safe_eval(node.operand))
+    if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
+        return _BINARY_OPS[type(node.op)](
+            _safe_eval(node.left), _safe_eval(node.right)
+        )
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+        return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
     raise ValueError("unsupported expression")
 
 
@@ -731,7 +743,11 @@ class BlindedSeatRunner:
     result.
     """
 
-    def __init__(self, seat_fns: dict[str, Callable[[str], str]], extractor=line_claim_extractor):
+    def __init__(
+        self,
+        seat_fns: Mapping[str, Callable[[str], str]],
+        extractor: Callable[[str, str, str], list[Claim]] = line_claim_extractor,
+    ):
         if not seat_fns:
             raise ValueError("at least one seat is required")
         self.seat_fns = dict(seat_fns)
@@ -955,7 +971,7 @@ class SequentialPassResult:
 # 4. CONVERGENCE AND STOPPING
 # ===========================================================================
 
-def fit_decay(yields: Sequence[float]) -> tuple | None:
+def fit_decay(yields: Sequence[float]) -> tuple[float, float] | None:
     """
     Fit VCY_k = a * exp(-b*k) by least squares on log(yield).
     Returns (a, b) or None if fewer than two positive observations.
@@ -992,7 +1008,9 @@ def residual_estimate(yields: Sequence[float]) -> float | None:
     return a * math.exp(-b * (K + 1)) / (1 - math.exp(-b))
 
 
-def chao1_lower_bound(detections_by_seat: dict[str, set]) -> dict[str, float]:
+def chao1_lower_bound(
+    detections_by_seat: Mapping[str, set[str]],
+) -> dict[str, float]:
     """
     Capture-recapture lower bound on errors NO seat caught.
 
@@ -1000,7 +1018,7 @@ def chao1_lower_bound(detections_by_seat: dict[str, set]) -> dict[str, float]:
     missed' feels like from inside, AND is the signal that more errors remain.
     Positive error correlation biases this DOWNWARD: it is a LOWER BOUND.
     """
-    counts: Counter = Counter()
+    counts: Counter[str] = Counter()
     for caught in detections_by_seat.values():
         for e in caught:
             counts[e] += 1
@@ -1093,8 +1111,8 @@ class Orchestrator:
 
         self.escalation_queue: list[Claim] = []
         self.history: list[PassRecord] = []
-        self.detections_by_seat: dict[str, set] = {}
-        self._seen_claims: set = set()
+        self.detections_by_seat: dict[str, set[str]] = {}
+        self._seen_claims: set[str] = set()
         self.divergence_by_pass: dict[str, PassDivergence] = {}
         # claim_id -> ClaimVerdict, one entry per DISTINCT claim. A claim is
         # adjudicated once, in the pass that first saw it; later re-proposals

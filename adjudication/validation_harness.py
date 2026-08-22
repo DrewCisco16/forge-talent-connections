@@ -22,6 +22,8 @@ Run: python validation_harness.py
 """
 
 
+from collections.abc import Callable
+
 import numpy as np
 
 import adjudication_orchestrator as AO
@@ -42,7 +44,7 @@ PASS_OF: dict[str, int] = {
 }
 
 
-def make_seat(caught: set[str]):
+def make_seat(caught: set[str]) -> Callable[[str], str]:
     """A synthetic seat that catches a fixed subset, reporting per pass.
 
     It reads the lens out of its own prompt -- which is all the blinding gives

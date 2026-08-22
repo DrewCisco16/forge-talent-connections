@@ -34,8 +34,10 @@ report breaks their blinding, and seat 5 must be a separate session.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
+import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -627,5 +629,43 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0 if answer.resolved else 1
 
 
+def _cli() -> int:
+    """Entry point that survives a closed pipe.
+
+    `run_adjudication.py --demo | head` is ordinary usage, and without this it
+    ends in a BrokenPipeError traceback: the reader is gone before the report
+    finishes printing. Python also flushes stdout at interpreter exit, which
+    raises a SECOND time on the way out, so stdout is redirected to devnull
+    before returning -- the standard remedy, and the reason a bare
+    `except BrokenPipeError: pass` is not enough.
+    """
+    try:
+        return main()
+    except BrokenPipeError:
+        # Redirecting is best-effort hygiene, not correctness: it suppresses
+        # the SECOND raise from Python's exit-time stdout flush. stdout is not
+        # always a real file descriptor -- under a test harness or any embedded
+        # runner it may be an in-memory object with no fileno -- and failing to
+        # redirect must not turn a handled broken pipe into an unhandled error.
+        devnull = None
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError, AttributeError):
+            pass
+        finally:
+            # dup2 DUPLICATES the descriptor, so the original stays open.
+            # Leaking one per broken pipe is harmless in a one-shot CLI and
+            # wrong in anything that calls _cli more than once.
+            if devnull is not None:
+                with contextlib.suppress(OSError):
+                    os.close(devnull)
+        return 141  # 128 + SIGPIPE, what a shell reports for this
+    except KeyboardInterrupt:
+        print("\ninterrupted; no audit entry was written for the current pass.",
+              file=sys.stderr)
+        return 130  # 128 + SIGINT
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_cli())

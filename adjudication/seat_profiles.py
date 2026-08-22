@@ -274,7 +274,17 @@ def profile_from_config(seat_id: str, cfg: Mapping[str, Any]) -> ProviderProfile
 
     def build_body(model: str, prompt: str, max_tokens: int,
                    temperature: float) -> dict[str, Any]:
-        return _substitute(body_template, model, prompt, max_tokens, temperature)
+        filled = _substitute(body_template, model, prompt, max_tokens, temperature)
+        if not isinstance(filled, dict):
+            # validate_config guarantees body is an object, so this is
+            # unreachable through the public API. It is a guard rather than a
+            # cast because the alternative is posting a JSON array or scalar
+            # to the vendor and reading the resulting 400 as a seat failure.
+            raise ProfileConfigError(
+                f"{seat_id}: body must fill to a JSON object, "
+                f"got {type(filled).__name__}"
+            )
+        return filled
 
     def extract_text(payload: Mapping[str, Any]) -> str | None:
         found = _walk(payload, text_path)

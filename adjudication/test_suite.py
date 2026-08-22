@@ -3840,3 +3840,223 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         # A lone survivor with six open holes is a shortlist, not an answer.
         assert rc == 1
         assert "NOT RESOLVED" in out
+
+
+class TestTheEvaluatorTablesAreSeparatedByArity:
+    """_SAFE_OPS was one merged dict, so `type(node.op) in _SAFE_OPS` on a
+    BinOp also matched ast.USub and ast.UAdd and the lookup would have handed
+    operator.neg two arguments. CPython's parser never builds that node, so it
+    was unreachable rather than wrong -- but the arity was enforced by the
+    grammar, not by the table, and the only thing catching a mismatch was the
+    broad except in ArithmeticGate. Found by mypy --strict, which could not
+    type the merged dict."""
+
+    def test_the_two_tables_do_not_overlap(self):
+        assert set(AO._BINARY_OPS) & set(AO._UNARY_OPS) == set()
+
+    def test_every_binary_entry_takes_two_operands(self):
+        for op, fn in AO._BINARY_OPS.items():
+            assert fn(6.0, 3.0) is not None, op
+            with pytest.raises(TypeError):
+                fn(6.0)          # type: ignore[call-arg]
+
+    def test_every_unary_entry_takes_one_operand(self):
+        for op, fn in AO._UNARY_OPS.items():
+            assert fn(5.0) is not None, op
+            with pytest.raises(TypeError):
+                fn(5.0, 5.0)     # type: ignore[call-arg]
+
+    def test_arithmetic_is_unchanged_by_the_split(self):
+        import ast as _ast
+        for expr, expected in (("2+2", 4), ("10-3", 7), ("6*7", 42), ("9/2", 4.5),
+                               ("2**8", 256), ("7%3", 1), ("7//2", 3),
+                               ("-5", -5), ("+5", 5), ("-(3*4)", -12),
+                               ("2+3*4", 14), ("(2+3)*4", 20)):
+            got = AO._safe_eval(_ast.parse(expr, mode="eval"))
+            assert got == expected, expr
+
+    def test_booleans_are_still_refused(self):
+        """The CI-red defect. bool subclasses int, so this must stay refused."""
+        import ast as _ast
+        for expr in ("True", "False", "True+True", "True*5"):
+            with pytest.raises(ValueError, match="unsupported expression"):
+                AO._safe_eval(_ast.parse(expr, mode="eval"))
+
+
+class TestTheTransportRetryPathAnOperatorWillActuallyHit:
+    """A network flake is the most likely thing to go wrong on the first live
+    run, and until now only the STATUS-code retry path was covered -- not the
+    one where the transport itself raises."""
+
+    def _seat(self, transport, **kw):
+        profiles = profiles_from_config(_cfg())
+        seat = AO.ResolvedSeat("seat_1", "m", "k")
+        return SA.build_seat_callables([seat], profiles, transport, **kw)["seat_1"]
+
+    def test_a_raising_transport_is_retried_then_fails_closed(self):
+        calls = {"n": 0}
+        slept: list[float] = []
+
+        def flaky(method, url, headers, body, timeout):
+            calls["n"] += 1
+            raise ConnectionResetError("connection reset by peer")
+
+        fn = self._seat(flaky, retry=SA.RetryPolicy(max_attempts=3),
+                        sleeper=slept.append)
+        with pytest.raises(SA.SeatError) as exc:
+            fn("prompt")
+        assert calls["n"] == 3, "every attempt should have been made"
+        assert slept, "backoff should have been requested between attempts"
+        assert "ConnectionResetError" in str(exc.value)
+        assert "connection reset by peer" in str(exc.value)
+
+    def test_a_transient_transport_error_recovers(self):
+        calls = {"n": 0}
+
+        def flaky(method, url, headers, body, timeout):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise TimeoutError("timed out")
+            return 200, _json.dumps(
+                {"choices": [{"message": {"content": "recovered"}}]}
+            ).encode()
+
+        fn = self._seat(flaky, retry=SA.RetryPolicy(max_attempts=3),
+                        sleeper=lambda _s: None)
+        assert fn("prompt") == "recovered"
+        assert calls["n"] == 2
+
+    def test_no_retry_means_one_attempt(self):
+        calls = {"n": 0}
+
+        def always_fails(method, url, headers, body, timeout):
+            calls["n"] += 1
+            raise OSError("down")
+
+        fn = self._seat(always_fails, retry=SA.RetryPolicy(max_attempts=1))
+        with pytest.raises(SA.SeatError):
+            fn("prompt")
+        assert calls["n"] == 1
+
+    def test_the_credential_survives_none_of_the_error_paths(self):
+        def boom(method, url, headers, body, timeout):
+            raise ConnectionError("upstream refused")
+
+        profiles = profiles_from_config(_cfg())
+        seat = AO.ResolvedSeat("seat_1", "m", "SECRET-KEY-2b7f")
+        fn = SA.build_seat_callables([seat], profiles, boom,
+                                     retry=SA.RetryPolicy(max_attempts=1))["seat_1"]
+        with pytest.raises(SA.SeatError) as exc:
+            fn("prompt")
+        assert "SECRET-KEY-2b7f" not in str(exc.value)
+
+
+class TestRunRecorderIsAbstract:
+    """The base extracted so DurableAuditLog could record a run at all. Its
+    append() must never be reachable: a log that silently accepts entries and
+    stores none is worse than no log, because it looks like one."""
+
+    def test_the_base_refuses_to_be_used_directly(self):
+        class Bare(AL.RunRecorder):
+            pass
+
+        with pytest.raises(NotImplementedError):
+            Bare().record_artifact("some artifact")
+
+    def test_both_real_logs_override_it(self):
+        for cls in (AL.AuditLog, AL.DurableAuditLog):
+            assert cls.append is not AL.RunRecorder.append, (
+                f"{cls.__name__} inherits the abstract append"
+            )
+
+
+class TestScrubNanCoversEveryContainer:
+    """NaN is not valid JSON and does not equal itself, so a hash over it would
+    be reproducible only by accident. Every container the payloads use must be
+    scrubbed, not just dicts and lists."""
+
+    def test_a_set_is_scrubbed_and_ordered(self):
+        """Sets have no order, so hashing one directly would produce a
+        different digest per run and break replay."""
+        out = AL.scrub_nan({"c", "a", "b"})
+        assert out == ["a", "b", "c"]
+
+    def test_nan_inside_every_container_becomes_null(self):
+        nan = float("nan")
+        assert AL.scrub_nan(nan) is None
+        assert AL.scrub_nan({"k": nan}) == {"k": None}
+        assert AL.scrub_nan([nan]) == [None]
+        assert AL.scrub_nan((nan,)) == [None]
+
+    def test_ordinary_values_pass_through(self):
+        assert AL.scrub_nan({"a": 1, "b": "x", "c": True, "d": None}) == {
+            "a": 1, "b": "x", "c": True, "d": None
+        }
+
+
+class TestTheCliSurvivesOrdinaryShellUsage:
+
+    def test_a_closed_pipe_does_not_traceback(self, monkeypatch, capsys):
+        """`run_adjudication.py --demo | head` is ordinary usage. Without the
+        guard it ends in a BrokenPipeError traceback, and Python's exit-time
+        stdout flush raises a second time on the way out."""
+        monkeypatch.setattr(RA, "main", lambda: (_ for _ in ()).throw(BrokenPipeError()))
+        assert RA._cli() == 141          # 128 + SIGPIPE
+
+    def test_an_interrupt_reports_rather_than_tracebacks(self, monkeypatch, capsys):
+        monkeypatch.setattr(RA, "main",
+                            lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+        assert RA._cli() == 130          # 128 + SIGINT
+        assert "interrupted" in capsys.readouterr().err
+
+    def test_a_normal_run_returns_mains_code_untouched(self, monkeypatch):
+        monkeypatch.setattr(RA, "main", lambda: 7)
+        assert RA._cli() == 7
+
+    def test_the_redirect_is_best_effort_and_never_masks_the_exit_code(self, monkeypatch):
+        """stdout is not always a real file descriptor -- under a test harness
+        or an embedded runner it may be an in-memory object with no fileno.
+        Failing to redirect must not turn a handled broken pipe into an
+        unhandled error, which is what happened the first time this was
+        written.
+
+        Note this patches sys.stdout rather than os.dup2: patching dup2 is
+        global, and it broke pytest's own capture teardown when tried.
+        """
+        import io
+
+        class NoFileno(io.StringIO):
+            def fileno(self) -> int:
+                raise io.UnsupportedOperation("not a real fd")
+
+        monkeypatch.setattr(RA, "main",
+                            lambda: (_ for _ in ()).throw(BrokenPipeError()))
+        monkeypatch.setattr(RA.sys, "stdout", NoFileno())
+        assert RA._cli() == 141
+
+    def test_the_devnull_descriptor_is_not_leaked(self, monkeypatch):
+        """dup2 duplicates, so the original stays open. One leak per broken
+        pipe is harmless in a one-shot CLI and wrong in anything that calls
+        _cli more than once."""
+        opened: list[int] = []
+        closed: list[int] = []
+        real_open, real_close = RA.os.open, RA.os.close
+
+        def tracking_open(path, flags, *a):
+            fd = real_open(path, flags, *a)
+            opened.append(fd)
+            return fd
+
+        def tracking_close(fd):
+            closed.append(fd)
+            return real_close(fd)
+
+        monkeypatch.setattr(RA, "main",
+                            lambda: (_ for _ in ()).throw(BrokenPipeError()))
+        monkeypatch.setattr(RA.os, "open", tracking_open)
+        monkeypatch.setattr(RA.os, "close", tracking_close)
+        monkeypatch.setattr(RA.os, "dup2", lambda *a: None)
+        assert RA._cli() == 141
+        assert opened and closed == opened, (
+            f"opened {opened} but closed {closed}"
+        )

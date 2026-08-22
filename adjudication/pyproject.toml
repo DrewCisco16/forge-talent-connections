@@ -23,6 +23,13 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
+# strict was turned on after the modules were written, not before, and it
+# found four things worth having: an untyped operator table whose arity was
+# enforced by CPython's grammar rather than by the table, an untyped tuple
+# that made the residual -- the convergence number the stop rule reads -- an
+# Any, a body template that could fill to a non-object and be posted anyway,
+# and an unannotated aggregator in the leave-one-seat-out diagnostic.
+strict = true
 files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py", "run_adjudication.py", "seat_profiles.py"]
 
 [tool.pytest.ini_options]

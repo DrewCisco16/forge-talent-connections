@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import itertools
 from collections import Counter
-from collections.abc import Hashable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -233,7 +233,7 @@ def chao1(detections: dict[Any, set[Any]]) -> dict[str, float]:
     ASSUMPTION VIOLATION: heterogeneous and positively-correlated capture
     probabilities bias N_hat DOWNWARD. Report as a LOWER BOUND.
     """
-    counts: Counter = Counter()
+    counts: Counter[Hashable] = Counter()
     for caught in detections.values():
         for err in caught:
             counts[err] += 1
@@ -312,7 +312,7 @@ def marginal_yield_by_pass(
 
 def leave_one_seat_out_stability(
     answers: Sequence[Sequence[Hashable]],
-    aggregator,
+    aggregator: Callable[[Sequence[Hashable]], Hashable],
 ) -> dict[str, Any]:
     """
     Re-run the elimination with each seat removed in turn. Does the same

@@ -67,7 +67,7 @@ seat, or over zero items, is not a weak signal; it is no signal, and the SOP
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -400,7 +400,7 @@ if __name__ == "__main__":
         Orchestrator,
     )
 
-    def seat(lines: str):
+    def seat(lines: str) -> Callable[[str], str]:
         return lambda _prompt: lines
 
     true_claim = "CLAIM | arithmetic | 2 + 2 = 4 | 2 + 2 = 4"
