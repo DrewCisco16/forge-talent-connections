@@ -3770,11 +3770,21 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         return str(path)
 
     def test_a_missing_credential_names_the_fix(self, tmp_path, capsys, monkeypatch):
+        # --env MUST point somewhere that does not exist. Deleting the
+        # variables is not enough on its own: main() calls load_env_file,
+        # which reads the real adjudication/.env off disk and puts them
+        # straight back. Once an operator fills that file in, this test
+        # stopped testing a missing credential and started testing whichever
+        # keys happened to be on the machine -- it failed with "panel
+        # incomplete" instead, because the credentials it had just deleted
+        # were present again. A test that passes only while the tool is
+        # unconfigured is not a test of the tool.
         for i in range(1, 6):
             monkeypatch.delenv(f"ADJ_SEAT_{i}_API_KEY", raising=False)
             monkeypatch.delenv(f"ADJ_SEAT_{i}_MODEL", raising=False)
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
-        assert RA.main(["--profiles", path]) == 2
+        absent_env = str(tmp_path / "absent.env")
+        assert RA.main(["--profiles", path, "--env", absent_env]) == 2
         err = capsys.readouterr().err
         assert "credential missing" in err
         assert ".env" in err

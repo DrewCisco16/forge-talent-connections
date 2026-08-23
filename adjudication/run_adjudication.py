@@ -39,6 +39,7 @@ import json
 import math
 import os
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -431,6 +432,15 @@ def live_seats(
     panel = load_panel(specs=specs or PANEL_OF_FIVE_EXTERNAL,
                        env=dict(env) if env is not None else None)
     profiles = load_profiles(profiles_path)
+    # WIRE THE BACKOFF. RetryPolicy carries backoff_seconds, but HttpSeat
+    # only sleeps if a sleeper is injected -- seat_adapter deliberately never
+    # reads a clock, so it stays deterministic under test. Nothing injected
+    # one on the live path, so _backoff returned immediately and a 429 fired
+    # all three attempts back to back with no delay: the rate limit could not
+    # clear, and the seat cost three calls instead of one to arrive at the
+    # same "retries exhausted". The CLI is the right place to supply real
+    # time; tests keep passing their own sleeper or none.
+    kwargs.setdefault("sleeper", time.sleep)
     return build_seat_callables(
         panel, profiles, transport or urllib_transport, **kwargs
     )
