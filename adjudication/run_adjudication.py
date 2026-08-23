@@ -59,6 +59,7 @@ from adjudication_orchestrator import (
     Pass,
     SchemaGate,
     SequentialPassResult,
+    UnitGate,
     content_claim_id,
     load_panel,
 )
@@ -91,6 +92,18 @@ class AdjudicationAnswer:
     holes: list[Hole] = field(default_factory=list)
     audit_head: str | None = None
     audit_path: str | None = None
+    escalated: list[Claim] = field(default_factory=list)
+    """Claims that reached no applicable gate. The SOP makes an empty queue a
+    precondition for commit, so the run has to hand them back in a form an
+    operator can actually answer."""
+    claim_coverage: dict[str, tuple[int, int]] = field(default_factory=dict)
+    """{candidate_id: (claims tested, claims carried)}.
+
+    A survivor with 1 of 6 claims tested survived by not being looked at,
+    which is a different fact from surviving scrutiny. Printing the two
+    identically is how run-003 reported three survivors when only one had
+    actually been examined.
+    """
 
     @property
     def resolved(self) -> bool:
@@ -329,6 +342,12 @@ def run_adjudication(
     audit = DurableAuditLog(audit_path, run_id) if audit_path else AuditLog(run_id)
 
     cands = list(candidates)
+    # Rule on what the candidates themselves assert BEFORE any seat is asked.
+    # Without this a candidate standing on a falsehood no seat happened to
+    # raise is never examined, and survives looking exactly like one that was.
+    intake_ruled = orch.gate_candidate_claims(cands)
+    if intake_ruled:
+        audit.append("intake", {"claims_ruled": len(intake_ruled)})
     results = orch.run_sequential(artifact, cands, runner, passes=chosen, audit=audit)
 
     stop = orch.should_stop(cands)
@@ -346,7 +365,42 @@ def run_adjudication(
         holes=collect_holes(results, orch, survivors, cands, stop, diagnosis),
         audit_head=audit.head,
         audit_path=audit_path,
+        claim_coverage={c.id: orch.claim_coverage(c) for c in cands},
+        escalated=list(orch.escalation_queue),
     )
+
+
+_SELECTABLE_GATES = {
+    "arithmetic": ArithmeticGate,
+    "schema": SchemaGate,
+    "unit": UnitGate,
+}
+"""Gates an operator may switch on from the command line.
+
+CitationResolutionGate and TestExecutionGate are deliberately absent: each
+needs a callable the operator must supply -- a real resolver, a real test
+runner -- and there is no honest default for either. SourceAdmissibilityGate
+is absent because alone it answers "is this the right KIND of source" and
+auto-accepted an invented DOI; it is safe only conjoined with a resolver.
+Offering any of them here as a name with nothing behind it would be the
+fail-open this module exists to prevent.
+"""
+
+
+def gates_from_names(spec: str) -> list[Gate]:
+    """Build the gate list named on the command line. Raises on an unknown
+    name rather than silently running with fewer gates than the operator
+    asked for -- a quietly missing gate is a claim quietly unchecked."""
+    names = [n.strip().lower() for n in spec.split(",") if n.strip()]
+    if not names:
+        raise ValueError("--gates was given no gate names")
+    unknown = [n for n in names if n not in _SELECTABLE_GATES]
+    if unknown:
+        raise ValueError(
+            f"unknown gate(s): {', '.join(unknown)}. "
+            f"Available: {', '.join(sorted(_SELECTABLE_GATES))}"
+        )
+    return [_SELECTABLE_GATES[n]() for n in names]
 
 
 def _default_gates() -> list[Gate]:
@@ -368,7 +422,7 @@ def _default_gates() -> list[Gate]:
     So a citation claim escalates by default and surfaces as a hole. Supply
     both gates together via the `gates` argument once you have a resolver.
     """
-    return [ArithmeticGate(), SchemaGate()]
+    return [ArithmeticGate(), SchemaGate(), UnitGate()]
 
 
 
@@ -450,6 +504,21 @@ def live_seats(
 # report
 # ---------------------------------------------------------------------------
 
+def _cov(answer: AdjudicationAnswer, cand_id: str) -> str:
+    """Claim coverage suffix for a survivor line.
+
+    Silent when every claim was tested; loud when it was not. A survivor
+    nobody examined must not read like one that withstood examination.
+    """
+    tested, total = answer.claim_coverage.get(cand_id, (0, 0))
+    if total == 0:
+        return "   [carries no claims -- nothing could test it]"
+    if tested == total:
+        return f"   [{tested}/{total} claims tested]"
+    return (f"   [ONLY {tested}/{total} claims tested -- "
+            f"{total - tested} never reached a gate]")
+
+
 def render_report(answer: AdjudicationAnswer) -> str:
     L: list[str] = []
     add = L.append
@@ -498,14 +567,14 @@ def render_report(answer: AdjudicationAnswer) -> str:
     if not answer.survivors:
         add("  NONE SURVIVED. Every candidate failed a gate.")
     elif len(answer.survivors) == 1:
-        add(f"  SURVIVOR: {answer.survivors[0].id}")
+        add(f"  SURVIVOR: {answer.survivors[0].id}{_cov(answer, answer.survivors[0].id)}")
         content = answer.survivors[0].content
         if content:
             add(f"    {content}")
     else:
         add(f"  {len(answer.survivors)} SURVIVE -- not narrowed to one:")
         for c in answer.survivors:
-            add(f"    {c.id}")
+            add(f"    {c.id}{_cov(answer, c.id)}")
     for c in answer.eliminated:
         add(f"  removed {c.id}: {c.elimination_reason}")
     add("")
@@ -589,6 +658,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--run-id", default="adjudication")
     ap.add_argument("--adjudications",
                     help="JSON file of {claim_id: true|false} for escalated claims")
+    ap.add_argument("--gates", metavar="LIST",
+                    help="comma-separated gates to run: arithmetic, schema, "
+                         "unit. Default: all three. Citation and code_behavior "
+                         "gates need a resolver and a test runner and are not "
+                         "selectable here -- see CONNECTING.md")
+    ap.add_argument("--export-queue", metavar="PATH",
+                    help="write the escalated claims to PATH as JSON, ready to "
+                         "answer and feed back with --adjudications")
     ap.add_argument("--demo", action="store_true",
                     help="run with three scripted synthetic seats and no credentials")
     ap.add_argument("--profiles",
@@ -696,11 +773,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         seat_fns = _demo_seats()
 
+    chosen_gates = None
+    if args.gates:
+        try:
+            chosen_gates = gates_from_names(args.gates)
+        except ValueError as exc:
+            print(f"--gates: {exc}", file=sys.stderr)
+            return 2
+
     answer = run_adjudication(
-        artifact, candidates, seat_fns,
+        artifact, candidates, seat_fns, gates=chosen_gates,
         audit_path=args.audit, run_id=args.run_id, adjudications=adjudications,
     )
     print(render_report(answer))
+
+    if args.export_queue:
+        # Shape it so answering is editing one field per entry: set "verdict"
+        # to true or false, then feed the file straight back in with
+        # --adjudications. Handing back bare ids would make the operator
+        # reconstruct what each one said.
+        payload = {
+            "_README": [
+                "Set \"verdict\" on each entry to true or false, then re-run with",
+                "--adjudications pointing at this file. Entries left null stay in",
+                "the queue and the run stays incomplete, which is the honest state.",
+            ],
+            "claims": [
+                {"id": c.id, "kind": c.kind.value, "text": c.text,
+                 "warrant": c.warrant, "first_seen_pass": c.source_pass,
+                 "verdict": None}
+                for c in answer.escalated
+            ],
+        }
+        with open(args.export_queue, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+        print(f"escalation queue written: {args.export_queue} "
+              f"({len(answer.escalated)} claim(s) to answer)", file=sys.stderr)
     # 0 only when one candidate survives with nothing outstanding.
     return 0 if answer.resolved else 1
 

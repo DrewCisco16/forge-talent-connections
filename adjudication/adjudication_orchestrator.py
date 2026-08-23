@@ -380,6 +380,91 @@ class SchemaGate:
         return GateResult(self.name, GateStatus.PASS, "schema valid")
 
 
+_UNIT_TABLE: dict[str, tuple[str, float]] = {
+    # unit -> (dimension, multiplier to that dimension's base)
+    "nm": ("length", 1e-9), "um": ("length", 1e-6), "mm": ("length", 1e-3),
+    "cm": ("length", 1e-2), "m": ("length", 1.0), "km": ("length", 1e3),
+    "in": ("length", 0.0254), "ft": ("length", 0.3048),
+    "yd": ("length", 0.9144), "mi": ("length", 1609.344),
+    "mg": ("mass", 1e-6), "g": ("mass", 1e-3), "kg": ("mass", 1.0),
+    "t": ("mass", 1e3), "oz": ("mass", 0.028349523125),
+    "lb": ("mass", 0.45359237),
+    "ms": ("time", 1e-3), "s": ("time", 1.0), "min": ("time", 60.0),
+    "h": ("time", 3600.0), "hr": ("time", 3600.0), "day": ("time", 86400.0),
+    "wk": ("time", 604800.0),
+    "b": ("data", 1.0), "kb": ("data", 1e3), "mb": ("data", 1e6),
+    "gb": ("data", 1e9), "tb": ("data", 1e12),
+    "kib": ("data", 1024.0), "mib": ("data", 1024.0 ** 2),
+    "gib": ("data", 1024.0 ** 3), "tib": ("data", 1024.0 ** 4),
+}
+
+_UNIT_WARRANT = re.compile(
+    r"^\s*(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\s*([A-Za-z]+)\s*=\s*"
+    r"(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\s*([A-Za-z]+)\s*$"
+)
+
+
+class UnitGate:
+    """
+    Confirms a stated unit conversion. warrant format: "<qty><unit> = <qty><unit>"
+    for example "5 km = 5000 m", "1 lb = 0.45359237 kg".
+
+    ClaimKind.UNIT existed with nothing to adjudicate it: seats emitted unit
+    claims and every one escalated, because no gate anywhere applied. A claim
+    kind the tool can never settle is a promise it cannot keep, so either the
+    kind goes or the gate arrives. The gate arrives.
+
+    NOT APPLICABLE RATHER THAN FAIL on an unrecognised unit or an
+    unparseable warrant. Every other gate here treats a bad warrant as FAIL,
+    but those gates own their whole domain: any arithmetic expression is
+    either evaluable or wrong. This table is a fixed list of units, and a
+    conversion in furlongs or fortnights is not false -- it is outside what
+    this gate knows. Returning FAIL would eliminate a candidate on the
+    strength of a gap in a lookup table, so an unknown unit routes to the
+    human queue instead, which is what "no applicable gate" already means.
+    Mixing dimensions -- metres against seconds -- IS a failure, and is
+    reported as one.
+    """
+    name = "unit"
+
+    def _parse(self, warrant: str | None):
+        if not warrant:
+            return None
+        m = _UNIT_WARRANT.match(warrant)
+        if not m:
+            return None
+        lhs_q, lhs_u, rhs_q, rhs_u = m.groups()
+        lu = _UNIT_TABLE.get(lhs_u.lower())
+        ru = _UNIT_TABLE.get(rhs_u.lower())
+        if lu is None or ru is None:
+            return None
+        return float(lhs_q), lu, float(rhs_q), ru
+
+    def applies_to(self, claim: Claim) -> bool:
+        return (claim.kind is ClaimKind.UNIT
+                and self._parse(claim.warrant) is not None)
+
+    def check(self, claim: Claim) -> GateResult:
+        parsed = self._parse(claim.warrant)
+        if parsed is None:  # unreachable via _route; guard, not cast
+            return GateResult(self.name, GateStatus.INAPPLICABLE,
+                              "unit or format not recognised")
+        lhs_q, (lhs_dim, lhs_f), rhs_q, (rhs_dim, rhs_f) = parsed
+        if lhs_dim != rhs_dim:
+            return GateResult(
+                self.name, GateStatus.FAIL,
+                f"dimension mismatch: {lhs_dim} stated as {rhs_dim}",
+            )
+        left, right = lhs_q * lhs_f, rhs_q * rhs_f
+        if math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12):
+            return GateResult(self.name, GateStatus.PASS,
+                              f"{left} {lhs_dim} base units confirmed")
+        return GateResult(
+            self.name, GateStatus.FAIL,
+            f"stated {rhs_q}, converts to {left / rhs_f}",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Evidence admissibility: what may count as a warrant at all
 # ---------------------------------------------------------------------------
@@ -1183,6 +1268,91 @@ class Orchestrator:
                 return r
         return results[0]
 
+    def gate_candidate_claims(self, candidates: list[Candidate]) -> list[str]:
+        """
+        Rule on the claims the CANDIDATES themselves assert, before any pass.
+
+        WHY THIS EXISTS. Elimination in run_pass fires only when a SEAT
+        independently proposes a claim whose content-addressed id collides with
+        one a candidate carries. A candidate standing on a falsehood that no
+        seat happened to raise was therefore never examined at all -- and the
+        report listed it beside a genuinely scrutinised survivor with no way to
+        tell the two apart. Observed on run-003: two of three survivors each
+        carried a false arithmetic claim, and neither had been tested.
+
+        That is a fail-open in a system built to fail closed, so it is closed
+        here. A candidate that contradicts arithmetic is wrong whether or not a
+        seat noticed; requiring rediscovery made scrutiny depend on luck.
+
+        Blinding is unaffected -- gates are code, not seats. The verdicts land
+        in the same self.verdicts map, so a claim adjudicated here is not
+        re-gated when a seat later proposes it, exactly as a claim first seen
+        in pass 1 is not re-gated in pass 2.
+
+        THIS METHOD DOES NOT ELIMINATE ANYTHING. It only rules on claims and
+        records the verdicts. Removal stays where the design puts it: on an
+        eliminative pass, via _sweep_standing_verdicts. Eliminating here would
+        have removed candidates outside an eliminative pass, which is the one
+        rule this module states about how an answer may be discarded, and a
+        fail-open is not worth buying with a broken invariant.
+
+        Returns the ids of claims newly adjudicated here.
+        """
+        ruled: list[str] = []
+        for cand in candidates:
+            for claim in cand.claims:
+                if claim.id in self.verdicts or claim.id in self._seen_claims:
+                    continue
+                result = self._route(claim)
+                if result is None:
+                    # No applicable gate: escalate like any other unwarranted
+                    # claim rather than letting it count as passed.
+                    self.escalation_queue.append(claim)
+                    self._seen_claims.add(claim.id)
+                    continue
+                self._seen_claims.add(claim.id)
+                self.verdicts[claim.id] = ClaimVerdict(
+                    claim.id, "intake", result.status, result.gate, result.detail
+                )
+                ruled.append(claim.id)
+        return ruled
+
+    def _sweep_standing_verdicts(
+        self, candidates: list[Candidate], p: Pass, rec: PassRecord
+    ) -> None:
+        """Remove any candidate leaning on a claim already ruled FAIL.
+
+        run_pass eliminates on claims proposed IN THAT PASS. That leaves two
+        gaps, both of which let a false candidate through: a claim ruled at
+        intake and never re-proposed by a seat, and a claim ruled in an earlier
+        pass whose candidate was not checked against it. Claim ids are
+        content-addressed, so a standing FAIL is a fact about the claim itself
+        and applies to every candidate carrying it, whenever it was ruled.
+        """
+        for cand in candidates:
+            if cand.eliminated:
+                continue
+            for claim in cand.claims:
+                v = self.verdicts.get(claim.id)
+                if v is not None and v.status is not GateStatus.PASS:
+                    cand.eliminated = True
+                    cand.elimination_reason = (
+                        f"{p.name}: {v.gate} failed -- {v.detail}"
+                    )
+                    rec.eliminated_candidates.append(cand.id)
+                    break
+
+    def claim_coverage(self, cand: Candidate) -> tuple[int, int]:
+        """How many of a candidate's own claims actually reached a gate.
+
+        (tested, total). A survivor with 1 of 6 tested survived by not being
+        looked at, which is a different fact from surviving scrutiny, and the
+        report should not print them identically.
+        """
+        total = len(cand.claims)
+        tested = sum(1 for c in cand.claims if c.id in self.verdicts)
+        return tested, total
+
     def run_pass(
         self,
         p: Pass,
@@ -1226,6 +1396,11 @@ class Orchestrator:
                             f"{p.name}: {result.gate} failed -- {result.detail}"
                         )
                         rec.eliminated_candidates.append(cand.id)
+
+        # Candidates can also lean on claims ruled at intake or in an earlier
+        # pass that no seat re-proposed here. Those are just as decided.
+        if p.eliminative:
+            self._sweep_standing_verdicts(candidates, p, rec)
 
         self.history.append(rec)
         return rec
