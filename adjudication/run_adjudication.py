@@ -66,6 +66,7 @@ from adjudication_orchestrator import (
 from audit_log import AuditLog, DurableAuditLog, digest
 from correctness_matrix import diagnose_run
 from seat_adapter import SeatError, build_seat_callables
+from seat_conduct import ConductLedger
 from seat_profiles import ProfileConfigError, describe, load_profiles
 
 
@@ -92,6 +93,8 @@ class AdjudicationAnswer:
     holes: list[Hole] = field(default_factory=list)
     audit_head: str | None = None
     audit_path: str | None = None
+    conduct: Any = None
+    """ConductLedger: which seat asserted what that a gate ruled false."""
     escalated: list[Claim] = field(default_factory=list)
     """Claims that reached no applicable gate. The SOP makes an empty queue a
     precondition for commit, so the run has to hand them back in a form an
@@ -350,6 +353,11 @@ def run_adjudication(
         audit.append("intake", {"claims_ruled": len(intake_ruled)})
     results = orch.run_sequential(artifact, cands, runner, passes=chosen, audit=audit)
 
+    conduct = ConductLedger.from_run(orch.detections_by_seat, orch.verdicts,
+                                     all_seat_ids=list(seat_fns))
+    if conduct.total_findings():
+        audit.append("seat_conduct", conduct.as_payload())
+
     stop = orch.should_stop(cands)
     diagnosis = diagnose_run(results, orch.verdicts, adjudications, total_seeded)
     survivors = orch.survivors(cands)
@@ -367,6 +375,7 @@ def run_adjudication(
         audit_path=audit_path,
         claim_coverage={c.id: orch.claim_coverage(c) for c in cands},
         escalated=list(orch.escalation_queue),
+        conduct=conduct,
     )
 
 
@@ -579,6 +588,11 @@ def render_report(answer: AdjudicationAnswer) -> str:
         add(f"  removed {c.id}: {c.elimination_reason}")
     add("")
 
+    if answer.conduct is not None and answer.conduct.seats:
+        for ln in answer.conduct.render():
+            add(ln)
+        add("")
+
     add("-" * 72)
     add("CONVERGENCE: ELIMINATIVE, OR COLLAPSE?")
     add("-" * 72)
@@ -663,6 +677,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                          "unit. Default: all three. Citation and code_behavior "
                          "gates need a resolver and a test runner and are not "
                          "selectable here -- see CONNECTING.md")
+    ap.add_argument("--resolve-dois", action="store_true",
+                    help="switch on the citation gates: every cited DOI must "
+                         "actually resolve. Uses Crossref and doi.org, which "
+                         "are free and take no credential -- no model is "
+                         "called and nothing is billed. The resolver is probed "
+                         "first and the run aborts if it is permissive.")
     ap.add_argument("--export-queue", metavar="PATH",
                     help="write the escalated claims to PATH as JSON, ready to "
                          "answer and feed back with --adjudications")
@@ -774,6 +794,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         seat_fns = _demo_seats()
 
     chosen_gates = None
+    if args.resolve_dois:
+        from adjudication_orchestrator import (CitationResolutionGate,
+                                               SourceAdmissibilityGate,
+                                               probe_resolver)
+        from doi_resolver import build_resolver
+        resolver = build_resolver()
+        # SOP 8.3: verify the resolver denies an identifier that cannot exist
+        # BEFORE trusting it. A permissive resolver passes every citation and
+        # turns a verified system back into an unverified one while the report
+        # still reads green, so this aborts rather than warns.
+        probe = probe_resolver(resolver)
+        print(f"resolver probe: {probe.status.value.upper()} -- {probe.detail}",
+              file=sys.stderr)
+        if probe.status.value != "pass":
+            print("refusing to run with a permissive citation resolver.",
+                  file=sys.stderr)
+            return 2
+        # Conjoined, never alone: admissibility answers "is this the right KIND
+        # of source", resolution answers "does it exist". Either one by itself
+        # is a fail-open.
+        chosen_gates = _default_gates() + [
+            SourceAdmissibilityGate(), CitationResolutionGate(resolver),
+        ]
     if args.gates:
         try:
             chosen_gates = gates_from_names(args.gates)
