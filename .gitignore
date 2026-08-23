@@ -3,3 +3,8 @@
 .env
 adjudication/.env
 adjudication/profiles.json
+
+# Run artifacts: audit logs are the operator's tamper-evident records of a
+# specific run, not repository content, and may quote the adjudicated artifact.
+adjudication/run-*.jsonl
+adjudication/run-*.jsonl.head

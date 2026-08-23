@@ -82,6 +82,14 @@ class ProviderProfile:
     build_body    : (model, prompt, max_tokens, temperature) -> JSON-serialisable dict.
     extract_text  : parsed response dict -> the reply text, or None if absent.
     extra_headers : any additional constant headers the vendor requires.
+    max_tokens    : per-seat output cap, overriding HttpSeat's default when set.
+
+    WHY max_tokens IS PER-SEAT. On a reasoning model the thinking tokens are
+    drawn from the SAME cap as the reply, so one budget that suits a
+    non-reasoning seat can leave a reasoning seat no room to answer -- it
+    returns a well-formed 200 whose reply text is empty, and the seat reads as
+    having examined the artifact and found nothing. A shared default cannot fit
+    both kinds of seat, and the alternative was editing the adapter per panel.
     """
 
     name: str
@@ -91,6 +99,7 @@ class ProviderProfile:
     build_body: Callable[[str, str, int, float], dict[str, Any]]
     extract_text: Callable[[dict[str, Any]], str | None]
     extra_headers: Mapping[str, str] = field(default_factory=dict)
+    max_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if "{key}" not in self.auth_template:
@@ -300,7 +309,11 @@ def build_seat_callables(
     for s in seats:
         if s.in_process:
             continue
-        out[s.seat_id] = HttpSeat(s, profiles[s.seat_id], transport, **kwargs)
+        prof = profiles[s.seat_id]
+        seat_kwargs = dict(kwargs)
+        if prof.max_tokens is not None:
+            seat_kwargs["max_tokens"] = prof.max_tokens
+        out[s.seat_id] = HttpSeat(s, prof, transport, **seat_kwargs)
     return out
 
 

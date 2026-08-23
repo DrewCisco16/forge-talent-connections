@@ -1,0 +1,76 @@
+"""Diagnostic: one tiny call per failing seat, to surface the vendor's error.
+
+This is the project's own seat machinery (load_panel + profiles.json), run
+once per seat with a ~6-token prompt and a 64-token cap, so it costs a
+fraction of a cent rather than the 25 calls a full run makes.
+
+It prints the HTTP status and the response body, because that is where each
+vendor puts the message explaining what it rejected. It never prints request
+headers, since those carry the credential.
+
+Usage:  .venv/bin/python diagnose-seats.py            # seats 1, 2, 5
+        .venv/bin/python diagnose-seats.py seat_2     # just one
+"""
+import json
+import sys
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, ".")
+from adjudication_orchestrator import PANEL_OF_FIVE_EXTERNAL, load_panel
+from run_adjudication import load_env_file, load_profiles
+
+SEATS = sys.argv[1:] or ["seat_1", "seat_2", "seat_5"]
+PROMPT = "Reply with the single word: OK"
+
+print("env:", load_env_file(None))
+panel = {s.seat_id: s for s in load_panel(specs=PANEL_OF_FIVE_EXTERNAL)}
+profiles = load_profiles("profiles.json")
+
+for sid in SEATS:
+    seat = panel[sid]
+    prof = profiles[sid]
+
+    sent = prof.build_body(seat.model, PROMPT, 64, 0.0)
+    headers = {
+        "content-type": "application/json",
+        prof.auth_header: prof.auth_template.format(key=seat.credential() or ""),
+        **dict(prof.extra_headers),
+    }
+
+    print("\n" + "=" * 68)
+    print(f"{sid}  {prof.name}  model={seat.model}")
+    print(f"POST {prof.endpoint}")
+    print("request body:", json.dumps(prof.build_body(seat.model, "<prompt>", 64, 0.0)))
+
+    req = urllib.request.Request(
+        prof.endpoint, data=json.dumps(sent).encode("utf-8"),
+        headers=headers, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            status, raw = resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        status, raw = exc.code, exc.read()
+    except Exception as exc:
+        print(f"  TRANSPORT FAILURE: {type(exc).__name__}: {exc}")
+        continue
+
+    print(f"HTTP {status}")
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        print("  non-JSON response:", raw[:300])
+        continue
+
+    if status >= 300:
+        print("  VENDOR SAID:", json.dumps(payload)[:700])
+        continue
+
+    print("  top-level keys:", sorted(payload)[:10])
+    got = prof.extract_text(payload)
+    if got is None:
+        print("  text_path resolved to None  <-- THE FAILURE IS HERE")
+        print("  full response:", json.dumps(payload)[:900])
+    else:
+        print("  text_path resolved to:", repr(got)[:200])

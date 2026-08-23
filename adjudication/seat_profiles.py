@@ -144,10 +144,35 @@ def _walk(payload: Any, path: Sequence[Any]) -> Any:
     None is the fail-closed answer: HttpSeat raises SeatError on it rather
     than handing the runner an empty string, which would read as a seat that
     examined the artifact and found nothing.
+
+    Three kinds of step:
+        "key"            an object key
+        0                a list index
+        {"type": "text"} SELECT the first list element whose fields all match
+
+    WHY THE SELECTOR EXISTS. A fixed index assumes the reply text sits at the
+    same position every time. On a thinking model it does not: Claude Opus 5
+    returns content [{"type": "thinking", ...}, {"type": "text", ...}] when it
+    thinks and [{"type": "text", ...}] when it does not, so ["content", 0,
+    "text"] reads the thinking block and resolves to None on exactly the
+    requests where the model worked hardest. Hard-coding index 1 trades one
+    silent failure for another. The selector says what is actually wanted --
+    the text block -- and keeps working whether or not thinking is present.
     """
     cur = payload
     for step in path:
-        if isinstance(step, int):
+        if isinstance(step, Mapping):
+            if not isinstance(cur, list):
+                return None
+            for item in cur:
+                if isinstance(item, dict) and all(
+                    item.get(k) == v for k, v in step.items()
+                ):
+                    cur = item
+                    break
+            else:
+                return None
+        elif isinstance(step, int):
             if not isinstance(cur, list) or not -len(cur) <= step < len(cur):
                 return None
             cur = cur[step]
@@ -233,10 +258,18 @@ def validate_config(raw: Any) -> list[str]:
                 )
             else:
                 for step in path:
+                    if isinstance(step, dict):
+                        if not step:
+                            problems.append(
+                                f"{where}: text_path selector {{}} is empty; it would "
+                                f"match the first element of any list"
+                            )
+                        continue
                     if not isinstance(step, (str, int)) or isinstance(step, bool):
                         problems.append(
-                            f"{where}: text_path step {step!r} must be a string key "
-                            f"or an integer index"
+                            f"{where}: text_path step {step!r} must be a string key, "
+                            f"an integer index, or a selector object such as "
+                            f'{{"type": "text"}}'
                         )
 
         if _contains(cfg, UNFILLED_MARKER):
@@ -244,6 +277,14 @@ def validate_config(raw: Any) -> list[str]:
                 f"{where}: still contains {UNFILLED_MARKER!r} -- this profile is an "
                 f"unfilled template. Copy the endpoint, request shape, and response "
                 f"path from the vendor's API reference."
+            )
+
+        cap = cfg.get("max_tokens")
+        if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool)
+                                or cap < 1):
+            problems.append(
+                f"{where}: max_tokens must be a positive integer when present, "
+                f"got {cap!r}"
             )
 
         headers = cfg.get("extra_headers", {})
@@ -298,6 +339,7 @@ def profile_from_config(seat_id: str, cfg: Mapping[str, Any]) -> ProviderProfile
         build_body=build_body,
         extract_text=extract_text,
         extra_headers=dict(cfg.get("extra_headers", {})),
+        max_tokens=cfg.get("max_tokens"),
     )
 
 

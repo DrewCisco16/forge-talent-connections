@@ -933,6 +933,16 @@ class PassDivergence:
     unanimous: bool
     all_seats_silent: bool = False
     collapse_warning: str | None = None
+    seat_errors: dict[str, str] = field(default_factory=dict)
+    """{seat_id: failure message} for every seat that errored on this pass.
+
+    seats_errored records WHICH seats failed; this records WHY. Without it the
+    run destroys its own evidence: a 400 on a rejected parameter, a 401 on a
+    bad credential, and a 200 whose reply text sat somewhere the configured
+    text_path does not reach are three different operator errors with three
+    different fixes, and "seat_1 failed" cannot distinguish them. Recovering
+    the distinction otherwise costs a second paid run.
+    """
 
 
 def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDivergence:
@@ -957,6 +967,7 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
     """
     responding = [r for r in responses if r.error is None]
     errored = [r.seat_id for r in responses if r.error is not None]
+    seat_errors = {r.seat_id: r.error for r in responses if r.error is not None}
     sets = [frozenset((c.kind.value, (c.warrant or c.text).strip()) for c in r.claims)
             for r in responding]
 
@@ -965,7 +976,7 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
     if len(sets) < 2:
         return PassDivergence(
             p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
-            len(set(sets)), float("nan"), False, silent, None,
+            len(set(sets)), float("nan"), False, silent, None, seat_errors,
         )
 
     jaccards = []
@@ -986,7 +997,7 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
         )
     return PassDivergence(
         p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
-        len(set(sets)), mean_j, unanimous, silent, warning,
+        len(set(sets)), mean_j, unanimous, silent, warning, seat_errors,
     )
 
 

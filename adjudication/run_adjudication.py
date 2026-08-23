@@ -469,6 +469,17 @@ def render_report(answer: AdjudicationAnswer) -> str:
             + (f"  [{div.collapse_warning}]" if div.collapse_warning else ""))
         if div.seats_errored:
             add(f"     SEAT ERROR: {', '.join(div.seats_errored)}")
+            # WHY, not just WHICH. Printing only the seat ids destroyed the
+            # run's own evidence: a rejected parameter, a bad credential, and a
+            # reply the text_path could not reach all read as "seat_1 failed",
+            # and telling them apart cost a second paid run. The message comes
+            # from SeatError, which is built to carry the status and the
+            # provider name but never the request -- the request holds the
+            # credential.
+            for seat_id in div.seats_errored:
+                why = div.seat_errors.get(seat_id)
+                if why:
+                    add(f"       {seat_id}: {why}")
     add("")
 
     add("-" * 72)
