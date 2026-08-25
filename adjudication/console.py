@@ -226,7 +226,43 @@ def night() -> None:
        f"{', '.join(g.name for g in night_gates())}")
     _p("  citation and quote checks make free lookups to Crossref, doi.org,")
     _p("  and the pages a seat cites. No credential is sent to them.")
-    _p(f"  5 rounds x 5 blind seats + 5 merges = 30 calls. Ceiling ${cap}.")
+    # SIZE THE RUN TO THE CEILING, and say so before asking for a YES.
+    #
+    # With the configured caps a five-round run's worst case was $25.51, so a
+    # sensible ceiling refused on the first call -- or worse, stopped the run
+    # twenty minutes in with four rounds unpaid for and no answer. The
+    # operator now sees what their ceiling buys and chooses.
+    import json as _json
+
+    from cost_ledger import CostLedger, plan_run
+    from run_adjudication import build_ledger
+
+    led = build_ledger(float(cap), None, None)
+    if not isinstance(led, CostLedger):
+        # ask_ceiling only returns a finite positive number, so this cannot
+        # happen -- and a paid panel with nothing counting is the one thing
+        # that must not run.
+        _p("  could not build a spend ledger; not running.")
+        return
+    with open(os.path.join(HERE, "profiles.json"), encoding="utf-8") as fh:
+        _seats = _json.load(fh)
+    _seats = _seats.get("seats", _seats)
+    caps = {s: (_seats[s].get("max_tokens") or 4096)
+            for s in sorted(_seats)
+            if not s.startswith("_") and isinstance(_seats[s], dict)}
+    plan = plan_run(led, caps)
+    _p(f"  5 rounds x 5 blind seats + 5 merges = {plan.calls} calls.")
+    _p(f"  ceiling ${cap}   worst case ${plan.worst_case:.2f}")
+    if not plan.fits:
+        _p("")
+        _p(f"  THIS CEILING IS TOO LOW: {plan.note}")
+        _p("  Raise it, or the run stops partway with nothing to show.")
+        return
+    if plan.caps != caps:
+        _p(f"  reply cap reduced to {max(plan.caps.values())} tokens so all "
+           f"{plan.calls} calls fit.")
+        _p("  Shorter answers, but the run finishes. Raise the ceiling for "
+           "longer ones.")
     _p("  The ceiling is checked against an ESTIMATE of each call, because no")
     _p("  vendor publishes a guaranteed maximum for a request plus all its")
     _p("  billable output. If a call ever bills more than it was authorised")
@@ -239,22 +275,14 @@ def night() -> None:
         _p("  Cancelled.")
         return
 
-    from cost_ledger import CeilingReached, CostLedger
+    from cost_ledger import CeilingReached
     from night_loop import live_night
-    from run_adjudication import build_ledger
-    led = build_ledger(float(cap), None, None)
-    if not isinstance(led, CostLedger):
-        # ask_ceiling only returns a finite positive number, so build_ledger
-        # cannot return None here -- and if it ever did, a paid panel with
-        # nothing counting is the one thing that must not run.
-        _p("  could not build a spend ledger; not running.")
-        return
     try:
         # Progress prints as it happens. Without it this is thirty silent
         # model calls, which is indistinguishable from a hang -- and the
         # only way to find out is to kill the run and lose what it cost.
         res = live_night(ask_text, os.path.join(HERE, "profiles.json"), out,
-                         ledger=led, on_event=_progress)
+                         ledger=led, on_event=_progress, caps=plan.caps)
     except CeilingReached as exc:
         _p(f"  PARTIAL -- {exc}")
         for line in led.render():

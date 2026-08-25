@@ -18,6 +18,7 @@ import json
 import os
 import pathlib
 from datetime import date, timedelta
+from typing import ClassVar
 
 import pytest
 
@@ -897,3 +898,138 @@ class TestTheShippedTiersAreEnforced:
                 continue
             if cfg.get("tiers"):
                 assert cfg.get("_note_tiers_source"), seat
+
+
+# ---------------------------------------------------------------------------
+# Sizing the run to the ceiling, instead of refusing when it does not fit
+# ---------------------------------------------------------------------------
+
+class TestTheCeilingDrivesTheCaps:
+    """With the configured caps a five-round run's worst case was $25.51, so a
+    sensible $3 ceiling refused on the first call -- or worse, stopped the run
+    twenty minutes in with four rounds unpaid for and no answer.
+
+    The operator should be choosing between a shorter reply and no run at all,
+    which is a real choice, rather than discovering the limit halfway through.
+    """
+
+    CAPS: ClassVar[dict[str, int]] = {
+        "seat_1": 16384, "seat_2": 4096, "seat_3": 4096,
+        "seat_4": 4096, "seat_5": 16384,
+    }
+
+    def _rates(self):
+        return {
+            "seat_1": CL.Rate(4.0, 20.0, verified_on=date.today().isoformat(),
+                              output_multiplier=2.0),
+            "seat_2": CL.Rate(2.0, 12.0, verified_on=date.today().isoformat(),
+                              output_multiplier=2.5),
+            "seat_3": CL.Rate(1.5, 7.5, verified_on=date.today().isoformat(),
+                              output_multiplier=2.0),
+            "seat_4": CL.Rate(2.0, 6.0, verified_on=date.today().isoformat(),
+                              output_multiplier=4.5),
+            "seat_5": CL.Rate(5.0, 25.0, verified_on=date.today().isoformat(),
+                              output_multiplier=2.5),
+        }
+
+    def _plan(self, ceiling):
+        led = CL.CostLedger(rates=self._rates(), per_run=ceiling)
+        return CL.plan_run(led, self.CAPS)
+
+    def test_a_generous_ceiling_leaves_the_caps_alone(self):
+        plan = self._plan(30.00)
+        assert plan.fits
+        assert plan.caps == self.CAPS
+
+    def test_a_modest_ceiling_shrinks_the_caps_rather_than_refusing(self):
+        plan = self._plan(5.00)
+        assert plan.fits
+        assert max(plan.caps.values()) < max(self.CAPS.values())
+        assert plan.worst_case <= 5.00
+
+    def test_a_three_dollar_ceiling_now_runs(self):
+        """The exact case that refused on the first call."""
+        plan = self._plan(3.00)
+        assert plan.fits
+        assert plan.worst_case <= 3.00
+
+    def test_a_ceiling_below_the_floor_is_refused_with_the_real_number(self):
+        """Below the floor a reasoning model spends the whole budget thinking
+        and returns nothing, so a smaller ceiling buys no answer rather than a
+        shorter one. Observed live, twice, on two different vendors."""
+        plan = self._plan(1.00)
+        assert not plan.fits
+        assert "needs about" in plan.note
+
+    def test_no_cap_falls_below_the_useful_floor(self):
+        assert all(c >= CL.MIN_USEFUL_CAP for c in self._plan(3.00).caps.values())
+
+    def test_the_closer_seat_is_counted_twice_a_round(self):
+        """seat_5 thinks blind AND merges, so it is called twice per round.
+        Counting it once understates the bill by a fifth."""
+        led = CL.CostLedger(rates=self._rates(), per_run=1000.0)
+        with_closer = CL.plan_run(led, self.CAPS).worst_case
+        without = CL.plan_run(led, {k: v for k, v in self.CAPS.items()
+                                    if k != "seat_5"}).worst_case
+        assert with_closer > without * 1.5
+
+    def test_the_call_count_is_right(self):
+        assert self._plan(30.00).calls == 30
+
+    def test_the_plan_changes_nothing_on_its_own(self):
+        """It reports. A smaller cap means shorter answers, and that is the
+        operator's call to make."""
+        caps = dict(self.CAPS)
+        self._plan(3.00)
+        assert caps == self.CAPS
+
+
+class TestThePerSeatOutputBound:
+    """One global 5x was calibrated on a single observation -- grok-4.6 at a
+    4096 cap reporting 16,748 total tokens -- and then applied to every seat.
+    Measured on a live canary at production caps, only that one seat overruns:
+    0.24x, 1.23x, 0.53x, 2.62x, 1.21x."""
+
+    def test_a_multiplier_is_read_from_the_rates_file(self):
+        rates = CL.rates_from_config({"seat_1": {
+            "input_per_mtok": 4.0, "output_per_mtok": 20.0,
+            "verified_on": date.today().isoformat(),
+            "output_multiplier": 2.0}})
+        assert rates["seat_1"].output_multiplier == 2.0
+
+    def test_a_missing_multiplier_falls_back_to_the_conservative_default(self):
+        rates = CL.rates_from_config({"seat_1": {
+            "input_per_mtok": 4.0, "output_per_mtok": 20.0,
+            "verified_on": date.today().isoformat()}})
+        assert rates["seat_1"].output_multiplier == CL.HIDDEN_OUTPUT_MULTIPLIER
+
+    def test_a_nonsense_multiplier_falls_back_rather_than_being_trusted(self):
+        for bad in ("two", -1, 0, True, None):
+            rates = CL.rates_from_config({"seat_1": {
+                "input_per_mtok": 4.0, "output_per_mtok": 20.0,
+                "verified_on": date.today().isoformat(),
+                "output_multiplier": bad}})
+            assert rates["seat_1"].output_multiplier == \
+                CL.HIDDEN_OUTPUT_MULTIPLIER, bad
+
+    def test_the_shipped_rates_carry_measured_multipliers(self):
+        with open("rates.json", encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        assert all(r.output_multiplier < CL.HIDDEN_OUTPUT_MULTIPLIER
+                   for r in rates.values())
+
+    def test_the_bound_reaches_the_seat(self):
+        """A multiplier nothing reads is the same as no multiplier."""
+        led = CL.CostLedger(
+            rates={"seat_1": CL.Rate(2.0, 6.0,
+                                     verified_on=date.today().isoformat(),
+                                     output_multiplier=2.0)},
+            per_run=1000.0)
+        prof = SA.ProviderProfile(
+            name="v", endpoint="https://a.invalid/v1",
+            auth_header="authorization", auth_template="Bearer {key}",
+            build_body=lambda m, p, mt, t: {"model": m},
+            extract_text=lambda p: p.get("text"))
+        seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), prof,
+                           _ok(), ledger=led, max_tokens=1000)
+        assert seat._multiplier() == 2.0

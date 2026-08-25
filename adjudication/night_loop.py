@@ -1197,7 +1197,8 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
                gates: Sequence[Any] | None = None,
                ledger: Any = None,
                closer_seat: str = "seat_5",
-               on_event: Callable[[str], None] | None = None) -> list[RoundResult]:
+               on_event: Callable[[str], None] | None = None,
+               caps: Mapping[str, int] | None = None) -> list[RoundResult]:
     """Run the night loop against the real panel.
 
     The closer is a seat like any other. It thinks FIRST, blind, with the other
@@ -1223,6 +1224,13 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)
     seats = live_seats(profiles_path, ledger=ledger)
+
+    # Reply caps sized to the operator's ceiling. Without this the configured
+    # caps decide the cost and a sensible ceiling simply refuses to start.
+    for seat_id, cap in (caps or {}).items():
+        seat = seats.get(seat_id)
+        if seat is not None and hasattr(seat, "max_tokens"):
+            seat.max_tokens = int(cap)
     if closer_seat not in seats:
         raise ValueError(
             f"closer seat {closer_seat!r} is not in the panel: {sorted(seats)}"

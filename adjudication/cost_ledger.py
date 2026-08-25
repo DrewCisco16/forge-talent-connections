@@ -55,6 +55,17 @@ class CeilingReached(BudgetExceeded):
         )
 
 
+HIDDEN_OUTPUT_MULTIPLIER = 5.0
+"""Worst-case ratio of billed output to the configured max_tokens cap.
+
+Measured on a live grok-4.6 call: max_tokens was 4096, and the vendor reported
+16,748 total tokens against 1,320 input -- roughly 15,400 billed as output,
+about 3.8x the cap. Reasoning tokens are generated and billed and are not
+bounded by max_tokens, so treating the cap as the worst case under-estimated
+the ceiling check by that factor. 5.0 leaves headroom above the one figure
+actually observed; it is a bound, not a prediction.
+"""
+
 @dataclass(frozen=True)
 class Rate:
     """Per-million-token prices, with the date they were checked.
@@ -76,6 +87,27 @@ class Rate:
     verified_on: str | None = None
     tiers: tuple[tuple[int, float, float], ...] = ()
     max_input_tokens: int | None = None
+    output_multiplier: float = HIDDEN_OUTPUT_MULTIPLIER
+    """How far this seat's billed output can exceed its configured cap.
+
+    PER SEAT, BECAUSE VENDORS DIFFER ON WHETHER REASONING COUNTS AGAINST THE
+    CAP. One global 5x was calibrated on a single observation -- grok-4.6 at a
+    4096 cap reporting 16,748 total tokens -- and then applied to every seat.
+    Measured across a live canary at production caps:
+
+        seat_1  0.24x its cap        seat_4  2.62x its cap
+        seat_2  1.23x                seat_5  1.21x
+        seat_3  0.53x
+
+    Only one seat overruns. Charging every seat as if it were that one put the
+    worst case for a five-round run at $25.51 and made a sensible ceiling
+    refuse to start.
+
+    This is still a BOUND, not a prediction, and it is still a guess where no
+    measurement exists. What makes tightening it safe is the reconciliation
+    below: a call that bills more than it was authorised for halts the run, so
+    an optimistic multiplier is caught on its first use rather than at the end
+    of the bill."""
 
     def tier_for(self, input_tokens: int) -> tuple[float, float]:
         """The prices that apply at this input size."""
@@ -148,16 +180,6 @@ OVER-estimates, because this number exists to refuse a call and an
 under-estimate is the one direction that spends money the operator forbade.
 """
 
-HIDDEN_OUTPUT_MULTIPLIER = 5.0
-"""Worst-case ratio of billed output to the configured max_tokens cap.
-
-Measured on a live grok-4.6 call: max_tokens was 4096, and the vendor reported
-16,748 total tokens against 1,320 input -- roughly 15,400 billed as output,
-about 3.8x the cap. Reasoning tokens are generated and billed and are not
-bounded by max_tokens, so treating the cap as the worst case under-estimated
-the ceiling check by that factor. 5.0 leaves headroom above the one figure
-actually observed; it is a bound, not a prediction.
-"""
 
 
 class CeilingOverrun(BudgetExceeded):
@@ -537,6 +559,7 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
                         and isinstance(entry[0], int)
                         and not isinstance(entry[0], bool) and entry[0] >= 0):
                     tiers.append((entry[0], float(entry[1]), float(entry[2])))
+        mult = _finite_positive(cfg.get("output_multiplier"))
         cap = cfg.get("max_input_tokens")
         max_in = (cap if isinstance(cap, int) and not isinstance(cap, bool)
                   and cap > 0 else None)
@@ -554,6 +577,7 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
                          if usable and cfg.get("verified_on") else None),
             tiers=tuple(sorted(tiers)),
             max_input_tokens=max_in,
+            output_multiplier=mult or HIDDEN_OUTPUT_MULTIPLIER,
         )
     return out
 
@@ -662,3 +686,94 @@ def _sibling_total(payload: Mapping[str, object],
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             return int(v)
     return None
+
+
+MIN_USEFUL_CAP = 2048
+"""Smallest output cap worth sending to a reasoning model.
+
+Below this the thinking consumes the whole budget and the reply comes back
+empty -- observed live, twice, on two different vendors. A run sized under
+this floor would not be a cheaper run, it would be a run that produces
+nothing and still bills for it.
+"""
+
+
+@dataclass
+class RunPlan:
+    """What a run will cost before any of it is spent."""
+
+    calls: int
+    worst_case: float
+    caps: dict[str, int]
+    ceiling: float
+    fits: bool
+    note: str
+
+
+def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
+             est_input: int = 4000) -> RunPlan:
+    """Size the run to the ceiling, rather than refusing when it does not fit.
+
+    THE CEILING SHOULD DRIVE THE CAPS, NOT THE OTHER WAY ROUND. With the
+    configured caps a five-round run's worst case was $25.51, so an operator
+    setting a sensible $3 limit got a refusal on the first call -- or, worse,
+    a run that stopped twenty minutes in with four rounds unpaid for and no
+    answer.
+
+    This computes the worst case for the panel as configured, and if it does
+    not fit, the largest uniform cap that does. The operator is then choosing
+    between a shorter reply and no run at all, which is a real choice, instead
+    of discovering the limit halfway through.
+
+    It reports rather than imposing. Nothing here changes a cap on its own:
+    the caller decides, because a smaller cap means shorter answers and that
+    is the operator's call to make.
+    """
+    per_round = len(caps) + 1                       # thinkers plus one merge
+    calls = per_round * rounds
+
+    def worst(cap_for: Mapping[str, int]) -> float:
+        total = 0.0
+        for seat_id, cap in cap_for.items():
+            rate = ledger.rates.get(seat_id)
+            if rate is None:
+                continue
+            n = rounds * (2 if seat_id in _closer_seats(caps) else 1)
+            total += n * rate.cost(est_input,
+                                   int(cap * rate.output_multiplier))
+        return total
+
+    as_configured = worst(caps)
+    ceiling = ledger.per_run or float("inf")
+    if as_configured <= ceiling:
+        return RunPlan(calls, as_configured, dict(caps), ceiling, True,
+                       "the panel as configured fits inside the ceiling")
+
+    # Scale every cap by the same factor, so no seat is starved relative to
+    # another, then converge: one division lands exactly on the ceiling, where
+    # float error and the MIN_USEFUL_CAP floor can push the result a fraction
+    # over and reject a plan that fits.
+    factor = ceiling / as_configured if as_configured else 1.0
+    for _ in range(40):
+        scaled = {s: max(MIN_USEFUL_CAP, int(c * factor))
+                  for s, c in caps.items()}
+        scaled_worst = worst(scaled)
+        if scaled_worst <= ceiling:
+            return RunPlan(
+                calls, scaled_worst, scaled, ceiling, True,
+                f"caps reduced to fit ${ceiling:.2f}; replies will be shorter")
+        if all(c <= MIN_USEFUL_CAP for c in scaled.values()):
+            break                       # already at the floor; cannot shrink
+        factor *= 0.9
+    needed = worst(dict.fromkeys(caps, MIN_USEFUL_CAP))
+    return RunPlan(
+        calls, needed, dict.fromkeys(caps, MIN_USEFUL_CAP), ceiling, False,
+        f"even at the {MIN_USEFUL_CAP}-token floor this panel needs about "
+        f"${needed:.2f}. Below that a reasoning model spends the whole budget "
+        f"thinking and returns nothing, so a smaller ceiling buys no answer "
+        f"rather than a shorter one")
+
+
+def _closer_seats(caps: Mapping[str, int]) -> set[str]:
+    """The seat that also merges, which therefore gets called twice a round."""
+    return {"seat_5"} if "seat_5" in caps else set()

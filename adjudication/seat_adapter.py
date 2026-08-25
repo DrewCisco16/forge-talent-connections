@@ -471,6 +471,13 @@ class HttpSeat:
         self.pass_id = pass_id
 
 
+    def _multiplier(self) -> float:
+        """This seat's output bound, from its rate entry."""
+        from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER
+        rate = getattr(self.ledger, "rates", {}).get(self.seat_id)
+        return float(getattr(rate, "output_multiplier", HIDDEN_OUTPUT_MULTIPLIER)
+                     if rate is not None else HIDDEN_OUTPUT_MULTIPLIER)
+
     def _precheck(self, prompt: str, body: bytes = b"") -> None:
         """Refuse this dispatch if its worst case would cross a ceiling.
 
@@ -483,7 +490,6 @@ class HttpSeat:
         if self.ledger is None:
             return
         from cost_ledger import (
-            HIDDEN_OUTPUT_MULTIPLIER,
             estimate_input_tokens,
             estimate_request_tokens,
         )
@@ -496,7 +502,7 @@ class HttpSeat:
         self._last_worst_case = self._worst_case_dollars(prompt, body)
         self.ledger.check_before_call(
             self.seat_id, est_in,
-            int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER),
+            int(self.max_tokens * self._multiplier()),
             pass_id=self.pass_id,
         )
 
@@ -504,7 +510,7 @@ class HttpSeat:
         """What this dispatch could have cost, for enforcement purposes."""
         if self.ledger is None:
             return 0.0
-        from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER, estimate_input_tokens
+        from cost_ledger import estimate_input_tokens
         rate = getattr(self.ledger, "rates", {}).get(self.seat_id)
         if rate is None:
             return 0.0
@@ -512,7 +518,7 @@ class HttpSeat:
         return float(rate.cost(
             max(self.est_input_tokens, estimate_input_tokens(prompt),
                 estimate_request_tokens(body)),
-            int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER)))
+            int(self.max_tokens * self._multiplier())))
 
     def _record_unmeasured(self, why: str) -> None:
         """Book a dispatch whose cost we never learned.

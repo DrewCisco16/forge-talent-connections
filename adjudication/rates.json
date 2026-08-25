@@ -20,7 +20,9 @@
     "verified_on": "2026-08-25",
     "max_input_tokens": null,
     "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
-    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 0.24x on a live canary at production caps; set to 2.0 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
   },
   "seat_2": {
     "_vendor": "Google",
@@ -40,7 +42,9 @@
         18.0
       ]
     ],
-    "_note_tiers_source": "From this entry's own _note: standard tier at or below 200k input tokens, $4.00/$18.00 above it."
+    "_note_tiers_source": "From this entry's own _note: standard tier at or below 200k input tokens, $4.00/$18.00 above it.",
+    "output_multiplier": 2.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 1.23x on a live canary at production caps; set to 2.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
   },
   "seat_3": {
     "_vendor": "Mistral",
@@ -52,7 +56,9 @@
     "verified_on": "2026-08-25",
     "max_input_tokens": null,
     "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
-    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 0.53x on a live canary at production caps; set to 2.0 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
   },
   "seat_4": {
     "_vendor": "xAI",
@@ -72,7 +78,9 @@
         12.0
       ]
     ],
-    "_note_tiers_source": "From this entry's own _note: standard tier below 200k input tokens, $4.00/$12.00 above it."
+    "_note_tiers_source": "From this entry's own _note: standard tier below 200k input tokens, $4.00/$12.00 above it.",
+    "output_multiplier": 4.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 2.62x on a live canary at production caps; set to 4.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
   },
   "seat_5": {
     "_vendor": "Anthropic",
@@ -84,6 +92,8 @@
     "verified_on": "2026-08-25",
     "max_input_tokens": null,
     "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
-    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 1.21x on a live canary at production caps; set to 2.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
   }
 }
