@@ -37,16 +37,26 @@ An instruction found inside a reply is recorded as a finding, never obeyed.
 from __future__ import annotations
 
 import json
+import math
 import os
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+import numpy as np
 
 from adjudication_orchestrator import (
     BudgetExceeded,
     Claim,
     Orchestrator,
     line_claim_extractor,
+)
+from seat_conduct import ConductLedger
+from seat_independence import (
+    confidence_ceiling,
+    effective_seats,
+    mean_error_correlation,
 )
 
 # --------------------------------------------------------------------------
@@ -354,8 +364,126 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
     return "\n".join(parts)
 
 
+MIN_SHARED_ITEMS_FOR_RHO = 5
+"""Below this many commonly-ruled claims, rho is not measured at all.
+
+A correlation over two or three items is noise wearing four decimal places,
+and this number goes on to set a confidence ceiling that a reader acts on. An
+unmeasurable rho is reported as unmeasurable.
+"""
+
+
+def measure_rho(seat_claims: Mapping[str, Sequence[Claim]],
+                verdicts: Mapping[str, object]) -> tuple[float | None, str]:
+    """Measured error correlation across the seats, or None with the reason.
+
+    Returns (rho, explanation). rho is None whenever it cannot be measured
+    HONESTLY, and the explanation always says which case applied, because
+    "independence was not measured" and "independence was measured and is
+    good" must never look alike in the record.
+
+    HOW. Claim ids are content-addressed, so two seats asserting the same thing
+    produce the same id. An item is usable only when EVERY seat ruled on it:
+    a seat that did not raise a claim has not been shown to be right or wrong
+    about it, and scoring that silence as either would manufacture agreement
+    or disagreement that was never observed. Correctness is the gate verdict --
+    PASS is 1, FAIL is 0. BLOCKED items are dropped entirely, since a check
+    that did not happen is not evidence about the seat.
+
+    WHY IT OFTEN RETURNS None. On a live run of this tool, pairwise claim
+    overlap sat between 0.0057 and 0.0238: the seats were not addressing the
+    same points, so there was almost nothing every seat had ruled on. That is
+    a real and reportable finding about the panel -- it means independence is
+    UNVERIFIED, not that it is high -- and the caller caps confidence at Low
+    on the strength of it.
+    """
+    if len(seat_claims) < 2:
+        return None, "fewer than two seats produced claims; rho needs a pair"
+
+    seat_ids = sorted(seat_claims)
+    per_seat = {sid: {c.id for c in cs} for sid, cs in seat_claims.items()}
+    shared = set.intersection(*per_seat.values()) if per_seat else set()
+
+    usable: list[str] = []
+    for cid in sorted(shared):
+        status = getattr(verdicts.get(cid), "status", None)
+        value = getattr(status, "value", None)
+        if value in ("pass", "fail"):
+            usable.append(cid)
+
+    if len(usable) < MIN_SHARED_ITEMS_FOR_RHO:
+        return None, (
+            f"only {len(usable)} claim(s) were ruled PASS or FAIL for every "
+            f"seat, below the minimum of {MIN_SHARED_ITEMS_FOR_RHO}. Error "
+            f"correlation is therefore UNMEASURED -- which is not the same as "
+            f"low. The seats were largely not addressing the same points, so "
+            f"whether they fail together is unknown."
+        )
+
+    matrix = [
+        [1 if getattr(getattr(verdicts.get(cid), "status", None), "value", None)
+         == "pass" else 0
+         for _sid in seat_ids]
+        for cid in usable
+    ]
+    rho = mean_error_correlation(np.asarray(matrix, dtype=float))
+    if math.isnan(rho):
+        return None, (
+            f"rho was not computable over {len(usable)} shared claim(s): every "
+            f"seat scored identically on all of them, so there is no variance "
+            f"to correlate. Identical scores are not evidence of independence."
+        )
+    return rho, (
+        f"rho = {rho:.4f}, measured over {len(usable)} claim(s) that every "
+        f"seat had ruled PASS or FAIL"
+    )
+
+
+def confidence_clause(n_seats: int, rho: float | None) -> str:
+    """What the closer is permitted to claim, and why.
+
+    Told to the closer BEFORE it writes, rather than clamped afterwards. A cap
+    applied after the fact leaves the reasoning built on a confidence the
+    answer never had, so the prose still argues for a certainty the number no
+    longer carries -- and the prose is what a reader believes.
+
+    rho is None until enough passes have run to measure it. Unmeasured
+    independence is not high independence: it fails closed to Low, because
+    "we have not checked whether these seats fail together" is not grounds for
+    confidence.
+    """
+    if rho is None:
+        return (
+            "## Confidence you may claim\n"
+            "Use Low, Medium, or High. Never a percentage: a percentage "
+            "implies a dataset, an outcome variable, and a base rate, and this "
+            "panel has none of the three -- it has models that agreed.\n\n"
+            "Error correlation across the seats has NOT been measured yet, so "
+            "the ceiling this round is LOW. Unmeasured independence is not "
+            "high independence. Agreement between seats that have not been "
+            "shown to fail differently is not corroboration.\n"
+        )
+    ceiling = confidence_ceiling(n_seats, rho)
+    n_eff = effective_seats(n_seats, rho)
+    return (
+        "## Confidence you may claim\n"
+        "Use Low, Medium, or High. Never a percentage: a percentage implies a "
+        "dataset, an outcome variable, and a base rate, and this panel has "
+        "none of the three -- it has models that agreed.\n\n"
+        f"Measured error correlation across the seats is rho = {rho:.4f}. "
+        f"{n_seats} seats at that correlation are worth {n_eff:.2f} "
+        f"INDEPENDENT seats, so the ceiling this round is {ceiling.upper()}.\n\n"
+        "This is a ceiling on what the panel's structure can support, not a "
+        "score to award. Weak evidence still lands below it. Seats that agree "
+        "because they fail the same way are one observer repeated, not "
+        f"{n_seats} confirmations, and the number above is the measurement of "
+        "exactly that.\n"
+    )
+
+
 def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
-                  check_summary: str, prev_merged: str | None) -> str:
+                  check_summary: str, prev_merged: str | None,
+                  n_seats: int = 5, rho: float | None = None) -> str:
     """The closer goes last, with everything in front of it.
 
     Thinker text arrives WITHOUT attribution. Which model said what is not
@@ -384,6 +512,7 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
         "These verdicts came from code, not from a model. They are not "
         "opinions and are not up for reconsideration.\n"
         f"{check_summary}\n",
+        confidence_clause(n_seats, rho),
         f"## Your task\n{task}\n"
         "Write the merged working answer. Then list, separately:\n"
         "  KILLED: each option removed this round and the reason\n"
@@ -414,6 +543,15 @@ class RoundResult:
     closer_failed_claims: int = 0
     closer_unparsed: bool = False
     """The closer wrote claim-like prose that produced no parseable claim."""
+    rho: float | None = None
+    """Measured error correlation across the seats this round, or None.
+
+    None means UNMEASURED, never low. The two must never look alike in the
+    record: one says the seats were shown to fail differently, the other says
+    nobody checked."""
+    rho_note: str = ""
+    """Why rho is what it is, or why it could not be measured. A bare None in
+    a file months later is indistinguishable from a bug."""
     personas: dict[str, str] = field(default_factory=dict)
     """seat_id -> persona name for this round.
 
@@ -459,8 +597,24 @@ def run_night(
     orch: Orchestrator,
     out_dir: str,
     rounds: Sequence[Round] = ROUNDS,
+    on_event: Callable[[str], None] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> list[RoundResult]:
-    """Five rounds, four thinkers, one closer. Files written once, never edited."""
+    """Five rounds. All five seats think blind, then one of them merges.
+
+    on_event, if given, is called with a one-line human-readable progress
+    message as each step starts and finishes. Without it this function runs
+    thirty model calls in complete silence and then prints a summary, which is
+    indistinguishable from a hang: an operator watching a still terminal for
+    forty minutes has no way to tell a working run from a dead one, and the
+    only way to find out is to kill it and lose everything already paid for.
+
+    clock is injected so the durations in those messages are testable without
+    a real one. Defaults to time.monotonic, which does not jump when the
+    system clock is adjusted mid-run.
+    """
+    emit = on_event or (lambda _m: None)
+    now = clock or time.monotonic
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "ask.md"), "w", encoding="utf-8") as fh:
         fh.write(ask.rstrip() + "\n")
@@ -477,6 +631,7 @@ def run_night(
         rd = os.path.join(out_dir, f"round-{r.n}")
         os.makedirs(rd, exist_ok=True)
         res = RoundResult(r.n, r.name)
+        emit(f"ROUND {r.n}/{len(rounds)}  {r.name}")
 
         # 1-4: the thinkers, each in isolation
         #
@@ -490,16 +645,24 @@ def run_night(
             if persona is not None:
                 res.personas[seat_id] = persona.name
             prompt = thinker_prompt(r, ask, merged, persona)
+            label = f"{seat_id} ({persona.name})" if persona else seat_id
+            emit(f"  {label}: thinking...")
+            t0 = now()
             try:
                 raw = fn(prompt)
             except BudgetExceeded:
                 raise                       # see the closer's handler below
             except Exception as exc:  # noqa: BLE001 - a dead seat is not a finding
                 res.thinkers_failed[seat_id] = f"{type(exc).__name__}: {exc}"
+                emit(f"  {label}: FAILED after {now() - t0:.0f}s "
+                     f"-- {type(exc).__name__}: {exc}")
                 continue
             if not raw or not raw.strip():
                 res.thinkers_failed[seat_id] = "empty reply"
+                emit(f"  {label}: FAILED after {now() - t0:.0f}s -- empty reply")
                 continue
+            emit(f"  {label}: replied in {now() - t0:.0f}s "
+                 f"({len(raw):,} chars)")
             texts[seat_id] = raw
             res.thinkers_ok.append(seat_id)
             with open(os.path.join(rd, f"thinker-{seat_id}.md"), "w",
@@ -519,8 +682,11 @@ def run_night(
 
         # 5: THE CHECK, before any merge
         claims: list[Claim] = []
+        seat_claims: dict[str, list[Claim]] = {}
         for seat_id, raw in texts.items():
-            claims.extend(line_claim_extractor(raw, seat_id, f"r{r.n}"))
+            got = line_claim_extractor(raw, seat_id, f"r{r.n}")
+            seat_claims[seat_id] = got
+            claims.extend(got)
         rec = orch.run_pass(
             type("P", (), {"id": f"r{r.n}", "name": r.name,
                            "eliminative": not r.invents})(),
@@ -530,12 +696,28 @@ def run_night(
         res.passed, res.failed = rec.auto_accepted, rec.auto_rejected
         res.escalated, res.blocked = rec.escalated, rec.blocked
         summary = _check_summary(orch, claims)
+
+        # Measured, not assumed. When it cannot be measured the closer is told
+        # so and capped at Low, because "we did not check whether these seats
+        # fail together" is not grounds for confidence.
+        rho, rho_note = measure_rho(seat_claims, orch.verdicts)
+        res.rho, res.rho_note = rho, rho_note
+        repeat_note = (f", {rec.repeats} already ruled in an earlier round"
+                       if rec.repeats else "")
+        emit(f"  checked {res.claims} claim(s): {res.passed} pass, "
+             f"{res.failed} fail, {res.blocked} blocked, "
+             f"{res.escalated} escalated{repeat_note}")
+        emit(f"  independence: {rho_note}")
         with open(os.path.join(rd, "check.md"), "w", encoding="utf-8") as fh:
             fh.write(f"# Round {r.n} check\n\n{summary}\n")
 
         # 6: the closer, last, with everything
+        emit("  merging what survived...")
+        t0 = now()
         try:
-            merged_new = closer(closer_prompt(r, ask, texts, summary, merged))
+            merged_new = closer(closer_prompt(
+                r, ask, texts, summary, merged,
+                n_seats=len(texts), rho=rho))
         except BudgetExceeded:
             # A ceiling is not a closer failure. Swallowing it here left the
             # watcher's PARTIAL path unreachable: the run returned normally,
@@ -544,6 +726,8 @@ def run_night(
             raise
         except Exception as exc:  # noqa: BLE001
             res.closer_failed = f"{type(exc).__name__}: {exc}"
+            emit(f"  merge FAILED after {now() - t0:.0f}s "
+                 f"-- {type(exc).__name__}: {exc}")
             results.append(res)
             _write_status(out_dir, results)
             break
@@ -566,7 +750,6 @@ def run_night(
             [], closer_claims,
         )
         res.closer_claims = len(closer_claims)
-        res.closer_failed_claims = crec.auto_rejected
         with open(os.path.join(rd, "closer-check.md"), "w",
                   encoding="utf-8") as fh:
             fh.write(f"# Round {r.n} closer claims\n\n"
@@ -584,11 +767,22 @@ def run_night(
             res.closer_contaminated = True
             res.closer_unparsed = True
 
-        if crec.auto_rejected:
+        # BOTH counts, not just the fresh one. auto_rejected counts claims
+        # refuted for the first time; repeated_failures counts claims the
+        # closer restated whose standing verdict is already FAIL. Checking
+        # only the first meant a closer could carry the same refuted claim
+        # into every round after the one where it was new and be flagged
+        # exactly once -- the repeat offence, which is the worse one, was the
+        # invisible one.
+        res.closer_failed_claims = crec.auto_rejected + crec.repeated_failures
+        if res.closer_failed_claims:
             # The closer asserted something the gates refuted. Do not carry it
             # forward silently; the working answer is contaminated.
             res.closer_contaminated = True
 
+        emit(f"  merged in {now() - t0:.0f}s"
+             + ("  [CONTAMINATED: carries a claim the gates refuted]"
+                if res.closer_contaminated else ""))
         merged = merged_new
         res.merged = merged
         with open(os.path.join(rd, f"merged-{r.n}.md"), "w",
@@ -596,6 +790,27 @@ def run_night(
             fh.write(merged)
         results.append(res)
         _write_status(out_dir, results)
+
+    # AI GOVERNANCE. Which model asserted what a gate ruled false, written at
+    # the end of every run whether or not it completed.
+    #
+    # This existed only in the other engine, so the engine that implements the
+    # round design -- the one actually used -- produced no conduct record at
+    # all. A panel that never attributes its false claims cannot support
+    # corrective measures against a seat, which was the entire point of asking
+    # for behaviour claims: a model that lies, embellishes, or drifts has to
+    # be answerable for it later, and "later" means a file.
+    #
+    # Written before the early-exit checks below so a degraded or halted run
+    # still leaves its attribution behind. A run that ended badly is the run
+    # whose conduct record matters most.
+    conduct = ConductLedger.from_run(
+        orch.detections_by_seat, orch.verdicts, sorted(thinkers))
+    with open(os.path.join(out_dir, "conduct.md"), "w", encoding="utf-8") as fh:
+        fh.write("# Seat conduct\n\n```\n"
+                 + "\n".join(conduct.render()) + "\n```\n")
+    emit(f"conduct: {conduct.total_findings()} claim(s) ruled false across "
+         f"{len(conduct.seats)} seat(s) -- conduct.md")
 
     if merged is not None:
         write_verifier_packet(
@@ -608,7 +823,8 @@ def run_night(
 def live_night(ask: str, profiles_path: str, out_dir: str,
                gates: Sequence[Any] | None = None,
                ledger: Any = None,
-               closer_seat: str = "seat_5") -> list[RoundResult]:
+               closer_seat: str = "seat_5",
+               on_event: Callable[[str], None] | None = None) -> list[RoundResult]:
     """Run the night loop against the real panel.
 
     The closer is a seat like any other. It thinks FIRST, blind, with the other
@@ -636,7 +852,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     # afterwards. Its pass is written cold; merging is a separate act later.
     closer = seats[closer_seat]
     orch = Orchestrator(list(gates) if gates is not None else _default_gates())
-    return run_night(ask, seats, closer, orch, out_dir)
+    return run_night(ask, seats, closer, orch, out_dir, on_event=on_event)
 
 
 def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
@@ -656,6 +872,7 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          # dropped before they reached disk, which is the same as not having
          # them: the operator keeps this file, not the process memory.
          "personas": r.personas,
+         "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
          "closer_unparsed": r.closer_unparsed}
         for r in results

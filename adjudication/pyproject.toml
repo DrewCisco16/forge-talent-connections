@@ -40,6 +40,7 @@ files = [
     "quote_gate.py",
     "doi_resolver.py",
     "recency_canary.py",
+    "approved_test_gate.py",
     # SEATS, COST, AND CONDUCT
     "seat_adapter.py",
     "seat_profiles.py",

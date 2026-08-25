@@ -427,7 +427,7 @@ def _citation_field_gate() -> Gate:
 
 
 def _approved_test_gate() -> Gate:
-    from test_runner import ApprovedTestGate
+    from approved_test_gate import ApprovedTestGate
     return ApprovedTestGate()
 
 
@@ -624,7 +624,7 @@ def kill_provenance(answer: AdjudicationAnswer) -> dict[str, int]:
         # Read the field, do not re-derive it from the reason text. Inferring
         # provenance from wording is how the quote cascade got reported as
         # consensus.
-        if getattr(c, "elimination_kind", None) == "earned":
+        if c.elimination_kind == "earned":
             earned += 1
         else:
             structural += 1
@@ -684,7 +684,16 @@ def render_report(answer: AdjudicationAnswer) -> str:
         rec, div = res.record, res.divergence
         add(f"{i}. {res.pass_name}")
         add(f"     proposed {rec.proposed} | accepted {rec.auto_accepted} | "
-            f"rejected {rec.auto_rejected} | escalated {rec.escalated}")
+            f"rejected {rec.auto_rejected} | escalated {rec.escalated}"
+            + (f" | blocked {rec.blocked}" if rec.blocked else ""))
+        if rec.repeats:
+            # Stated explicitly, because otherwise the line above stops adding
+            # up and the reader is left to guess where the difference went.
+            note = f"     {rec.repeats} already ruled in an earlier pass"
+            if rec.repeated_failures:
+                note += (f", of which {rec.repeated_failures} had ALREADY "
+                         f"BEEN REFUTED and were asserted again")
+            add(note)
         if rec.eliminated_candidates:
             add(f"     eliminated: {', '.join(rec.eliminated_candidates)}")
         jac = div.mean_pairwise_jaccard
@@ -722,7 +731,7 @@ def render_report(answer: AdjudicationAnswer) -> str:
             add(f"    {c.id}{_cov(answer, c.id)}")
     for c in answer.eliminated:
         reason = c.elimination_reason or ""
-        tag = ("EARNED" if getattr(c, "elimination_kind", None) == "earned"
+        tag = ("EARNED" if c.elimination_kind == "earned"
                else "STRUCTURAL")
         add(f"  removed {c.id} [{tag}]: {reason}")
     prov = kill_provenance(answer)

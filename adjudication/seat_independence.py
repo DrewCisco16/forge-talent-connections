@@ -523,3 +523,96 @@ if __name__ == "__main__":
         "seatE": {3, 12},
     }
     print("[synthetic] capture-recapture:", chao1(det))
+
+
+# ---------------------------------------------------------------------------
+# confidence ceilings
+# ---------------------------------------------------------------------------
+
+CONFIDENCE_LEVELS = ("Low", "Medium", "High")
+"""The only confidence vocabulary this tool permits.
+
+Deliberately NOT numeric. A percentage implies a dataset, an outcome variable,
+and a base rate, and this panel has none of the three: it has some models that
+agreed. Emitting "87% confident" from five correlated language models is the
+fabrication the whole architecture exists to prevent, and it is more dangerous
+than a wrong answer because it travels downstream carrying false precision.
+"""
+
+MEDIUM_NEEDS_EFFECTIVE_SEATS = 2.0
+HIGH_NEEDS_EFFECTIVE_SEATS = 3.0
+"""Thresholds on n_eff, not on n.
+
+Below 2.0 effective seats the panel is worth roughly one observer, and one
+observer's agreement with itself is not corroboration at any strength. Below
+3.0 it is worth about two, which can catch a blunder but cannot establish a
+conclusion.
+
+These are ceilings on what the panel's STRUCTURE can support, and they are
+where they are because n_eff is the only independence figure this system
+actually measures. They are not a claim that 3.0 effective seats makes a
+conclusion true.
+"""
+
+
+def confidence_ceiling(n_seats: int, rho: float) -> str:
+    """The strongest confidence this panel's independence can support.
+
+    A CEILING, never an assignment. Evidence decides where a conclusion
+    actually lands; this only says how high it is permitted to reach. A
+    candidate with one weak warrant sits at Low no matter how independent the
+    seats were.
+
+    WHY THIS EXISTS. Five seats that agree look like five confirmations, and
+    that appearance is what a reader acts on. If those seats fail together --
+    which is exactly what rho measures -- they are closer to one confirmation
+    repeated five times. On a live run of this tool, measured pairwise claim
+    overlap ran between 0.0000 and 0.0238 and nothing was eliminated in any
+    pass; a "High confidence" stamped on that output would have described the
+    panel's size rather than its evidence.
+    """
+    n_eff = effective_seats(n_seats, rho)
+    if n_eff < MEDIUM_NEEDS_EFFECTIVE_SEATS:
+        return "Low"
+    if n_eff < HIGH_NEEDS_EFFECTIVE_SEATS:
+        return "Medium"
+    return "High"
+
+
+def cap_confidence(claimed: str, n_seats: int, rho: float) -> tuple[str, str | None]:
+    """Clamp a claimed confidence to the ceiling. Returns (value, why_capped).
+
+    why_capped is None when nothing was clamped, and a sentence naming the
+    measured numbers when it was. The sentence is required rather than
+    optional: silently lowering a confidence would leave the operator with a
+    number they cannot account for, and an unexplained downgrade is only
+    marginally better than an unearned upgrade.
+
+    An unrecognised claimed value fails CLOSED to the FLOOR, not to the
+    ceiling. A model that writes "Very High" or "95%" has stepped outside the
+    permitted vocabulary, and the vocabulary is the mechanism -- honouring the
+    string would let any value bypass the cap. Falling back to the ceiling
+    would be worse still: on an independent panel the ceiling is High, so a
+    contract violation would be REWARDED with the maximum confidence the
+    system can express. Default is denied, so it lands at Low.
+    """
+    ceiling = confidence_ceiling(n_seats, rho)
+    n_eff = effective_seats(n_seats, rho)
+    limit = CONFIDENCE_LEVELS.index(ceiling)
+
+    if claimed not in CONFIDENCE_LEVELS:
+        return CONFIDENCE_LEVELS[0], (
+            f"claimed confidence {claimed!r} is not one of "
+            f"{', '.join(CONFIDENCE_LEVELS)}. A value outside the permitted "
+            f"vocabulary is not evidence of strength, so it fails closed to "
+            f"{CONFIDENCE_LEVELS[0]} rather than to the {ceiling} ceiling "
+            f"({n_seats} seats at measured rho {rho:.4f} are worth "
+            f"{n_eff:.2f} independent seats)"
+        )
+    if CONFIDENCE_LEVELS.index(claimed) <= limit:
+        return claimed, None
+    return ceiling, (
+        f"{claimed} exceeds what this panel's independence supports: "
+        f"{n_seats} seats at measured rho {rho:.4f} are worth {n_eff:.2f} "
+        f"independent seats, which caps confidence at {ceiling}"
+    )

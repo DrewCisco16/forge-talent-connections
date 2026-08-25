@@ -130,8 +130,20 @@ def rerun() -> None:
     execute(d, ",".join(dom.gates), dom.resolve_dois)
 
 
+def _progress(message: str) -> None:
+    """Print a progress line immediately.
+
+    flush=True is not decoration. Python block-buffers stdout when it is not a
+    terminal, so piped or redirected output would appear only at the end --
+    which is precisely the run where the operator most needs to see progress,
+    because they redirected it to watch a long job.
+    """
+    print(f"  {message}", flush=True)
+
+
 def night() -> None:
-    """v9 shape: four thinkers, one closer, round 1 invents the options."""
+    """All five seats think blind; one of them then merges. Round 1 invents
+    the options and rounds 2-5 only remove from that set."""
     sys.path.insert(0, HERE)
     from intake import ask as _ask
     from intake import ask_multiline, slugify
@@ -153,7 +165,9 @@ def night() -> None:
     cap = _ask("Hard spend ceiling in dollars [3.00]:", allow_blank=True) or "3.00"
     _p()
     _p("-" * 68)
-    _p(f"  5 rounds x 4 thinkers + 5 closer calls. Ceiling ${cap}.")
+    _p(f"  5 rounds x 5 blind seats + 5 merges = 30 calls. Ceiling ${cap}.")
+    _p("  Allow 30-90 minutes. Reasoning models take minutes per call and")
+    _p("  the seats run one at a time; progress prints as each one answers.")
     _p(f"  folder: {os.path.relpath(out, HERE)}")
     _p("-" * 68)
     if input("  Type YES to spend: ").strip() != "YES":
@@ -165,8 +179,11 @@ def night() -> None:
     from run_adjudication import build_ledger
     try:
         led = build_ledger(float(cap), None, None)
+        # Progress prints as it happens. Without it this is thirty silent
+        # model calls, which is indistinguishable from a hang -- and the
+        # only way to find out is to kill the run and lose what it cost.
         res = live_night(ask_text, os.path.join(HERE, "profiles.json"), out,
-                         ledger=led)
+                         ledger=led, on_event=_progress)
     except CeilingReached as exc:
         _p(f"  PARTIAL -- {exc}")
         return
@@ -175,9 +192,10 @@ def night() -> None:
         return
     _p()
     for r in res:
-        _p(f"  round {r.n}  {r.name[:34]:36} thinkers {len(r.thinkers_ok)}/4"
+        _p(f"  round {r.n}  {r.name[:34]:36} seats {len(r.thinkers_ok)}/5"
            f"  claims {r.claims:>3}  pass {r.passed:>3} fail {r.failed:>3}"
-           f" blocked {r.blocked:>2}" + ("   DEGRADED" if r.degraded else ""))
+           f" blocked {r.blocked:>2}" + ("   DEGRADED" if r.degraded else "")
+           + ("   CONTAMINATED" if r.closer_contaminated else ""))
     _p()
     _p(f"  verifier packet: {os.path.relpath(os.path.join(out, 'VERIFIER-PACKET.md'), HERE)}")
     _p("  Paste it into a NEW chat in your Claude Project. Nothing else.")
@@ -260,10 +278,19 @@ MENU = """
 ======================================================================
 
   SOLVE A PROBLEM
-    1  New problem            guided setup, then run   (~25 calls)
-    2  Run an existing one    already formulated       (~25 calls)
-    n  Night loop             you write one line; round 1 invents
-                              the options              (~25 calls)
+    n  Five rounds            RECOMMENDED. You write one line. All five
+                              seats answer blind, code checks every claim,
+                              then one seat merges what survived and the
+                              next round starts from that merge.
+                              30 calls (5 rounds x 5 seats + 5 merges)
+                              Allow 30-90 min: reasoning models take
+                              minutes per call, and the seats run in turn.
+
+    1  New problem            Guided setup, then the elimination engine:
+                              you supply the candidate answers up front and
+                              five passes try to knock them out.
+                              25 calls (5 passes x 5 seats)
+    2  Run an existing one    Same engine, already formulated.  25 calls
 
   LOOK AT RESULTS                                          free
     3  Verdict from a run

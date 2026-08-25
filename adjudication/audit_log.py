@@ -276,6 +276,16 @@ class RunRecorder:
                 "auto_accepted": rec.auto_accepted,
                 "auto_rejected": rec.auto_rejected,
                 "escalated": rec.escalated,
+                # proposed does not equal accepted + rejected + escalated +
+                # blocked once any claim has been made twice. Without these
+                # two the arithmetic silently stops closing, and a later
+                # round reads as "N proposed, 0 resolved" -- which looks
+                # exactly like the gates having stopped working.
+                "repeats": rec.repeats,
+                # The one that matters: a speaker restating something the
+                # gates already refuted is asserting a known falsehood, and
+                # counting only fresh rulings made every repeat invisible.
+                "repeated_failures": rec.repeated_failures,
                 "eliminated_candidates": list(rec.eliminated_candidates),
                 "claims": sorted(
                     {c.id for r in result.responses for c in r.claims}
@@ -287,11 +297,17 @@ class RunRecorder:
                 # operator keeps -- could not say why a seat failed. A live
                 # run lost a seat in four of five passes and the reason
                 # existed only in a terminal window that later hung.
-                "seat_errors": dict(getattr(div, "seat_errors", {}) or {}),
+                "seat_errors": dict(div.seat_errors),
                 # blocked serialised as None because the field postdated this
                 # writer. A blocked count of "None" reads as "not applicable"
                 # when it means zero checks were prevented.
-                "blocked": int(getattr(rec, "blocked", 0) or 0),
+                #
+                # Both fields are read DIRECTLY, not via getattr with a
+                # default. A defensive getattr here would turn a future rename
+                # into a silently empty audit record -- the run would look
+                # complete and would have destroyed the evidence -- instead of
+                # an AttributeError at the moment the contract broke.
+                "blocked": int(rec.blocked),
                 "mean_pairwise_jaccard": div.mean_pairwise_jaccard,
                 "unanimous": div.unanimous,
                 "all_seats_silent": div.all_seats_silent,

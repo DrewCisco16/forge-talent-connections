@@ -1267,6 +1267,17 @@ class PassRecord:
     auto_accepted: int
     auto_rejected: int
     escalated: int
+    repeats: int = 0
+    """Claims re-proposed after being adjudicated in an earlier pass.
+
+    Without this the pass counts read as "N proposed, 0 resolved" on a later
+    round, which looks exactly like the gates having stopped working."""
+    repeated_failures: int = 0
+    """Re-proposed claims whose STANDING verdict is FAIL.
+
+    The one that matters. A speaker restating something the gates already
+    refuted is asserting a known falsehood, and counting only fresh rulings
+    made that invisible after the first occurrence."""
     eliminated_candidates: list[str] = field(default_factory=list)
     blocked: int = 0
     """Claims whose check could not be performed. Never a finding, never a kill.
@@ -1454,7 +1465,11 @@ class Orchestrator:
 
         by_id = {c.id: c for cand in candidates for c in cand.claims}
         by_id.update({c.id: c for c in self.escalation_queue})
-        by_id.update(getattr(self, "_proposed_index", {}))
+        # Direct, not getattr-with-a-default: _proposed_index is set in
+        # __init__, so a default here could only ever mask a rename, and it
+        # would mask it by silently cascading nothing -- a quote shown not to
+        # exist would leave every claim it supported standing.
+        by_id.update(self._proposed_index)
 
         unsupported = cascade_unsupported(self.verdicts, by_id)
         if not unsupported:
@@ -1544,7 +1559,20 @@ class Orchestrator:
                 self.detections_by_seat.setdefault(claim.source_seat, set()).add(claim.id)
 
             if claim.id in self._seen_claims:
-                continue  # already adjudicated in an earlier pass
+                # Already adjudicated in an earlier pass. Re-gating a
+                # content-addressed claim would recompute a verdict that
+                # cannot have changed, so the skip is right -- but it is
+                # counted, because "not ruled on THIS pass" and "not ruled on
+                # at all" are different facts and a consumer that conflates
+                # them stops seeing repeat offences. A closer that restates a
+                # refuted claim in every round was flagged only in the round
+                # where the claim was new.
+                rec.repeats += 1
+                if self.verdicts.get(claim.id, None) is not None:
+                    v = self.verdicts[claim.id]
+                    if v.status is GateStatus.FAIL:
+                        rec.repeated_failures += 1
+                continue
             self._seen_claims.add(claim.id)
 
             result = self._route(claim)

@@ -20,6 +20,7 @@ import os
 import pytest
 
 import night_loop as NL
+import seat_independence as SI
 from adjudication_orchestrator import ArithmeticGate, Orchestrator
 
 # ---------------------------------------------------------------------------
@@ -37,6 +38,17 @@ def _seat(reply: str, log: list | None = None):
             log.append(prompt)
         return reply
     return fn
+
+
+def _fake_clock():
+    """A monotonic clock that advances a fixed step per call, so durations in
+    progress messages are exact and the test does not depend on wall time."""
+    state = {"t": 0.0}
+
+    def now() -> float:
+        state["t"] += 7.0
+        return state["t"]
+    return now
 
 
 def _panel(n: int = 5, reply: str = "an answer\n\nCLAIM | arithmetic | 2 + 2 = 4 | it adds up"):
@@ -399,3 +411,293 @@ class TestUntrustedMaterial:
         """Told only to ignore directives, a model silently drops them. Told to
         report them, the attempt itself becomes visible in the run."""
         assert "report it as a finding" in NL.UNTRUSTED_OPEN
+
+
+# ---------------------------------------------------------------------------
+# 9. confidence is capped by measured independence, never by seat count
+# ---------------------------------------------------------------------------
+
+class TestConfidenceCeiling:
+
+    def test_unmeasured_rho_caps_at_low_not_high(self):
+        """The load-bearing case. 'We did not check whether these seats fail
+        together' is not grounds for confidence, and an unmeasured panel that
+        defaulted to High would stamp certainty on exactly the runs where
+        independence is unknown."""
+        c = NL.confidence_clause(5, None)
+        assert "LOW" in c
+        assert "Unmeasured independence is not high independence" in c
+
+    def test_correlated_seats_cap_lower_than_independent_ones(self):
+        assert SI.confidence_ceiling(5, 0.0) == "High"
+        assert SI.confidence_ceiling(5, 0.9) == "Low"
+
+    def test_a_ceiling_does_not_raise_a_weak_claim(self):
+        """It is a ceiling, not an award. Evidence still decides where a
+        conclusion lands."""
+        value, why = SI.cap_confidence("Low", 5, 0.0)
+        assert value == "Low" and why is None
+
+    def test_an_overreaching_claim_is_clamped_with_the_numbers(self):
+        """A silent downgrade leaves the operator with a value they cannot
+        account for, which is only marginally better than an unearned one."""
+        value, why = SI.cap_confidence("High", 5, 0.9)
+        assert value == "Low"
+        assert "0.9000" in why and "1.09" in why
+
+    def test_an_unrecognised_value_fails_to_the_floor_not_the_ceiling(self):
+        """Falling back to the ceiling would REWARD a contract violation with
+        the maximum confidence the system can express."""
+        for bad in ("95%", "Very High", "certain", ""):
+            value, why = SI.cap_confidence(bad, 5, 0.0)
+            assert value == "Low", f"{bad!r} was not failed closed"
+            assert why
+
+    def test_percentages_are_refused_in_the_prompt(self):
+        """A percentage implies a dataset, an outcome variable, and a base
+        rate. This panel has none of the three."""
+        for clause in (NL.confidence_clause(5, None), NL.confidence_clause(5, 0.1)):
+            assert "Never a percentage" in clause
+
+    def test_the_closer_is_told_the_ceiling_before_it_writes(self):
+        """Clamped afterwards, the prose still argues for a certainty the
+        number no longer carries -- and the prose is what a reader believes."""
+        p = NL.closer_prompt(NL.ROUNDS[0], "ask", {"s": "x"}, "sum", None,
+                             n_seats=5, rho=0.9)
+        assert "LOW" in p
+        assert p.index("Confidence you may claim") < p.index("Your task")
+
+
+# ---------------------------------------------------------------------------
+# 10. rho is measured or reported unmeasurable, never assumed
+# ---------------------------------------------------------------------------
+
+class TestRhoMeasurement:
+
+    def test_one_seat_is_not_a_correlation(self):
+        rho, why = NL.measure_rho({"seat_1": []}, {})
+        assert rho is None
+        assert "pair" in why
+
+    def test_too_few_shared_items_is_unmeasured_not_low(self):
+        """The measured live case: overlap between 0.0057 and 0.0238 left
+        almost nothing every seat had ruled on."""
+        rho, why = NL.measure_rho({"a": [], "b": []}, {})
+        assert rho is None
+        assert "UNMEASURED" in why
+        assert "not the same as" in why
+
+    def test_the_reason_is_always_recorded(self):
+        """A bare None in a file months later is indistinguishable from a bug."""
+        for args in (({"a": []}, {}), ({"a": [], "b": []}, {})):
+            _, why = NL.measure_rho(*args)
+            assert why.strip()
+
+    def test_identical_scores_are_not_evidence_of_independence(self):
+        """Zero variance yields NaN, and NaN must not be reported as rho = 0,
+        which would read as a perfectly independent panel."""
+        import adjudication_orchestrator as AO
+
+        class V:
+            status = AO.GateStatus.PASS
+
+        claims = [AO.Claim(id=f"c{i}", kind=AO.ClaimKind.JUDGMENT,
+                           text=f"t{i}", warrant=None) for i in range(6)]
+        rho, why = NL.measure_rho({"a": claims, "b": claims},
+                                  {c.id: V() for c in claims})
+        assert rho is None
+        assert "no variance" in why
+
+    def test_rho_and_its_reason_reach_disk(self, tmp_path):
+        NL.run_night("ask", _panel(), _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        payload = json.loads(
+            (tmp_path / "status.md").read_text().split("```json")[1].split("```")[0])
+        assert "rho" in payload[0]
+        assert payload[0]["rho_note"].strip()
+
+
+# ---------------------------------------------------------------------------
+# 11. progress — a silent run is indistinguishable from a hang
+# ---------------------------------------------------------------------------
+
+class TestProgressReporting:
+
+    def _run(self, tmp_path, rounds=None, seats=None, closer=None):
+        events: list[str] = []
+        NL.run_night("ask", seats or _panel(), closer or _seat("merged"),
+                     _orch(), str(tmp_path), rounds=rounds or NL.ROUNDS[:1],
+                     on_event=events.append, clock=_fake_clock())
+        return events
+
+    def test_a_run_without_a_hook_still_works(self, tmp_path):
+        """The hook is optional. A missing one must not become a crash in the
+        one code path that costs money."""
+        res = NL.run_night("ask", _panel(), _seat("merged"), _orch(),
+                           str(tmp_path), rounds=NL.ROUNDS[:1])
+        assert res[0].merged
+
+    def test_every_seat_is_announced_before_it_is_waited_on(self, tmp_path):
+        """Announced only on completion, a 275-second call shows nothing for
+        275 seconds, which is what a dead run also shows."""
+        events = self._run(tmp_path)
+        for i in range(1, 6):
+            assert any(f"seat_{i}" in e and "thinking" in e for e in events)
+
+    def test_each_reply_reports_its_duration(self, tmp_path):
+        """The operator needs to know a four-minute call is normal for these
+        models, not a symptom."""
+        events = self._run(tmp_path)
+        assert any("replied in" in e and "s (" in e for e in events)
+
+    def test_a_failing_seat_reports_why_and_when(self, tmp_path):
+        def dead(_p):
+            raise TimeoutError("did not reply within 600s")
+        seats = dict(_panel())
+        seats["seat_4"] = dead
+        events = self._run(tmp_path, seats=seats)
+        assert any("seat_4" in e and "FAILED" in e and "600s" in e
+                   for e in events)
+
+    def test_the_merge_is_announced_and_timed(self, tmp_path):
+        events = self._run(tmp_path)
+        assert any("merging" in e for e in events)
+        assert any("merged in" in e for e in events)
+
+    def test_contamination_is_surfaced_live_not_only_in_the_file(self, tmp_path):
+        """A merged answer carrying a refuted claim is the one result the
+        operator must not read past."""
+        merged = "m\n\nCLAIM | arithmetic | 2 + 2 = 5 | wrong"
+        events = self._run(tmp_path, closer=_seat(merged))
+        assert any("CONTAMINATED" in e for e in events)
+
+    def test_independence_is_reported_every_round(self, tmp_path):
+        """Reported only at the end, an unverified panel looks fine until the
+        run is already paid for."""
+        events = self._run(tmp_path)
+        assert any("independence:" in e for e in events)
+
+    def test_the_round_is_announced_with_its_position(self, tmp_path):
+        events = self._run(tmp_path, rounds=NL.ROUNDS)
+        assert any(e.startswith("ROUND 1/5") for e in events)
+
+
+# ---------------------------------------------------------------------------
+# 12. a repeat offence is still an offence
+#
+# Claims are content-addressed, so a claim re-proposed in a later round is
+# skipped rather than re-gated -- correctly, since its verdict cannot have
+# changed. The bug was in the consumers: they read "not ruled on THIS pass" as
+# "not refuted", so a closer that restated a refuted claim in every round was
+# flagged only in the round where the claim happened to be new.
+# ---------------------------------------------------------------------------
+
+class TestRepeatedFailuresStayVisible:
+
+    def test_a_refuted_claim_is_flagged_every_round_it_reappears(self, tmp_path):
+        """The load-bearing case. Flagged once and then silent, the merged
+        answer carries a known falsehood into the deliverable unremarked."""
+        merged = "MERGED\n\nCLAIM | arithmetic | 2 + 2 = 5 | wrong every time"
+        res = NL.run_night("ask", _panel(), _seat(merged), _orch(),
+                           str(tmp_path), rounds=NL.ROUNDS[:3])
+        assert len(res) == 3
+        for r in res:
+            assert r.closer_contaminated is True, f"round {r.n} went unflagged"
+            assert r.closer_failed_claims >= 1
+
+    def test_repeats_are_counted_not_silently_dropped(self, tmp_path):
+        """'5 proposed, 0 resolved' on a later round looks exactly like the
+        gates having stopped working."""
+        import adjudication_orchestrator as AO
+
+        orch = _orch()
+        claim = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
+                         text="two and two", warrant="2 + 2 = 4")
+        p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
+        first = orch.run_pass(p, [], [claim])
+        second = orch.run_pass(p, [], [claim])
+        assert first.auto_accepted == 1 and first.repeats == 0
+        assert second.auto_accepted == 0 and second.repeats == 1
+
+    def test_a_repeated_pass_is_not_counted_as_a_failure(self, tmp_path):
+        """Only a standing FAIL counts. Counting every repeat would make an
+        honest restatement look like contamination."""
+        import adjudication_orchestrator as AO
+
+        orch = _orch()
+        good = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
+                        text="ok", warrant="2 + 2 = 4")
+        p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
+        orch.run_pass(p, [], [good])
+        again = orch.run_pass(p, [], [good])
+        assert again.repeats == 1
+        assert again.repeated_failures == 0
+
+    def test_a_repeated_failure_is_counted_as_one(self, tmp_path):
+        import adjudication_orchestrator as AO
+
+        orch = _orch()
+        bad = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
+                       text="no", warrant="2 + 2 = 5")
+        p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
+        orch.run_pass(p, [], [bad])
+        again = orch.run_pass(p, [], [bad])
+        assert again.repeated_failures == 1
+
+    def test_the_operator_is_told_how_many_were_already_ruled(self, tmp_path):
+        events: list[str] = []
+        NL.run_night("ask", _panel(), _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:2],
+                     on_event=events.append, clock=_fake_clock())
+        assert any("already ruled in an earlier round" in e for e in events)
+
+
+# ---------------------------------------------------------------------------
+# 13. AI governance — false claims are attributed to the model that made them
+# ---------------------------------------------------------------------------
+
+class TestConductRecord:
+
+    def test_a_run_writes_a_conduct_record(self, tmp_path):
+        NL.run_night("ask", _panel(), _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        assert (tmp_path / "conduct.md").exists()
+
+    def test_a_false_claim_is_attributed_to_the_seat_that_made_it(self, tmp_path):
+        """Corrective measures against a model require knowing which model."""
+        seats = dict(_panel())
+        seats["seat_3"] = _seat("x\n\nCLAIM | arithmetic | 2 + 2 = 5 | false")
+        NL.run_night("ask", seats, _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        text = (tmp_path / "conduct.md").read_text()
+        assert "seat_3" in text
+        assert "1 of" in text
+
+    def test_a_halted_run_still_leaves_its_attribution(self, tmp_path):
+        """A run that ended badly is the run whose conduct record matters most."""
+        def dead(_p):
+            raise RuntimeError("seat down")
+        seats = {"seat_1": _seat("x\n\nCLAIM | arithmetic | 1 + 1 = 3 | false"),
+                 "seat_2": dead, "seat_3": dead}
+        res = NL.run_night("ask", seats, _seat("merged"), _orch(),
+                           str(tmp_path), rounds=NL.ROUNDS)
+        assert res[0].degraded is True
+        assert (tmp_path / "conduct.md").exists()
+
+    def test_a_silent_seat_is_distinguished_from_a_clean_one(self, tmp_path):
+        """A seat absent from a conduct report reads as a seat with nothing
+        against it. Those are opposite facts."""
+        seats = dict(_panel())
+        seats["seat_2"] = _seat("prose with no claim lines at all")
+        NL.run_night("ask", seats, _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        text = (tmp_path / "conduct.md").read_text()
+        assert "proposed nothing" in text
+        assert "not the same as a clean one" in text
+
+    def test_the_record_does_not_claim_the_model_lied(self, tmp_path):
+        """Ruled false is a statement about a claim, not about intent."""
+        NL.run_night("ask", _panel(), _seat("merged"), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        text = (tmp_path / "conduct.md").read_text()
+        assert "does not establish intent" in text

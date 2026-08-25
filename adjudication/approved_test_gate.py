@@ -1,6 +1,6 @@
 """
-test_runner.py
-==============
+approved_test_gate.py
+=====================
 Runs the commands a code_behavior claim asserts will pass.
 
 THIS SHIPS INERT, AND THAT IS THE DESIGN. The allowlist is empty until the

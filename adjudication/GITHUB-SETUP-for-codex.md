@@ -160,12 +160,12 @@ re-reporting intentional behaviour.
 Two things worth its attention more than style:
 
 1. mypy strict covers 8 of 21 modules -- the original author's list. The newer
-   ones (quote_gate, citation_gate, night_loop, watcher, test_runner,
+   ones (quote_gate, citation_gate, night_loop, watcher, approved_test_gate,
    recency_canary) are clean where mypy looks but are not in files=. Adding
    them is worth doing.
 
 2. No new module has a dedicated test. All 503 tests are the original suite.
-   quote_gate, citation_gate, test_runner, recency_canary, and watcher were
+   quote_gate, citation_gate, approved_test_gate, recency_canary, and watcher were
    verified by hand, not by anything that runs on every commit. That is the
    most valuable thing to add.
 ```

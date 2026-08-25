@@ -64,7 +64,7 @@ BUNDLES = [
      "score a denial as a pass; it already failed that once. The watcher spends\n"
      "money unattended: find a way to start it without a ceiling, to read a\n"
      "half-written file, or to make one bad input re-run all night.",
-     ["test_runner.py", "recency_canary.py", "watcher.py"]),
+     ["approved_test_gate.py", "recency_canary.py", "watcher.py"]),
 ]
 
 # A real key, not a fixture. Fixture values in the suite are plain words
