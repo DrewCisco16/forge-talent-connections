@@ -48,14 +48,15 @@ BUNDLES = [
      "citation while the report still reads green. The conduct ledger attributes a\n"
      "false claim to every seat that proposed it -- find a way to be blamed for a\n"
      "claim you did not make, or to escape one you did.",
-     ["cost_ledger.py", "doi_resolver.py", "seat_conduct.py"]),
+     ["cost_ledger.py", "doi_resolver.py", "seat_conduct.py", "quote_gate.py"]),
     ("bundle-6-intake.txt", "INTAKE, DOMAIN PROFILES, CONSOLE",
      "Intake must never invent a warrant and must never be talked past its two\n"
      "refusals (no disproof test, fewer than two candidates). Find an input that\n"
      "gets past either one. The patent profile is RED-gated: find a path that sends\n"
      "unpublished material to a vendor. The console must never hide which action\n"
      "spends money.",
-     ["intake.py", "domains.py", "console.py", "diagnose-seats.py"]),
+     ["intake.py", "domains.py", "console.py", "diagnose-seats.py",
+      "night_loop.py"]),
 ]
 
 # A real key, not a fixture. Fixture values in the suite are plain words

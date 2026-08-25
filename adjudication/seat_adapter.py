@@ -100,6 +100,16 @@ class ProviderProfile:
     extract_text: Callable[[dict[str, Any]], str | None]
     extra_headers: Mapping[str, str] = field(default_factory=dict)
     max_tokens: int | None = None
+    usage_input_path: Sequence[Any] | None = None
+    usage_output_path: Sequence[Any] | None = None
+    """Where this vendor reports token counts, declared per profile.
+
+    Declarative for the same reason the reply path is: five vendors put usage
+    in five places and hard-coding them is how the adapter learns about
+    vendors again. A path that misses yields None, the call is counted as
+    unmeasured, and the run total prints as a lower bound -- never a
+    fabricated estimate dressed as a measurement.
+    """
 
     def __post_init__(self) -> None:
         if "{key}" not in self.auth_template:
@@ -157,6 +167,8 @@ class HttpSeat:
         timeout_s: float = 120.0,
         retry: RetryPolicy | None = None,
         sleeper: Callable[[float], None] | None = None,
+        ledger: Any = None,
+        est_input_tokens: int = 3000,
     ):
         resolved_model = model or seat.model
         if not resolved_model:
@@ -177,12 +189,23 @@ class HttpSeat:
         self.profile = profile
         self.transport = transport
         self.model = resolved_model
-        self.max_tokens = max_tokens
+        # The PROFILE's cap wins when it has one. The ceiling estimate reads
+        # this value, so a seat constructed without the profile cap propagated
+        # would estimate 4096 while actually generating up to its real cap --
+        # a silent under-estimate, which is the one direction a spend limit
+        # must never err in. Making the seat self-consistent removes the
+        # dependence on every construction path remembering to pass it.
+        self.max_tokens = (profile.max_tokens
+                           if getattr(profile, "max_tokens", None)
+                           else max_tokens)
         self.temperature = temperature
         self.timeout_s = timeout_s
         self.retry = retry or RetryPolicy()
         self.sleeper = sleeper
         self.attempts_made = 0
+        self.ledger = ledger
+        self.est_input_tokens = est_input_tokens
+        self.last_usage: tuple[int | None, int | None] = (None, None)
 
     @property
     def seat_id(self) -> str:
@@ -206,6 +229,15 @@ class HttpSeat:
         }
 
     def __call__(self, prompt: str) -> str:
+        if self.ledger is not None:
+            # BEFORE the call, never after. A limit you can only detect having
+            # crossed is a report, not a limit. The estimate assumes this
+            # seat's full output cap because that is the worst case this call
+            # can produce; estimating smaller lets the last call of a run
+            # cross the ceiling it was checked against.
+            self.ledger.check_before_call(
+                self.seat_id, self.est_input_tokens, self.max_tokens
+            )
         body = json.dumps(
             self.profile.build_body(
                 self.model, prompt, self.max_tokens, self.temperature
@@ -237,9 +269,29 @@ class HttpSeat:
                     f"seat {self.seat_id}: HTTP {status} from {self.profile.name}"
                     + ("" if status not in RETRYABLE_STATUS else " (retries exhausted)")
                 )
-            return self._parse(raw)
+            text = self._parse(raw)
+            self._book(raw)
+            return text
 
         raise SeatError(f"seat {self.seat_id}: {last} (retries exhausted)")
+
+    def _book(self, raw: bytes) -> None:
+        """Record what the call actually cost, from the vendor's own count."""
+        if self.ledger is None:
+            return
+        tin = tout = None
+        try:
+            from cost_ledger import usage_from_payload
+            payload = json.loads(raw)
+            if isinstance(payload, dict):
+                tin, tout = usage_from_payload(
+                    payload, self.profile.usage_input_path,
+                    self.profile.usage_output_path,
+                )
+        except Exception:  # noqa: BLE001 - unmeasured is honest, guessing is not
+            tin = tout = None
+        self.last_usage = (tin, tout)
+        self.ledger.record(self.seat_id, tin, tout)
 
     def _backoff(self, attempt: int) -> None:
         if self.sleeper is None or not self.retry.backoff_seconds:

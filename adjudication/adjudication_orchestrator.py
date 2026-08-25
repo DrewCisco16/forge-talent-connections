@@ -882,6 +882,13 @@ class BlindedSeatRunner:
             self.prompt_log.append(prompt)
             try:
                 raw = fn(prompt.render())
+            except BudgetExceeded:
+                # A ceiling is not a seat failure and must not be absorbed as
+                # one. Recording it here would mark the seat FAILED, continue
+                # to the next seat, and keep spending -- which is the precise
+                # behaviour a hard ceiling exists to prevent. It propagates so
+                # the run stops and writes a partial result.
+                raise
             except Exception as exc:  # noqa: BLE001 - fail-closed: seat error recorded  # noqa: BLE001 - fail-closed: any error denies
                 # Fail closed: a seat that errors contributes no claims, and
                 # the failure is recorded rather than silently swallowed.
@@ -894,6 +901,16 @@ class BlindedSeatRunner:
 # ---------------------------------------------------------------------------
 # Panel configuration: five seats, four external credentials plus Claude
 # ---------------------------------------------------------------------------
+
+class BudgetExceeded(RuntimeError):
+    """A spend ceiling stopped the run. Declared here, raised by cost_ledger.
+
+    Lives in this module so BlindedSeatRunner can let it through without
+    importing the ledger, keeping the orchestrator free of cost concerns while
+    still refusing to swallow the one exception that must never be treated as
+    a seat error.
+    """
+
 
 class MissingSeatCredential(RuntimeError):
     """Raised when a configured seat has no credential in the environment."""

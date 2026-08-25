@@ -65,6 +65,7 @@ from adjudication_orchestrator import (
 )
 from audit_log import AuditLog, DurableAuditLog, digest
 from correctness_matrix import diagnose_run
+from cost_ledger import CeilingReached, CostLedger, rates_from_config
 from seat_adapter import SeatError, build_seat_callables
 from seat_conduct import ConductLedger
 from seat_profiles import ProfileConfigError, describe, load_profiles
@@ -474,6 +475,35 @@ def load_env_file(path: str | None = None) -> str:
     return f"loaded {target}"
 
 
+DEFAULT_RATES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "rates.json")
+DAY_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              ".spend-by-day.json")
+
+
+def build_ledger(per_run: float | None, per_stage: float | None,
+                 per_day: float | None,
+                 rates_path: str = DEFAULT_RATES_FILE) -> CostLedger | None:
+    """A ledger, or None when no ceiling was asked for.
+
+    Returns None rather than an unenforcing ledger when every ceiling is
+    unset: a ledger that bounds nothing but appears in the report reads as
+    protection that is not there.
+    """
+    if per_run is None and per_stage is None and per_day is None:
+        return None
+    if not os.path.exists(rates_path):
+        raise ValueError(
+            f"a ceiling was requested but {rates_path} does not exist. A limit "
+            f"computed from absent prices bounds nothing."
+        )
+    with open(rates_path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    return CostLedger(rates=rates_from_config(raw), per_run=per_run,
+                      per_stage=per_stage, per_day=per_day,
+                      day_state_path=DAY_STATE_FILE)
+
+
 def live_seats(
     profiles_path: str,
     env: Mapping[str, str] | None = None,
@@ -742,6 +772,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                          "unit. Default: all three. Citation and code_behavior "
                          "gates need a resolver and a test runner and are not "
                          "selectable here -- see CONNECTING.md")
+    ap.add_argument("--max-cost", type=float, metavar="USD",
+                    help="hard per-run spend ceiling. The run aborts mid-run "
+                         "and writes a partial result rather than crossing it. "
+                         "Checked BEFORE each call.")
+    ap.add_argument("--max-cost-per-stage", type=float, metavar="USD")
+    ap.add_argument("--max-cost-per-day", type=float, metavar="USD")
     ap.add_argument("--resolve-dois", action="store_true",
                     help="switch on the citation gates: every cited DOI must "
                          "actually resolve. Uses Crossref and doi.org, which "
@@ -827,6 +863,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         with open(args.adjudications, encoding="utf-8") as fh:
             adjudications = {k: bool(v) for k, v in json.load(fh).items()}
 
+    try:
+        ledger = build_ledger(args.max_cost, args.max_cost_per_stage,
+                              args.max_cost_per_day)
+    except ValueError as exc:
+        print(f"cost ceiling: {exc}", file=sys.stderr)
+        return 2
+    if ledger is not None:
+        stale = ledger.stale_rates()
+        if stale:
+            print(f"WARNING: rates unverified or stale for {', '.join(stale)}. "
+                  f"A ceiling computed from unchecked prices does not bound "
+                  f"anything.", file=sys.stderr)
+
     if args.profiles:
         print(f"env: {load_env_file(args.env)}", file=sys.stderr)
         try:
@@ -834,6 +883,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.profiles,
                 specs=(PANEL_OF_FIVE if args.seat5 == "in-process"
                        else PANEL_OF_FIVE_EXTERNAL),
+                ledger=ledger,
             )
         except MissingSeatCredential as exc:
             print(f"credential missing: {exc}\n"
@@ -889,11 +939,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"--gates: {exc}", file=sys.stderr)
             return 2
 
-    answer = run_adjudication(
-        artifact, candidates, seat_fns, gates=chosen_gates,
-        audit_path=args.audit, run_id=args.run_id, adjudications=adjudications,
-    )
+    try:
+        answer = run_adjudication(
+            artifact, candidates, seat_fns, gates=chosen_gates,
+            audit_path=args.audit, run_id=args.run_id,
+            adjudications=adjudications,
+        )
+    except CeilingReached as exc:
+        # PARTIAL, not a crash. The operator paid for the calls that were made
+        # and is owed the record of them.
+        print(f"\nPARTIAL RUN -- {exc}", file=sys.stderr)
+        if ledger is not None:
+            ledger.persist_day()
+            print("\n".join(ledger.render()), file=sys.stderr)
+        print(f"audit log: {args.audit}", file=sys.stderr)
+        return 3
     print(render_report(answer))
+    if ledger is not None:
+        ledger.persist_day()
+        print("\n".join(ledger.render()))
 
     if args.export_queue:
         # Shape it so answering is editing one field per entry: set "verdict"

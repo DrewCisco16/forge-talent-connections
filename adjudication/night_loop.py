@@ -322,6 +322,28 @@ def run_night(
     return results
 
 
+def live_night(ask: str, profiles_path: str, out_dir: str,
+               gates=None, ledger=None, closer_seat: str = "seat_5"):
+    """Run the night loop against the real panel.
+
+    The closer is a seat like any other; it is simply called last and given
+    everything. Pulling it out of the thinker set is the whole design: a model
+    that helped write an answer cannot also be the one that decides what
+    survived.
+    """
+    from adjudication_orchestrator import Orchestrator
+    from run_adjudication import _default_gates, live_seats
+
+    seats = live_seats(profiles_path, ledger=ledger)
+    if closer_seat not in seats:
+        raise ValueError(
+            f"closer seat {closer_seat!r} is not in the panel: {sorted(seats)}"
+        )
+    closer = seats.pop(closer_seat)
+    orch = Orchestrator(list(gates) if gates is not None else _default_gates())
+    return run_night(ask, seats, closer, orch, out_dir)
+
+
 def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
     """The one file that may be overwritten. Everything else is append-only.
 

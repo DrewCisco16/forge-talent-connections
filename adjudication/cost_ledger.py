@@ -36,7 +36,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 
-class CeilingReached(RuntimeError):
+from adjudication_orchestrator import BudgetExceeded
+
+
+class CeilingReached(BudgetExceeded):
     """A call was refused because making it would cross a configured limit.
 
     Carries which ceiling and by how much, because "aborted on cost" without

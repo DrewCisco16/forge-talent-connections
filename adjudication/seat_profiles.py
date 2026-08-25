@@ -340,6 +340,8 @@ def profile_from_config(seat_id: str, cfg: Mapping[str, Any]) -> ProviderProfile
         extract_text=extract_text,
         extra_headers=dict(cfg.get("extra_headers", {})),
         max_tokens=cfg.get("max_tokens"),
+        usage_input_path=cfg.get("usage_input_path"),
+        usage_output_path=cfg.get("usage_output_path"),
     )
 
 
