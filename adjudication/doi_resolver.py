@@ -49,6 +49,16 @@ callers a faster pool. Replace the mailto with a real address you monitor if
 you run this at volume -- Crossref may throttle anonymous traffic."""
 
 
+class ResolverBlocked(RuntimeError):
+    """The lookup could not be performed. NOT evidence the DOI is absent.
+
+    Returning bare False for a DNS failure, a TLS error, or a timeout made an
+    offline machine turn every honest DOI into a FAIL, a conduct finding
+    against the seat that cited it, and an EARNED elimination. Absence of a
+    network is not absence of a paper.
+    """
+
+
 class DoiResolver:
     """Resolves DOIs against Crossref, falling back to doi.org.
 
@@ -81,7 +91,15 @@ class DoiResolver:
     def _resolve(self, ident: str) -> bool:
         doi = self._as_doi(ident)
         if doi is not None:
-            return self._crossref(doi) or self._doi_org(doi)
+            try:
+                if self._crossref(doi):
+                    return True
+            except ResolverBlocked:
+                # Crossref unreachable. Try doi.org before giving up, but if
+                # that is also unreachable the caller learns BLOCKED, not
+                # "absent".
+                return self._doi_org(doi)
+            return self._doi_org(doi)
         if ident.startswith(("http://", "https://")) and self.allow_url_fallback:
             return self._url_head(ident)
         return False
@@ -117,10 +135,13 @@ class DoiResolver:
         url = CROSSREF_API + urllib.parse.quote(doi, safe="")
         try:
             status, raw = self._get(url)
-        except urllib.error.HTTPError:
-            return False          # 404 means not registered
-        except Exception:         # noqa: BLE001 - timeout, DNS, TLS: fail closed
-            return False
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return False      # authoritative: not registered
+            raise ResolverBlocked(f"Crossref returned HTTP {exc.code}") from exc
+        except Exception as exc:
+            raise ResolverBlocked(
+                f"could not reach Crossref: {type(exc).__name__}") from exc
         if status != 200:
             return False
         try:
@@ -140,10 +161,13 @@ class DoiResolver:
         try:
             status, _ = self._get(DOI_ORG + urllib.parse.quote(doi, safe=""),
                                   method="HEAD")
-        except urllib.error.HTTPError:
-            return False
-        except Exception:         # noqa: BLE001 - fail closed
-            return False
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return False
+            raise ResolverBlocked(f"doi.org returned HTTP {exc.code}") from exc
+        except Exception as exc:
+            raise ResolverBlocked(
+                f"could not reach doi.org: {type(exc).__name__}") from exc
         return 200 <= status < 400
 
     def _url_head(self, url: str) -> bool:

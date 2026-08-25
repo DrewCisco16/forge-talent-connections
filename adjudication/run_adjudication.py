@@ -983,7 +983,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         SourceAdmissibilityGate(), CitationResolutionGate(resolver)]
     if args.gates:
         try:
-            chosen_gates = gates_from_names(args.gates)
+            named = gates_from_names(args.gates)
+            # MERGE, never overwrite. --resolve-dois builds the conjoined
+            # citation pair; assigning the named list on top silently dropped
+            # them, so an invented DOI became BLOCKED and the candidate
+            # resting on it survived. The console passes both options for the
+            # doctorate and patent workflows, so this was the normal path.
+            if chosen_gates:
+                have = {type(g) for g in named}
+                named += [g for g in chosen_gates if type(g) not in have]
+            chosen_gates = named
         except ValueError as exc:
             print(f"--gates: {exc}", file=sys.stderr)
             return 2

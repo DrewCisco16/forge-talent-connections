@@ -223,12 +223,25 @@ class TestCitationGate:
         assert g.check(c).status is GateStatus.FAIL
         assert called == [], "resolver must not be called on malformed input"
 
-    def test_resolver_exception_fails_closed(self):
+    def test_resolver_exception_is_blocked_not_failed(self):
+        """A resolver that could not reach its source has not shown the DOI to
+        be absent.
+
+        This asserted FAIL until two independent reviews pointed out the
+        consequence: an offline machine turned every honest citation into a
+        refutation, a conduct finding against the seat that made it, and an
+        EARNED elimination. Absence of a network is not absence of a paper.
+
+        BLOCKED is still fail-closed in the sense the original test protected:
+        the claim is not accepted, it does not enter the working answer, and
+        it cannot verify anything. What it no longer does is convict."""
         def boom(i):
             raise ConnectionError("network down")
         g = CitationResolutionGate(boom)
         c = Claim("c", "t", ClaimKind.CITATION, "10.1000/x")
-        assert g.check(c).status is GateStatus.FAIL
+        result = g.check(c)
+        assert result.status is GateStatus.BLOCKED
+        assert result.status is not GateStatus.PASS
 
 
 class TestSchemaGate:
@@ -1504,12 +1517,23 @@ class TestPermissiveResolverProbe:
         r = AO.probe_resolver(lambda i: i == "10.1038/s42256-026-01268-y")
         assert r.status is GateStatus.PASS
 
-    def test_raising_resolver_is_acceptable(self):
-        """The gate already fails closed on exceptions, so a resolver that
-        cannot reach the network is safe -- unlike one that guesses True."""
+    def test_an_unreachable_resolver_cannot_certify_itself(self):
+        """An offline resolver has demonstrated nothing about its strictness.
+
+        This asserted PASS, on the reasoning that a raising resolver is at
+        least not permissive. But the probe's job is to establish that the
+        resolver DENIES a non-existent identifier, and a resolver that cannot
+        reach the network has not denied anything -- it has failed to answer.
+        Passing it let an offline run certify its own citation gate and then
+        BLOCK every real DOI for the rest of the run, while the report said
+        the resolver had been verified.
+
+        Unknown strictness is reported as unknown."""
         def offline(_i):
             raise ConnectionError("no network")
-        assert AO.probe_resolver(offline).status is GateStatus.PASS
+        result = AO.probe_resolver(offline)
+        assert result.status is GateStatus.BLOCKED
+        assert result.status is not GateStatus.PASS
 
     def test_the_probe_identifier_is_structurally_valid_but_inadmissible_free(self):
         """The probe must look like a real DOI, or a resolver could reject it on

@@ -326,8 +326,14 @@ class CitationResolutionGate:
             return GateResult(self.name, GateStatus.FAIL, "malformed identifier")
         try:
             ok = self.resolver_fn(ident)
-        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
-            return GateResult(self.name, GateStatus.FAIL, f"resolver error: {exc}")
+        except Exception as exc:  # noqa: BLE001 - see below
+            # A resolver that could not reach its source has not shown the
+            # identifier to be absent. Reporting FAIL here turned an offline
+            # machine into a fabrication detector, blaming seats for citing
+            # real papers. The resolver signals this by raising; anything it
+            # raises is treated as "check did not happen".
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"resolver could not check {ident}: {exc}")
         return GateResult(
             self.name,
             GateStatus.PASS if ok else GateStatus.FAIL,
@@ -352,9 +358,16 @@ def probe_resolver(resolver_fn: Callable[[str], bool]) -> GateResult:
     """
     try:
         answered = resolver_fn(PERMISSIVE_RESOLVER_PROBE)
-    except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
-        return GateResult("resolver_probe", GateStatus.PASS,
-                          f"resolver raised rather than confirming: {exc}")
+    except Exception as exc:  # noqa: BLE001 - see below
+        # A resolver that cannot reach its source has not demonstrated
+        # anything about its strictness. Treating a raise as a pass meant an
+        # OFFLINE resolver certified itself, and then failed every honest DOI
+        # for the rest of the run. The probe now reports that it could not be
+        # performed, which is a different fact from "the resolver is sound".
+        return GateResult("resolver_probe", GateStatus.BLOCKED,
+                          f"could not probe the resolver: {exc}. Its "
+                          f"strictness is unknown, so citation verdicts from "
+                          f"this run are not trustworthy.")
     if answered:
         return GateResult(
             "resolver_probe", GateStatus.FAIL,
@@ -795,6 +808,14 @@ class SeatResponse:
     raw: str
     claims: list[Claim] = field(default_factory=list)
     error: str | None = None
+
+
+def _edge_is_own(target_id: str, unsupported: Mapping[str, str],
+                 own_ids: set[str]) -> bool:
+    """True when the failed quote that condemned this claim belongs to the
+    same candidate. The quote's id is embedded in the recorded reason."""
+    why = unsupported.get(target_id, "")
+    return any(cid in why for cid in own_ids)
 
 
 def content_claim_id(kind: ClaimKind, warrant: str | None, text: str) -> str:
@@ -1442,8 +1463,17 @@ class Orchestrator:
         for cand in candidates:
             if cand.eliminated:
                 continue
+            # SUPPORT EDGES ARE CANDIDATE-SCOPED. A quote may only undermine
+            # claims carried by the SAME candidate that offered it. Globally
+            # scoped edges let a candidate name a rival's independently
+            # verified claim in its own `supports` and take the rival down
+            # with it when its own quote proved fabricated -- a candidate
+            # eliminating a competitor by lying about it.
+            own = {c.id for c in cand.claims}
             for claim in cand.claims:
                 why = unsupported.get(claim.id)
+                if why and not _edge_is_own(claim.id, unsupported, own):
+                    continue
                 if why:
                     cand.eliminated = True
                     cand.elimination_reason = f"{p.name}: {why}"
@@ -1489,7 +1519,15 @@ class Orchestrator:
         report should not print them identically.
         """
         total = len(cand.claims)
-        tested = sum(1 for c in cand.claims if c.id in self.verdicts)
+        # A BLOCKED claim was NOT tested. It has a verdict object, but the
+        # verdict says the check did not happen, and counting it as coverage
+        # let a survivor report "3/3 claims tested" when one of them was never
+        # actually checked.
+        tested = sum(
+            1 for c in cand.claims
+            if (v := self.verdicts.get(c.id)) is not None
+            and v.status in (GateStatus.PASS, GateStatus.FAIL)
+        )
         return tested, total
 
     def run_pass(

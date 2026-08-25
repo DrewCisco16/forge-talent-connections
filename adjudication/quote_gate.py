@@ -48,6 +48,36 @@ broken endpoint stream until memory runs out, which stops the whole run.
 """
 
 
+def _resolve_public(host: str) -> str | None:
+    """Resolve once and return the address, or None if any answer is private.
+
+    Returning the ADDRESS matters: checking the hostname and then letting
+    urllib resolve it again independently is a time-of-check/time-of-use gap.
+    A name whose DNS answer changes between the two lookups -- classic DNS
+    rebinding -- passes the check and then connects somewhere else. The caller
+    connects to exactly the address that was approved.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:  # noqa: BLE001 - unresolvable is not public
+        return None
+    first: str | None = None
+    for info in infos:
+        addr = info[4][0]
+        if not isinstance(addr, str):
+            return None
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return None
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return None
+        if first is None:
+            first = addr
+    return first
+
+
 def _is_public(host: str) -> bool:
     """Resolve the host and refuse anything not on the public internet.
 
@@ -171,16 +201,27 @@ class QuoteVerificationGate:
 
     # -- the fetch ----------------------------------------------------------
     def _fetch(self, url: str) -> tuple[int, str]:
-        host = urllib.parse.urlparse(url).hostname or ""
-        if not _is_public(host):
+        parts = urllib.parse.urlparse(url)
+        host = parts.hostname or ""
+        addr = _resolve_public(host)
+        if addr is None:
             raise ValueError(
                 f"refusing {host!r}: not a public address. This URL came from "
                 f"a model, and fetching a private or loopback host on its "
                 f"say-so is server-side request forgery."
             )
+        # Connect to the address that was checked, not to a fresh lookup of
+        # the name. Host and SNI still carry the original hostname so TLS and
+        # virtual hosting behave.
+        pinned = parts._replace(
+            netloc=f"[{addr}]:{parts.port}" if ":" in addr and parts.port
+            else (f"[{addr}]" if ":" in addr
+                  else (f"{addr}:{parts.port}" if parts.port else addr))
+        ).geturl()
         req = urllib.request.Request(
-            url, method="GET",
+            pinned, method="GET",
             headers={"User-Agent": USER_AGENT,
+                     "Host": parts.netloc,
                      "Accept": "text/html,application/xhtml+xml,text/plain,*/*"},
         )
         # https is enforced in parse_warrant; nosec on the next line because

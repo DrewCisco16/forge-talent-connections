@@ -173,7 +173,11 @@ class ConductLedger:
                 if v is None:
                     continue                      # escalated, never ruled
                 status = getattr(getattr(v, "status", None), "value", None)
-                if status == "pass" or status is None:
+                # ONLY a FAIL is a conduct finding. "pass" and None were
+                # already skipped; "blocked" was not, so a paywall or a
+                # timeout entered the ledger as though the seat had asserted
+                # something untrue. A firewall is not misconduct.
+                if status != "fail":
                     continue
                 gate = str(getattr(v, "gate", "") or "")
                 cat = _GATE_TO_CATEGORY.get(gate, ConductCategory.MALFORMED_WARRANT)

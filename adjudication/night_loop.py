@@ -212,6 +212,8 @@ class RoundResult:
     degraded: bool = False
     closer_claims: int = 0
     closer_failed_claims: int = 0
+    closer_unparsed: bool = False
+    """The closer wrote claim-like prose that produced no parseable claim."""
     closer_contaminated: bool = False
     """The closer asserted something the gates refuted in the same round.
 
@@ -347,6 +349,18 @@ def run_night(
                   encoding="utf-8") as fh:
             fh.write(f"# Round {r.n} closer claims\n\n"
                      f"{_check_summary(orch, closer_claims)}\n")
+
+        # A closer that writes claim-like prose the extractor cannot parse
+        # yields zero claims and would otherwise sail through unchecked. If it
+        # says "claim" or "warrant" anywhere and produced nothing parseable,
+        # that is contamination too -- the text asserts something it declined
+        # to make checkable.
+        looks_like_claims = any(
+            w in merged_new.lower() for w in ("claim", "warrant", "verified")
+        )
+        if looks_like_claims and not closer_claims:
+            res.closer_contaminated = True
+            res.closer_unparsed = True
 
         if crec.auto_rejected:
             # The closer asserted something the gates refuted. Do not carry it
