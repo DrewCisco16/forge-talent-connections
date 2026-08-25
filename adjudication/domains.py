@@ -77,7 +77,7 @@ DOCTORATE = Domain(
         "Instrument B, because A was validated on a different population",
     ),
     primary_claim_kinds=("citation", "arithmetic", "judgment"),
-    gates=("arithmetic", "schema", "unit"),
+    gates=("arithmetic", "schema", "unit", "quote", "citation_fields"),
     resolve_dois=True,
     extra_questions=(
         "Which claims are load-bearing for the committee, and which are context?",
@@ -103,7 +103,7 @@ PATENT = Domain(
         "Reference X teaches away from element 3",
     ),
     primary_claim_kinds=("citation", "judgment"),
-    gates=("arithmetic", "schema", "unit"),
+    gates=("arithmetic", "schema", "unit", "quote", "citation_fields"),
     resolve_dois=True,
     red_gate=True,
     red_prompt=(
@@ -138,7 +138,7 @@ SOFTWARE = Domain(
         "In-place under a lock with rollback; O(1), no extra memory, not crash-atomic",
     ),
     primary_claim_kinds=("arithmetic", "code_behavior", "unit"),
-    gates=("arithmetic", "schema", "unit"),
+    gates=("arithmetic", "schema", "unit", "quote", "code_behavior"),
     extra_questions=(
         "Which behaviours already have tests that run, and which tests do you still owe?",
     ),
@@ -163,7 +163,7 @@ CODING = Domain(
         "The race is in the connection pool checkout",
     ),
     primary_claim_kinds=("code_behavior", "arithmetic"),
-    gates=("arithmetic", "schema", "unit"),
+    gates=("arithmetic", "schema", "unit", "code_behavior"),
     extra_questions=("What command reproduces it, and what is its exit code today?",),
 )
 

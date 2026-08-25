@@ -48,7 +48,8 @@ BUNDLES = [
      "citation while the report still reads green. The conduct ledger attributes a\n"
      "false claim to every seat that proposed it -- find a way to be blamed for a\n"
      "claim you did not make, or to escape one you did.",
-     ["cost_ledger.py", "doi_resolver.py", "seat_conduct.py", "quote_gate.py"]),
+     ["cost_ledger.py", "doi_resolver.py", "seat_conduct.py", "quote_gate.py",
+      "citation_gate.py"]),
     ("bundle-6-intake.txt", "INTAKE, DOMAIN PROFILES, CONSOLE",
      "Intake must never invent a warrant and must never be talked past its two\n"
      "refusals (no disproof test, fewer than two candidates). Find an input that\n"
@@ -57,6 +58,13 @@ BUNDLES = [
      "spends money.",
      ["intake.py", "domains.py", "console.py", "diagnose-seats.py",
       "night_loop.py"]),
+    ("bundle-7-execution.txt", "TEST RUNNER, RECENCY CANARY, FOLDER WATCHER",
+     "The test runner must never execute a command a MODEL produced -- find a\n"
+     "path where seat-supplied text reaches subprocess. The canary must not\n"
+     "score a denial as a pass; it already failed that once. The watcher spends\n"
+     "money unattended: find a way to start it without a ceiling, to read a\n"
+     "half-written file, or to make one bad input re-run all night.",
+     ["test_runner.py", "recency_canary.py", "watcher.py"]),
 ]
 
 # A real key, not a fixture. Fixture values in the suite are plain words

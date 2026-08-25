@@ -388,10 +388,28 @@ def run_adjudication(
     )
 
 
+def _quote_gate():
+    from quote_gate import QuoteVerificationGate
+    return QuoteVerificationGate()
+
+
+def _citation_field_gate():
+    from citation_gate import CitationFieldMatchGate
+    return CitationFieldMatchGate()
+
+
+def _approved_test_gate():
+    from test_runner import ApprovedTestGate
+    return ApprovedTestGate()
+
+
 _SELECTABLE_GATES = {
     "arithmetic": ArithmeticGate,
     "schema": SchemaGate,
     "unit": UnitGate,
+    "quote": _quote_gate,
+    "citation_fields": _citation_field_gate,
+    "code_behavior": _approved_test_gate,
 }
 """Gates an operator may switch on from the command line.
 
@@ -440,7 +458,9 @@ def _default_gates() -> list[Gate]:
     So a citation claim escalates by default and surfaces as a hole. Supply
     both gates together via the `gates` argument once you have a resolver.
     """
-    return [ArithmeticGate(), SchemaGate(), UnitGate()]
+    from quote_gate import QuoteVerificationGate
+    return [ArithmeticGate(), SchemaGate(), UnitGate(),
+            QuoteVerificationGate()]
 
 
 

@@ -70,6 +70,18 @@ class ConductCategory(str, Enum):
     FAILED_CODE_BEHAVIOR = "failed_code_behavior"
     """Asserted a behaviour whose test command did not pass."""
 
+    UNSOURCED_QUOTE = "unsourced_quote"
+    """Quoted a string that is not at the URL it was attributed to.
+
+    Distinct from FABRICATED_CITATION: that one invents a source, this one
+    invents what a real source says. The second is harder to catch by reading
+    and does more damage, because the source checks out."""
+
+    WRONG_PAPER_CITATION = "wrong_paper_citation"
+    """Cited a DOI that resolves to a different work than the one named.
+
+    The characteristic model citation error. Resolution alone passes it."""
+
     MALFORMED_WARRANT = "malformed_warrant"
     """Supplied a warrant the gate could not read at all -- an assertion of
     checkability that was not actually checkable."""
@@ -82,6 +94,8 @@ _GATE_TO_CATEGORY = {
     "unit": ConductCategory.FALSE_UNIT,
     "schema": ConductCategory.FAILED_SCHEMA,
     "test_execution": ConductCategory.FAILED_CODE_BEHAVIOR,
+    "quote_verification": ConductCategory.UNSOURCED_QUOTE,
+    "citation_field_match": ConductCategory.WRONG_PAPER_CITATION,
 }
 
 

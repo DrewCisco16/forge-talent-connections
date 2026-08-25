@@ -12,3 +12,8 @@ adjudication/run-*.jsonl.head
 # Run folders are the operator working set: artifacts, candidates, audit logs.
 # Not repository content.
 adjudication/runs/
+
+# Operator-approved command list and canary questions are local policy,
+# not repository content.
+adjudication/approved-commands.json
+adjudication/canaries.json

@@ -160,6 +160,32 @@ class DoiResolver:
         return 200 <= status < 400
 
 
+def crossref_record(doi: str, timeout_s: float = 12.0) -> dict | None:
+    """The Crossref record for a DOI, or None if it could not be retrieved.
+
+    Separate from resolution because they answer different questions.
+    Resolution asks whether the identifier is registered; this asks what it is
+    registered TO, which is the only way to catch a real DOI attached to a
+    paper that is not the one cited.
+    """
+    r = DoiResolver(timeout_s=timeout_s)
+    bare = r._as_doi(doi)
+    if bare is None:
+        return None
+    try:
+        status, raw = r._get(CROSSREF_API + urllib.parse.quote(bare, safe=""))
+    except Exception:  # noqa: BLE001 - unreachable is not a finding
+        return None
+    if status != 200:
+        return None
+    try:
+        payload = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return None
+    msg = payload.get("message")
+    return msg if isinstance(msg, dict) else None
+
+
 def build_resolver(timeout_s: float = 12.0,
                    allow_url_fallback: bool = True) -> Callable[[str], bool]:
     """The resolver as a plain callable, for CitationResolutionGate."""
