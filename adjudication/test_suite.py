@@ -194,8 +194,22 @@ class TestArithmeticGate:
         assert r.status is GateStatus.FAIL
         assert "47" in r.detail
 
-    def test_float_tolerance(self):
-        assert self.g.check(self._claim("1/3 = 0.3333333333333333")).status is GateStatus.PASS
+    def test_a_truncated_decimal_is_imprecise_not_confirmed(self):
+        """CORRECTED. This asserted PASS on "1/3 = 0.3333333333333333".
+
+        1/3 is not that number. Arithmetic is now evaluated exactly, from the
+        digits the operator wrote, so a tolerance no longer turns a rounded
+        value into a confirmation -- that is how "1000000000 = 1000000001" and
+        "9999999999999999.0 = 10000000000000000" both passed.
+
+        It is not a refutation either. A value agreeing to every digit written
+        and differing beyond it is BLOCKED, because a FAIL removes an option
+        and a rounded decimal is honestly written."""
+        r = self.g.check(self._claim("1/3 = 0.3333333333333333"))
+        assert r.status is GateStatus.BLOCKED
+        assert "agree to every digit written" in r.detail
+        # A value that differs within the written precision is still refuted.
+        assert self.g.check(self._claim("1/3 = 0.5")).status is GateStatus.FAIL
 
     def test_malformed_warrant_fails_closed(self):
         """Unparseable input must never PASS.
@@ -2396,7 +2410,10 @@ class TestBooleanLiteralsAreNotArithmetic:
         ("2 ** 10 = 1024", "1024"),
         ("1 = 1", "1"),
         ("0 = 0", "0"),
-        ("1/3 = 0.3333333333333333", "0.333"),
+        # "1/3 = 0.3333333333333333" moved to
+        # test_a_truncated_decimal_is_imprecise_not_confirmed: exact
+        # evaluation makes it BLOCKED, not PASS.
+        ("1/2 = 0.5", "0.5"),
     ])
     def test_real_numeric_literals_still_pass(self, warrant, expected):
         """The fix must not cost genuine arithmetic, including the integers 1
@@ -5225,3 +5242,103 @@ class TestArithmeticIsExactAndBounded:
     def test_ordinary_wrong_arithmetic_still_fails(self):
         for warrant in ("2 + 2 = 5", "12 * 50 = 700"):
             assert self._check(warrant).status is GateStatus.FAIL, warrant
+
+
+class TestArithmeticIsExactAndBoundedRoundTwo:
+    """Re-check findings #1 (remainder) and #8. Arithmetic is now evaluated as
+    exact rationals read from the digits the operator actually wrote, so no
+    tolerance can turn a rounded value into a confirmation."""
+
+    g = ArithmeticGate()
+
+    def _check(self, warrant):
+        return self.g.check(Claim("c", "t", ClaimKind.ARITHMETIC, warrant))
+
+    def test_a_float_literal_does_not_collapse_into_its_neighbour(self):
+        """A float literal loses information the moment Python parses it:
+        9999999999999999.0 and 10000000000000000 become the same double, so
+        the gate found them equal and reported PASS on two plainly different
+        numbers."""
+        assert self._check("9999999999999999.0 = 10000000000000000").status \
+            is GateStatus.FAIL
+
+    def test_two_decimals_that_share_a_double_are_not_confirmed(self):
+        """Not accepted, which is the property that matters. BLOCKED rather
+        than FAIL because the operator wrote one decimal place and to one
+        decimal place the two agree -- refuting on digits nobody wrote would
+        be the dangerous direction, since a FAIL removes an option."""
+        r = self._check("0.10000000000000001 = 0.1")
+        assert r.status is not GateStatus.PASS
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_clearly_wrong_decimal_is_refuted(self):
+        assert self._check("0.1 + 0.2 = 0.3000000000005").status is GateStatus.FAIL
+
+    def test_a_decimal_that_is_exactly_right_passes(self):
+        """Exactness must not cost genuine decimal arithmetic."""
+        for warrant in ("0.1 + 0.2 = 0.3", "10 / 4 = 2.5", "1/2 = 0.5"):
+            assert self._check(warrant).status is GateStatus.PASS, warrant
+
+    def test_a_complex_result_is_blocked_not_crashed(self):
+        """(-1) ** 0.5 raised TypeError out of the gate, taking the run with
+        it rather than producing a verdict."""
+        assert self._check("(-1) ** 0.5 = 0").status is GateStatus.BLOCKED
+
+    def test_an_unbounded_intermediate_is_refused(self):
+        """The exponent cap bounds each LITERAL, not the running result. A
+        chain of individually permitted powers stays under it while the value
+        it builds does not, and exact rationals have no overflow to stop
+        them."""
+        r = self._check("((2 ** 64) ** 64) ** 64 = 1")
+        assert r.status is GateStatus.BLOCKED
+        assert "digits" in r.detail
+
+    def test_evaluation_stays_fast(self):
+        import time
+        t0 = time.time()
+        self._check("((2 ** 64) ** 64) ** 64 = 1")
+        assert time.time() - t0 < 2.0
+
+
+class TestAWarrantMustBearOnTheClaimRoundTwo:
+    """Re-check finding #1. Number-matching accepted claims the arithmetic did
+    not establish."""
+
+    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
+        return AO.warrant_supports(
+            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
+
+    @pytest.mark.parametrize("text", [
+        "the total is under 4",
+        "the total is about 4",
+        "the total is approximately 4",
+        "the total is at most 4",
+    ])
+    def test_a_qualifier_changes_the_proposition(self, text):
+        """"the total is 4" restates a warrant computing 4. "under 4" and
+        "about 4" are different claims the arithmetic settles neither of, and
+        all three mention the number."""
+        assert not self._accepts(text, "2 + 2 = 4")
+
+    def test_a_unit_the_warrant_does_not_measure_is_refused(self):
+        """"5 km = 5000 m" is a true conversion and establishes nothing about
+        5000 dollars."""
+        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
+                                 ClaimKind.UNIT)
+        assert not self._accepts("the price is 4 dollars", "2 + 2 = 4")
+
+    def test_a_unit_the_warrant_does_measure_is_allowed(self):
+        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
+                             ClaimKind.UNIT)
+
+    def test_integers_beyond_binary64_do_not_match_each_other(self):
+        """_numbers normalised through float, so a claim reading
+        9007199254740992 matched a warrant computing 9007199254740993."""
+        assert not self._accepts("the total is 9007199254740992",
+                                 "9007199254740993 = 9007199254740993")
+
+    def test_a_plain_restatement_is_still_accepted(self):
+        for text, warrant in (("the total is 4", "2 + 2 = 4"),
+                              ("12 units at 50 each is 600 in total",
+                               "12 * 50 = 600")):
+            assert self._accepts(text, warrant), text

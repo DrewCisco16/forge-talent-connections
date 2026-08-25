@@ -45,7 +45,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from enum import Enum
 from fractions import Fraction
 from typing import Any, Protocol
@@ -270,17 +270,50 @@ class Gate(Protocol):
 # but the arity was enforced by the grammar rather than by this table, and
 # the only thing catching a mismatch was the broad except in the caller.
 # Split, each table's domain is its arity, and mypy can type both.
-_BINARY_OPS: dict[type[ast.operator], Callable[[float, float], float]] = {
+_BINARY_OPS: dict[type[ast.operator], Callable[[Fraction, Fraction], Fraction]] = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
     ast.Div: operator.truediv, ast.Pow: operator.pow, ast.Mod: operator.mod,
     ast.FloorDiv: operator.floordiv,
 }
-_UNARY_OPS: dict[type[ast.unaryop], Callable[[float], float]] = {
+_UNARY_OPS: dict[type[ast.unaryop], Callable[[Fraction], Fraction]] = {
     ast.USub: operator.neg, ast.UAdd: operator.pos,
 }
 
 
-def _safe_eval(node: ast.AST) -> float:
+MAX_RESULT_DIGITS = 5000
+
+
+def _bounded(value: Fraction) -> Fraction:
+    """Refuse an intermediate result too large to keep working with.
+
+    THE EXPONENT CAP BOUNDS EACH LITERAL, NOT THE RUNNING RESULT. A chain of
+    individually permitted powers stays under it while the value it builds
+    does not: exact rationals have no overflow to stop them, so the process
+    adjudicating the operator's question is the one that runs out of memory.
+
+    Raised as ValueError so the gate reports BLOCKED. An expression this code
+    declined to finish evaluating has established nothing about the claim.
+    """
+    for part in (value.numerator, value.denominator):
+        if part and len(str(abs(part))) > MAX_RESULT_DIGITS:
+            raise ValueError(
+                f"an intermediate result exceeded {MAX_RESULT_DIGITS} digits; "
+                f"the expression was not evaluated to completion")
+    return value
+
+
+def _literal_text(node: ast.AST, source: str | None) -> str:
+    """The characters the operator actually typed for this literal."""
+    if not source:
+        return ""
+    try:
+        seg = ast.get_source_segment(source, node)
+    except Exception:  # noqa: BLE001 - a missing segment is not a finding
+        return ""
+    return (seg or "").strip()
+
+
+def _safe_eval(node: ast.AST, source: str | None = None) -> Fraction:
     """
     Evaluate an arithmetic AST without exec/eval on arbitrary code.
 
@@ -293,17 +326,35 @@ def _safe_eval(node: ast.AST) -> float:
     Found by a fuzz property on CI's random seed, not by any example.
     """
     if isinstance(node, ast.Expression):
-        return _safe_eval(node.body)
+        return _safe_eval(node.body, source)
     if (isinstance(node, ast.Constant)
             and isinstance(node.value, (int, float))
             and not isinstance(node.value, bool)):
-        return node.value
+        # EXACT, FROM THE TEXT THE OPERATOR WROTE.
+        #
+        # A float literal loses information the moment Python parses it:
+        # 9999999999999999.0 and 10000000000000000 become the same double, so
+        # a gate comparing them found them equal and reported PASS on two
+        # plainly different numbers. Reading the literal back out of the
+        # source and carrying it as a Fraction keeps every digit, so the
+        # comparison is between what was written and what was computed.
+        if isinstance(node.value, int):
+            return Fraction(node.value)
+        literal = _literal_text(node, source)
+        try:
+            return Fraction(Decimal(literal)) if literal else Fraction(node.value)
+        except (InvalidOperation, ValueError):
+            return Fraction(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
-        return _BINARY_OPS[type(node.op)](
-            _safe_eval(node.left), _safe_eval(node.right)
-        )
+        left, right = _safe_eval(node.left, source), _safe_eval(node.right, source)
+        if isinstance(node.op, ast.Pow) and right.denominator != 1:
+            # A fractional exponent leaves the rationals. Refuse rather than
+            # fall back to float and lose the exactness this gate depends on.
+            raise ValueError("fractional exponents are not supported here")
+        return _bounded(_BINARY_OPS[type(node.op)](left, right))
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-        return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
+        return _bounded(_UNARY_OPS[type(node.op)](
+            _safe_eval(node.operand, source)))
     raise ValueError("unsupported expression")
 
 
@@ -312,15 +363,22 @@ _WORDISH = re.compile(r"[a-z0-9]+")
 
 
 def _numbers(text: str) -> set[str]:
-    """Numeric literals, normalised so 1,200 and 1200 and 1200.0 all match."""
+    """Numeric literals, normalised so 1,200 and 1200 and 1200.0 all match.
+
+    NORMALISED THROUGH Decimal, NOT float. Going through float collapsed
+    distinct integers above 2**53: a claim reading "the total is
+    9007199254740992" matched a warrant computing 9007199254740993, because
+    both became the same double. A verifier that cannot tell two integers
+    apart is not verifying arithmetic.
+    """
     out: set[str] = set()
     for raw in _NUMBER.findall(text or ""):
         cleaned = raw.replace(",", "").rstrip(".")
         try:
-            v = float(cleaned)
-        except ValueError:
+            v = Decimal(cleaned)
+        except (InvalidOperation, ValueError):
             continue
-        out.add(str(int(v)) if v == int(v) else str(v))
+        out.add(str(int(v)) if v == v.to_integral_value() else str(v))
     return out
 
 
@@ -330,7 +388,32 @@ def _tokens(text: str) -> set[str]:
 
 _NEGATION = frozenset(["not", "no", "never", "none", "nor", "cannot", "cant", "won't", "wont", "doesn't", "doesnt", "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt", "shouldn't", "shouldnt", "without", "fails", "failed", "unable", "false", "untrue", "incorrect", "wrong", "denies", "denied", "refutes", "refuted", "contradicts"])
 
-_QUANTITY_VOCABULARY = frozenset(["total", "totals", "totalling", "sum", "sums", "adds", "add", "equals", "equal", "is", "are", "was", "were", "comes", "come", "to", "of", "at", "each", "per", "unit", "units", "item", "items", "cost", "costs", "price", "prices", "dollar", "dollars", "value", "values", "amount", "amounts", "figure", "figures", "result", "results", "count", "counts", "number", "numbers", "times", "multiplied", "divided", "plus", "minus", "less", "more", "over", "under", "about", "approximately", "roughly", "exactly", "and", "the", "a", "an", "it", "that", "this", "in", "for", "from", "with", "by", "percent", "pct"])
+_QUALIFIERS = frozenset(["under", "over", "about", "approximately", "roughly", "nearly", "almost", "around", "circa", "least", "most", "below", "above", "beyond", "within", "some", "many", "few", "several", "perhaps", "maybe", "possibly", "likely", "unlikely", "estimated", "projected", "expected", "assumed", "upwards", "downwards"])
+"""Words that change what a number ASSERTS.
+
+"the total is 4" restates a warrant computing 4. "the total is UNDER 4" and
+"the total is ABOUT 4" are different propositions and the arithmetic settles
+neither -- but all three mention the number, so a number-matching test
+accepted all three. These were previously in the free vocabulary below, which
+is what made them invisible.
+"""
+
+_UNIT_WORDS = frozenset(["dollar", "dollars", "usd", "cent", "cents", "euro", "euros", "pound", "pounds", "gbp", "eur", "metre", "metres", "meter", "meters", "km", "kilometre", "kilometres", "cm", "mm", "mile", "miles", "foot", "feet", "inch", "inches", "yard", "yards", "second", "seconds", "ms", "minute", "minutes", "hour", "hours", "day", "days", "week", "weeks", "month", "months", "year", "years", "kg", "kilogram", "kilograms", "gram", "grams", "tonne", "tonnes", "lb", "lbs", "ounce", "ounces", "percent", "pct", "byte", "bytes", "kb", "mb", "gb", "tb"])
+"""Units carry a dimension the bare arithmetic does not.
+
+"5 km = 5000 m" is a true conversion and establishes nothing about 5000
+DOLLARS. A number without its dimension is not the same claim, and "dollars"
+was previously free vocabulary, so "the price is 5000 dollars" was accepted on
+a distance conversion.
+"""
+
+_QUANTITY_VOCABULARY = frozenset(["total", "totals", "totalling", "sum", "sums", "adds", "add", "equals", "equal", "is", "are", "was", "were", "comes", "come", "to", "of", "at", "each", "per", "unit", "units", "item", "items", "count", "counts", "value", "values", "amount", "amounts", "figure", "figures", "result", "results", "number", "numbers", "times", "multiplied", "divided", "plus", "minus", "exactly", "and", "the", "a", "an", "it", "that", "this", "in", "for", "from", "with", "by", "cost", "costs", "price", "prices", "distance", "length", "duration", "weight", "size", "quantity"])
+"""Words a restatement of a quantity may contain without asserting anything
+beyond it.
+
+QUALIFIERS AND UNIT NAMES ARE DELIBERATELY ABSENT. They used to be here, and
+that is precisely how "under 4", "about 4" and "5000 dollars" passed as
+restatements of arithmetic that established none of them."""
 
 
 def _content_words(text: str) -> list[str]:
@@ -390,7 +473,28 @@ def warrant_supports(claim: Claim) -> str | None:
         # The numbers matching is not enough. "The launch is SAFE, code 4"
         # mentions 4 and asserts something the arithmetic never touched, so
         # the claim must carry NO assertion beyond the quantity it states.
-        extra = sorted({w for w in _content_words(text)
+        words = _content_words(text)
+
+        hedges = sorted(set(words) & _QUALIFIERS)
+        if hedges:
+            return (
+                f"THE CLAIM QUALIFIES THE NUMBER: "
+                f"{', '.join(repr(h) for h in hedges)}. The check confirmed a "
+                f"value; it established nothing about being under, over, or "
+                f"near it."
+            )
+
+        warrant_units = set(_content_words(warrant)) & _UNIT_WORDS
+        foreign = sorted((set(words) & _UNIT_WORDS) - warrant_units)
+        if foreign:
+            return (
+                f"THE CLAIM IS ABOUT A DIFFERENT QUANTITY: it asserts "
+                f"{', '.join(repr(u) for u in foreign)}, which the warrant "
+                f"{warrant.strip()!r} does not measure. A number without its "
+                f"dimension is not the same claim."
+            )
+
+        extra = sorted({w for w in words
                         if w not in _QUANTITY_VOCABULARY
                         and not w.isdigit()
                         and w not in _content_words(warrant)})
@@ -510,8 +614,46 @@ def _exact(value: object) -> Fraction:
     raise ValueError(f"cannot make {type(value).__name__} exact")
 
 
+def _agrees_to_written_precision(actual: Fraction, claimed: str) -> bool:
+    """True when the computed value rounds to exactly what was written.
+
+    The comparison uses the precision the OPERATOR chose, not a tolerance this
+    code picked. Someone who writes four decimal places has asserted four
+    decimal places; someone who writes sixteen has asserted sixteen.
+    """
+    text = claimed.strip()
+    if "." not in text or "e" in text.lower():
+        return False
+    places = len(text.split(".", 1)[1])
+    if places > 30:
+        return False
+    try:
+        quantum = Decimal(1).scaleb(-places)
+        rounded = Decimal(actual.numerator) / Decimal(actual.denominator)
+        return rounded.quantize(quantum, rounding=ROUND_HALF_UP) == Decimal(text)
+    except (InvalidOperation, ValueError, ZeroDivisionError):
+        return False
+
+
 def _show(value: object) -> str:
-    """Print a number without inventing precision it does not have."""
+    """Print a number without inventing precision it does not have.
+
+    Arithmetic is carried as an exact Fraction, and str(Fraction) reads as
+    "1/2" -- correct, and not what an operator checking a cost figure wants to
+    see. A value with a terminating decimal is shown as that decimal; anything
+    else keeps the fraction, because rendering 1/3 as a rounded decimal would
+    print precision the value does not have.
+    """
+    if isinstance(value, Fraction):
+        if value.denominator == 1:
+            return str(value.numerator)
+        try:
+            dec = Decimal(value.numerator) / Decimal(value.denominator)
+            if Fraction(dec) == value:
+                return format(dec.normalize(), "f")
+        except (InvalidOperation, ValueError, ZeroDivisionError):
+            pass
+        return str(value)
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
@@ -553,7 +695,15 @@ class ArithmeticGate:
             return GateResult(self.name, GateStatus.BLOCKED, blocked)
 
         try:
-            actual = _safe_eval(tree)
+            actual = _safe_eval(tree, expr.strip())
+        except (TypeError, OverflowError, ZeroDivisionError) as exc:
+            # A COMPLEX, INFINITE, OR UNDEFINED RESULT IS NOT A REFUTATION.
+            # (-1) ** 0.5 is complex and raised TypeError out of the gate;
+            # 1e308 * 1e308 raised OverflowError. Both escaped as crashes
+            # rather than verdicts, taking the run with them.
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"the expression does not evaluate to a real "
+                              f"finite number: {type(exc).__name__}: {exc}")
         except ValueError as exc:
             # The evaluator refuses names, calls and operators it does not
             # support. Same reasoning as above: unsupported is not false.
@@ -585,18 +735,46 @@ class ArithmeticGate:
             if exact_actual == expected:
                 return GateResult(self.name, GateStatus.PASS,
                                   f"{_show(actual)} confirmed exactly")
+            # A TRUNCATED DECIMAL IS IMPRECISE, NOT FALSE.
+            #
+            # "1/3 = 0.3333333333333333" is exactly wrong and honestly
+            # written. Refuting it would be the dangerous direction -- a FAIL
+            # removes an option -- so a value that agrees to every digit the
+            # operator actually wrote is BLOCKED, with what to do about it.
+            # Only a value that differs within the written precision is a
+            # refutation.
+            if _agrees_to_written_precision(exact_actual, claimed.strip()):
+                return GateResult(
+                    self.name, GateStatus.BLOCKED,
+                    f"recomputed {_show(actual)} against a claimed "
+                    f"{_show(claimed.strip())}: they agree to every digit "
+                    f"written, and differ beyond it. State the value exactly, "
+                    f"or have a person settle whether the rounding matters")
             return GateResult(
                 self.name, GateStatus.FAIL,
                 f"claimed {_show(claimed.strip())}, recomputed "
                 f"{_show(actual)}")
 
-        # Only a genuine float result reaches here, where a tolerance is the
-        # honest comparison -- and it is stated in the detail so nobody reads
-        # "confirmed" as "exact".
+        # A GENUINE FLOAT RESULT IS NOT CONFIRMED, IT IS APPROXIMATED.
+        #
+        # A tolerance was reported as a PASS, so "0.1 + 0.2 = 0.3000000000005"
+        # and "9999999999999999.0 = 10000000000000000" both came back
+        # confirmed. Those are different numbers; binary floating point simply
+        # cannot separate them, which is a fact about the arithmetic and not
+        # evidence about the claim.
+        #
+        # Close enough to be worth a person's attention is BLOCKED. Plainly
+        # different is still a refutation.
+        if not isinstance(actual, float) or not math.isfinite(actual):
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"result {actual!r} is not a finite real number")
         if math.isclose(float(actual), float(expected),
                         rel_tol=1e-12, abs_tol=1e-12):
-            return GateResult(self.name, GateStatus.PASS,
-                              f"{actual} confirmed to 1e-12")
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"recomputed {actual!r} against a claimed {expected}: equal "
+                f"within binary floating point, which cannot separate them. "
+                f"State the value exactly, or have a person settle it")
         return GateResult(
             self.name, GateStatus.FAIL,
             f"claimed {expected}, recomputed {actual}")
