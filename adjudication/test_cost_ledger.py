@@ -489,3 +489,108 @@ class TestConcurrentDayStateWriters:
         led.record("seat_1", 1000, 1000)
         led.persist_day()
         assert [f for f in os.listdir(tmp_path) if f.endswith(".tmp")] == []
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2: "field added, production path not connected"
+#
+# The pattern the reviewer named. A control can be written, tested through a
+# hand-built object, and reach production inert -- the parameter exists, the
+# test passes, and nothing on the live path ever sets it.
+# ---------------------------------------------------------------------------
+
+class TestAFailedDispatchConsumesBudget:
+
+    def _seat(self, led, attempts=3, prompt_len=40):
+        def dead(*_a, **_k):
+            raise ConnectionResetError("reset")
+        return SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                           dead, ledger=led,
+                           retry=SA.RetryPolicy(max_attempts=attempts),
+                           sleeper=lambda _s: None)
+
+    def test_three_failed_dispatches_do_not_cost_nothing(self):
+        """Recording them as merely 'unmeasured' made the REPORT honest -- it
+        says LOWER BOUND -- and did nothing for ENFORCEMENT, because an
+        unmeasured call costs 0.0. Three real dispatches against a $1.00
+        ceiling consumed $0.0000."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1.00)
+        with pytest.raises(SA.SeatError):
+            self._seat(led)("a normal sized question about build versus buy")
+        assert led.committed > 0.0, "failed dispatches consumed no budget"
+
+    def test_measured_spend_stays_honest(self):
+        """spent() is what an operator reconciles against an invoice, so it
+        must report only what was actually billed. The worst-case figure lives
+        apart from it and is what the ceiling tests."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1.00)
+        with pytest.raises(SA.SeatError):
+            self._seat(led)("a normal sized question about build versus buy")
+        assert led.spent == 0.0
+        assert led.unmeasured_calls == 3
+
+    def test_an_endlessly_failing_seat_is_eventually_stopped(self):
+        """The point of the whole control. Without it a seat that fails on
+        every attempt can dispatch without limit against a ceiling that never
+        moves."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=0.30)
+        dispatched = 0
+        with pytest.raises(CL.CeilingReached):
+            for _ in range(500):
+                try:
+                    self._seat(led, attempts=1)("a normal sized question")
+                except SA.SeatError:
+                    dispatched += 1
+        assert dispatched < 500
+
+    def test_a_successful_call_is_charged_at_its_real_cost(self):
+        """The estimate must not linger once the true figure is known."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=10.0)
+        payload = {"text": "ok", "usage": {"prompt_tokens": 1000,
+                                           "completion_tokens": 500}}
+        seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                           _ok(payload), ledger=led)
+        seat("prompt")
+        assert led.spent == pytest.approx(led.committed)
+
+
+class TestPassIdReachesTheLedgerFromTheRealPath:
+
+    def test_a_seat_can_be_told_which_pass_it_is_in(self):
+        seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                           _ok(), ledger=None)
+        seat.set_pass("r3")
+        assert seat.pass_id == "r3"
+
+    def test_a_full_round_attributes_every_call_to_that_round(self, tmp_path):
+        """pass_id was added as a constructor argument, tested through a seat
+        built by hand, and set by NOTHING on the production path -- so every
+        live call recorded pass_id=None, stage spend stayed at zero, and a
+        configured per-stage ceiling could never be reached however much was
+        spent. The parameter existed, the test passed, and the control was
+        inert."""
+        import night_loop as NL
+        from adjudication_orchestrator import ArithmeticGate, Orchestrator
+
+        led = CL.CostLedger(rates={f"seat_{i}": LIVE_RATE for i in range(1, 6)},
+                            per_run=100.0)
+        body = json.dumps({"usage": {"prompt_tokens": 100,
+                                     "completion_tokens": 50}}).encode()
+        prof = SA.ProviderProfile(
+            name="v", endpoint="https://api.example.invalid/v1",
+            auth_header="authorization", auth_template="Bearer {key}",
+            build_body=lambda m, p, mt, t: {"model": m},
+            extract_text=lambda p: "a\nCLAIM | arithmetic | 2 + 2 = 4 | it is 4",
+            usage_input_path=["usage", "prompt_tokens"],
+            usage_output_path=["usage", "completion_tokens"])
+        seats = {f"seat_{i}": SA.HttpSeat(
+            AO.ResolvedSeat(f"seat_{i}", "m", "k"), prof,
+            lambda *a, **k: (200, body), ledger=led) for i in range(1, 6)}
+
+        NL.run_night("ask", seats, seats["seat_5"],
+                     Orchestrator([ArithmeticGate()]), str(tmp_path),
+                     rounds=NL.ROUNDS[:2])
+
+        assert all(c.pass_id for c in led.calls), "a call was not attributed"
+        assert led.stage_spent("r1") > 0
+        assert led.stage_spent("r2") > 0

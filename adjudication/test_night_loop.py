@@ -1164,3 +1164,70 @@ class TestThePanelIsFiveDistinctVendors:
         identity = NL.panel_identity(path)
         assert "_README" not in identity
         NL.check_panel_is_five_vendors(identity)
+
+
+class TestOneVendorCannotWearFiveNames:
+    """Codex round 2. Keying the panel check on vendor/model PAIRS let one
+    vendor with five model labels pass as five vendors -- gpt-5.6-variant-1
+    through -5 satisfied it completely. That is the exact failure the check
+    exists to catch, wearing the check's own approval."""
+
+    def _distinct(self):
+        return {f"seat_{i}": (f"Vendor{i}", f"model-{i}") for i in range(1, 6)}
+
+    def test_one_vendor_with_five_model_labels_is_refused(self):
+        panel = {f"seat_{i}": ("OpenAI", f"gpt-5.6-variant-{i}")
+                 for i in range(1, 6)}
+        with pytest.raises(ValueError, match="distinct VENDORS"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_two_seats_on_one_vendor_are_refused(self):
+        """Models from one vendor share training data, tokeniser, alignment
+        and infrastructure. They fail together."""
+        panel = self._distinct()
+        panel["seat_5"] = ("Vendor1", "model-9")
+        with pytest.raises(ValueError, match="distinct VENDORS"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_the_same_model_under_two_vendor_names_is_refused(self):
+        """One model sampled twice is one observer, however it is labelled."""
+        panel = self._distinct()
+        panel["seat_5"] = ("Vendor9", "model-1")
+        with pytest.raises(ValueError, match="same model"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_an_unset_model_is_a_named_refusal(self):
+        """panel_identity reads the model from ADJ_SEAT_n_MODEL. Reading it
+        from the settings file returned "?" for every seat, which would have
+        REFUSED THE REAL PANEL at start-up -- a check meant to protect the
+        configuration failing it instead. An unset model must be its own
+        named refusal, never a silent duplicate."""
+        panel = self._distinct()
+        panel["seat_3"] = ("Vendor3", "UNSET")
+        with pytest.raises(ValueError, match="no model is configured"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_five_genuinely_distinct_vendors_pass(self):
+        NL.check_panel_is_five_vendors(self._distinct())
+
+    def test_the_model_comes_from_the_environment(self, tmp_path):
+        """env is passed explicitly rather than read from the process, so this
+        cannot pass or fail on what the runner happens to have exported."""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"seats": {
+            f"seat_{i}": {"name": f"Vendor{i}", "endpoint": "https://e.invalid"}
+            for i in range(1, 6)}}))
+        env = {f"ADJ_SEAT_{i}_MODEL": f"real-model-{i}" for i in range(1, 6)}
+        identity = NL.panel_identity(str(path), env=env)
+        assert all(m.startswith("real-model-") for _v, m in identity.values())
+        NL.check_panel_is_five_vendors(identity)
+
+    def test_the_environment_wins_over_a_stale_settings_entry(self, tmp_path):
+        """A model id in the settings file may be a leftover; the environment
+        is what the run will actually send."""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"seats": {
+            "seat_1": {"name": "V1", "model": "stale-model"}}}))
+        identity = NL.panel_identity(str(path),
+                                     env={"ADJ_SEAT_1_MODEL": "current-model"})
+        assert identity["seat_1"][1] == "current-model"

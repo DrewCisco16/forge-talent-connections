@@ -84,6 +84,22 @@ class CallCost:
     dollars: float | None
     measured: bool
     pass_id: str | None = None
+    estimated_dollars: float = 0.0
+    """Worst-case cost of a dispatch whose real cost was never learned.
+
+    A failed or timed-out attempt still reached the vendor and may still be
+    billed. Recording it as unmeasured made the REPORT honest -- it says LOWER
+    BOUND -- and did nothing for ENFORCEMENT, because an unmeasured call costs
+    0.0 and consumes no budget. Three real dispatches against a $1.00 ceiling
+    consumed $0.0000, so a seat that fails repeatedly can dispatch without
+    limit against a ceiling that never moves.
+
+    Kept apart from `dollars` on purpose. spent() reports only what we KNOW
+    was billed, which is what an operator reconciles against an invoice.
+    committed() adds these estimates, and committed is what a ceiling is
+    tested against -- for a limit, over-stating is the safe direction and
+    under-stating is the one that spends money.
+    """
 
 
 CHARS_PER_TOKEN = 3.0
@@ -135,6 +151,13 @@ class CostLedger:
     @property
     def spent(self) -> float:
         return sum(c.dollars or 0.0 for c in self.calls)
+
+    @property
+    def committed(self) -> float:
+        """Known spend plus the worst case of every dispatch we could not
+        price. This, not spent, is what a ceiling must be tested against."""
+        return sum((c.dollars if c.dollars is not None else c.estimated_dollars)
+                   for c in self.calls)
 
     @property
     def unmeasured_calls(self) -> int:
@@ -210,20 +233,26 @@ class CostLedger:
                                  self.spent, 0.0, 0.0)
         would_add = rate.cost(est_input, est_output)
 
-        if self.per_run is not None and self.spent + would_add > self.per_run:
-            raise CeilingReached("per-run", self.spent, self.per_run, would_add)
+        # committed, not spent: a dispatch whose cost we never learned still
+        # happened and may still be billed, so it must count against the
+        # limit. Testing against spent let three failed attempts consume
+        # nothing at all.
+        if self.per_run is not None and self.committed + would_add > self.per_run:
+            raise CeilingReached("per-run", self.committed, self.per_run,
+                                 would_add)
         if self.per_stage is not None and pass_id is not None:
             s = self.stage_spent(pass_id)
             if s + would_add > self.per_stage:
                 raise CeilingReached(f"per-stage ({pass_id})", s,
                                      self.per_stage, would_add)
         if self.per_day is not None:
-            d = self.day_spent() + self.spent
+            d = self.day_spent() + self.committed
             if d + would_add > self.per_day:
                 raise CeilingReached("per-day", d, self.per_day, would_add)
 
     def record(self, seat_id: str, input_tokens: int | None,
-               output_tokens: int | None, pass_id: str | None = None) -> CallCost:
+               output_tokens: int | None, pass_id: str | None = None,
+               estimated_dollars: float = 0.0) -> CallCost:
         """Book a completed call. Unmeasured calls cost 0.0 and are counted."""
         rate = self.rates.get(seat_id)
         measured = (input_tokens is not None and output_tokens is not None
@@ -231,10 +260,13 @@ class CostLedger:
         dollars = rate.cost(input_tokens or 0, output_tokens or 0) \
             if measured and rate else None
         cc = CallCost(seat_id, input_tokens, output_tokens, dollars,
-                      measured, pass_id)
+                      measured, pass_id,
+                      0.0 if measured else float(estimated_dollars))
         self.calls.append(cc)
-        if pass_id is not None and dollars:
-            self._stage_spent[pass_id] = self._stage_spent.get(pass_id, 0.0) + dollars
+        charge = dollars if dollars is not None else cc.estimated_dollars
+        if pass_id is not None and charge:
+            self._stage_spent[pass_id] = \
+                self._stage_spent.get(pass_id, 0.0) + charge
         return cc
 
     def persist_day(self) -> None:

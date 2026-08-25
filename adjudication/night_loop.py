@@ -40,7 +40,7 @@ import json
 import os
 import re
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -663,6 +663,19 @@ def _check_summary(orch: Orchestrator, claims: Sequence[Claim]) -> str:
     return "\n".join(lines) if lines else "  (no claims were proposed this round)"
 
 
+def _set_pass_on(seats: Iterable[object], pass_id: str) -> None:
+    """Point every seat that can carry a pass id at this round.
+
+    Duck-typed rather than isinstance-checked, because the seat set legitimately
+    mixes real HttpSeats with the fakes the tests and the demo use, and a fake
+    that cannot record spend is not an error.
+    """
+    for seat in seats:
+        setter = getattr(seat, "set_pass", None)
+        if callable(setter):
+            setter(pass_id)
+
+
 def run_night(
     ask: str,
     thinkers: Mapping[str, Callable[[str], str]],
@@ -712,6 +725,12 @@ def run_night(
         # carries a persona and a shared prompt would hand all five the same
         # stance -- five samples of one reading of the problem, which is the
         # correlated panel the independence math discounts to nearly one seat.
+        # ATTRIBUTE EVERY CALL IN THIS ROUND TO THIS ROUND, so a per-stage
+        # ceiling has something to bind to. Without this the ledger records
+        # pass_id=None for every live call and the stage limit is decorative.
+        _set_pass_on(thinkers.values(), f"r{r.n}")
+        _set_pass_on([closer], f"r{r.n}")
+
         texts: dict[str, str] = {}
         for seat_id, fn in thinkers.items():
             persona = persona_for(seat_id, seat_order)
@@ -911,12 +930,24 @@ def run_night(
 EXPECTED_SEATS = 5
 
 
-def panel_identity(profiles_path: str) -> dict[str, tuple[str, str]]:
-    """seat_id -> (vendor, model), read from the profile file.
+def panel_identity(profiles_path: str,
+                   env: Mapping[str, str] | None = None) -> dict[str, tuple[str, str]]:
+    """seat_id -> (vendor, model).
+
+    The VENDOR comes from the profile file; the MODEL comes from the seat's
+    own environment variable, because that is where it actually lives.
+    Reading it from the profile returned "?" for every seat, which then failed
+    the distinct-model check on a perfectly valid panel -- a start-up refusal
+    on the real configuration, from a check meant to protect it.
 
     No credential is read, printed, or returned. Vendor and model are
-    configuration, and the whole independence argument rests on them.
+    configuration, and the entire independence argument rests on them.
     """
+    from adjudication_orchestrator import PANEL_OF_FIVE_EXTERNAL
+
+    environ = os.environ if env is None else env
+    model_var = {spec.seat_id: spec.model_env for spec in PANEL_OF_FIVE_EXTERNAL}
+
     with open(profiles_path, encoding="utf-8") as fh:
         raw = json.load(fh)
     seats = raw.get("seats", raw)
@@ -924,8 +955,10 @@ def panel_identity(profiles_path: str) -> dict[str, tuple[str, str]]:
     for sid, cfg in seats.items():
         if sid.startswith("_") or not isinstance(cfg, dict):
             continue
+        var = model_var.get(sid)
+        model = (environ.get(var) if var else None) or cfg.get("model")
         out[sid] = (str(cfg.get("name") or cfg.get("_vendor") or sid),
-                    str(cfg.get("model") or cfg.get("_model") or "?"))
+                    str(model or "UNSET"))
     return out
 
 
@@ -949,20 +982,48 @@ def check_panel_is_five_vendors(identity: Mapping[str, tuple[str, str]]) -> None
             f"panel is a different instrument, and every independence figure "
             f"in the output would describe one that was not run."
         )
-    seen: dict[str, list[str]] = {}
-    for sid, (vendor, model) in sorted(identity.items()):
-        seen.setdefault(f"{vendor.casefold()}|{model.casefold()}", []).append(sid)
-    duplicates = {k: v for k, v in seen.items() if len(v) > 1}
-    if duplicates:
-        detail = "; ".join(
-            f"{', '.join(sids)} all use {key.split('|')[0]} {key.split('|')[1]}"
-            for key, sids in duplicates.items())
+    # DISTINCT VENDORS, NOT DISTINCT VENDOR/MODEL PAIRS.
+    #
+    # Keying on the pair let ONE vendor with five model labels pass as five
+    # vendors -- gpt-5.6-variant-1 through -5 satisfied the check completely.
+    # That is the failure the check exists to catch, wearing the check's own
+    # approval. Models from one vendor share training data, tokeniser,
+    # alignment, and infrastructure; they fail together, and their agreement
+    # is the correlated agreement this whole design is built to avoid.
+    by_vendor: dict[str, list[str]] = {}
+    for sid, (vendor, _model) in sorted(identity.items()):
+        by_vendor.setdefault(vendor.casefold().strip(), []).append(sid)
+    repeated = {v: sids for v, sids in by_vendor.items() if len(sids) > 1}
+    if repeated:
+        detail = "; ".join(f"{', '.join(sids)} are all {vendor}"
+                           for vendor, sids in sorted(repeated.items()))
         raise ValueError(
-            f"the panel is not five distinct vendor/model pairs: {detail}. "
-            f"Seats sharing a model fail the same way, which is precisely the "
-            f"correlation this design exists to avoid -- and nothing "
-            f"downstream can detect it, because their agreement looks like "
-            f"corroboration."
+            f"the panel is not five distinct VENDORS: {detail}. Different "
+            f"models from one vendor share training data, tokeniser, "
+            f"alignment and infrastructure -- they fail together, and nothing "
+            f"downstream can detect it because their agreement looks exactly "
+            f"like corroboration."
+        )
+    # A second seat on the same model would be caught above, but check the
+    # model too: a vendor renamed between profile entries would otherwise slip
+    # two identical models through as two vendors.
+    unset = sorted(sid for sid, (_v, m) in identity.items() if m == "UNSET")
+    if unset:
+        raise ValueError(
+            f"no model is configured for {', '.join(unset)}. The model each "
+            f"seat runs is the whole basis of the independence claim, so an "
+            f"unset one cannot be treated as 'some other model'."
+        )
+    by_model: dict[str, list[str]] = {}
+    for sid, (_vendor, model) in sorted(identity.items()):
+        by_model.setdefault(model.casefold().strip(), []).append(sid)
+    same_model = {m: sids for m, sids in by_model.items() if len(sids) > 1}
+    if same_model:
+        detail = "; ".join(f"{', '.join(sids)} all run {model}"
+                           for model, sids in sorted(same_model.items()))
+        raise ValueError(
+            f"two seats run the same model: {detail}. One model sampled twice "
+            f"is one observer, however it is labelled."
         )
 
 
@@ -984,7 +1045,14 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     order already protects.
     """
     from adjudication_orchestrator import Orchestrator
-    from run_adjudication import _default_gates, live_seats
+
+    # LOAD .env HERE, not in a caller that may not do it. Only the CLI's
+    # main() called load_env_file, so the console and the watcher -- the two
+    # ways this is actually started -- reached this point with no models and
+    # no credentials in the environment at all. Idempotent, and override=False
+    # means a real shell export still wins over a possibly-stale file.
+    from run_adjudication import _default_gates, live_seats, load_env_file
+    load_env_file()
 
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)

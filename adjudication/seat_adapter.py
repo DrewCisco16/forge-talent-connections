@@ -296,6 +296,9 @@ class HttpSeat:
         # pass_id=None, stage spend stayed at zero, and a configured
         # per-stage limit could never be reached however much was spent.
         self.pass_id = pass_id
+        # Worst case of the dispatch currently in flight, so a failure can be
+        # charged for what it might have cost rather than for nothing.
+        self._last_worst_case = 0.0
         self.last_usage: tuple[int | None, int | None] = (None, None)
 
     @property
@@ -418,6 +421,22 @@ class HttpSeat:
         self.last_usage = (tin, tout)
         self.ledger.record(self.seat_id, tin, tout, pass_id=self.pass_id)
 
+    def set_pass(self, pass_id: str | None) -> None:
+        """Tell this seat which pass its next calls belong to.
+
+        WITHOUT A CALLER, pass_id WAS DEAD. It was added as a constructor
+        argument, tested through a seat built by hand, and set by nothing on
+        the production path -- so every live call still recorded pass_id=None,
+        stage spend stayed at zero, and a configured per-stage ceiling could
+        never be reached however much was spent. The parameter existed, the
+        test passed, and the control was inert.
+
+        Seats are built once and reused across every pass, so the pass has to
+        be told to them as the run moves, not fixed at construction.
+        """
+        self.pass_id = pass_id
+
+
     def _precheck(self, prompt: str) -> None:
         """Refuse this dispatch if its worst case would cross a ceiling.
 
@@ -430,12 +449,25 @@ class HttpSeat:
         if self.ledger is None:
             return
         from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER, estimate_input_tokens
+        self._last_worst_case = self._worst_case_dollars(prompt)
         self.ledger.check_before_call(
             self.seat_id,
             max(self.est_input_tokens, estimate_input_tokens(prompt)),
             int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER),
             pass_id=self.pass_id,
         )
+
+    def _worst_case_dollars(self, prompt: str) -> float:
+        """What this dispatch could have cost, for enforcement purposes."""
+        if self.ledger is None:
+            return 0.0
+        from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER, estimate_input_tokens
+        rate = getattr(self.ledger, "rates", {}).get(self.seat_id)
+        if rate is None:
+            return 0.0
+        return float(rate.cost(
+            max(self.est_input_tokens, estimate_input_tokens(prompt)),
+            int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER)))
 
     def _record_unmeasured(self, why: str) -> None:
         """Book a dispatch whose cost we never learned.
@@ -449,7 +481,13 @@ class HttpSeat:
         """
         self.last_unmeasured_reason = why
         if self.ledger is not None:
-            self.ledger.record(self.seat_id, None, None, pass_id=self.pass_id)
+            # CHARGED AT ITS WORST CASE, not at zero. Recording it as merely
+            # "unmeasured" made the report say LOWER BOUND and left the
+            # ceiling untouched, so three real dispatches consumed $0.0000 of
+            # a $1.00 limit. The figure is separated from measured spend so
+            # `spent` still reconciles against an invoice.
+            self.ledger.record(self.seat_id, None, None, pass_id=self.pass_id,
+                               estimated_dollars=self._last_worst_case)
 
     def _backoff(self, attempt: int) -> None:
         if self.sleeper is None or not self.retry.backoff_seconds:
