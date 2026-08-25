@@ -75,7 +75,7 @@ class TestOnlyADeliberateFileStartsARun:
         f = W.Folders.under(str(tmp_path))
         for n in ("c.md", "a.md", "b.md"):
             with open(os.path.join(f.inbox, n), "w") as fh:
-                fh.write("Q: x\n")
+                fh.write("Q: should we build the ingest service or buy one?\n")
         assert [os.path.basename(p) for p in W.candidates(f.inbox)] == \
             ["a.md", "b.md", "c.md"]
 
@@ -83,20 +83,20 @@ class TestOnlyADeliberateFileStartsARun:
 class TestTheFileMustStopChangingBeforeItIsRead:
 
     def test_a_steady_file_is_stable(self, tmp_path):
-        _, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        _, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         assert W.wait_until_stable(p, polls=1, interval=0.0) is True
 
     def test_a_vanished_file_is_not_stable(self, tmp_path):
         """A file removed mid-debounce must not start a run against a path
         that no longer exists."""
-        _, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        _, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         os.remove(p)
         assert W.wait_until_stable(p, polls=1, interval=0.0) is False
 
     def test_a_file_still_being_written_resets_the_count(self, tmp_path, monkeypatch):
         """Reading a half-synced file would send a truncated question to five
         paid models."""
-        _, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        _, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         seq = iter([(10, 1.0), (20, 2.0), (30, 3.0), (30, 3.0), (30, 3.0)])
         monkeypatch.setattr(W, "_stamp", lambda _p: next(seq, (30, 3.0)))
         assert W.wait_until_stable(p, polls=2, interval=0.0) is True
@@ -128,7 +128,7 @@ class TestWhereAFileEndsUp:
         return W.Folders.under(str(tmp_path))
 
     def test_a_successful_run_moves_the_file_to_done(self, tmp_path, monkeypatch):
-        f, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: [])
         W.process(p, f, 1.0, "profiles.json")
@@ -140,7 +140,7 @@ class TestWhereAFileEndsUp:
         would invite a re-run that pays for the same rounds again."""
         from cost_ledger import CeilingReached
 
-        f, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
 
         def broke(*_a, **_k):
             raise CeilingReached("per-run", 3.0, 3.0, 0.5)
@@ -152,7 +152,7 @@ class TestWhereAFileEndsUp:
 
     def test_a_crash_files_it_as_failed_and_keeps_the_traceback(self, tmp_path,
                                                                monkeypatch):
-        f, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
 
         def boom(*_a, **_k):
             raise RuntimeError("the panel exploded")
@@ -166,7 +166,7 @@ class TestWhereAFileEndsUp:
                                                        monkeypatch):
         """A file that fails deterministically would be re-run on every poll
         and spend money in a loop all night."""
-        f, p = _inbox(tmp_path, "ask.md", "Q: x\n")
+        f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
         W.process(p, f, 1.0, "profiles.json")
@@ -176,7 +176,7 @@ class TestWhereAFileEndsUp:
         f = W.Folders.under(str(tmp_path))
         for n in ("bad.md", "good.md"):
             with open(os.path.join(f.inbox, n), "w") as fh:
-                fh.write("Q: x\n")
+                fh.write("Q: should we build the ingest service or buy one?\n")
         seen = []
 
         def sometimes(ask, profiles, out, **_k):
@@ -330,3 +330,122 @@ class TestTheWatcherCeilingMustBeARealNumber:
     def test_a_real_ceiling_is_still_accepted(self, tmp_path):
         W.watch(str(tmp_path / "ok"), 1.50, interval=0.0, once=True)
         assert (tmp_path / "ok" / "inbox").is_dir()
+
+
+class TestTheWatcherClaimsItsInputBeforePaying:
+    """Codex H14. The Q: marker was checked in the inbox, before the debounce,
+    and never revalidated. Two unchanged size and mtime observations prove the
+    writer PAUSED, not that it finished."""
+
+    def _folders(self, tmp_path):
+        return W.Folders.under(str(tmp_path))
+
+    def _write(self, folders, name, text):
+        p = os.path.join(folders.inbox, name)
+        with open(p, "w") as fh:
+            fh.write(text)
+        return p
+
+    def test_a_marker_removed_during_debounce_is_not_paid_for(
+            self, tmp_path, monkeypatch):
+        """The operator withdrew it. The decision had been made against a
+        snapshot nobody kept."""
+        f = self._folders(tmp_path)
+        p = self._write(f, "ask.md", "N: actually never mind, withdrawn\n\nbody")
+        called = {"n": 0}
+        monkeypatch.setattr("night_loop.live_night",
+                            lambda *a, **k: called.__setitem__("n", 1) or [])
+        out = W.process(p, f, 1.0, "profiles.json")
+        assert called["n"] == 0, "a withdrawn file was paid for"
+        assert os.path.exists(os.path.join(f.failed, "ask.md"))
+        with open(os.path.join(out, "REJECTED.md")) as fh:
+            assert "not a Q: marker" in fh.read()
+
+    def test_a_half_written_ask_is_not_paid_for(self, tmp_path, monkeypatch):
+        """A file caught mid-write holds a fragment that debounce cannot tell
+        from a finished short question, and five models would be paid for it."""
+        f = self._folders(tmp_path)
+        p = self._write(f, "ask.md", "Q: should we\n")
+        called = {"n": 0}
+        monkeypatch.setattr("night_loop.live_night",
+                            lambda *a, **k: called.__setitem__("n", 1) or [])
+        out = W.process(p, f, 1.0, "profiles.json")
+        assert called["n"] == 0
+        with open(os.path.join(out, "REJECTED.md")) as fh:
+            assert "mid-write" in fh.read()
+
+    def test_a_complete_ask_still_runs(self, tmp_path, monkeypatch):
+        f = self._folders(tmp_path)
+        p = self._write(f, "ask.md",
+                        "Q: should we build the ingest service or buy one?\n")
+        called = {"n": 0}
+        monkeypatch.setattr("night_loop.live_night",
+                            lambda *a, **k: called.__setitem__("n", 1) or [])
+        W.process(p, f, 1.0, "profiles.json")
+        assert called["n"] == 1
+
+
+class TestTheWatcherFolderTopology:
+    """Codex H15."""
+
+    def test_a_symlinked_stage_folder_is_refused(self, tmp_path):
+        """With failed/ pointing at inbox/, a run that failed and cost money
+        reappeared in the inbox and was paid for again on every poll -- all
+        night. The whole reason failed/ is separate is that a deterministic
+        failure must not be retried."""
+        f = W.Folders.under(str(tmp_path))
+        os.rmdir(f.failed)
+        os.symlink(f.inbox, f.failed)
+        with pytest.raises(ValueError, match="symlink"):
+            W.Folders.under(str(tmp_path))
+
+    def test_an_inbox_symlink_to_an_external_file_is_ignored(self, tmp_path):
+        """It points at content nobody put in the folder, and whatever it
+        named became the paid ask."""
+        outside = tmp_path / "outside.md"
+        outside.write_text("Q: content from outside the watched folder\n")
+        root = tmp_path / "root"
+        f = W.Folders.under(str(root))
+        os.symlink(str(outside), os.path.join(f.inbox, "link.md"))
+        assert W.candidates(f.inbox) == []
+
+    def test_real_folders_are_still_accepted(self, tmp_path):
+        f = W.Folders.under(str(tmp_path))
+        assert os.path.isdir(f.inbox) and os.path.isdir(f.failed)
+
+
+class TestTheWatcherAlwaysLeavesACostRecord:
+    """Codex M5."""
+
+    def test_a_successful_run_writes_a_cost_report(self, tmp_path, monkeypatch):
+        f = W.Folders.under(str(tmp_path))
+        p = os.path.join(f.inbox, "ask.md")
+        with open(p, "w") as fh:
+            fh.write("Q: should we build the ingest service or buy one?\n")
+        monkeypatch.setattr("night_loop.live_night", lambda *a, **k: [])
+        out = W.process(p, f, 1.0, "profiles.json")
+        assert os.path.exists(os.path.join(out, "COST.md"))
+
+    def test_a_crashed_run_still_writes_one(self, tmp_path, monkeypatch):
+        """The runs that most need a cost record are the ones that ended
+        badly: they spent money and wrote no figure anywhere."""
+        f = W.Folders.under(str(tmp_path))
+        p = os.path.join(f.inbox, "ask.md")
+        with open(p, "w") as fh:
+            fh.write("Q: should we build the ingest service or buy one?\n")
+        monkeypatch.setattr("night_loop.live_night",
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+        out = W.process(p, f, 1.0, "profiles.json")
+        assert os.path.exists(os.path.join(out, "COST.md"))
+
+    def test_a_scan_failure_does_not_end_the_loop(self, tmp_path, monkeypatch):
+        """A watcher that has silently stopped looks exactly like a watcher
+        with an empty inbox, and every later file waits forever."""
+        calls = {"n": 0}
+
+        def flaky(_inbox):
+            calls["n"] += 1
+            raise OSError("transient listdir failure")
+        monkeypatch.setattr(W, "candidates", flaky)
+        W.watch(str(tmp_path), 1.0, interval=0.0, once=True)
+        assert calls["n"] == 1

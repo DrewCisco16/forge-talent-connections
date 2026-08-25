@@ -52,11 +52,45 @@ class Folders:
 
     @classmethod
     def under(cls, root: str) -> Folders:
-        f = cls(os.path.join(root, "inbox"), os.path.join(root, "processing"),
-                os.path.join(root, "done"), os.path.join(root, "failed"),
-                os.path.join(root, "runs"))
+        """The five folders, each a real directory directly under root.
+
+        SYMLINKS ARE REFUSED, and this is not hypothetical tidiness. With
+        failed/ symlinked to inbox/, a run that failed and cost money was
+        moved to "failed" and reappeared in the inbox on the next poll --
+        re-running, re-paying, and failing again, all night. The whole reason
+        failed/ is a separate folder is that a deterministic failure must not
+        be retried, and one symlink silently removes that.
+        """
+        real_root = os.path.realpath(root)
+        f = cls(os.path.join(real_root, "inbox"),
+                os.path.join(real_root, "processing"),
+                os.path.join(real_root, "done"),
+                os.path.join(real_root, "failed"),
+                os.path.join(real_root, "runs"))
         for d in (f.inbox, f.processing, f.done, f.failed, f.runs):
+            if os.path.islink(d):
+                raise ValueError(
+                    f"{d} is a symlink. The watcher's folders must be real "
+                    f"directories: with failed/ pointing at inbox/, a run that "
+                    f"failed and cost money reappears in the inbox and is paid "
+                    f"for again on every poll."
+                )
             os.makedirs(d, exist_ok=True)
+        seen: dict[str, str] = {}
+        for d in (f.inbox, f.processing, f.done, f.failed, f.runs):
+            real = os.path.realpath(d)
+            if real in seen:
+                raise ValueError(
+                    f"{d} and {seen[real]} resolve to the same directory "
+                    f"({real}). Each stage must be distinct or a file cannot "
+                    f"move out of one."
+                )
+            if os.path.dirname(real) != real_root:
+                raise ValueError(
+                    f"{d} resolves to {real}, which is not directly under "
+                    f"{real_root}"
+                )
+            seen[real] = d
         return f
 
 
@@ -79,7 +113,13 @@ def candidates(inbox: str) -> list[str]:
         if not name.lower().endswith((".md", ".txt")) or name.startswith("."):
             continue
         p = os.path.join(inbox, name)
+        if os.path.islink(p):
+            # A symlink in the inbox points at content nobody put there. It
+            # was followed, and whatever it named became the paid ask.
+            continue
         if not os.path.isfile(p):
+            continue
+        if os.path.dirname(os.path.realpath(p)) != os.path.realpath(inbox):
             continue
         try:
             with open(p, encoding="utf-8", errors="replace") as fh:
@@ -117,11 +157,55 @@ def read_ask(path: str) -> str:
     return (first.split(":", 1)[1].strip() + "\n" + rest).strip()
 
 
+MIN_ASK_CHARS = 20
+"""Shortest ask worth paying five models to answer.
+
+A file caught mid-write can hold a plausible-looking fragment -- "Q: should
+we" -- that debounce cannot distinguish from a finished short question. Two
+unchanged observations prove the writer PAUSED, not that it finished.
+"""
+
+
+def _rejects_claimed_file(path: str, ask: str) -> str | None:
+    """Why this claimed file must not be paid for, or None.
+
+    Re-validated on the SNAPSHOT WE CLAIMED rather than on what was seen in
+    the inbox. The marker check happened before the debounce and was never
+    repeated, so a file edited during the debounce window was paid for on
+    content the operator had already withdrawn.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            first = fh.readline().strip()
+    except OSError as exc:
+        return f"could not be read after claiming it: {exc}"
+    if not first.upper().startswith("Q:"):
+        return (f"first line is {first[:60]!r}, not a Q: marker. It was "
+                f"marked when the folder was scanned and is not now, so it "
+                f"was edited between the scan and the run.")
+    if len(ask.strip()) < MIN_ASK_CHARS:
+        return (f"the ask is {len(ask.strip())} characters, below the "
+                f"{MIN_ASK_CHARS}-character minimum. A file caught mid-write "
+                f"holds a fragment that debounce cannot tell from a finished "
+                f"short question, and five models would be paid to answer it.")
+    return None
+
+
 def process(path: str, folders: Folders, max_cost: float,
             profiles_path: str) -> str:
     """One file, start to finish. Returns the run directory."""
     name = os.path.basename(path)
     working = os.path.join(folders.processing, name)
+
+    # CLAIM THE FILE FIRST, THEN VALIDATE WHAT WE CLAIMED.
+    #
+    # The Q: marker was checked in the inbox, before the debounce, and never
+    # revalidated. Changing "Q:" to "N:" during the debounce window therefore
+    # produced a paid run on content the operator had just withdrawn, because
+    # the decision was made against a snapshot nobody kept. os.rename is
+    # atomic within a filesystem, so moving the file out of the inbox is what
+    # makes the content stop changing under us -- everything after this reads
+    # one immutable snapshot, and that snapshot is what gets paid for.
     shutil.move(path, working)
 
     from cost_ledger import CeilingReached
@@ -130,10 +214,18 @@ def process(path: str, folders: Folders, max_cost: float,
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out = os.path.join(folders.runs, f"{stamp}-{os.path.splitext(name)[0][:40]}")
-    ask = read_ask(working)
 
+    ask = read_ask(working)
+    reason = _rejects_claimed_file(working, ask)
+    if reason is not None:
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "REJECTED.md"), "w", encoding="utf-8") as fh:
+            fh.write(f"# Not run\n\n{reason}\n")
+        shutil.move(working, os.path.join(folders.failed, name))
+        return out
+
+    ledger = build_ledger(max_cost, None, None)
     try:
-        ledger = build_ledger(max_cost, None, None)
         live_night(ask, profiles_path, out, ledger=ledger)
         shutil.move(working, os.path.join(folders.done, name))
     except CeilingReached as exc:
@@ -160,6 +252,17 @@ def process(path: str, folders: Folders, max_cost: float,
         # poll, and a file that fails deterministically would spend money in a
         # loop all night.
         shutil.move(working, os.path.join(folders.failed, name))
+    finally:
+        # WHAT IT COST, ON EVERY PATH. Written in finally because the runs
+        # that most need a cost record are the ones that ended badly: a
+        # ceiling stop and a crash both spent money, and neither wrote a
+        # figure anywhere the operator would find it in the morning.
+        os.makedirs(out, exist_ok=True)
+        body = ("\n".join(ledger.render()) if ledger is not None else
+                "  no ledger was built, so nothing was measured. Treat the "
+                "cost of this run as UNKNOWN, not as zero.")
+        with open(os.path.join(out, "COST.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Cost\n\n```\n" + body + "\n```\n")
     return out
 
 
@@ -186,9 +289,23 @@ def watch(root: str, max_cost: float, profiles_path: str | None = None,
           f"debounce {STABLE_POLLS} polls")
     print("  a file starts a run only if its FIRST LINE begins with 'Q:'")
     while True:
-        for path in candidates(folders.inbox):
+        try:
+            found = candidates(folders.inbox)
+        except OSError as exc:
+            # The SCAN itself sat outside the backstop, so a single transient
+            # listdir failure ended the loop. A watcher that has silently
+            # stopped looks exactly like a watcher with an empty inbox, and
+            # every later file waits forever.
+            print(f"  could not scan {folders.inbox}: {exc}")
+            found = []
+        for path in found:
             print(f"\n[{datetime.now():%H:%M:%S}] seen {os.path.basename(path)}")
-            if not wait_until_stable(path, interval=interval):
+            try:
+                stable = wait_until_stable(path, interval=interval)
+            except OSError as exc:
+                print(f"  could not stat it ({exc}); leaving it")
+                continue
+            if not stable:
                 print("  vanished or still changing; leaving it")
                 continue
             print("  stable; starting")
