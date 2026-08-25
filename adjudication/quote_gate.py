@@ -46,7 +46,7 @@ USER_AGENT = (
 MAX_BYTES = 4_000_000
 """Cap on what a fetch will read.
 
-The quote URL comes from a model. An unbounded read lets a hostile or merely
+The quote URL comes from a model. An unbounded read lets a malformed or merely
 broken endpoint stream until memory runs out, which stops the whole run.
 """
 
@@ -85,7 +85,8 @@ def _is_public(host: str) -> bool:
     """Resolve the host and refuse anything not on the public internet.
 
     The URL in a quote_verification warrant is model-controlled, so the gate
-    is a server-side request forgery primitive unless this exists: a model
+    would let a model reach hosts that are not on the public internet unless
+    this exists: a model
     could point it at 127.0.0.1, at 169.254.169.254, or at anything reachable
     from this machine but not from the internet, and the gate would fetch it
     and report on the contents.
@@ -308,7 +309,7 @@ class QuoteVerificationGate:
             raise ValueError(
                 f"refusing {host!r}: not a public address. This URL came from "
                 f"a model, and fetching a private or loopback host on its "
-                f"say-so is server-side request forgery."
+                f"say-so would let it read whatever this machine can reach."
             )
         # CONNECT TO THE APPROVED ADDRESS, VALIDATE THE ORIGINAL HOSTNAME.
         #

@@ -177,8 +177,8 @@ class DoiResolver:
         for it too -- which followed redirects. A public https endpoint that
         302s to http://127.0.0.1 therefore reached loopback: the origin check
         applied to the first hop only, and every later hop was unchecked. That
-        is a server-side request forgery primitive reachable from a model's
-        warrant.
+        would let a model's warrant direct a fetch at a host that is not on the
+        public internet.
 
         Redirects are refused rather than revalidated per hop. A citation URL
         that redirects is weak evidence anyway, and refusing is the version
@@ -191,7 +191,7 @@ class DoiResolver:
             raise ResolverBlocked(
                 f"refusing {parts.hostname!r}: not a public address. This URL "
                 f"came from a model, and fetching a private or loopback host "
-                f"on its say-so is server-side request forgery."
+                f"on its say-so would let it read whatever this machine can reach."
             )
         self.calls += 1
         req = urllib.request.Request(

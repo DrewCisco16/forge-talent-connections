@@ -308,8 +308,8 @@ class TestResolutionFailsClosed:
 class TestTheCommandRunnerShipsInert:
 
     def test_an_absent_allowlist_authorises_nothing(self, tmp_path):
-        """A gate that runs model-supplied commands is remote code execution by
-        design. It must be switched on deliberately, per exact command."""
+        """A gate that runs commands proposed by a model must only ever run ones the
+        operator wrote down first. It must be switched on deliberately, per exact command."""
         assert ATG.load_allowlist(str(tmp_path / "nope.json")) == []
 
     def test_an_unapproved_command_raises_rather_than_returning_false(self,
@@ -817,8 +817,8 @@ class TestTheResolverEntryPoints:
     def test_a_model_supplied_url_cannot_reach_a_private_address(self):
         """Codex H10. _get followed redirects, so a public https endpoint that
         302s to http://127.0.0.1 reached loopback: the origin check applied to
-        the first hop only. That is an SSRF primitive reachable from a
-        model's warrant."""
+        the first hop only. That let a model's warrant direct a fetch at a host that is not on the
+        public internet."""
         r = DR.DoiResolver()
         for host in ("localhost", "127.0.0.1", "169.254.169.254"):
             with pytest.raises(DR.ResolverBlocked, match="not a public"):
@@ -892,8 +892,8 @@ class TestTheResolverEntryPoints:
 
 
 # ===========================================================================
-# Codex C1 / C2 / H18 — the approved-command gate is remote code execution
-# by design, so its policy file and its isolation are the whole control.
+# Codex C1 / C2 / H18 — the approved-command gate is the one place this tool
+# runs a command, so its policy file and its isolation are the whole control.
 # ===========================================================================
 
 class TestTheAllowlistPolicyFileIsValidatedStrictly:

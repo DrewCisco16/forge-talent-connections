@@ -868,7 +868,7 @@ def run_night(
         # invisible one.
         # CONTENT NO SEAT PROPOSED. The closer's output was checked only for
         # explicit CLAIM lines, so free-form prose sailed past: a merge reading
-        # "Recommendation: BUY POISON immediately." produced zero closer
+        # "Recommendation: LIQUIDATE ALL INVENTORY immediately." produced zero closer
         # claims, closer_contaminated False, an ADJUDICATED verdict, and was
         # printed to the operator as the answer. The closer is the last step
         # and the only one whose output nothing reviews.
@@ -1146,7 +1146,7 @@ ABOUT an analysis; a sentence made only of these is not a proposition.
 "recommendation" and "conclusion" are deliberately NOT here. They look like
 document words, but a sentence is only reached at all once it has enough
 novel content, and treating the label as free pushed "Recommendation: BUY
-POISON immediately" -- the exact attack -- below the length floor. A label in
+POISON immediately" -- the exact failure mode -- below the length floor. A label in
 front of an invented instruction does not make it less invented."""
 
 MIN_CONTENT_WORDS = 4
@@ -1155,7 +1155,8 @@ MAX_UNSUPPORTED_FRACTION = 0.50
 MIN_WORDS_WHEN_WHOLLY_UNSUPPORTED = 3
 """A shorter sentence is flagged when NONE of its content words appear.
 
-Tuned on the actual attack. "Recommendation: BUY POISON immediately." carries
+Tuned on the real case. "Recommendation: LIQUIDATE ALL INVENTORY
+immediately." carries
 three content words -- recommendation, poison, immediately -- so a flat
 four-word floor skipped the exact sentence this check exists to catch. A
 sentence of three substantive words that no seat used is an assertion the
@@ -1174,7 +1175,7 @@ def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str
     accepted whole. Reproduced: five seats proposed shared claims, two were
     mechanically refuted, and the closer returned
 
-        "Recommendation: BUY POISON immediately."
+        "Recommendation: LIQUIDATE ALL INVENTORY immediately."
 
     The run reported ADJUDICATED, closer_contaminated False, zero closer
     claims, and printed that sentence to the operator as the answer. Nothing

@@ -340,7 +340,7 @@ def warrant_supports(claim: Claim) -> str | None:
     The checks below are deliberately weak and deliberately one-directional.
     They cannot confirm that a warrant proves a proposition -- that is
     semantics, and no string comparison settles it. They can only catch a
-    warrant that is not even ABOUT the proposition, which is the attack.
+    warrant that is not even ABOUT the proposition, which is the failure mode.
     Anything they cannot settle escalates to a person.
     """
     text = claim.text or ""
@@ -1426,7 +1426,7 @@ class PassRecord:
     finding: an ordinary escalation had no mechanical warrant at all, while
     these had one that passed and simply is not about the proposition. A run
     with many of these is a run where seats are attaching true evidence to
-    unrelated assertions, which is the specific attack this system exists to
+    unrelated assertions, which is the specific failure mode this system exists to
     stop.
     """
     repeats: int = 0

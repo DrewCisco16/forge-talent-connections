@@ -4878,8 +4878,8 @@ class TestAWarrantMustBearOnTheClaim:
         """Fail closed on the conclusion, open on the candidate. Eliminating
         here would kill a claim that might be perfectly true."""
         c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="Drinking poison is safe", warrant="1 + 1 = 2")
-        cand = Candidate("A", "poison is fine", [c])
+                  text="This shortcut is safe to take", warrant="1 + 1 = 2")
+        cand = Candidate("A", "the shortcut is fine", [c])
         o = Orchestrator([ArithmeticGate()])
         rec = o.run_pass(
             type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
@@ -4947,7 +4947,7 @@ class TestAWarrantMustBearOnTheClaim:
         """Different findings. An ordinary escalation had no mechanical
         warrant; these had one that PASSED and simply is not about the claim.
         Many of these means seats are attaching true evidence to unrelated
-        assertions, which is the specific attack this system exists to stop."""
+        assertions, which is the specific failure mode this system exists to stop."""
         _, rec = self._run(
             Claim(id="", kind=ClaimKind.ARITHMETIC, text="unrelated prose",
                   warrant="2 + 2 = 4"),

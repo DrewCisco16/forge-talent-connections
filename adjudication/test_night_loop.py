@@ -969,19 +969,19 @@ class TestTheCloserCannotIntroduceContent:
         """Codex C4, reproduced before fixing. The closer's output was checked
         only for explicit CLAIM lines, so prose carrying none sailed past: the
         run reported ADJUDICATED, closer_contaminated False, and printed
-        'Recommendation: BUY POISON immediately.' to the operator as the
+        'Recommendation: LIQUIDATE ALL INVENTORY immediately.' to the operator as the
         answer. Nothing had examined it, because it never said 'claim'."""
         assert NL.closer_introduced(
-            "Recommendation: BUY POISON immediately.", self.TEXTS)
+            "Recommendation: LIQUIDATE ALL INVENTORY immediately.", self.TEXTS)
 
     def test_other_inventions_are_caught_too(self):
-        for attack in (
+        for invented in (
             "The company should immediately liquidate all inventory and "
             "relocate offshore.",
             "Acquire the Zurich subsidiary before the quarter closes.",
             "Conclusion: terminate the pension scheme.",
         ):
-            assert NL.closer_introduced(attack, self.TEXTS), attack
+            assert NL.closer_introduced(invented, self.TEXTS), invented
 
     def test_a_faithful_merge_is_not_flagged(self):
         assert not NL.closer_introduced(

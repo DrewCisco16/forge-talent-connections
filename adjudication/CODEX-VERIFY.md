@@ -1,136 +1,166 @@
-# Re-verification request
+# Code review request — my own project
 
-You reviewed this codebase at commit `2699b94` and found 5 critical, 19 high
-and 8 medium defects. I reproduced every finding I could before changing
-anything. Every one I could reproduce was real, and none of your reasoning was
-wrong where I could check it.
+I built this tool and I own it. I am asking for an ordinary engineering review:
+correctness, robustness, and whether its safety controls actually hold. There
+is nothing here to break into and nothing to demonstrate — I am the operator,
+and I want to know where my own code is wrong before I trust it with a decision
+that matters.
 
-This is the second pass. **Do not trust that anything below is fixed because I
-say it is.** Re-derive your own checks, re-run your own reproductions, and
-assume nothing. Where my description and the code disagree, the code is the
-fact and my description is the defect.
+**You do not need any credential, any network access, or any live API call to
+do this review.** Everything below can be established by reading the code and
+running the offline test suite. `.env` and `profiles.json` hold my live
+settings; please do not open, print, or transmit either one. Nothing in the
+review requires them.
 
-I am also asking you to look for what the *fixes themselves* broke. Several of
-my earlier repairs created the next round's findings — a DNS-rebinding fix that
-disabled certificate validation, a claim-identity fix that addressed aliasing
-and left the underlying attack open, a coverage change that broke the security
-gate. Treat every change below as new code with new failure modes.
+The review is split into four sessions so each one is a reasonable amount of
+reading. Run them separately; each stands alone.
 
 ---
 
-## What the tool is for
+## What the tool does
 
 An operator has a hard question with several possible answers. Five language
-models from five different vendors answer independently, none seeing another's
-response. Code — not a model — mechanically checks every claim it can:
-recomputes arithmetic, resolves DOIs, verifies quoted strings appear at the
-URLs they are attributed to, checks cited papers are the papers named, runs
-operator-approved commands.
+models from five different vendors answer it independently, none seeing another
+model's response. Then code — not a model — checks every claim it can check
+mechanically: it recomputes arithmetic, looks up DOIs, confirms quoted text
+appears at the page it was attributed to, checks a cited paper is the paper
+named, and runs test commands the operator wrote down in advance.
 
-Answers whose claims are mechanically refuted are eliminated. What survives is
-consolidated by one seat and becomes the next round's starting point. Five
-rounds, five analytical frameworks. The result goes to the operator to verify
-independently.
+Answers whose claims are shown false get removed. What survives is consolidated
+by one of the models and becomes the starting point for the next round. Five
+rounds, five analytical frameworks. The result goes back to the operator to
+check independently.
 
-The tool's entire claim on a reader's trust is that something was ruled out by
+The reason it exists: five models agreeing is not evidence, because they can be
+wrong in the same way. The tool only claims value if something was ruled out by
 machinery rather than agreed on by models.
 
-## The rules it is built on
+## The rules it is supposed to follow
 
-1. **Blindness.** No seat sees another's response within a round.
-2. **Fail closed on the conclusion, never on the candidate.** Demonstrably
-   wrong is eliminated. Unverifiable survives and is listed open — it could be
-   true. Only verified is accepted. Three outcomes, not two.
-3. **BLOCKED is not FAILED.** A check that could not run is not evidence.
-4. **Consensus is not adjudication.**
-5. **Never invent.** Confidence is bounded by measured independence, and
-   unmeasured independence is not high independence.
-6. **Money and credentials fail closed absolutely.**
-7. **The record must say WHY, not just WHAT.**
+Please check the code against these. Where the code and my description
+disagree, the code is the fact.
+
+1. **Independence.** No model sees another's answer within a round.
+2. **Three outcomes, not two.** Shown false is removed. Not checkable survives
+   and is listed as open — it might be true. Only checked-and-held is accepted.
+3. **A check that could not run is not a result.** A timeout, a paywall, or a
+   rate limit means nothing was learned, and must never be recorded as a
+   finding either way.
+4. **Agreement is not verification**, and the output must not present one as
+   the other.
+5. **No invented figures.** Confidence is limited by measured independence, and
+   independence that was not measured is not high independence.
+6. **Spending limits are checked before a call, never after.**
+7. **The record must say why something failed, not only that it did.**
 
 ---
 
-## What I changed
+# Session 1 — the checking layer
 
-Grouped as you ordered them. Each is my claim, not an established fact.
+Files: `adjudication_orchestrator.py`, `citation_gate.py`, `quote_gate.py`,
+`doi_resolver.py`, `recency_canary.py`, `approved_test_gate.py`
 
-**Approved-command isolation (C1, C2, H18).** The child now gets a minimal
-environment built from an allowlist of variable names rather than inheriting
-the panel's credentials; output is redacted as a second layer; the policy file
-is validated strictly and raises rather than silently approving nothing;
-commands run in their own process group and the whole tree is killed on
-timeout.
+This is the code that decides what is true, so everything else defers to it.
 
-**The closer (C4).** Sentences in the merge whose content words appear in no
-seat's answer are flagged, contaminate the round, and block an ADJUDICATED
-verdict. This does **not** make the closer a formatter over a code-owned
-survivor set, which is what you actually asked for. I closed the path by which
-unchecked content reached the operator wearing the panel's authority; I did not
-re-represent options as candidates with structured claim ownership. If you
-think that leaves the finding open, say so.
+What I want established:
 
-**Warrant versus proposition (C5).** After any gate PASS, the warrant must be
-shown to bear on the claim's text or the claim escalates. Arithmetic and unit
-claims must name the computed value; quote and code_behavior claims must share
-substantive terms; citations never establish a proposition at all. The checks
-are deliberately weak and one-directional — they catch a warrant that is not
-*about* the proposition, and everything else goes to a person.
+- A check confirms a **warrant** (an equation, a DOI, a quoted string). Does
+  anything let a confirmed warrant mark an **unrelated statement** as verified?
+  This was previously possible: `2 + 2 = 4` marked both "the launch is safe"
+  and "the launch is unsafe" as verified.
+- Does every "could not check" path stay separate from "checked and false"? I
+  care most about: an unreachable lookup service, a page behind a subscription
+  wall that returns HTTP 200, a page larger than the read limit, and a page in a
+  non-UTF-8 encoding.
+- `approved_test_gate.py` runs shell commands, and it is the only place this
+  tool does. It ships with an empty list and only runs exact strings the
+  operator wrote down. Is that list validated strictly enough that a malformed
+  file cannot widen it? Does the child process get a minimal environment rather
+  than inheriting the operator's settings?
+- Does anything the tool fetches on a model's suggestion get restricted to
+  ordinary public web addresses?
 
-**Cost (H2–H6, M4).** Bounds derived from the actual prompt rather than a flat
-3,000 tokens; output bounded at 5× the cap to allow for reasoning tokens; every
-dispatch checked and every attempt booked, failed ones as unmeasured; unreadable
-daily state blocks instead of granting a fresh budget; unique temp files;
-non-finite ceilings and unusable prices refused; pass_id threaded so per-stage
-ceilings bind; only exact non-negative integers count as measured.
+---
 
-**Tri-state (H7, H9, M1).** `verified_true` is True/False/None. Blocked claims
-appear in holes. URL-fallback transport failures raise ResolverBlocked. Soft
-paywalls, truncated reads and non-UTF-8 pages are BLOCKED rather than FAILED.
+# Session 2 — the round engine and the output
 
-**Evidence transport (H10, H11, H12, H13, M2).** Model-supplied URLs refuse
-redirects and private addresses. Quotes are validated after normalisation and
-must clear a minimum length. TLS pins the address while validating the
-hostname. Quote-support ownership is structured data, not a substring search.
-Citation matching handles polarity, Unicode, thin titles and missing dates.
+Files: `night_loop.py`, `run_adjudication.py`, `audit_log.py`,
+`seat_conduct.py`, `closer-system-prompt.md`
 
-**Independence (H16, H17, H19).** `measure_rho` now returns None with a
-structural reason: a gate verdict is per-claim and error correlation needs
-per-seat correctness, which open-ended generation cannot supply. Non-finite rho
-can no longer become effective seats or High confidence. The escalation
-fraction uses one deduplicated population. Five distinct vendor/model pairs are
-enforced at start-up and recorded.
+What I want established:
 
-I also **separated adjudication from confidence**: unmeasured independence now
-yields INCONCLUSIVE rather than NOT ADJUDICATED, because once rho became honest
-the old rule would have stamped NOT ADJUDICATED on every run this tool can
-produce, including runs that eliminated real answers. **Please attack this
-decision specifically** — it is the one place I chose a weaker verdict, and I
-may have chosen wrong.
+- Within a round, can any model's text reach another model's prompt? This is
+  the property the whole design rests on.
+- One model consolidates at the end of each round. Can it introduce a statement
+  no model proposed, and can that statement reach the operator looking checked?
+  It previously could: a merged answer reading "Recommendation: liquidate all
+  inventory immediately" was reported as an adjudicated result.
+- `run_verdict()` decides whether a run gets labelled ADJUDICATED,
+  INCONCLUSIVE, or NOT ADJUDICATED. Can a run that removed nothing be labelled
+  ADJUDICATED by any path?
+- **I would especially like this decision challenged:** unmeasured independence
+  currently yields INCONCLUSIVE rather than NOT ADJUDICATED. My reasoning was
+  that independence is not measurable at all in this design, so the stricter
+  rule would label every possible run the same way and stop carrying
+  information. I may have reasoned that wrong.
+- Does the durable record on disk say *why* a model failed, not only which one?
 
-**Watcher (H14, H15, M5).** Inputs are claimed by atomic rename before the
-marker and content are revalidated on that snapshot; asks below 20 characters
-are refused as mid-write fragments; symlinked stage folders and inbox entries
-are refused; the scan and debounce are inside the backstop; a cost record is
-written on every path.
+---
 
-**Remaining (H1, H8, M3, M6, M7, M8).** Endpoint userinfo and credential query
-parameters refused; repr redacts; auth_template not echoed. Escalation queue
-round-trips and only real booleans resolve a claim. CI profile probe asserts
-status *and* message. Console test action uses discovery. Diagnostics scrub
-credentials. A missing closer policy refuses to start.
+# Session 3 — spending limits
 
-## What I did NOT do
+Files: `cost_ledger.py`, `seat_adapter.py`, `rates.json`
 
-- **H8 (citation warrant formats).** Bare-DOI gates require the whole warrant
-  to be a DOI while the field gate requires DOI plus metadata, so no single
-  format satisfies all three. I did not unify them into one parsed structure.
-- **C4's full remedy**, as above.
-- **console.py and intake.py remain untested** — 480 statements of interactive
-  terminal prompting.
+This tool spends the operator's money on API calls, sometimes overnight with
+nobody watching. The limit is the only thing standing between a
+misconfiguration and an open-ended bill.
 
-## Verify it yourself
+What I want established:
 
-Python 3.11+ (numpy 2.x will not build below it).
+- Is the limit checked before **every** dispatch, including each retry?
+- A call that fails or times out still reached the vendor and may still be
+  billed. Does it consume budget, or only appear in the report?
+- The estimate before a call: is it derived from the actual prompt, and does it
+  allow for reasoning tokens? A measured example: a request with a 4,096-token
+  cap reported 16,748 total tokens.
+- Can a limit be set to a value that cannot restrain anything — a non-finite
+  number, or a price of zero?
+- Per-stage limits are keyed by a round identifier. Is that identifier actually
+  set on the live path, or only in tests?
+- The daily total is kept in a shared file. What happens when it is unreadable,
+  and what happens when two processes write it at once?
+
+---
+
+# Session 4 — the unattended path and the rest
+
+Files: `watcher.py`, `seat_profiles.py`, `console.py`, `intake.py`,
+`correctness_matrix.py`, `seat_independence.py`, `.github/workflows/`
+
+`watcher.py` watches a folder and starts a paid run when a file appears, with
+nobody present.
+
+What I want established:
+
+- Is the file the tool pays to answer the same file it inspected? It waits for
+  the file to stop changing, then moves it before reading — is that enough to
+  be sure a half-written file is not paid for?
+- Its folders are inbox / processing / done / failed. Can a failed run end up
+  back in the inbox and be paid for again?
+- If one file fails, does the loop keep going?
+- `seat_independence.py` computes what five agreeing models are actually worth.
+  `measure_rho` currently returns "not measurable" with a reason rather than a
+  number, because a check result says whether a *claim* held and the statistic
+  needs whether each *model* was right. Is that reasoning sound, or is there a
+  measurement available that I have missed?
+- Do the CI steps in `.github/workflows/` actually fail when they should? They
+  previously had lists of filenames that stopped covering new code.
+
+---
+
+## Running it
+
+Python 3.11 or newer. No network needed.
 
 ```
 cd adjudication
@@ -143,16 +173,25 @@ python3 -m venv .venv
 .venv/bin/python -m pytest --cov --cov-fail-under=80
 ```
 
-`python3 run_adjudication.py --demo` costs nothing. `profiles.json` and `.env`
-hold live credentials — do not read, print or transmit them, and make no live
-call.
+`python3 run_adjudication.py --demo` runs the whole engine against fake models
+and costs nothing.
 
-## What I want back
+## Known gaps, so you do not have to find them
 
-Findings, most severe first, with the concrete input or state that makes each
-break. Distinguish what you **executed and observed** from what you reasoned
-about but did not run.
+- `console.py` and `intake.py` are untested — about 480 lines of terminal
+  prompting.
+- The three citation checks want different warrant formats, so no single format
+  satisfies all of them.
+- The consolidating model is checked after the fact rather than being limited to
+  formatting a list that code produced. I am aware this is the weaker design.
 
-Say plainly which of your original findings are still open, which are closed,
-and which I made worse. If a claim above is false, the code is the fact. If the
-architecture is wrong, that is a more useful finding than a list of small ones.
+## What I would like back
+
+Findings, most serious first, each with the specific input or state that makes
+it go wrong. Please separate what you ran and observed from what you reasoned
+about but did not run — I have had reviews where everything was plausible and
+none of it had been executed.
+
+If something I have written above is not true of the code, the code is the
+fact. If you think the design itself is wrong, that is more useful to me than a
+list of small things.
