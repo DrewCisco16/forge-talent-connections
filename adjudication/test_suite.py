@@ -4637,3 +4637,50 @@ class TestTimeoutIsNotRetried:
         below that guarantees the failure this change exists to remove."""
         seat = HttpSeat(_resolved_seat(), _profile(), _transport())
         assert seat.timeout_s >= 275.4 * 2
+
+
+class TestReasoningTokensReachTheCeiling:
+    """End to end: a reply carrying reasoning tokens must move the ledger by
+    the amount actually billed, not by the amount the output field advertises.
+
+    The unit tests above prove usage_from_payload reconciles. This proves the
+    reconciled figure survives the trip through HttpSeat into the ledger --
+    the wiring, not the arithmetic. A correct calculation that never reaches
+    the ceiling protects nothing.
+    """
+
+    def _seat_with_usage(self, ledger, total_tokens):
+        prof = _profile(
+            build_body=lambda model, prompt, mt, temp: {"model": model},
+            extract_text=lambda p: p.get("text"),
+            usage_input_path=["usage", "prompt_tokens"],
+            usage_output_path=["usage", "completion_tokens"],
+        )
+        payload = {"text": "ok", "usage": {"prompt_tokens": 1320,
+                                           "completion_tokens": 2433,
+                                           "total_tokens": total_tokens}}
+        return HttpSeat(_resolved_seat(), prof, _transport(body=payload),
+                        ledger=ledger)
+
+    def _ledger(self):
+        return CL.CostLedger(
+            rates={"seat_1": CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0)})
+
+    def test_the_ledger_is_charged_for_reasoning_tokens(self):
+        honest = self._ledger()
+        self._seat_with_usage(honest, 16748)("prompt")
+
+        advertised = self._ledger()
+        self._seat_with_usage(advertised, 3753)("prompt")
+
+        assert honest.spent > advertised.spent * 3, (
+            "the reasoning tokens never reached the ledger, so the ceiling is "
+            "still being enforced against the advertised figure")
+
+    def test_the_call_is_recorded_as_measured(self):
+        """A reconciled figure must not look like a guess. unmeasured_calls
+        drives the LOWER BOUND warning, and a call wrongly counted there would
+        understate the ledger's own confidence in itself."""
+        led = self._ledger()
+        self._seat_with_usage(led, 16748)("prompt")
+        assert led.unmeasured_calls == 0

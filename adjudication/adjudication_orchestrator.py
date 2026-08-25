@@ -1545,6 +1545,17 @@ class Orchestrator:
         )
         return tested, total
 
+    def claim_by_id(self, claim_id: str) -> Claim | None:
+        """The claim behind a verdict, or None if it was never proposed here.
+
+        Public because callers legitimately need it: a verdict carries a gate's
+        message but not the assertion the gate ruled on, and a report that
+        shows only the message tells a reader that something held without
+        saying what. Reaching into the private index from outside was the
+        alternative, and it would break silently on any rename.
+        """
+        return self._proposed_index.get(claim_id)
+
     def run_pass(
         self,
         p: Pass,

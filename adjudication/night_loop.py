@@ -816,6 +816,7 @@ def run_night(
         write_verifier_packet(
             out_dir, ask, merged, orch,
             [r.n for r in results if r.closer_contaminated],
+            results,
         )
     return results
 
@@ -885,7 +886,8 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
 
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
                           orch: Orchestrator,
-                          contaminated_rounds: Sequence[int] = ()) -> str:
+                          contaminated_rounds: Sequence[int] = (),
+                          rounds_run: Sequence[RoundResult] = ()) -> str:
     """The packet to paste into a fresh Claude Project chat.
 
     Claude Projects are a claude.ai feature with no API equivalent -- there is
@@ -923,10 +925,17 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         "## Claims it rests on, with what the mechanical checks found",
         "",
     ]
-    for _cid, v in orch.verdicts.items():
+    for cid, v in orch.verdicts.items():
         if v.status is None:
             continue          # escalated; it belongs under "still open", below
-        lines.append(f"- [{v.status.value.upper()}] {v.detail}")
+        # The claim TEXT, not only the gate's message. "[PASS] 2 + 2 = 4
+        # recomputed" tells a verifier that some arithmetic held without
+        # saying what it was offered to support, which is the only thing they
+        # can actually check against their own documents.
+        claim = orch.claim_by_id(cid)
+        text = claim.text if claim is not None else "(claim text unavailable)"
+        lines.append(f"- [{v.status.value.upper()}] {text}")
+        lines.append(f"      evidence: {v.detail}")
     if orch.escalation_queue:
         lines += ["", "## Still open -- no mechanical check applied", ""]
         for c in orch.escalation_queue:
@@ -940,6 +949,30 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
             "because removing it would mean a model editing a model. Read the",
             "round's closer-check.md before trusting any of this answer.",
         ]
+    # HOW MUCH THIS PANEL'S AGREEMENT IS WORTH. Without it a verifier reads a
+    # list of PASSed claims from five models and infers five confirmations. If
+    # the seats fail together they are one confirmation repeated, and the
+    # measurement of exactly that belongs next to the claims it qualifies.
+    if rounds_run:
+        lines += ["", "## How independent the panel actually was", ""]
+        for r in rounds_run:
+            if r.rho is None:
+                lines.append(f"- Round {r.n}: independence NOT MEASURED. "
+                             f"{r.rho_note}")
+            else:
+                lines.append(
+                    f"- Round {r.n}: rho = {r.rho:.4f} over the claims every "
+                    f"seat ruled on, so {len(r.thinkers_ok)} seats are worth "
+                    f"{effective_seats(len(r.thinkers_ok), r.rho):.2f} "
+                    f"independent ones "
+                    f"(ceiling: {confidence_ceiling(len(r.thinkers_ok), r.rho)})"
+                )
+        lines += ["",
+                  "NOT MEASURED is not the same as low. It means the seats were",
+                  "largely not addressing the same points, so whether they fail",
+                  "together is unknown -- and agreement between seats that have",
+                  "not been shown to fail differently is not corroboration."]
+
     lines += ["", "---", "",
               "BLOCKED means a check could not be performed -- a paywall, a",
               "timeout, a rate limit. It is not evidence against the claim and",
