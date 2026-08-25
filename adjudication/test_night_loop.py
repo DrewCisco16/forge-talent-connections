@@ -1087,16 +1087,80 @@ class TestThePanelIsFiveDistinctVendors:
         with pytest.raises(ValueError):
             NL.check_panel_is_five_vendors(panel)
 
-    def test_the_configured_panel_passes_its_own_check(self):
-        """The profile file this repository ships with must satisfy the
-        invariant, or the check is theatre."""
-        identity = NL.panel_identity("profiles.json")
-        NL.check_panel_is_five_vendors(identity)
+    def _settings_file(self, tmp_path, seats):
+        """Write a settings file and return its path.
 
-    def test_panel_identity_carries_no_credential(self):
-        """Vendor and model are configuration. Nothing else leaves this."""
-        identity = NL.panel_identity("profiles.json")
+        These two tests used to open "profiles.json" -- the OPERATOR's file,
+        which .gitignore keeps out of the repository precisely because it
+        holds live endpoints beside live keys. So they passed on the machine
+        that had one and raised FileNotFoundError everywhere else, which is
+        how they turned CI red. Same shape as the .env defect b3db788 fixed:
+        a test whose result depends on an untracked local file is a test of
+        that machine, not of this code.
+
+        It mattered most for the credential test. That check only runs where
+        a real settings file exists -- so it never ran in CI, and CI is the
+        one place a leak would be caught before the file reached anyone.
+        A fixture runs everywhere.
+        """
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps(seats), encoding="utf-8")
+        return str(path)
+
+    def test_a_settings_file_naming_five_vendors_passes_its_own_check(self, tmp_path):
+        """The invariant holds against a file on disk, not just a dict built
+        in the test -- panel_identity has to read and shape it correctly."""
+        path = self._settings_file(tmp_path, {
+            f"seat_{i}": {"name": f"Vendor{i}", "model": f"model-{i}"}
+            for i in range(1, 6)
+        })
+        NL.check_panel_is_five_vendors(NL.panel_identity(path))
+
+    def test_a_settings_file_collapsed_onto_one_vendor_is_refused(self, tmp_path):
+        """The failure this check exists for, exercised through the file path
+        an operator actually configures."""
+        path = self._settings_file(tmp_path, {
+            f"seat_{i}": {"name": "OpenAI", "model": "gpt-5.6"}
+            for i in range(1, 6)
+        })
+        with pytest.raises(ValueError, match="not five distinct"):
+            NL.check_panel_is_five_vendors(NL.panel_identity(path))
+
+    def test_panel_identity_carries_no_credential(self, tmp_path):
+        """Vendor and model are configuration. Nothing else leaves this.
+
+        The fixture carries a credential-shaped value in every field
+        panel_identity does NOT return -- auth header, auth template, endpoint
+        -- so this asserts the function drops them rather than asserting that
+        a file which may hold no key at all contains no key.
+        """
+        secret = "sk-live-DEADBEEFdeadbeef0123456789"
+        path = self._settings_file(tmp_path, {
+            f"seat_{i}": {
+                "name": f"Vendor{i}",
+                "model": f"model-{i}",
+                "auth_header": "authorization",
+                "auth_template": f"Bearer {secret}",
+                "endpoint": f"https://api.vendor{i}.invalid/v1/chat?k={secret}",
+                "api_key": secret,
+            }
+            for i in range(1, 6)
+        })
+        identity = NL.panel_identity(path)
+        assert len(identity) == 5
         for vendor, model in identity.values():
             for value in (vendor, model):
+                assert secret not in value
                 assert "sk-" not in value
                 assert len(value) < 80
+
+    def test_comment_keys_are_not_mistaken_for_seats(self, tmp_path):
+        """Keys starting with _ are notes. Counting one as a seat would make a
+        five-seat panel read as six and fail a check it should pass."""
+        seats = {f"seat_{i}": {"name": f"Vendor{i}", "model": f"model-{i}"}
+                 for i in range(1, 6)}
+        seats["_README"] = {"name": "not a seat", "model": "not a model"}
+        path = self._settings_file(tmp_path, seats)
+        identity = NL.panel_identity(path)
+        assert "_README" not in identity
+        NL.check_panel_is_five_vendors(identity)
