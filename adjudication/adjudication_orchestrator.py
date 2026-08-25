@@ -807,8 +807,24 @@ def content_claim_id(kind: ClaimKind, warrant: str | None, text: str) -> str:
     so both seats are credited with the catch while the claim is gated once.
     Seat-scoped ids would make every claim a singleton and inflate the Chao1
     estimate of what nobody caught.
+
+    THE PROPOSITION IS PART OF THE IDENTITY. It was not, and the consequence
+    was severe: identity was (kind, warrant OR text), so whenever a warrant
+    existed the text was discarded entirely. "the launch is safe" and "the
+    launch is UNSAFE" both carrying the warrant "2 + 2 = 4" hashed to the same
+    id, were gated once, and BOTH received that PASS. A gate checks a warrant;
+    binding that verdict to whatever text happened to accompany it means a
+    model could attach a true equation, or an approved passing command, to any
+    false assertion and have it verified.
+
+    Text is normalised before hashing -- case folded, whitespace collapsed,
+    surrounding punctuation dropped -- so two seats phrasing the same
+    proposition slightly differently still collide, which is what the
+    capture-recapture statistics need. What no longer collides is two
+    DIFFERENT propositions leaning on one warrant.
     """
-    material = f"{kind.value}|{(warrant or text).strip()}"
+    norm = " ".join((text or "").split()).strip(" .;:\u2014-").casefold()
+    material = f"{kind.value}|{(warrant or '').strip()}|{norm}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 

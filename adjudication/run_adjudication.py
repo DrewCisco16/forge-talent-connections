@@ -143,6 +143,30 @@ def urllib_transport(
     import urllib.error
     import urllib.request
 
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        """Refuse every 3xx instead of following it.
+
+        urllib follows redirects by default AND carries the request headers to
+        the new location -- verified against a local server: a 302 from an
+        authenticated POST arrived at another origin, over plaintext HTTP,
+        still carrying Authorization and x-api-key. That is a credential leak
+        to whatever the Location header names, and constraint 4 says a key
+        never crosses a plaintext connection.
+
+        A redirect from a vendor API endpoint is a configuration error, not a
+        thing to follow: the correct endpoint does not redirect. Raising here
+        turns it into a visible seat failure with the status attached.
+        """
+
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                f"refusing to follow a {code} redirect to {newurl!r}: the "
+                f"request carries a credential and urllib would forward it to "
+                f"the new origin. Fix the endpoint in profiles.json.",
+                headers, fp,
+            )
+
     # DEFENCE IN DEPTH against B310. urlopen honours file:// and ftp://, so a
     # profile whose endpoint slipped past validation would read a local file
     # and hand its bytes back as a seat's answer. ProviderProfile already
@@ -160,7 +184,8 @@ def urllib_transport(
     try:
         # The https scheme is enforced immediately above; nosec is on the next
         # line because bandit reads everything after it as test ids.
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=timeout) as resp:  # nosec B310
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
