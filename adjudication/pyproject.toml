@@ -141,9 +141,24 @@ python_files = ["test_*.py"]
 ]
 
 [tool.bandit]
-# Scans the engine modules. The test suite is excluded: it deliberately
-# constructs hostile payloads, and flagging those is noise, not signal.
-exclude_dirs = [".venv"]
+# Scans every production module. CI previously named eight files, so anything
+# added since was scanned by nobody -- see the workflow comment.
+#
+# Test files are excluded by PATTERN, not by name, so a new one is excluded
+# too. They are excluded for a specific reason and not for convenience:
+# pytest's entire assertion mechanism is the bare `assert` statement, which
+# B101 flags on sight. Scanning them buries the production findings under
+# roughly 1,250 hits on the one construct pytest requires -- and a scan whose
+# output nobody can read is a scan nobody runs.
+#
+# Anything a test does that would be a genuine finding in production -- a
+# subprocess, a network call, a temp path -- is still caught, because the
+# module it exercises is scanned.
+exclude_dirs = [".venv", "*/test_*.py"]
+# The pattern, not a list of filenames: a test file added tomorrow is excluded
+# without anyone remembering to add it, and -- verified by dropping a file
+# with a real finding into the tree under each name -- a PRODUCTION module
+# added tomorrow is still scanned.
 
 # ---------------------------------------------------------------------------
 # Coverage: source everything, omit deliberately, say why.

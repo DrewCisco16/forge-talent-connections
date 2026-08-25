@@ -104,12 +104,18 @@ class TestTheFileMustStopChangingBeforeItIsRead:
 
 class TestTheWatcherRefusesToRunUnbounded:
 
-    def test_no_ceiling_is_refused(self):
+    def test_no_ceiling_is_refused(self, tmp_path):
         """The one component that spends with nobody watching. Without a limit
-        it is an open-ended bill with a folder for an interface."""
+        it is an open-ended bill with a folder for an interface.
+
+        The path is a real temporary directory rather than a literal /tmp one:
+        watch() must raise before touching the filesystem, and a hardcoded
+        /tmp path would still be wrong if it ever stopped doing so."""
         for bad in (None, 0, -1.0):
             with pytest.raises(ValueError, match="spend ceiling"):
-                W.watch("/tmp/whatever", bad, once=True)
+                W.watch(str(tmp_path / "never-created"), bad, once=True)
+        assert not (tmp_path / "never-created").exists(), (
+            "the ceiling was checked after the folders were made")
 
     def test_a_ceiling_is_accepted(self, tmp_path):
         W.watch(str(tmp_path), 1.0, interval=0.0, once=True)
