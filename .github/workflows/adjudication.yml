@@ -61,8 +61,20 @@ jobs:
       # pytest now discovers test files by pattern (see pyproject testpaths),
       # and coverage sources everything with explicit, reasoned omissions in
       # [tool.coverage.run]. New code is measured unless someone says why not.
+      #
+      # THE FLOOR MOVED FROM 90 TO 80, AND THAT IS A TIGHTENING, NOT A
+      # LOOSENING. The old 90 was computed over seven hand-picked modules and
+      # excluded night_loop.py, cost_ledger.py and every gate -- it measured
+      # the covered code and called the result coverage. The new 80 is over
+      # everything.
+      #
+      # It is depressed almost entirely by console.py and intake.py, 480
+      # statements of interactive terminal prompting that are untested.
+      # Excluding the engines, those two, gates, ledger and watcher stand at
+      # 92%. This floor is a ratchet: raise it as console and intake are
+      # covered, never lower it to accommodate new uncovered code.
       - name: Tests with coverage
-        run: pytest --cov --cov-report=term-missing --cov-fail-under=90
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=80
 
       # SOP 8.4 non-AI verification layer. These fail independently of the
       # models, which is the whole reason for running them.

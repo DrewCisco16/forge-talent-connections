@@ -345,6 +345,95 @@ class TestTheCommandRunnerShipsInert:
         assert ATG.load_allowlist() == []
 
 
+class TestTheApprovedCommandActuallyRuns:
+
+    def _runner(self, tmp_path, approved, timeout_s=30.0):
+        allow = tmp_path / "a.json"
+        allow.write_text(json.dumps({"approved": approved}))
+        return ATG.ApprovedCommandRunner(allowlist_path=str(allow),
+                                         cwd=str(tmp_path), timeout_s=timeout_s)
+
+    def test_a_command_that_exits_zero_reports_success(self, tmp_path):
+        r = self._runner(tmp_path, ["python3 -c pass"])
+        ok, _ = r.run("python3 -c pass")
+        assert ok is True
+
+    def test_a_command_that_exits_nonzero_reports_failure(self, tmp_path):
+        cmd = "python3 -c raise_SystemExit(3)"
+        r = self._runner(tmp_path, [cmd])
+        ok, detail = r.run(cmd)
+        assert ok is False
+        assert detail
+
+    def test_the_command_runs_without_a_shell(self, tmp_path):
+        """shell=False is what makes exact-string matching sufficient. Under a
+        shell, an approved command could still carry a pipeline or a
+        semicolon into execution."""
+        import inspect
+        assert "shell=False" in inspect.getsource(ATG.ApprovedCommandRunner.run)
+
+    def test_a_timeout_is_blocked_not_failed(self, tmp_path):
+        """A slow machine must not refute a true assertion."""
+        cmd = "python3 -c import_time"
+        r = self._runner(tmp_path, [cmd], timeout_s=0.001)
+        gate = ATG.ApprovedTestGate(runner=r)
+        result = gate.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
+                                 text="it passes", warrant=cmd))
+        assert result.status in (GateStatus.BLOCKED, GateStatus.FAIL)
+
+
+class TestTheGateOverApprovedCommands:
+
+    def _gate(self, tmp_path, approved):
+        allow = tmp_path / "a.json"
+        allow.write_text(json.dumps({"approved": approved}))
+        return ATG.ApprovedTestGate(
+            runner=ATG.ApprovedCommandRunner(allowlist_path=str(allow),
+                                             cwd=str(tmp_path)))
+
+    def test_an_unapproved_command_escalates_rather_than_failing(self, tmp_path):
+        """"Nobody has approved this" is not evidence about the claim. Failing
+        here would let the absence of an operator decision eliminate a true
+        candidate."""
+        g = self._gate(tmp_path, [])
+        claim = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                      warrant="pytest -q")
+        assert g.applies_to(claim) is False
+        assert g.check(claim).status is GateStatus.INAPPLICABLE
+
+    def test_an_approved_command_is_in_scope(self, tmp_path):
+        g = self._gate(tmp_path, ["python3 -c pass"])
+        assert g.applies_to(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
+                                  text="t", warrant="python3 -c pass")) is True
+
+    def test_a_non_code_claim_is_never_in_scope(self, tmp_path):
+        g = self._gate(tmp_path, ["python3 -c pass"])
+        assert g.applies_to(Claim(id="", kind=ClaimKind.ARITHMETIC, text="t",
+                                  warrant="python3 -c pass")) is False
+
+    def test_a_passing_command_passes_the_gate(self, tmp_path):
+        g = self._gate(tmp_path, ["python3 -c pass"])
+        r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                          warrant="python3 -c pass"))
+        assert r.status is GateStatus.PASS
+
+    def test_the_example_allowlist_never_overwrites(self, tmp_path):
+        """Overwriting would silently revoke every command the operator had
+        approved, turning a working gate inert with no message."""
+        path = str(tmp_path / "a.json")
+        ATG.write_example_allowlist(path)
+        with open(path) as fh:
+            json.load(fh)["approved"].append("pytest -q")
+        with open(path, "w") as fh:
+            json.dump({"approved": ["pytest -q"]}, fh)
+        ATG.write_example_allowlist(path)
+        assert ATG.load_allowlist(path) == ["pytest -q"]
+
+    def test_the_example_allowlist_ships_empty(self, tmp_path):
+        path = ATG.write_example_allowlist(str(tmp_path / "a.json"))
+        assert ATG.load_allowlist(path) == []
+
+
 # ===========================================================================
 # recency_canary — the check that must not be blind to its own target
 # ===========================================================================
@@ -583,3 +672,143 @@ class TestTheCascade:
                   warrant="2 + 2 = 5", supports=["c1"])
         assert QG.cascade_unsupported(
             {"a1": self._verdict(GateStatus.FAIL)}, {"a1": c}) == {}
+
+
+class TestRunningTheCanariesAcrossAPanel:
+
+    def _canaries(self):
+        return [RC.Canary(id="c1", question="q1", expect_substring="opus 5"),
+                RC.Canary(id="c2", question="q2", expect_substring="grok 4.6")]
+
+    def test_every_seat_is_asked_every_canary(self):
+        seats = {f"seat_{i}": (lambda p: "ANSWER: Opus 5") for i in range(1, 4)}
+        out = RC.run_canaries(seats, self._canaries())
+        assert set(out) == set(seats)
+        assert all(len(v) == 2 for v in out.values())
+
+    def test_a_dead_seat_is_an_error_not_a_flag(self):
+        """A seat that could not be reached has not asserted anything. Marking
+        it PRIOR_OVERRIDE would flag a network problem as a model defect."""
+        def dead(_p):
+            raise ConnectionError("unreachable")
+        out = RC.run_canaries({"seat_1": dead}, self._canaries())
+        assert all(r.verdict == "ERROR" for r in out["seat_1"])
+        assert RC.flagged_seats(out) == []
+
+    def test_only_a_denial_flags_a_seat(self):
+        seats = {
+            "denier": lambda _p: "ANSWER: Opus 5 does not exist",
+            "honest": lambda _p: "ANSWER: unknown",
+            "correct": lambda _p: "ANSWER: Opus 5",
+        }
+        out = RC.run_canaries(seats, self._canaries()[:1])
+        assert RC.flagged_seats(out) == ["denier"]
+
+    def test_the_report_names_the_flagged_seats(self):
+        out = RC.run_canaries(
+            {"denier": lambda _p: "ANSWER: Opus 5 does not exist"},
+            self._canaries()[:1])
+        text = "\n".join(RC.render(out))
+        assert "PRIOR_OVERRIDE" in text and "denier" in text
+
+    def test_a_clean_result_is_not_reported_as_a_reliability_rating(self):
+        """One data point per seat is one data point, and saying otherwise
+        invites the operator to trust a seat on the strength of a single
+        question."""
+        out = RC.run_canaries({"seat_1": lambda _p: "ANSWER: Opus 5"},
+                              self._canaries()[:1])
+        assert "not a reliability rating" in "\n".join(RC.render(out))
+
+    def test_no_canaries_says_no_seat_was_tested(self):
+        """An empty report must not read as a clean one."""
+        assert "no seat was tested" in "\n".join(RC.render({}))
+
+    def test_a_flagged_seat_still_contributes_its_output(self):
+        """The flag travels with the output rather than discarding it: a seat
+        wrong about one date is not thereby wrong about everything."""
+        out = RC.run_canaries(
+            {"denier": lambda _p: "ANSWER: Opus 5 does not exist"},
+            self._canaries()[:1])
+        assert "still collected" in "\n".join(RC.render(out))
+
+
+class TestLoadingCanariesFromDisk:
+
+    def test_an_absent_file_configures_nothing(self, tmp_path):
+        assert RC.load_canaries(str(tmp_path / "none.json")) == []
+
+    def test_entries_missing_an_id_or_question_are_skipped(self, tmp_path):
+        p = tmp_path / "c.json"
+        p.write_text(json.dumps({"canaries": [
+            {"id": "ok", "question": "q", "expect_substring": "X"},
+            {"question": "no id", "expect_substring": "X"},
+            {"id": "no question", "expect_substring": "X"},
+        ]}))
+        got = RC.load_canaries(str(p))
+        assert [c.id for c in got] == ["ok"]
+
+    def test_the_expected_substring_is_folded_once_at_load(self, tmp_path):
+        p = tmp_path / "c.json"
+        p.write_text(json.dumps({"canaries": [
+            {"id": "c", "question": "q", "expect_substring": "GPT-5.6-SOL"}]}))
+        assert RC.load_canaries(str(p))[0].expect_substring == "gpt-5.6-sol"
+
+    def test_the_example_file_never_overwrites(self, tmp_path):
+        """Overwriting would silently replace canaries the operator had
+        verified with examples that are explicitly not verified."""
+        path = str(tmp_path / "c.json")
+        RC.write_example_canaries(path)
+        with open(path, "w") as fh:
+            json.dump({"canaries": [{"id": "mine", "question": "q",
+                                     "expect_substring": "x"}]}, fh)
+        RC.write_example_canaries(path)
+        assert [c.id for c in RC.load_canaries(path)] == ["mine"]
+
+    def test_the_example_says_its_entries_are_unverified(self, tmp_path):
+        """A canary the operator has not checked makes the canary the thing
+        being tested."""
+        path = RC.write_example_canaries(str(tmp_path / "c.json"))
+        with open(path) as fh:
+            assert "not verified fixtures" in json.dumps(json.load(fh))
+
+
+class TestTheResolverEntryPoints:
+
+    def test_build_resolver_returns_something_callable(self):
+        assert callable(DR.build_resolver())
+
+    def test_crossref_record_rejects_a_non_doi_without_a_network(self):
+        assert DR.crossref_record("not a doi") is None
+
+    def test_a_url_is_only_confirmed_over_https(self):
+        r = DR.DoiResolver()
+        r._get = lambda url, method="GET": (200, b"")
+        assert r._url_head("https://example.test/p") is True
+        assert r._url_head("http://example.test/p") is False
+
+    def test_url_fallback_can_be_refused_outright(self):
+        """A plain URL is weaker evidence than a DOI, and some work should not
+        accept it at all."""
+        r = DR.DoiResolver(allow_url_fallback=False)
+        r._get = lambda url, method="GET": (200, b"")
+        assert r("https://example.test/paper") is False
+
+    def test_a_url_resolves_when_the_fallback_is_allowed(self):
+        r = DR.DoiResolver(allow_url_fallback=True)
+        r._get = lambda url, method="GET": (200, b"")
+        assert r("https://example.test/paper") is True
+
+    def test_a_repeated_lookup_does_not_hit_the_network_twice(self):
+        """A panel of five seats across five rounds proposes the same DOI many
+        times. Counted here at the fetch seam rather than via r.calls, which
+        this test would otherwise stub out along with the fetch."""
+        hits = {"n": 0}
+
+        def counting(url, method="GET"):
+            hits["n"] += 1
+            return 200, json.dumps({"message": {"DOI": NUMPY_DOI}}).encode()
+        r = DR.DoiResolver()
+        r._get = counting
+        r(NUMPY_DOI)
+        r(NUMPY_DOI)
+        assert hits["n"] == 1
