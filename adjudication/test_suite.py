@@ -3831,7 +3831,7 @@ class TestTheCliConnectPath:
         )
 
     def test_demo_and_profiles_together_are_refused(self, capsys):
-        assert RA.main(["--demo", "--profiles", "p.json"]) == 2
+        assert RA.main(["--demo", "--profiles", "p.json", "--max-cost", "1.00"]) == 2
         assert "mutually exclusive" in capsys.readouterr().err
 
     def test_the_no_seats_message_gives_the_whole_connect_procedure(self, capsys):
@@ -3908,7 +3908,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.delenv(f"ADJ_SEAT_{i}_MODEL", raising=False)
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
         absent_env = str(tmp_path / "absent.env")
-        assert RA.main(["--profiles", path, "--env", absent_env]) == 2
+        assert RA.main(["--profiles", path, "--env", absent_env, "--max-cost", "1.00"]) == 2
         err = capsys.readouterr().err
         assert "credential missing" in err
         assert ".env" in err
@@ -3919,7 +3919,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": {"endpoint": "http://x.invalid"}})
-        assert RA.main(["--profiles", path]) == 2
+        assert RA.main(["--profiles", path, "--max-cost", "1.00"]) == 2
         err = capsys.readouterr().err
         assert "profiles unusable" in err
         assert "--check-profiles" in err
@@ -3929,7 +3929,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
-        assert RA.main(["--profiles", path]) == 2
+        assert RA.main(["--profiles", path, "--max-cost", "1.00"]) == 2
         err = capsys.readouterr().err
         assert "panel incomplete" in err
         assert "seat_2" in err
@@ -3954,7 +3954,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         monkeypatch.setattr(RA, "urllib_transport", fake_transport)
         artifact = tmp_path / "a.txt"
         artifact.write_text("the total is 5")
-        rc = RA.main([str(artifact), "--profiles", path])
+        rc = RA.main([str(artifact), "--profiles", path, "--max-cost", "1000.00"])
         out = capsys.readouterr().out
         assert calls["n"] == 25, "5 external seats x 5 passes"
         assert "PASSES, ONE AT A TIME (5)" in out
@@ -4255,7 +4255,7 @@ class TestTheEnvFileIsActuallyRead:
         prof = tmp_path / "p.json"
         prof.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
         envp = tmp_path / "nothing.env"
-        assert RA.main(["--profiles", str(prof), "--env", str(envp)]) == 2
+        assert RA.main(["--profiles", str(prof), "--env", str(envp), "--max-cost", "1.00"]) == 2
         err = capsys.readouterr().err
         assert str(envp) in err
         assert ".env.example" in err

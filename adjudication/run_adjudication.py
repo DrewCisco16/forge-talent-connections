@@ -610,7 +610,7 @@ DAY_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 def build_ledger(per_run: float | None, per_stage: float | None,
                  per_day: float | None,
-                 rates_path: str = DEFAULT_RATES_FILE) -> CostLedger | None:
+                 rates_path: str | None = None) -> CostLedger | None:
     """A ledger, or None when no ceiling was asked for.
 
     Returns None rather than an unenforcing ledger when every ceiling is
@@ -638,6 +638,11 @@ def build_ledger(per_run: float | None, per_stage: float | None,
             )
     if per_run is None and per_stage is None and per_day is None:
         return None
+    # Resolved at CALL time, not bound at definition time. A module-level
+    # default captured in the signature cannot be redirected afterwards, which
+    # makes the rates file impossible to point elsewhere for a test or for an
+    # operator keeping prices outside the repository.
+    rates_path = rates_path or DEFAULT_RATES_FILE
     if not os.path.exists(rates_path):
         raise ValueError(
             f"a ceiling was requested but {rates_path} does not exist. A limit "
@@ -1027,11 +1032,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     if ledger is not None:
         stale = ledger.stale_rates()
         if stale:
-            print(f"WARNING: rates unverified or stale for {', '.join(stale)}. "
+            print(f"rates unverified or stale for {', '.join(stale)}. "
                   f"A ceiling computed from unchecked prices does not bound "
                   f"anything.", file=sys.stderr)
 
     if args.profiles:
+        # A PAID PANEL WITHOUT A LEDGER IS AN UNBOUNDED PANEL.
+        #
+        # build_ledger returns None when no ceiling was asked for, and the
+        # real-panel path accepted that and called five vendors with nothing
+        # counting. The demo has no ledger because it spends nothing; a run
+        # against --profiles spends on every call.
+        if ledger is None:
+            print(
+                "refusing to run a real panel with no spend ceiling. Pass "
+                "--max-cost (and optionally --max-cost-per-stage or "
+                "--max-cost-per-day). A run against --profiles calls five "
+                "vendors on every pass; without a ledger nothing counts what "
+                "it costs and nothing can stop it.",
+                file=sys.stderr)
+            return 2
+        unusable = sorted(set(ledger.stale_rates()))
+        if unusable:
+            # WARNING WAS NOT ENOUGH. A zero price means every call is free,
+            # so no ceiling can ever be crossed and the limit is decorative --
+            # and the run continued past the warning. A ceiling computed from
+            # a price nobody checked bounds nothing.
+            print(
+                f"refusing to run: the price for {', '.join(unusable)} is "
+                f"missing, zero, or unverified. A ceiling computed from an "
+                f"unchecked price bounds nothing. Fix rates.json and stamp "
+                f"verified_on from the vendor's own page.",
+                file=sys.stderr)
+            return 2
         print(f"env: {load_env_file(args.env)}", file=sys.stderr)
         try:
             seat_fns = live_seats(

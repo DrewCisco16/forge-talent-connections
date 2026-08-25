@@ -32,7 +32,15 @@
     "verified_on": "2026-08-25",
     "max_input_tokens": null,
     "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
-    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "tiers": [
+      [
+        200000,
+        4.0,
+        18.0
+      ]
+    ],
+    "_note_tiers_source": "From this entry's own _note: standard tier at or below 200k input tokens, $4.00/$18.00 above it."
   },
   "seat_3": {
     "_vendor": "Mistral",
@@ -56,7 +64,15 @@
     "verified_on": "2026-08-25",
     "max_input_tokens": null,
     "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
-    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "tiers": [
+      [
+        200000,
+        4.0,
+        12.0
+      ]
+    ],
+    "_note_tiers_source": "From this entry's own _note: standard tier below 200k input tokens, $4.00/$12.00 above it."
   },
   "seat_5": {
     "_vendor": "Anthropic",

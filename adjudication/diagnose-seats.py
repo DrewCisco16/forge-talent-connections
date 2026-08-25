@@ -1,5 +1,13 @@
 """Diagnostic: one tiny call per failing seat, to surface the vendor's error.
 
+IT SPENDS MONEY, SO IT COUNTS WHAT IT SPENDS. This called the transport
+directly with no ledger and no ceiling, which made it the one paid path in the
+tool with nothing bounding it -- reachable from the console's "ping all five"
+action. The calls are tiny, but "tiny" is not a control: a misconfigured
+endpoint, a retry loop, or a seat that returns a huge body costs whatever it
+costs. Every call is now booked against a ledger with a small hard ceiling,
+and the run stops if it is reached.
+
 This is the project's own seat machinery (load_panel + profiles.json), run
 once per seat with a ~6-token prompt and a 64-token cap, so it costs a
 fraction of a cent rather than the 25 calls a full run makes.
@@ -41,9 +49,39 @@ def _safe(text: str, key: str | None) -> str:
 SEATS = sys.argv[1:] or ["seat_1", "seat_2", "seat_5"]
 PROMPT = "Reply with the single word: OK"
 
+MAX_TOTAL = 0.05
+"""Hard ceiling for the whole diagnostic, in dollars.
+
+Five calls of about seventy tokens each cost a small fraction of a cent. This
+is two orders of magnitude above that, which is enough headroom that an
+honest run never reaches it and low enough that a misconfigured seat cannot
+spend meaningfully before it stops.
+"""
+
 print("env:", load_env_file(None))
 panel = {s.seat_id: s for s in load_panel(specs=PANEL_OF_FIVE_EXTERNAL)}
 profiles = load_profiles("profiles.json")
+
+ledger = None
+per_call = 0.0
+try:
+    from cost_ledger import CeilingReached, CostLedger, rates_from_config
+    with open("rates.json", encoding="utf-8") as _fh:
+        _rates = rates_from_config(json.load(_fh))
+    ledger = CostLedger(rates=_rates, per_run=MAX_TOTAL)
+    # Every call is priced at its worst case up front, because the reply's
+    # own usage block is exactly what a broken seat may not return.
+    per_call = max(
+        (r.cost(64, 64) for r in _rates.values()), default=0.0)
+    print(f"ceiling: ${MAX_TOTAL:.2f} for the whole run "
+          f"(about ${per_call:.6f} per call at the worst seat's price)")
+except Exception as exc:  # noqa: BLE001
+    # A diagnostic that cannot price itself must not spend at all: the reason
+    # to run it is usually that something is already misconfigured.
+    print(f"refusing to run: could not build a spend ledger ({exc}). "
+          f"This makes real calls, and a paid path with nothing counting is "
+          f"the one thing that must not exist here.")
+    sys.exit(2)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -63,6 +101,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 for sid in SEATS:
+    if ledger is not None:
+        try:
+            ledger.check_before_call(sid, 64, 64)
+        except CeilingReached as exc:
+            print(f"\nstopping: {exc}")
+            break
     seat = panel[sid]
     prof = profiles[sid]
 
@@ -98,6 +142,11 @@ for sid in SEATS:
               f"{_safe(str(exc), key)}")
         continue
 
+    if ledger is not None:
+        # Booked against the same ledger every other paid path uses, so a
+        # misconfigured seat cannot run away here either.
+        ledger.record(sid, None, None, estimated_dollars=per_call,
+                      authorised=per_call)
     print(f"HTTP {status}")
     try:
         payload = json.loads(raw)

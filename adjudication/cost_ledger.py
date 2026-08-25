@@ -436,6 +436,11 @@ class CostLedger:
         out = ["-" * 72, "COST", "-" * 72]
         if not self.calls:
             out.append("  no billable call was made")
+            # THE WARNINGS BELOW STILL APPLY. This returned early, so a run
+            # that spent nothing never showed which seats have no documented
+            # maximum request size -- and that is precisely the run where the
+            # operator is still deciding whether to spend.
+            out += self._warnings()
             return out
         by_seat: dict[str, tuple[int, int, float, int]] = {}
         for c in self.calls:
@@ -450,6 +455,12 @@ class CostLedger:
         if self.unmeasured_calls:
             out.append(f"  {self.unmeasured_calls} call(s) returned no usage block, so the "
                        f"figure above is a floor, not the bill.")
+        out += self._warnings()
+        return out
+
+    def _warnings(self) -> list[str]:
+        """Everything qualifying the figures above, on every render path."""
+        out: list[str] = []
         if self.overruns:
             out.append("")
             out.append("  CEILING OVERRUN -- a call cost more than it was authorised for:")

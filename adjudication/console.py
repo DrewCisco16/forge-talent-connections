@@ -214,7 +214,7 @@ def night() -> None:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out = os.path.join(RUNS, f"{stamp}-night-{slugify(ask_text, 32)}")
-    cap = _ask("Hard spend ceiling in dollars [3.00]:", allow_blank=True) or "3.00"
+    cap = f"{ask_ceiling():.2f}"
     _p()
     _p("-" * 68)
     _p(f"  5 rounds x 5 blind seats + 5 merges = 30 calls. Ceiling ${cap}.")
@@ -230,11 +230,17 @@ def night() -> None:
         _p("  Cancelled.")
         return
 
-    from cost_ledger import CeilingReached
+    from cost_ledger import CeilingReached, CostLedger
     from night_loop import live_night
     from run_adjudication import build_ledger
+    led = build_ledger(float(cap), None, None)
+    if not isinstance(led, CostLedger):
+        # ask_ceiling only returns a finite positive number, so build_ledger
+        # cannot return None here -- and if it ever did, a paid panel with
+        # nothing counting is the one thing that must not run.
+        _p("  could not build a spend ledger; not running.")
+        return
     try:
-        led = build_ledger(float(cap), None, None)
         # Progress prints as it happens. Without it this is thirty silent
         # model calls, which is indistinguishable from a hang -- and the
         # only way to find out is to kill the run and lose what it cost.
@@ -242,9 +248,13 @@ def night() -> None:
                          ledger=led, on_event=_progress)
     except CeilingReached as exc:
         _p(f"  PARTIAL -- {exc}")
+        for line in led.render():
+            _p(f"  {line}")
         return
     except Exception as exc:  # noqa: BLE001
         _p(f"  stopped: {type(exc).__name__}: {exc}")
+        for line in led.render():
+            _p(f"  {line}")
         return
     _p()
     for r in res:
@@ -282,6 +292,15 @@ def night() -> None:
     elif not v.trustworthy:
         _p("  Machinery DID remove options -- that result is real. The caveats")
         _p("  above say what it does not settle.")
+    # WHAT IT COST, ON EVERY EXIT PATH.
+    #
+    # render() was never called here, so the console night run -- the one an
+    # operator actually uses -- printed no cost at all, and never showed the
+    # seats whose price has no documented maximum. A ceiling nobody can see
+    # the result of is not a control the operator can act on.
+    _p()
+    for line in led.render():
+        _p(f"  {line}")
     _p()
     _p(f"  verifier packet: {os.path.relpath(os.path.join(out, 'VERIFIER-PACKET.md'), HERE)}")
     _p("  Paste it into a NEW chat in your Claude Project. Nothing else.")

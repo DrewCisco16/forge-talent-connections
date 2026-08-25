@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 from datetime import date, timedelta
 
 import pytest
@@ -788,3 +789,111 @@ class TestTheLedgerValidatesItsOwnCeilings:
 
     def test_no_ceiling_at_all_is_still_allowed(self):
         CL.CostLedger(rates={})
+
+
+class TestNoPaidPathRunsWithoutALedger:
+    """Re-check #7. Three paid routes reached transport with nothing counting:
+    the direct CLI, the console's diagnostic action, and any seat priced at
+    zero."""
+
+    def _profiles(self, tmp_path):
+        import shutil
+        src = os.path.join(os.path.dirname(os.path.abspath(CL.__file__)),
+                           "profiles.example.json")
+        dst = tmp_path / "p.json"
+        shutil.copy(src, dst)
+        return str(dst)
+
+    def test_the_cli_refuses_a_real_panel_with_no_ceiling(self, tmp_path, capsys):
+        """build_ledger returns None when no ceiling was asked for, and the
+        real-panel path accepted that and called five vendors with nothing
+        counting."""
+        import run_adjudication as RA
+
+        artifact = tmp_path / "a.txt"
+        artifact.write_text("an artifact")
+        rc = RA.main([str(artifact), "--profiles", self._profiles(tmp_path)])
+        assert rc == 2
+        assert "no spend ceiling" in capsys.readouterr().err
+
+    def test_a_zero_price_refuses_rather_than_warning(self, tmp_path, capsys,
+                                                      monkeypatch):
+        """A zero price means every call is free, so no ceiling can ever be
+        crossed and the limit is decorative -- and the run continued past the
+        warning."""
+        import run_adjudication as RA
+
+        rates = tmp_path / "rates.json"
+        rates.write_text(json.dumps({
+            f"seat_{i}": {"input_per_mtok": 0.0, "output_per_mtok": 0.0,
+                          "verified_on": date.today().isoformat()}
+            for i in range(1, 6)}))
+        monkeypatch.setattr(RA, "DEFAULT_RATES_FILE", str(rates))
+        artifact = tmp_path / "a.txt"
+        artifact.write_text("an artifact")
+        rc = RA.main([str(artifact), "--profiles", self._profiles(tmp_path),
+                      "--max-cost", "1.00"])
+        assert rc == 2
+        assert "missing, zero, or unverified" in capsys.readouterr().err
+
+    def test_the_diagnostic_script_builds_a_ledger(self):
+        """It called the transport directly with no ledger and no ceiling,
+        which made it the one paid path in the tool with nothing bounding it
+        -- reachable from the console's ping-all-five action."""
+        src = pathlib.Path("diagnose-seats.py").read_text()
+        assert "CostLedger" in src
+        assert "check_before_call" in src
+        assert "refusing to run" in src
+
+
+class TestTheCostReportIsAlwaysVisible:
+    """Re-check #13. render() returned early when no call had been booked, so
+    a run that spent nothing never showed which seats have no documented
+    maximum -- and that is precisely the run where the operator is still
+    deciding whether to spend."""
+
+    def test_a_zero_call_render_still_carries_the_warnings(self):
+        with open("rates.json", encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        text = "\n".join(CL.CostLedger(rates=rates, per_run=3.0).render())
+        assert "no billable call was made" in text
+        assert "NO DOCUMENTED MAXIMUM" in text
+
+    def test_the_console_night_path_renders_the_ledger(self):
+        src = pathlib.Path("console.py").read_text()
+        night = src[src.index("def night("):]
+        assert night.count("led.render()") >= 3, \
+            "the ledger must be rendered on success, on a ceiling stop, and " \
+            "on any other stop"
+
+
+class TestTheShippedTiersAreEnforced:
+    """Re-check #6. Two seats documented a long-context boundary in their own
+    notes and neither carried tiers, so reconciliation recomputed the bill at
+    the same standard rate that had authorised the call."""
+
+    def _rates(self):
+        with open("rates.json", encoding="utf-8") as fh:
+            return CL.rates_from_config(json.load(fh))
+
+    def test_the_documented_boundary_changes_the_price(self):
+        rates = self._rates()
+        for seat in ("seat_2", "seat_4"):
+            r = rates[seat]
+            assert r.tier_for(199_999) == (r.input_per_mtok, r.output_per_mtok)
+            assert r.tier_for(220_001) != (r.input_per_mtok, r.output_per_mtok)
+
+    def test_the_reviewers_figure_is_reproduced(self):
+        """220,001 input plus 20,480 output at the higher figures already
+        written in this file's own note."""
+        r = self._rates()["seat_2"]
+        assert r.cost(220_001, 20_480) == pytest.approx(1.248644, abs=1e-6)
+
+    def test_every_tier_came_from_a_recorded_source(self):
+        with open("rates.json", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        for seat, cfg in raw.items():
+            if seat.startswith("_") or not isinstance(cfg, dict):
+                continue
+            if cfg.get("tiers"):
+                assert cfg.get("_note_tiers_source"), seat
