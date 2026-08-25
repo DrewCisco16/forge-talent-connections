@@ -701,3 +701,184 @@ class TestConductRecord:
                      str(tmp_path), rounds=NL.ROUNDS[:1])
         text = (tmp_path / "conduct.md").read_text()
         assert "does not establish intent" in text
+
+
+# ---------------------------------------------------------------------------
+# 14. divergence is a STOP CONDITION, not a footnote
+#
+# THE FAILURE THIS EXISTS TO STOP, from the live run: 352 claims proposed,
+# 210 escalated, ZERO eliminations across five passes, seat claim overlap
+# between 0.0000 and 0.0238 -- the seats were not disagreeing, they were not
+# addressing the same points at all -- and the tool emitted something shaped
+# like an answer. Everything went through regardless of whether the answers
+# were different.
+#
+# CONSENSUS and ADJUDICATION look identical on the page and are completely
+# different facts: one survived attack, the other was never attacked.
+# ---------------------------------------------------------------------------
+
+def _round(n=1, claims=10, failed=0, escalated=0, rho=0.1, **kw):
+    r = NL.RoundResult(n, f"round {n}")
+    r.claims, r.failed, r.escalated, r.rho = claims, failed, escalated, rho
+    r.thinkers_ok = ["seat_1", "seat_2", "seat_3", "seat_4", "seat_5"]
+    for k, v in kw.items():
+        setattr(r, k, v)
+    return r
+
+
+class TestARunThatRefutedNothingSaysSo:
+
+    def test_zero_eliminations_is_not_adjudicated(self):
+        """The live run's exact shape. A merged paragraph from a panel that
+        eliminated nothing is consensus, and calling it an answer is the most
+        damaging thing this tool could do -- its whole claim on a reader's
+        trust is that something was ruled out."""
+        verdict, reasons = NL.run_verdict([_round(failed=0)])
+        assert verdict == "NOT ADJUDICATED"
+        assert any("NOTHING WAS REFUTED" in r for r in reasons)
+
+    def test_a_run_that_refuted_something_can_be_adjudicated(self):
+        verdict, _ = NL.run_verdict([_round(claims=10, failed=3, escalated=1)])
+        assert verdict == "ADJUDICATED"
+
+    def test_mostly_escalated_is_not_adjudicated_even_with_a_refutation(self):
+        """210 of 352 escalated. The panel narrowed little; it produced a
+        queue, and a queue with an answer stapled to it reads as an answer."""
+        verdict, reasons = NL.run_verdict(
+            [_round(claims=352, failed=1, escalated=210)])
+        assert verdict == "INCONCLUSIVE"
+        assert any("MOST OF IT IS UNCHECKED" in r for r in reasons)
+
+    def test_unmeasured_independence_alone_blocks_adjudication(self):
+        """Seats that never addressed the same points cannot corroborate each
+        other, however much they appear to agree."""
+        verdict, reasons = NL.run_verdict([_round(failed=3, rho=None)])
+        assert verdict == "NOT ADJUDICATED"
+        assert any("INDEPENDENCE WAS NEVER MEASURED" in r for r in reasons)
+
+    def test_a_contaminated_merge_blocks_adjudication(self):
+        verdict, reasons = NL.run_verdict(
+            [_round(failed=3, closer_contaminated=True)])
+        assert verdict == "INCONCLUSIVE"
+        assert any("CARRIES REFUTED CLAIMS" in r for r in reasons)
+
+    def test_a_short_panel_blocks_adjudication(self):
+        verdict, reasons = NL.run_verdict([_round(failed=3, degraded=True)])
+        assert verdict == "INCONCLUSIVE"
+        assert any("PANEL WAS SHORT" in r for r in reasons)
+
+    def test_no_rounds_at_all_is_not_adjudicated(self):
+        verdict, reasons = NL.run_verdict([])
+        assert verdict == "NOT ADJUDICATED"
+        assert reasons
+
+    def test_every_verdict_carries_a_reason(self):
+        """A bare verdict is an assertion. The reason is what lets an operator
+        disagree with it."""
+        for rounds in ([], [_round(failed=0)], [_round(failed=3)],
+                       [_round(claims=100, failed=1, escalated=90)]):
+            _, reasons = NL.run_verdict(rounds)
+            assert reasons and all(r.strip() for r in reasons)
+
+
+class TestTheVerdictIsUnmissableInTheDeliverable:
+
+    def _packet(self, tmp_path, closer="MERGED: buy it.", seats=None):
+        NL.run_night("ask", seats or _panel(), _seat(closer), _orch(),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        return (tmp_path / "VERIFIER-PACKET.md").read_text()
+
+    def test_the_verdict_appears_before_the_answer(self, tmp_path):
+        """Below it, a reader has absorbed the conclusion before learning what
+        it is worth, and a caveat after a confident paragraph is a caveat
+        nobody applies."""
+        text = self._packet(tmp_path)
+        assert text.index("VERDICT:") < text.index("## The question")
+        assert text.index("VERDICT:") < text.index("MERGED: buy it.")
+
+    def test_an_unadjudicated_answer_is_not_titled_as_having_survived(self,
+                                                                     tmp_path):
+        """'The answer that survived' asserts the exact thing that did not
+        happen."""
+        seats = {f"seat_{i}": _seat(f"a{i}\n\nCLAIM | judgment |  | opinion {i}")
+                 for i in range(1, 6)}
+        text = self._packet(tmp_path, seats=seats)
+        assert "NOT ADJUDICATED" in text
+        assert "The answer that survived" not in text
+        assert "NOT established" in text
+
+    def test_the_full_answer_is_still_present(self, tmp_path):
+        """The verdict refuses to ASSERT adjudication. It does not withhold
+        the work -- withholding would make the tool useless on exactly the
+        runs where the operator most needs to see what happened."""
+        text = self._packet(tmp_path, closer="MERGED: buy it.")
+        assert "MERGED: buy it." in text
+
+    def test_the_reader_is_told_the_difference(self, tmp_path):
+        text = self._packet(tmp_path)
+        assert "CONSENSUS" in text and "ADJUDICATION" in text
+
+
+# ---------------------------------------------------------------------------
+# 15. the closer plugs holes using the lenses, without learning who spoke
+# ---------------------------------------------------------------------------
+
+class TestTheCloserSeesLensesNotVendors:
+
+    def _p(self, texts, personas, rounds=0):
+        return NL.closer_prompt(NL.ROUNDS[rounds], "ask", texts, "sum", None,
+                                n_seats=len(texts), personas=personas)
+
+    def test_contributions_are_labelled_by_lens(self):
+        p = self._p({"seat_1": "alpha", "seat_3": "gamma"},
+                    {"seat_1": "Contrarian", "seat_3": "Expansionist"})
+        assert "Contribution 1 -- Contrarian" in p
+        assert "Contribution 2 -- Expansionist" in p
+
+    def test_the_model_behind_a_lens_is_still_hidden(self):
+        """A lens says what a contribution was hunting. A vendor name says
+        whose authority stands behind it, which is the vote this architecture
+        exists to avoid."""
+        p = self._p({"seat_1": "alpha", "seat_3": "gamma"},
+                    {"seat_1": "Contrarian", "seat_3": "Expansionist"})
+        assert "seat_1" not in p and "seat_3" not in p
+
+    def test_a_lens_that_did_not_report_is_named_as_a_hole(self):
+        """The point of labelling. An unlabelled pile of two paragraphs looks
+        complete; naming the missing lenses says plainly that nobody examined
+        feasibility, premises, or long-term cost."""
+        p = self._p({"seat_1": "alpha", "seat_3": "gamma"},
+                    {"seat_1": "Contrarian", "seat_3": "Expansionist"})
+        assert "Lenses that did NOT report" in p
+        for name in ("First Principles", "Executor", "Steward"):
+            assert name in p
+
+    def test_a_full_panel_reports_no_missing_lenses(self):
+        texts = {f"seat_{i}": f"t{i}" for i in range(1, 6)}
+        personas = {f"seat_{i}": p.name
+                    for i, p in zip(range(1, 6), NL.PERSONAS, strict=True)}
+        assert "Lenses that did NOT report" not in self._p(texts, personas)
+
+    def test_a_missing_lens_is_framed_as_unexamined_not_as_clean(self):
+        """A failure mode nobody looked for produces no findings, which is
+        indistinguishable from a failure mode that is not there."""
+        p = self._p({"seat_1": "alpha"}, {"seat_1": "Contrarian"})
+        assert "HOLE, not an absence of a problem" in p
+
+    def test_the_closer_is_told_to_name_holes_not_fill_them(self):
+        """Filling a hole would make the closer a sixth seat writing
+        unexamined content into an answer that has stopped being reviewed."""
+        p = self._p({"seat_1": "alpha"}, {"seat_1": "Contrarian"})
+        assert "PLUG THE HOLES" in p
+        assert "Do NOT fill a hole with your own answer" in p
+
+    def test_hole_plugging_applies_to_every_round_not_just_the_first(self):
+        """The merged text becomes the next round's starting point, so a gap
+        left unnamed in round 2 is inherited for the rest of the run."""
+        for i in range(len(NL.ROUNDS)):
+            p = self._p({"seat_1": "alpha"}, {"seat_1": "Contrarian"}, rounds=i)
+            assert "PLUG THE HOLES" in p
+
+    def test_an_unassigned_seat_is_labelled_without_inventing_a_lens(self):
+        p = self._p({"seat_9": "x"}, {})
+        assert "no assigned lens" in p

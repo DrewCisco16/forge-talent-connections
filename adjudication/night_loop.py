@@ -483,23 +483,79 @@ def confidence_clause(n_seats: int, rho: float | None) -> str:
 
 def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
                   check_summary: str, prev_merged: str | None,
-                  n_seats: int = 5, rho: float | None = None) -> str:
+                  n_seats: int = 5, rho: float | None = None,
+                  personas: Mapping[str, str] | None = None) -> str:
     """The closer goes last, with everything in front of it.
 
     Thinker text arrives WITHOUT attribution. Which model said what is not
     information the closer should weigh -- weighting by source is the vote
     this architecture exists to avoid.
     """
+    # LABELLED BY LENS, NEVER BY MODEL.
+    #
+    # Which VENDOR said something must stay hidden: weighting a claim by who
+    # made it is the vote this architecture exists to avoid. Which LENS
+    # produced it is a different fact and a useful one -- it says what that
+    # contribution was hunting, not whose authority stands behind it. The
+    # persona was assigned by this code, not chosen by the model, so it
+    # carries no reputation to defer to.
+    #
+    # It also makes ABSENCE visible, which is the point. An unlabelled pile of
+    # four paragraphs looks complete. Four paragraphs where the Executor lens
+    # is missing says plainly that nobody examined whether any of this can
+    # actually be done -- a hole the closer can name only if it can see the
+    # gap.
+    personas = dict(personas or {})
     body = "\n\n".join(
-        f"### Contribution {i}\n{wrap_untrusted(t)}"
-        for i, t in enumerate(thinker_texts.values(), 1)
+        f"### Contribution {i} -- {personas.get(sid, 'no assigned lens')}\n"
+        f"{wrap_untrusted(t)}"
+        for i, (sid, t) in enumerate(thinker_texts.items(), 1)
+    )
+    missing = [p.name for p in PERSONAS
+               if p.name not in set((personas or {}).values())]
+    absent = ""
+    if missing:
+        absent = (
+            "\n## Lenses that did NOT report this round\n"
+            + "\n".join(
+                f"- {p.name}: nobody was hunting {p.hunts}"
+                for p in PERSONAS if p.name in missing)
+            + "\n\nEach of these is a HOLE, not an absence of a problem. "
+              "Name it in the OPEN list below. A failure mode nobody looked "
+              "for produces no findings, which is indistinguishable from a "
+              "failure mode that is not there.\n"
+        )
+    # PLUGGING THE HOLES IS THE JOB, not a closing courtesy.
+    #
+    # This merge is the ONLY point where the round's separate blind passes are
+    # ever seen together, so it is the only point where a gap between them can
+    # be noticed at all. Every seat wrote alone; none of them could know what
+    # the others left out. If the closer does not name what is missing here,
+    # nothing downstream ever will -- the merged text becomes the next round's
+    # starting point and the gap is inherited, silently, for the rest of the
+    # run. A hole carried forward four rounds is indistinguishable from a
+    # question that was settled.
+    plug = (
+        "\n\nTHEN PLUG THE HOLES. Each seat wrote alone and could not know "
+        "what the others left out. You are the first and only point where "
+        "these passes are seen together, so a gap you do not name here is "
+        "inherited by every round that follows and eventually reads as a "
+        "settled question.\n"
+        "For each hole, say what is missing and what would close it:\n"
+        "  - a lens that did not report, from the list above\n"
+        "  - a claim every seat asserted and none of them evidenced\n"
+        "  - an option proposed with no way to knock it down\n"
+        "  - a check that came back BLOCKED and left the point unsettled\n"
+        "Do NOT fill a hole with your own answer. Naming it is the work; "
+        "filling it would make you a sixth seat writing unexamined content "
+        "into an answer that has already stopped being reviewed."
     )
     task = ("Collect every option proposed, remove duplicates, and produce ONE "
             "numbered list of the distinct options. That list is what later "
             "rounds eliminate from."
             if r.invents else
             "Keep what survived. Remove what the check refuted. Do not add "
-            "anything new.")
+            "anything new.") + plug
     rules = load_closer_rules()
     return "\n".join([
         (f"{rules}\n\n{'=' * 68}\n" if rules else ""),
@@ -508,6 +564,7 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
         ("## The working answer entering this round\n"
          + wrap_untrusted(prev_merged) + "\n" if prev_merged else ""),
         f"## Contributions from this round\n{body}\n",
+        absent,
         "## Mechanical check results\n"
         "These verdicts came from code, not from a model. They are not "
         "opinions and are not up for reconsideration.\n"
@@ -717,7 +774,7 @@ def run_night(
         try:
             merged_new = closer(closer_prompt(
                 r, ask, texts, summary, merged,
-                n_seats=len(texts), rho=rho))
+                n_seats=len(texts), rho=rho, personas=res.personas))
         except BudgetExceeded:
             # A ceiling is not a closer failure. Swallowing it here left the
             # watcher's PARTIAL path unreachable: the run returned normally,
@@ -884,6 +941,95 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
     os.replace(tmp, os.path.join(out_dir, "status.md"))
 
 
+MAX_ESCALATION_FRACTION = 0.50
+"""Above this share of claims left to a human, the run did not adjudicate.
+
+Measured on the live run: 352 claims proposed, 210 escalated -- 59% -- and
+zero eliminations across five passes. The tool reported a result anyway. A
+panel that hands most of its work to the operator has not narrowed anything;
+it has produced a reading list with an answer attached, and the answer is the
+part a reader will act on.
+"""
+
+
+def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
+    """What the run actually established. Returns (verdict, reasons).
+
+    THE FAILURE THIS EXISTS TO STOP. On the live run every round completed,
+    nothing was ever refuted, the seats' claims overlapped between 0.0000 and
+    0.0238 -- they were not disagreeing, they were not addressing the same
+    points at all -- and the tool emitted something shaped like an answer.
+    Divergence was a footnote when it should have been a stop condition.
+
+    A merged paragraph produced by a panel that eliminated nothing is
+    CONSENSUS, not adjudication. The two look identical on the page and are
+    completely different facts: one survived attack, the other was never
+    attacked. Presenting the second as the first is the single most damaging
+    thing this tool could do, because its whole claim on a reader's trust is
+    that something was ruled out.
+
+    This is the fail-closed rule applied to the CONCLUSION, which is where it
+    belongs. It refuses to assert that a run adjudicated. It does not discard
+    the work, eliminate anything, or withhold the text -- the merged answer
+    and every claim still appear below, and a reader can weigh them knowing
+    what they are.
+    """
+    reasons: list[str] = []
+    if not results:
+        return "NOT ADJUDICATED", ["no round completed"]
+
+    refuted = sum(r.failed for r in results)
+    claims = sum(r.claims for r in results)
+    escalated = sum(r.escalated for r in results)
+    contaminated = [r.n for r in results if r.closer_contaminated]
+    degraded = [r.n for r in results if r.degraded]
+    measured = [r for r in results if r.rho is not None]
+
+    if refuted == 0:
+        reasons.append(
+            f"NOTHING WAS REFUTED. {claims} claim(s) were proposed across "
+            f"{len(results)} round(s) and no mechanical check ruled any of "
+            f"them false. Nothing was eliminated, so the merged text below is "
+            f"what the seats agreed on -- not what survived being attacked."
+        )
+    if claims and escalated / claims > MAX_ESCALATION_FRACTION:
+        reasons.append(
+            f"MOST OF IT IS UNCHECKED. {escalated} of {claims} claim(s) "
+            f"({escalated / claims:.0%}) carried no mechanical warrant and "
+            f"were left to a human. The panel narrowed little; it produced a "
+            f"queue."
+        )
+    if not measured:
+        reasons.append(
+            "INDEPENDENCE WAS NEVER MEASURED. No round had enough claims that "
+            "every seat had ruled on, which means the seats were largely not "
+            "addressing the same points. Whether they fail together is "
+            "unknown, so their agreement is not corroboration."
+        )
+    if contaminated:
+        reasons.append(
+            f"THE MERGED ANSWER CARRIES REFUTED CLAIMS, in round(s) "
+            f"{', '.join(str(n) for n in contaminated)}. The closing model "
+            f"asserted something the checks had already ruled false."
+        )
+    if degraded:
+        reasons.append(
+            f"THE PANEL WAS SHORT in round(s) "
+            f"{', '.join(str(n) for n in degraded)}. Fewer seats answered "
+            f"than were configured, so this is not the panel that was "
+            f"specified."
+        )
+
+    if refuted == 0 or not measured:
+        return "NOT ADJUDICATED", reasons
+    if reasons:
+        return "INCONCLUSIVE", reasons
+    return "ADJUDICATED", [
+        f"{refuted} claim(s) were mechanically refuted and removed; "
+        f"{escalated} of {claims} remain open for a human."
+    ]
+
+
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
                           orch: Orchestrator,
                           contaminated_rounds: Sequence[int] = (),
@@ -901,8 +1047,35 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
       Attribution stripped. No model names, no seat labels. The verifier must
       not be able to weight a claim by who made it.
     """
+    verdict, reasons = run_verdict(rounds_run)
     lines = [
         "# Verifier packet",
+        "",
+        # THE VERDICT GOES FIRST, ABOVE THE ANSWER.
+        #
+        # Placed below it, a reader has already absorbed the conclusion before
+        # learning what it is worth, and a caveat after a confident paragraph
+        # is a caveat nobody applies. The live run emitted a merged answer
+        # having refuted nothing, and nothing in the deliverable said so.
+        f"## VERDICT: {verdict}",
+        "",
+    ]
+    if verdict != "ADJUDICATED":
+        lines += [
+            "**This run did not establish what it may appear to.** Read this "
+            "before the answer below.",
+            "",
+        ]
+    lines += [f"- {r}" for r in reasons]
+    lines += [
+        "",
+        "CONSENSUS and ADJUDICATION look identical on the page and are "
+        "completely different facts: one survived attack, the other was never "
+        "attacked. Nothing below has been withheld or altered -- the merged "
+        "answer and every claim are here in full, so you can weigh them "
+        "knowing which of the two you are reading.",
+        "",
+        "---",
         "",
         "Paste this into a NEW chat in your Claude Project. Nothing else.",
         "This packet contains the final answer and its claims only -- no round",
@@ -919,7 +1092,9 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         "## The question",
         ask.strip(),
         "",
-        "## The answer that survived",
+        ("## The answer that survived"
+         if verdict == "ADJUDICATED"
+         else "## The merged answer (NOT established -- see the verdict above)"),
         merged.strip(),
         "",
         "## Claims it rests on, with what the mechanical checks found",

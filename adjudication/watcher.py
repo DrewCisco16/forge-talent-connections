@@ -137,6 +137,17 @@ def process(path: str, folders: Folders, max_cost: float,
         shutil.move(working, os.path.join(folders.done, name))
     except CeilingReached as exc:
         # A ceiling is a clean stop, not a fault. The partial run is on disk.
+        #
+        # makedirs FIRST. live_night creates the run directory, so a ceiling
+        # reached on the very first call -- before it got that far -- left no
+        # directory to write PARTIAL.md into. The open() then raised
+        # FileNotFoundError from INSIDE this handler, where the sibling
+        # except cannot catch it, so process() propagated, the input was
+        # stranded in processing/ (neither done nor failed), and the exception
+        # unwound watch()'s loop and killed the watcher outright. One run
+        # hitting its ceiling stopped every later file in the inbox, overnight,
+        # with nobody awake to see it.
+        os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "PARTIAL.md"), "w", encoding="utf-8") as fh:
             fh.write(f"# PARTIAL\n\n{exc}\n")
         shutil.move(working, os.path.join(folders.done, name))
@@ -172,8 +183,18 @@ def watch(root: str, max_cost: float, profiles_path: str | None = None,
                 print("  vanished or still changing; leaving it")
                 continue
             print("  stable; starting")
-            out = process(path, folders, max_cost, profiles_path)
-            print(f"  done -> {out}")
+            try:
+                out = process(path, folders, max_cost, profiles_path)
+                print(f"  done -> {out}")
+            except Exception as exc:  # noqa: BLE001
+                # process() is written not to raise. This is the backstop, and
+                # it exists because the failure it guards against is the worst
+                # one this component has: an exception here ends the loop, and
+                # a watcher that has silently stopped looks exactly like a
+                # watcher with an empty inbox. Every later file waits forever.
+                print(f"  UNHANDLED {type(exc).__name__}: {exc}")
+                print(f"  {os.path.basename(path)} may be stranded in "
+                      f"{folders.processing}; the watcher is still running")
         if once:
             return
         time.sleep(interval)

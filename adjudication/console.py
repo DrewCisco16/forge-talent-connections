@@ -130,6 +130,20 @@ def rerun() -> None:
     execute(d, ",".join(dom.gates), dom.resolve_dois)
 
 
+def _wrap(text: str, width: int) -> list[str]:
+    """Wrap for a terminal without importing textwrap for one call."""
+    words, line, out = text.split(), "", []
+    for w in words:
+        if len(line) + len(w) + 1 > width:
+            out.append(line)
+            line = w
+        else:
+            line = f"{line} {w}".strip()
+    if line:
+        out.append(line)
+    return out
+
+
 def _progress(message: str) -> None:
     """Print a progress line immediately.
 
@@ -196,6 +210,22 @@ def night() -> None:
            f"  claims {r.claims:>3}  pass {r.passed:>3} fail {r.failed:>3}"
            f" blocked {r.blocked:>2}" + ("   DEGRADED" if r.degraded else "")
            + ("   CONTAMINATED" if r.closer_contaminated else ""))
+    # THE VERDICT, BEFORE THE FILE PATH. The operator reads the last thing
+    # printed. A run that refuted nothing must not end with a tidy "done" and
+    # a path, because that reads as success.
+    from night_loop import run_verdict
+    verdict, reasons = run_verdict(res)
+    _p()
+    _p("=" * 68)
+    _p(f"  VERDICT: {verdict}")
+    _p("=" * 68)
+    for reason in reasons:
+        for line in _wrap(reason, 64):
+            _p(f"  {line}")
+    if verdict != "ADJUDICATED":
+        _p()
+        _p("  CONSENSUS is not ADJUDICATION. Nothing was withheld -- the full")
+        _p("  answer is in the packet -- but it was not established here.")
     _p()
     _p(f"  verifier packet: {os.path.relpath(os.path.join(out, 'VERIFIER-PACKET.md'), HERE)}")
     _p("  Paste it into a NEW chat in your Claude Project. Nothing else.")
