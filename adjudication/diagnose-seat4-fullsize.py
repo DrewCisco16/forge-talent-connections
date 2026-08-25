@@ -8,6 +8,7 @@ comes back, verbatim.
 One call per named seat. Prints the vendor's own error body.
 """
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -20,6 +21,23 @@ from adjudication_orchestrator import (
     load_panel,
 )
 from run_adjudication import load_env_file, load_profiles
+
+
+def _safe(text: str, key: str | None) -> str:
+    """Never print a credential, whatever the vendor or the exception says.
+
+    These scripts exist to be run against a LIVE panel and their output is
+    pasted into chats and issue trackers. A vendor error body can echo the
+    request, and urllib puts a malformed Authorization value straight into its
+    exception text, so the raw string is the one thing that must not be
+    printed unfiltered.
+    """
+    out = text or ""
+    if key and len(key) >= 8:
+        out = out.replace(key, "[redacted credential]")
+    return re.sub(r"\b(sk|pk|gh[pousr]|xox[baprs])[-_][A-Za-z0-9_\-]{8,}\b",
+                  "[redacted]", out)
+
 
 SEATS = sys.argv[1:] or ["seat_4"]
 print("env:", load_env_file(None))
@@ -41,6 +59,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 for sid in SEATS:
     seat, prof = panel[sid], profiles[sid]
+    # Bound once so every print below can scrub it out.
+    key = seat.credential() or ""
     cap = prof.max_tokens or 4096
     body = json.dumps(prof.build_body(seat.model, prompt, cap, 0.0)).encode()
     headers = {"content-type": "application/json",
@@ -65,10 +85,10 @@ for sid in SEATS:
     try:
         payload = json.loads(raw)
     except Exception:  # noqa: BLE001
-        print("  non-JSON:", raw[:300])
+        print("  non-JSON:", _safe(raw[:300].decode("utf-8", "replace"), key))
         continue
     if status >= 300:
-        print("  VENDOR SAID:", json.dumps(payload)[:700])
+        print("  VENDOR SAID:", _safe(json.dumps(payload)[:700], key))
         continue
     txt = prof.extract_text(payload)
     print(f"  text_path resolved: {'YES' if txt else 'NO'}  len={len(txt or '')}")

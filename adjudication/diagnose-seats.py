@@ -12,6 +12,7 @@ Usage:  .venv/bin/python diagnose-seats.py            # seats 1, 2, 5
         .venv/bin/python diagnose-seats.py seat_2     # just one
 """
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -19,6 +20,23 @@ import urllib.request
 sys.path.insert(0, ".")
 from adjudication_orchestrator import PANEL_OF_FIVE_EXTERNAL, load_panel
 from run_adjudication import load_env_file, load_profiles
+
+
+def _safe(text: str, key: str | None) -> str:
+    """Never print a credential, whatever the vendor or the exception says.
+
+    These scripts exist to be run against a LIVE panel and their output is
+    pasted into chats and issue trackers. A vendor error body can echo the
+    request, and urllib puts a malformed Authorization value straight into its
+    exception text, so the raw string is the one thing that must not be
+    printed unfiltered.
+    """
+    out = text or ""
+    if key and len(key) >= 8:
+        out = out.replace(key, "[redacted credential]")
+    return re.sub(r"\b(sk|pk|gh[pousr]|xox[baprs])[-_][A-Za-z0-9_\-]{8,}\b",
+                  "[redacted]", out)
+
 
 SEATS = sys.argv[1:] or ["seat_1", "seat_2", "seat_5"]
 PROMPT = "Reply with the single word: OK"
@@ -48,6 +66,8 @@ for sid in SEATS:
     seat = panel[sid]
     prof = profiles[sid]
 
+    # Bound once so every print below can scrub it out.
+    key = seat.credential() or ""
     sent = prof.build_body(seat.model, PROMPT, 64, 0.0)
     headers = {
         "content-type": "application/json",
@@ -74,18 +94,20 @@ for sid in SEATS:
     except Exception as exc:  # noqa: BLE001 - fail-closed: a diagnostic that
         # dies on the first bad seat cannot diagnose the others, which is the
         # whole reason it exists.
-        print(f"  TRANSPORT FAILURE: {type(exc).__name__}: {exc}")
+        print(f"  TRANSPORT FAILURE: {type(exc).__name__}: "
+              f"{_safe(str(exc), key)}")
         continue
 
     print(f"HTTP {status}")
     try:
         payload = json.loads(raw)
     except Exception:  # noqa: BLE001 - unparseable is a finding to show, not raise
-        print("  non-JSON response:", raw[:300])
+        print("  non-JSON response:",
+              _safe(raw[:300].decode("utf-8", "replace"), key))
         continue
 
     if status >= 300:
-        print("  VENDOR SAID:", json.dumps(payload)[:700])
+        print("  VENDOR SAID:", _safe(json.dumps(payload)[:700], key))
         continue
 
     print("  top-level keys:", sorted(payload)[:10])

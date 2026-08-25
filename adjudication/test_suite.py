@@ -4954,3 +4954,97 @@ class TestAWarrantMustBearOnTheClaim:
             Claim(id="", kind=ClaimKind.JUDGMENT, text="a matter of taste"))
         assert rec.escalated == 2
         assert rec.warrant_only == 1
+
+
+class TestAQuoteCannotEliminateACandidateItDoesNotBelongTo:
+    """Codex H13. Candidate ownership of a failed quote was recovered by
+    substring-searching a rendered English sentence for a claim id, so a
+    failed quote whose URL merely CONTAINED another candidate's claim id read
+    as belonging to that candidate as well -- and eliminated it. Candidate A's
+    fabricated quote took candidate B down with it, for no reason but a
+    coincidence of characters."""
+
+    def _run(self):
+        from quote_gate import QuoteVerificationGate
+
+        # B's claim id appears verbatim inside A's quote URL.
+        b_claim = Claim(id="bclaim0001", kind=ClaimKind.ARITHMETIC,
+                        text="B says the total is 4", warrant="2 + 2 = 4")
+        a_quote = Claim(id="aquote0001", kind=ClaimKind.QUOTE_VERIFICATION,
+                        text="A cites a source",
+                        warrant="https://e.test/bclaim0001 :: a fabricated "
+                                "sentence that is not on the page",
+                        supports=["aclaim0001"])
+        a_claim = Claim(id="aclaim0001", kind=ClaimKind.ARITHMETIC,
+                        text="A says the total is 9", warrant="3 * 3 = 9")
+        A = Candidate("A", "answer A", [a_claim, a_quote])
+        B = Candidate("B", "answer B", [b_claim])
+
+        gate = QuoteVerificationGate(
+            fetcher=lambda _u: (200, "entirely unrelated page text. " * 40))
+        o = Orchestrator([ArithmeticGate(), gate])
+        o.run_pass(
+            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
+            [A, B], [a_claim, a_quote, b_claim])
+        return A, B
+
+    def test_the_candidate_that_offered_the_bad_quote_is_eliminated(self):
+        A, _ = self._run()
+        assert A.eliminated is True
+
+    def test_the_unrelated_candidate_survives(self):
+        """The load-bearing assertion. B did nothing wrong."""
+        _, B = self._run()
+        assert B.eliminated is False, (
+            "a rival was eliminated because its claim id happened to appear "
+            "inside another candidate's quote URL")
+
+
+class TestTheEscalationQueueRoundTrips:
+    """Codex M3. --export-queue writes {"_README": [...], "claims": [...]} and
+    the reader expected a flat {id: value} mapping, so feeding the exported
+    file straight back -- which the file's own instructions tell the operator
+    to do -- raised on the key "_README"."""
+
+    EXPORTED: ClassVar[dict] = {
+        "_README": ["Set verdict on each entry, then re-run."],
+        "claims": [
+            {"id": "c1", "kind": "judgment", "text": "t", "verdict": True},
+            {"id": "c2", "kind": "judgment", "text": "t", "verdict": None},
+            {"id": "c3", "kind": "judgment", "text": "t", "verdict": False},
+        ],
+    }
+
+    def test_the_exported_shape_is_read_back(self):
+        assert RA.parse_adjudications(self.EXPORTED) == {"c1": True, "c3": False}
+
+    def test_an_unanswered_entry_stays_open(self):
+        """null used to become False through bool(), silently answering a
+        question the operator had deliberately left open."""
+        assert "c2" not in RA.parse_adjudications(self.EXPORTED)
+
+    def test_a_string_verdict_is_refused_not_coerced(self):
+        """bool("false") is True. A human verdict is the one input here that
+        no gate checks, so coercing it is the one place a typo becomes a
+        fact."""
+        with pytest.raises(RA.AdjudicationFileError, match="true or false"):
+            RA.parse_adjudications({"claims": [{"id": "c1", "verdict": "false"}]})
+
+    def test_a_numeric_verdict_is_refused(self):
+        with pytest.raises(RA.AdjudicationFileError):
+            RA.parse_adjudications({"claims": [{"id": "c1", "verdict": 1}]})
+
+    def test_a_flat_hand_written_mapping_still_works(self):
+        assert RA.parse_adjudications({"c9": True, "c8": False}) == {
+            "c9": True, "c8": False}
+
+    def test_underscore_keys_are_comments_in_the_flat_shape_too(self):
+        assert RA.parse_adjudications({"_note": "x", "c9": True}) == {"c9": True}
+
+    def test_an_entry_with_no_id_is_refused(self):
+        with pytest.raises(RA.AdjudicationFileError, match="no usable 'id'"):
+            RA.parse_adjudications({"claims": [{"verdict": True}]})
+
+    def test_a_wholly_wrong_shape_is_named(self):
+        with pytest.raises(RA.AdjudicationFileError, match="export-queue"):
+            RA.parse_adjudications("not a queue at all")

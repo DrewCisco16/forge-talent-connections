@@ -41,7 +41,12 @@ def sh(args: list[str]) -> int:
     """
     # argv list, shell=False by default, and args are built from this repo's
     # own paths. No model output reaches this call.
-    return subprocess.call(args, cwd=HERE)  # nosec B603 B607
+    #
+    # B607 was listed here and suppresses nothing: bandit reports a nosec with
+    # no matching finding, and a stale suppression is indistinguishable from a
+    # live one, so it teaches the next reader that this line needs an
+    # exemption it does not need.
+    return subprocess.call(args, cwd=HERE)  # nosec B603
 
 
 def run_dirs() -> list[str]:
@@ -361,7 +366,11 @@ def main() -> int:
         elif c == "7":
             sh([PY, "run_adjudication.py", "--demo"])
         elif c == "8":
-            sh([PY, "-m", "pytest", "test_suite.py", "test_properties.py", "-q"])
+            # Discovery, not two filenames. This named the original pair, so
+            # the console's "Test suite" ran 561 of 909 tests and reported a
+            # pass -- the four newer files, which cover the gates, the ledger,
+            # the round engine and the watcher, were run by nobody here.
+            sh([PY, "-m", "pytest", "-q"])
         elif c == "9":
             _p("  5 real calls, ~6 tokens each. Under a cent.")
             if input("  Type YES: ").strip() == "YES":

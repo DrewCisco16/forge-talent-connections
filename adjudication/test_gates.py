@@ -669,7 +669,13 @@ class TestTheCascade:
         out = QG.cascade_unsupported({"q1": self._verdict(GateStatus.FAIL)},
                                      {"q1": q})
         assert set(out) == {"c1", "c2"}
-        assert "UNSUPPORTED" in out["c1"]
+        quote_id, why = out["c1"]
+        # The CONDEMNING QUOTE'S ID, returned as data. It was previously
+        # recovered by substring-searching this sentence, so a quote whose URL
+        # merely contained another candidate's claim id eliminated that
+        # candidate too.
+        assert quote_id == "q1"
+        assert "UNSUPPORTED" in why
 
     def test_a_blocked_quote_cascades_nothing(self):
         """The check did not happen, so the supported claim is exactly as well
@@ -1077,3 +1083,65 @@ class TestAnIncompleteReadIsNotAFinding:
         fetch = inspect.getsource(QG.QuoteVerificationGate._fetch)
         assert "_PinnedHTTPSHandler(addr)" in fetch
         assert "pinned" not in fetch.split("_PinnedHTTPSHandler")[0][-400:]
+
+
+class TestCitationMatchingCatchesSubstitutionAndSpareHonestMetadata:
+    """Codex M2. The matcher admitted substitutions and refuted honest
+    citations, in four separate ways."""
+
+    def _check(self, warrant, record):
+        g = CG.CitationFieldMatchGate(record_fn=lambda _d: record)
+        return g.check(_claim(warrant))
+
+    def test_a_reversed_finding_is_caught_despite_high_word_overlap(self):
+        """"reduces survival" against "improves survival" differs by one token
+        out of three and can clear a 70% threshold, so the gate would confirm
+        a citation asserting the OPPOSITE of the work it names. Bag-of-words
+        similarity cannot see this."""
+        r = self._check(
+            f"{NUMPY_DOI} :: Harris ;; 2020 ;; Treatment reduces survival in mice",
+            _record(title="Treatment improves survival in mice"))
+        assert r.status is GateStatus.FAIL
+        assert "OPPOSITE_FINDING" in r.detail
+
+    def test_a_one_word_title_cannot_match_everything(self):
+        """Overlap is measured against the SHORTER title, so a claimed title
+        of one word appearing anywhere in the real one scored 100% -- a model
+        could cite any paper by naming one of its words."""
+        r = self._check(f"{NUMPY_DOI} :: Harris ;; 2020 ;; Learning",
+                        _record(title="Learning to rank with deep networks"))
+        assert r.status is GateStatus.BLOCKED
+        assert "too thin" in r.detail
+
+    def test_identical_non_latin_titles_match(self):
+        """The ASCII tokeniser reduced a CJK title to nothing, so two
+        IDENTICAL Chinese titles scored 0% and the gate reported WRONG_PAPER --
+        refuting an honest citation because of the alphabet it is written in."""
+        title = "深度学习综述与展望"
+        assert CG.title_overlap(title, title) == 1.0
+
+    def test_a_missing_record_year_blocks_rather_than_passing(self):
+        """Passing let a citation clear the gate on two fields out of three
+        while silently skipping the third."""
+        rec = _record()
+        rec.pop("issued")
+        r = self._check(f"{NUMPY_DOI} :: Harris ;; 2020 ;; {NUMPY_TITLE}", rec)
+        assert r.status is GateStatus.BLOCKED
+        assert "no date" in r.detail
+
+    def test_a_genuinely_matching_citation_still_passes(self):
+        """Every guard above must leave the honest case alone, or the gate
+        would refute real references and be switched off."""
+        r = self._check(f"{NUMPY_DOI} :: Harris ;; 2020 ;; {NUMPY_TITLE}",
+                        _record())
+        assert r.status is GateStatus.PASS
+
+    def test_a_wrong_paper_is_still_caught(self):
+        r = self._check(
+            f"{NUMPY_DOI} :: Harris ;; 2020 ;; Attention is all you need",
+            _record())
+        assert r.status is GateStatus.FAIL
+        assert "WRONG_PAPER" in r.detail
+
+    def test_polarity_does_not_fire_on_an_ordinary_title(self):
+        assert CG.polarity_conflict(NUMPY_TITLE, NUMPY_TITLE) is None

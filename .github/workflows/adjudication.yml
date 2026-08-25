@@ -102,7 +102,27 @@ jobs:
           python run_adjudication.py --demo | grep "SURVIVOR: c_true" > /dev/null
           # The shipped template MUST fail validation while unfilled.
           # It validating clean is the fail-open this layer exists to stop.
-          python run_adjudication.py --check-profiles profiles.example.json && exit 1 || true
+          # `cmd && exit 1 || true` succeeds on ANY nonzero status, so a
+          # crash in the profile checker -- a traceback, an import error --
+          # passed this step exactly as a clean validation failure did. The
+          # expected exit code is asserted explicitly instead.
+          # The status alone is not enough: an unhandled Python exception
+          # also exits 1, so a traceback would satisfy an exit-code check as
+          # happily as a clean validation failure. Assert BOTH the nonzero
+          # status and the message that only the real refusal produces.
+          set +e
+          out=$(python run_adjudication.py --check-profiles profiles.example.json 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          if [ "$rc" -eq 0 ]; then
+            echo "the unfilled template validated clean; that is the fail-open this step exists to stop"
+            exit 1
+          fi
+          echo "$out" | grep -q "PROFILES NOT USABLE" || {
+            echo "expected a validation refusal; got a different failure (a crash?)"
+            exit 1
+          }
 
       # A permissive resolver silently converts the whole system back into an
       # unverified ensemble. SOP 8.3 calls this the most common build failure.

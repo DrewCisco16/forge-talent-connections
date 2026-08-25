@@ -268,6 +268,62 @@ def load_candidates(path: str) -> list[Candidate]:
     return parse_candidates(raw)
 
 
+class AdjudicationFileError(ValueError):
+    """The answered escalation queue is not in a shape this will act on."""
+
+
+def parse_adjudications(raw: Any) -> dict[str, bool]:
+    """Read an answered escalation queue, in the shape --export-queue writes.
+
+    IT COULD NOT READ ITS OWN OUTPUT. --export-queue emits
+    {"_README": [...], "claims": [{"id": ..., "verdict": null}, ...]} and the
+    reader expected a flat {id: value} mapping, so feeding the exported file
+    straight back -- which the file's own instructions tell the operator to do
+    -- raised AdjudicationConflict on the key "_README".
+
+    It also applied bool() to every value, which is wrong in both directions:
+    null became False, silently answering a question the operator had left
+    open, and the string "false" became True, because every non-empty string
+    is truthy. A human verdict is the one input here that no gate checks, so
+    coercing it is the one place a typo becomes a fact.
+
+    Only real booleans resolve a claim. null stays open, which is the honest
+    state, and anything else is refused by name.
+    """
+    if isinstance(raw, dict) and isinstance(raw.get("claims"), list):
+        entries = raw["claims"]           # the exported shape
+    elif isinstance(raw, list):
+        entries = raw
+    elif isinstance(raw, dict):
+        # A flat {id: verdict} mapping, hand-written. Underscore keys are
+        # comments, matching every other config file in this tool.
+        entries = [{"id": k, "verdict": v} for k, v in raw.items()
+                   if not str(k).startswith("_")]
+    else:
+        raise AdjudicationFileError(
+            f"expected the file written by --export-queue, or a flat "
+            f"{{id: true|false}} object; got {type(raw).__name__}")
+
+    out: dict[str, bool] = {}
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise AdjudicationFileError(f"entry {i} is not an object")
+        cid = entry.get("id")
+        if not isinstance(cid, str) or not cid.strip():
+            raise AdjudicationFileError(f"entry {i} has no usable 'id'")
+        verdict = entry.get("verdict")
+        if verdict is None:
+            continue                      # unanswered; stays in the queue
+        if not isinstance(verdict, bool):
+            raise AdjudicationFileError(
+                f"claim {cid!r} has verdict {verdict!r}. Use true or false, "
+                f"not a string or a number: bool(\"false\") is True, and a "
+                f"human verdict is the one input here that no gate checks."
+            )
+        out[cid] = verdict
+    return out
+
+
 # ---------------------------------------------------------------------------
 # holes
 # ---------------------------------------------------------------------------
@@ -941,7 +997,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     adjudications = None
     if args.adjudications:
         with open(args.adjudications, encoding="utf-8") as fh:
-            adjudications = {k: bool(v) for k, v in json.load(fh).items()}
+            adjudications = parse_adjudications(json.load(fh))
 
     try:
         ledger = build_ledger(args.max_cost, args.max_cost_per_stage,

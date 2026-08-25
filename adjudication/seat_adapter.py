@@ -42,6 +42,7 @@ from request headers.
 from __future__ import annotations
 
 import json
+import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -125,6 +126,25 @@ def scrub(text: str, secret: str | None) -> str:
     return text
 
 
+def redact_url(url: str) -> str:
+    """scheme://host/path, with userinfo and any query dropped.
+
+    Enough to identify which endpoint was called; not enough to carry a
+    credential someone put in the URL.
+    """
+    try:
+        p = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return "[unparseable endpoint]"
+    if not p.scheme:
+        return "[endpoint]"
+    host = p.hostname or ""
+    port = f":{p.port}" if p.port else ""
+    query = "?[redacted]" if p.query else ""
+    userinfo = "[redacted]@" if (p.username or p.password) else ""
+    return f"{p.scheme}://{userinfo}{host}{port}{p.path}{query}"
+
+
 class SeatError(RuntimeError):
     """A seat could not produce a verified reply. Carries no credential."""
 
@@ -182,7 +202,13 @@ class ProviderProfile:
             )
 
     def __repr__(self) -> str:
-        return f"ProviderProfile(name={self.name!r}, endpoint={self.endpoint!r})"
+        # THE ENDPOINT IS REDACTED, NOT PRINTED. repr() lands in tracebacks,
+        # logs, debugger output and pytest failure messages, and an endpoint
+        # carrying userinfo or a credential query parameter would be copied
+        # into all of them. validate_config refuses such endpoints, but repr
+        # is reached by profiles built directly in code and by anything that
+        # bypasses validation.
+        return f"ProviderProfile(name={self.name!r}, endpoint={redact_url(self.endpoint)!r})"
 
 
 @dataclass(frozen=True)

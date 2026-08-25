@@ -420,17 +420,17 @@ class QuoteVerificationGate:
 
 def cascade_unsupported(
     verdicts: Mapping[str, object], claims_by_id: Mapping[str, Claim]
-) -> dict[str, str]:
+) -> dict[str, tuple[str, str]]:
     """Claims whose supporting quote was shown not to exist.
 
-    Returns {claim_id: why}. A quote_verification claim that FAILED does not
+    Returns {claim_id: (condemning_quote_id, why)}. A quote_verification claim that FAILED does not
     merely drop itself: every claim it was offered in support of has lost its
     stated evidentiary basis and must leave the working answer too.
 
     A BLOCKED quote cascades nothing. The check did not happen, so the
     supported claim is exactly as well or badly evidenced as it was before.
     """
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, str]] = {}
     for cid, v in verdicts.items():
         claim = claims_by_id.get(cid)
         if claim is None or claim.kind is not ClaimKind.QUOTE_VERIFICATION:
@@ -438,8 +438,18 @@ def cascade_unsupported(
         if getattr(getattr(v, "status", None), "value", None) != "fail":
             continue
         for supported in claim.supports:
-            out[supported] = (
-                f"UNSUPPORTED: its supporting quote ({cid}) was checked against "
-                f"the source and is not there -- {getattr(v, 'detail', '')}"
-            )
+            # THE CONDEMNING QUOTE'S ID IS RETURNED, NOT EMBEDDED IN PROSE.
+            #
+            # Callers need to know WHICH quote condemned a claim, in order to
+            # check it belongs to the same candidate. That was recovered by
+            # substring-searching the rendered sentence below, so a failed
+            # quote whose URL merely CONTAINED another candidate's claim id
+            # read as belonging to that candidate too -- and eliminated it.
+            # An id is an identifier; it should never be recovered by looking
+            # for it inside a sentence.
+            out[supported] = (cid, (
+                f"UNSUPPORTED: its supporting quote ({cid}) was checked "
+                f"against the source and is not there -- "
+                f"{getattr(v, 'detail', '')}"
+            ))
     return out

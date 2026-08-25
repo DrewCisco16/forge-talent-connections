@@ -949,12 +949,25 @@ class SeatResponse:
     error: str | None = None
 
 
-def _edge_is_own(target_id: str, unsupported: Mapping[str, str],
+def _edge_is_own(target_id: str,
+                 unsupported: Mapping[str, tuple[str, str]],
                  own_ids: set[str]) -> bool:
     """True when the failed quote that condemned this claim belongs to the
-    same candidate. The quote's id is embedded in the recorded reason."""
-    why = unsupported.get(target_id, "")
-    return any(cid in why for cid in own_ids)
+    same candidate.
+
+    THE EDGE IS READ FROM THE RECORD, NOT FOUND IN THE PROSE. This previously
+    did `any(cid in why for cid in own_ids)` -- substring-searching a rendered
+    English sentence for a claim id. A failed quote whose URL merely CONTAINED
+    another candidate's claim id therefore read as belonging to that candidate
+    as well, and eliminated it: candidate A's fabricated quote took candidate
+    B down with it, for no reason but a coincidence of characters. An
+    identifier must never be recovered by looking for it inside a sentence.
+    """
+    edge = unsupported.get(target_id)
+    if edge is None:
+        return False
+    condemning_quote_id, _why = edge
+    return condemning_quote_id in own_ids
 
 
 def content_claim_id(kind: ClaimKind, warrant: str | None, text: str) -> str:
@@ -1640,7 +1653,10 @@ class Orchestrator:
         unsupported = cascade_unsupported(self.verdicts, by_id)
         if not unsupported:
             return
-        self.unsupported_claims.update(unsupported)
+        # Keep the human-readable half in the public record; the edge itself
+        # stays structured for anything that must reason about ownership.
+        self.unsupported_claims.update(
+            {cid: why for cid, (_qid, why) in unsupported.items()})
         for cand in candidates:
             if cand.eliminated:
                 continue
@@ -1652,10 +1668,11 @@ class Orchestrator:
             # eliminating a competitor by lying about it.
             own = {c.id for c in cand.claims}
             for claim in cand.claims:
-                why = unsupported.get(claim.id)
-                if why and not _edge_is_own(claim.id, unsupported, own):
+                edge = unsupported.get(claim.id)
+                if edge and not _edge_is_own(claim.id, unsupported, own):
                     continue
-                if why:
+                if edge:
+                    _quote_id, why = edge
                     cand.eliminated = True
                     cand.elimination_reason = f"{p.name}: {why}"
                     cand.elimination_kind = "earned"

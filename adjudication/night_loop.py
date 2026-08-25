@@ -104,10 +104,34 @@ told is answerable months later rather than living somewhere opaque.
 
 
 def load_closer_rules(path: str = CLOSER_SYSTEM_PROMPT) -> str:
+    """The house rules the closer is given on every merging call.
+
+    A MISSING FILE RAISES. It returned "" and the paid run continued, which
+    meant the one model able to alter the conclusion -- the model whose output
+    becomes the deliverable -- ran with its training and nothing else, on a
+    run that had already cost money. Packaging the modules without the prompt
+    file, or a rename, would have produced exactly that silently.
+
+    These rules are not decoration. They are where fail-closed, the evidence
+    labels, the refusal to invent a probability, and the prohibition on
+    simulating a panel are stated. A closer without them is a different
+    instrument.
+    """
     if not os.path.exists(path):
-        return ""
+        raise FileNotFoundError(
+            f"the closer policy file is missing: {path}. Refusing to start. "
+            f"Without it the model that writes the deliverable runs with no "
+            f"house rules at all -- no fail-closed default, no evidence "
+            f"labels, and no prohibition on simulating a panel."
+        )
     with open(path, encoding="utf-8") as fh:
-        return fh.read().strip()
+        text = fh.read().strip()
+    if not text:
+        raise ValueError(
+            f"the closer policy file is empty: {path}. An empty policy is not "
+            f"a permissive policy, it is a missing one."
+        )
+    return text
 
 
 MIN_THINKERS = 2

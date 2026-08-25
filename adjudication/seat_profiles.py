@@ -39,6 +39,7 @@ interpolates as text, which is how a system-prompt prefix is written.
 from __future__ import annotations
 
 import json
+import urllib.parse
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -214,6 +215,32 @@ def validate_config(raw: Any) -> list[str]:
                 problems.append(f"{where}: missing required field {field_name!r}")
 
         endpoint = cfg.get("endpoint")
+        # A CREDENTIAL MUST NOT LIVE IN THE URL. Userinfo and query parameters
+        # are copied verbatim into logs, error messages, repr(), and any HTTP
+        # library's diagnostics, so a key placed there leaks by every route at
+        # once and none of the scrubbing elsewhere in this codebase applies to
+        # it. Refused rather than redacted: the operator must move it to the
+        # environment, which is the only place this tool reads secrets from.
+        if isinstance(endpoint, str) and endpoint:
+            parsed = urllib.parse.urlparse(endpoint)
+            if parsed.username or parsed.password:
+                problems.append(
+                    f"{where}: endpoint carries userinfo before the '@'. A "
+                    f"credential in a URL is copied into logs and error "
+                    f"messages verbatim. Put it in the environment and "
+                    f"reference it from auth_template."
+                )
+            query = urllib.parse.parse_qs(parsed.query)
+            leaky = sorted(k for k in query
+                           if any(m in k.casefold()
+                                  for m in ("key", "token", "secret", "auth",
+                                            "password", "sig")))
+            if leaky:
+                problems.append(
+                    f"{where}: endpoint query carries {', '.join(leaky)}, "
+                    f"which reads as a credential. Put it in the environment "
+                    f"and reference it from auth_template."
+                )
         if isinstance(endpoint, str) and endpoint and not endpoint.startswith("https://"):
             problems.append(
                 f"{where}: endpoint must be https, got {endpoint!r} -- a credential "
@@ -227,9 +254,14 @@ def validate_config(raw: Any) -> list[str]:
 
         auth = cfg.get("auth_template")
         if isinstance(auth, str) and "{key}" not in auth:
+            # THE TEMPLATE IS NOT ECHOED. A template with no {key} placeholder
+            # is one where the operator hardcoded the credential, so quoting it
+            # back prints exactly the secret this message exists to complain
+            # about -- into a terminal, a log, and any CI transcript.
             problems.append(
-                f"{where}: auth_template must contain a {{key}} placeholder, "
-                f"got {auth!r}"
+                f"{where}: auth_template must contain a {{key}} placeholder. "
+                f"The value is not repeated here because a template missing "
+                f"that placeholder usually has a credential hardcoded in it."
             )
 
         body = cfg.get("body")

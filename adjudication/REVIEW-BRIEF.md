@@ -133,7 +133,15 @@ specific site genuinely needs it, argue that site.
 
 ## State of the build
 
-- 496 tests. Coverage 94%.
+- 926 tests. Coverage 80%, measured over EVERY module.
+
+  The previous line here read "496 tests. Coverage 94%." Both figures were
+  stale, and the coverage one was worse than stale: it was computed over seven
+  hand-picked modules that excluded the round engine, the cost ledger, and
+  every gate. Excluding only console.py and intake.py -- 480 statements of
+  interactive terminal prompting, still untested -- the remainder stands at
+  about 92%. The 80% is over everything, which is the number that means
+  something.
 - `ruff`, `mypy --strict`, `bandit`, `pip-audit` all clean.
 - Mutation tested: deliberate breaks introduced to check the tests notice.
   40 breaks, 35 caught immediately, 5 exposed weak tests that were then

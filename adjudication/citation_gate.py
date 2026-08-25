@@ -64,7 +64,55 @@ year. A two-year gap is a different work.
 
 _STOP = {"a", "an", "the", "of", "for", "and", "in", "on", "with", "to",
          "from", "by", "at", "as", "is", "are", "using", "via"}
-_WORD = re.compile(r"[a-z0-9]+")
+_WORD = re.compile(r"\w+", re.UNICODE)
+"""UNICODE, not [a-z0-9]. The ASCII class tokenised a CJK title to nothing, so
+two IDENTICAL Chinese titles scored 0% overlap and the gate reported
+WRONG_PAPER -- refuting an honest citation because of the alphabet it is
+written in. Any non-Latin script had the same problem."""
+
+MIN_INFORMATIVE_TOKENS = 3
+"""Fewest content words a claimed title must have to be matchable.
+
+Overlap is measured against the SHORTER title, so a claimed title of one word
+that appears anywhere in the real one scored 100%. "Learning" matched
+"Learning to rank with deep networks for search" perfectly, which means a model
+could cite any paper by naming one of its words. Below this the gate cannot
+rule and the claim goes to a person."""
+
+_POLARITY = {
+    "increases": "decreases", "decreases": "increases",
+    "improves": "reduces", "reduces": "improves",
+    "raises": "lowers", "lowers": "raises",
+    "higher": "lower", "lower": "higher",
+    "positive": "negative", "negative": "positive",
+    "supports": "refutes", "refutes": "supports",
+    "effective": "ineffective", "ineffective": "effective",
+    "safe": "unsafe", "unsafe": "safe",
+    "with": "without", "without": "with",
+    "no": "yes", "not": "",
+}
+"""Words whose swap reverses a title's meaning while barely moving the overlap.
+
+"reduces survival" against "improves survival" differs by one token out of
+three and can clear a 70% threshold -- so the gate would confirm a citation
+that says the OPPOSITE of the work it names. Bag-of-words similarity cannot
+see this; it has to be checked for separately."""
+
+
+def polarity_conflict(claimed: str, actual: str) -> str | None:
+    """A directional term present in one title whose opposite is in the other."""
+    a, b = _tokens_raw(claimed), _tokens_raw(actual)
+    for word, opposite in _POLARITY.items():
+        if not opposite:
+            continue
+        if word in a and opposite in b and word not in b:
+            return f"{word!r} vs {opposite!r}"
+    return None
+
+
+def _tokens_raw(title: str) -> set[str]:
+    """All words, stopwords included. Polarity often lives in a stopword."""
+    return set(_WORD.findall(_fold(title)))
 
 
 def _fold(s: str) -> str:
@@ -90,6 +138,11 @@ def title_overlap(claimed: str, actual: str) -> float:
         return 0.0
     shorter = a if len(a) <= len(b) else b
     return len(a & b) / len(shorter)
+
+
+def title_is_matchable(claimed: str) -> bool:
+    """False when the claimed title is too thin for overlap to mean anything."""
+    return len(_tokens(claimed)) >= MIN_INFORMATIVE_TOKENS
 
 
 def _record_year(rec: dict[str, Any]) -> int | None:
@@ -182,6 +235,30 @@ class CitationFieldMatchGate:
                 f"{'title' if not got_title else 'authors'} to compare",
             )
 
+        if not title_is_matchable(title):
+            # Overlap is measured against the shorter title, so a one-word
+            # claimed title that appears anywhere in the real one scores 100%.
+            # The gate cannot rule; a person must.
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"the cited title {title[:60]!r} carries fewer than "
+                f"{MIN_INFORMATIVE_TOKENS} informative words, which is too "
+                f"thin for a title comparison to mean anything",
+            )
+
+        conflict = polarity_conflict(title, got_title)
+        if conflict is not None:
+            # Bag-of-words similarity cannot see a reversed meaning: "reduces
+            # survival" against "improves survival" differs by one token and
+            # clears the threshold, so the gate would confirm a citation
+            # asserting the OPPOSITE of the work it names.
+            return GateResult(
+                self.name, GateStatus.FAIL,
+                f"OPPOSITE_FINDING: {doi} is registered to "
+                f"\"{got_title[:70]}\", which reverses the cited title "
+                f"({conflict}). The words mostly match and the meaning does not",
+            )
+
         overlap = title_overlap(title, got_title)
         if overlap < TITLE_OVERLAP_MIN:
             return GateResult(
@@ -197,14 +274,24 @@ class CitationFieldMatchGate:
                 f"{', '.join(sorted(got_surnames)[:4])} -- no author named "
                 f"{surname}",
             )
-        if got_year is not None and abs(got_year - year) > YEAR_TOLERANCE:
+        if got_year is None:
+            # A record with no date cannot confirm or refute the cited year.
+            # Passing anyway let a citation clear the gate on two fields out of
+            # three while silently skipping the third.
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"{doi} resolves and the title and author match, but its "
+                f"record carries no date, so the cited year {year} was not "
+                f"checked",
+            )
+        if abs(got_year - year) > YEAR_TOLERANCE:
             return GateResult(
                 self.name, GateStatus.FAIL,
                 f"YEAR_MISMATCH: {doi} is dated {got_year}, cited as {year}",
             )
 
         note = ""
-        if got_year is not None and got_year != year:
+        if got_year != year:
             note = (f" (record year {got_year} vs cited {year}, within the "
                     f"{YEAR_TOLERANCE}-year tolerance)")
         venue = (rec.get("container-title") or [""])[0]
