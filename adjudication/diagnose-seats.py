@@ -36,7 +36,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
     plaintext. These requests carry a credential, so they must not follow.
     """
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913, PLR0917
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise urllib.error.HTTPError(
             req.full_url, code,
             f"refusing a {code} redirect to {newurl!r} on a credentialed request",
