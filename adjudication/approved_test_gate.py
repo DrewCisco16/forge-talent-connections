@@ -26,9 +26,12 @@ substitution, globbing, or chaining exists to be exploited.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import shlex
+import signal
 
 # Reason kept OFF the nosec line: bandit parses everything after "nosec" as
 # test ids and warns about each prose word. subprocess is used with an argv
@@ -38,18 +41,110 @@ import subprocess  # nosec B404
 
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
+SAFE_ENV_NAMES = frozenset({
+    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM", "TMPDIR",
+    "SYSTEMROOT", "COMSPEC", "PATHEXT",
+})
+"""Environment variables an approved command may see.
+
+An ALLOWLIST because a denylist is wrong here by construction: it can only
+remove the credentials someone remembered, and the one that leaks is always
+the one added later. Nothing named *_API_KEY, *_TOKEN, *_SECRET or read from
+.env appears here, and nothing needs to -- a test asserting code behaviour has
+no business holding a vendor credential.
+"""
+
+_SECRET_HINT = re.compile(
+    r"(sk-|pk-|api[-_]?key|bearer\s|token|secret|password|xox[baprs]-|"
+    r"gh[pousr]_|AIza|AKIA)", re.IGNORECASE)
+_LONG_OPAQUE = re.compile(r"\b[A-Za-z0-9_\-]{24,}\b")
+
+
+def redact(text: str) -> str:
+    """Blank anything credential-shaped before it reaches an artifact.
+
+    DEFENCE IN DEPTH, not the primary control -- the environment allowlist is.
+    This exists because the command's output goes three places that are all
+    hard to recall: the on-disk check record, the operator's terminal, and the
+    closer prompt, which leaves the machine. A leak into the last of those is
+    unrecoverable, so the cost of over-redacting a diagnostic line is not
+    comparable to the cost of missing one.
+    """
+    if not text:
+        return text
+    if _SECRET_HINT.search(text):
+        return "[redacted: output matched a credential pattern]"
+    return _LONG_OPAQUE.sub("[redacted]", text)
+
+
 DEFAULT_ALLOWLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  "approved-commands.json")
 
 
+class AllowlistError(ValueError):
+    """The approved-commands policy file is not a policy this code will honour.
+
+    Raised rather than returning an empty list, because an operator who wrote a
+    malformed allowlist believes commands are approved. Silently approving
+    nothing would look identical to the gate being inert by choice, and they
+    would never learn the file was ignored.
+    """
+
+
 def load_allowlist(path: str = DEFAULT_ALLOWLIST) -> list[str]:
-    """Exact command strings the operator has approved. Absent file -> none."""
+    """Exact command strings the operator has approved. Absent file -> none.
+
+    THE FAILURE THIS VALIDATION EXISTS TO STOP. The previous version did
+    `[c for c in (cmds or []) if isinstance(c, str) and c.strip()]`. A JSON
+    STRING is iterable, and every character of it is a non-empty str, so
+
+        {"approved": "safe_cmd"}
+
+    produced the approvals ['s', 'a', 'f', 'e', '_', 'c', 'm', 'd'] -- eight
+    one-character commands the operator never approved -- while "safe_cmd",
+    the command they DID intend, was not approved at all. If any executable
+    named `s` exists on PATH, a model proposing the warrant `s` gets it run.
+    That is a direct path from model output to subprocess with no operator
+    approval anywhere in it, and it is reachable from a plausible typo.
+
+    Everything here fails CLOSED and LOUDLY: an unreadable or malformed policy
+    raises. The one silent case is a file that does not exist, which is the
+    documented inert default rather than a malformed policy.
+    """
     if not os.path.exists(path):
         return []
-    with open(path, encoding="utf-8") as fh:
-        raw = json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise AllowlistError(
+            f"{path} is not valid JSON ({exc}). Refusing to run anything: a "
+            f"policy file that cannot be read is not a policy that approves "
+            f"nothing, it is a policy nobody knows."
+        ) from None
+    except OSError as exc:
+        raise AllowlistError(f"{path} could not be read: {exc}") from None
+
     cmds = raw.get("approved") if isinstance(raw, dict) else raw
-    return [c for c in (cmds or []) if isinstance(c, str) and c.strip()]
+    if cmds is None:
+        return []
+    # A str is a sequence of str, which is exactly why this must be checked
+    # before iterating and not by filtering afterwards.
+    if not isinstance(cmds, list):
+        raise AllowlistError(
+            f"{path}: 'approved' must be a JSON LIST of command strings, got "
+            f"{type(cmds).__name__}. Written as a bare string it would be "
+            f"iterated one character at a time, approving every letter as a "
+            f"separate command and approving the intended command not at all."
+        )
+    bad = [c for c in cmds if not isinstance(c, str) or not c.strip()]
+    if bad:
+        raise AllowlistError(
+            f"{path}: every entry in 'approved' must be a non-empty string. "
+            f"Rejected: {bad!r}. Dropping them silently would leave the "
+            f"operator believing a command is approved when it is not."
+        )
+    return [c.strip() for c in cmds]
 
 
 class ApprovedCommandRunner:
@@ -76,17 +171,66 @@ class ApprovedCommandRunner:
                 f"not in the approved list: {cmd!r}. Add it to "
                 f"approved-commands.json yourself if you want it run."
             )
+        argv = shlex.split(cmd)
+        if not argv:
+            raise PermissionError(f"approved entry {cmd!r} has no executable")
+
         try:
-            # argv list, shell=False, exact-string allowlist checked above.
             proc = subprocess.run(  # nosec B603
-                shlex.split(cmd), cwd=self.cwd, timeout=self.timeout_s,
+                argv, cwd=self.cwd, timeout=self.timeout_s,
                 capture_output=True, text=True, shell=False, check=False,
+                # THE CHILD MUST NOT INHERIT THE PANEL'S CREDENTIALS.
+                #
+                # This is the whole point. An approved command is approved to
+                # run -- it is not approved to read five vendor API keys. With
+                # an inherited environment, any conftest, plugin, or module the
+                # command legitimately loads can read SEAT_n_API_KEY. Verified
+                # end to end: the key reached GateResult.detail, was written to
+                # check.md on disk, and was placed in the closer prompt, which
+                # is transmitted to a third-party vendor. The operator approved
+                # a test command and thereby mailed their credentials out.
+                env=self._child_env(),
+                # A dedicated process group, so the timeout below can kill the
+                # whole tree. Killing only the direct child leaves grandchildren
+                # running after the gate has reported.
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
+            self._kill_group(exc)
             raise TimeoutError(f"{cmd!r} exceeded {self.timeout_s}s") from None
         tail = (proc.stdout or proc.stderr or "").strip().splitlines()
-        return proc.returncode == 0, (tail[-1][:200] if tail else
-                                      f"exit {proc.returncode}")
+        detail = tail[-1][:200] if tail else f"exit {proc.returncode}"
+        return proc.returncode == 0, redact(detail)
+
+    # -- isolation ---------------------------------------------------------
+    def _child_env(self) -> dict[str, str]:
+        """A minimal environment with no credential in it.
+
+        An ALLOWLIST, not a denylist. Removing the variables we happen to know
+        about would let the next credential added to .env flow straight through
+        -- and the point of failure is a variable nobody remembered.
+        """
+        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_NAMES}
+        env.setdefault("PATH", os.defpath)
+        env["HOME"] = self.cwd
+        # Marks the child for anything that wants to refuse to run under it.
+        env["ADJUDICATION_SANDBOXED"] = "1"
+        return env
+
+    @staticmethod
+    def _kill_group(exc: subprocess.TimeoutExpired) -> None:
+        """Terminate the timed-out command and everything it started.
+
+        subprocess kills only the process it launched. A test runner that
+        spawned workers leaves them running, still holding whatever the parent
+        had, doing work the gate has already stopped waiting for.
+        """
+        pid = getattr(getattr(exc, "process", None), "pid", None)
+        if pid is None:
+            return
+        with contextlib.suppress(OSError, ProcessLookupError):
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
 
 
 class ApprovedTestGate:

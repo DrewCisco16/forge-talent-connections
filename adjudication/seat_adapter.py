@@ -101,6 +101,30 @@ and delays the operator seeing the one thing that needs fixing.
 """
 
 
+def scrub(text: str, secret: str | None) -> str:
+    """Remove a known credential from a diagnostic string.
+
+    THE FAILURE THIS EXISTS TO STOP. The handler below carried a comment
+    saying the message is "the exception TYPE and text, never the request,
+    because the request carries the credential". That was wrong in the one way
+    that matters: we do not include the request, but the EXCEPTION'S OWN TEXT
+    can. urllib raises ValueError containing the offending header value for a
+    malformed Authorization; several transports include the request in their
+    message. Verified: the credential appeared in SeatError, which is written
+    to seat_errors, into the audit record, and into status.md on disk.
+
+    Exact-value removal, not pattern matching, because the credential is known
+    here. Also scrubs any chained cause, since traceback printing walks it.
+    """
+    if not text:
+        return text
+    if secret:
+        for form in (secret, secret.strip()):
+            if form and len(form) >= 8:
+                text = text.replace(form, "[redacted credential]")
+    return text
+
+
 class SeatError(RuntimeError):
     """A seat could not produce a verified reply. Carries no credential."""
 
@@ -286,7 +310,7 @@ class HttpSeat:
                 status, raw = self.transport(
                     "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
                 )
-            except Exception as exc:  # fail closed on any transport fault
+            except Exception as exc:  # noqa: BLE001 - fail closed on any transport fault
                 # A READ TIMEOUT IS THE MODEL STILL THINKING, NOT A FAULT,
                 # and it is the one transport failure that must not be retried.
                 #
@@ -308,14 +332,24 @@ class HttpSeat:
                         f"routinely exceed this on a full-size prompt. Raise "
                         f"timeout_s -- do not lower max_tokens, which "
                         f"truncates the reply instead of speeding it up."
-                    ) from exc
-                # The message is the exception TYPE and text, never the request,
-                # because the request carries the credential.
-                last = f"transport raised {type(exc).__name__}: {exc}"
+                    # from None: the chained cause is walked by traceback
+                    # printing and by the watcher's format_exc(), and a
+                    # transport exception can carry the request headers.
+                    ) from None
+                # The exception's OWN text can contain the request, and the
+                # request carries the credential. Naming only the type would
+                # discard the vendor's explanation, which is what made the
+                # first live run unreadable -- so the text is kept and the
+                # known credential is removed from it by exact value.
+                last = scrub(f"transport raised {type(exc).__name__}: {exc}",
+                             self.seat.credential())
                 if attempt + 1 < self.retry.max_attempts:
                     self._backoff(attempt)
                     continue
-                raise SeatError(f"seat {self.seat_id}: {last}") from exc
+                # from None, not from exc: __cause__ is walked by traceback
+                # printing and by the watcher's format_exc(), so a chained
+                # cause carrying the credential lands in ERROR.md on disk.
+                raise SeatError(f"seat {self.seat_id}: {last}") from None
 
             if status in RETRYABLE_STATUS and attempt + 1 < self.retry.max_attempts:
                 self._backoff(attempt)
@@ -359,11 +393,13 @@ class HttpSeat:
     def _parse(self, raw: bytes) -> str:
         try:
             payload = json.loads(raw)
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             raise SeatError(
                 f"seat {self.seat_id}: {self.profile.name} returned "
                 f"{len(raw)} bytes that are not JSON"
-            ) from exc
+            # from None: chaining prints the decode error, which quotes the
+            # response body. A vendor error body can echo the request.
+            ) from None
         if not isinstance(payload, dict):
             raise SeatError(
                 f"seat {self.seat_id}: expected a JSON object, got "
@@ -371,11 +407,11 @@ class HttpSeat:
             )
         try:
             text = self.profile.extract_text(payload)
-        except Exception as exc:  # a raising extractor fails closed
+        except Exception as exc:  # noqa: BLE001 - a raising extractor fails closed
             raise SeatError(
-                f"seat {self.seat_id}: extract_text raised "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
+                scrub(f"seat {self.seat_id}: extract_text raised "
+                      f"{type(exc).__name__}: {exc}", self.seat.credential())
+            ) from None
 
         if text is None:
             raise SeatError(

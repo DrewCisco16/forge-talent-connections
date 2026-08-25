@@ -334,11 +334,6 @@ class TestTheCommandRunnerShipsInert:
             with pytest.raises(PermissionError):
                 r.run(sneaky)
 
-    def test_a_non_string_entry_is_ignored(self, tmp_path):
-        allow = tmp_path / "a.json"
-        allow.write_text(json.dumps({"approved": ["ok", 42, None, "  "]}))
-        assert ATG.load_allowlist(str(allow)) == ["ok"]
-
     def test_the_shipped_allowlist_is_empty(self):
         """Ships inert. An allowlist populated by default would mean a fresh
         clone executes commands a model asked for."""
@@ -812,3 +807,116 @@ class TestTheResolverEntryPoints:
         r(NUMPY_DOI)
         r(NUMPY_DOI)
         assert hits["n"] == 1
+
+
+# ===========================================================================
+# Codex C1 / C2 / H18 — the approved-command gate is remote code execution
+# by design, so its policy file and its isolation are the whole control.
+# ===========================================================================
+
+class TestTheAllowlistPolicyFileIsValidatedStrictly:
+
+    def _write(self, tmp_path, payload):
+        p = tmp_path / "a.json"
+        p.write_text(json.dumps(payload) if not isinstance(payload, str)
+                     else payload)
+        return str(p)
+
+    def test_a_scalar_approved_field_is_refused_not_split_into_characters(
+            self, tmp_path):
+        """Codex C2, reproduced before fixing. A JSON string is iterable and
+        every character of it is a non-empty str, so {"approved": "safe_cmd"}
+        yielded eight one-character approvals -- s, a, f, e, _, c, m, d -- and
+        did NOT approve "safe_cmd". Any executable named `s` on PATH was then
+        reachable from a model's warrant with no operator approval at all."""
+        p = self._write(tmp_path, {"approved": "safe_cmd"})
+        with pytest.raises(ATG.AllowlistError, match="must be a JSON LIST"):
+            ATG.load_allowlist(p)
+
+    def test_a_malformed_policy_raises_rather_than_approving_nothing(
+            self, tmp_path):
+        """An operator with a broken allowlist believes commands are approved.
+        Silently approving nothing looks identical to the gate being inert by
+        choice, and they never learn the file was ignored."""
+        p = self._write(tmp_path, "{ not json at all")
+        with pytest.raises(ATG.AllowlistError, match="not valid JSON"):
+            ATG.load_allowlist(p)
+
+    def test_a_non_string_entry_raises_rather_than_being_dropped(self, tmp_path):
+        p = self._write(tmp_path, {"approved": ["ok", 42]})
+        with pytest.raises(ATG.AllowlistError, match="non-empty string"):
+            ATG.load_allowlist(p)
+
+    def test_an_empty_entry_raises(self, tmp_path):
+        p = self._write(tmp_path, {"approved": ["ok", "   "]})
+        with pytest.raises(ATG.AllowlistError):
+            ATG.load_allowlist(p)
+
+    def test_an_absent_file_is_still_the_silent_inert_default(self, tmp_path):
+        """The one silent case, and deliberately so: no file is the documented
+        ships-inert state, not a malformed policy."""
+        assert ATG.load_allowlist(str(tmp_path / "nope.json")) == []
+
+    def test_a_well_formed_list_still_loads(self, tmp_path):
+        p = self._write(tmp_path, {"approved": ["pytest -q", " ruff check . "]})
+        assert ATG.load_allowlist(p) == ["pytest -q", "ruff check ."]
+
+
+class TestAnApprovedCommandCannotReachTheCredentials:
+
+    def _gate(self, tmp_path, script, cmd="python3 leaky.py"):
+        (tmp_path / "leaky.py").write_text(script)
+        (tmp_path / "a.json").write_text(json.dumps({"approved": [cmd]}))
+        return ATG.ApprovedTestGate(runner=ATG.ApprovedCommandRunner(
+            allowlist_path=str(tmp_path / "a.json"), cwd=str(tmp_path)))
+
+    def test_a_seat_credential_is_not_inherited_by_the_child(
+            self, tmp_path, monkeypatch):
+        """Codex C1, reproduced before fixing. The command is approved to RUN.
+        It is not approved to read five vendor API keys. With an inherited
+        environment any conftest or plugin it loads could, and the value
+        reached check.md on disk AND the closer prompt -- which is transmitted
+        to a third-party vendor."""
+        monkeypatch.setenv("SEAT_1_API_KEY", "sk-FAKE-CREDENTIAL-abc123")
+        g = self._gate(tmp_path,
+                       'import os\nprint("cfg:", os.environ.get("SEAT_1_API_KEY"))\n')
+        r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                          warrant="python3 leaky.py"))
+        assert "sk-FAKE-CREDENTIAL" not in r.detail
+
+    def test_the_environment_is_an_allowlist_not_a_denylist(
+            self, tmp_path, monkeypatch):
+        """A denylist can only remove the credentials someone remembered, and
+        the one that leaks is always the one added later."""
+        monkeypatch.setenv("SOME_FUTURE_CREDENTIAL", "sk-NOT-YET-INVENTED")
+        g = self._gate(tmp_path,
+                       'import os\nprint(os.environ.get("SOME_FUTURE_CREDENTIAL"))\n')
+        r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                          warrant="python3 leaky.py"))
+        assert "sk-NOT-YET-INVENTED" not in r.detail
+
+    def test_the_child_still_gets_what_a_test_actually_needs(self, tmp_path):
+        g = self._gate(tmp_path, 'import os\nprint("PATH" in os.environ)\n')
+        r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                          warrant="python3 leaky.py"))
+        assert r.status is GateStatus.PASS
+
+    def test_output_that_looks_like_a_credential_is_redacted(self):
+        """Defence in depth behind the environment allowlist. The command's
+        output reaches an on-disk record and a prompt that leaves the machine,
+        so over-redacting a diagnostic line is not comparable in cost to
+        missing one."""
+        assert "sk-live-abcd" not in ATG.redact("token: sk-live-abcd1234")
+        assert "redacted" in ATG.redact("Bearer abcdefghijklmnopqrstuvwx")
+
+    def test_ordinary_test_output_survives_redaction(self):
+        """A gate whose every detail reads '[redacted]' tells the operator
+        nothing and would be switched off."""
+        assert ATG.redact("5 passed in 1.20s") == "5 passed in 1.20s"
+
+    def test_the_child_is_marked_as_sandboxed(self, tmp_path):
+        g = self._gate(tmp_path,
+                       'import os\nprint(os.environ.get("ADJUDICATION_SANDBOXED"))\n')
+        r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
+                          warrant="python3 leaky.py"))
+        assert "1" in r.detail

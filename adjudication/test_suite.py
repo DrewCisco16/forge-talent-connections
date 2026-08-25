@@ -346,7 +346,11 @@ CALIB = Pass("pc", "Calibration", "x", False)
 class TestOrchestratorRouting:
     def test_gate_pass_is_auto_accepted(self):
         o = _orch()
-        rec = o.run_pass(ELIM, [], [Claim("c1", "t", ClaimKind.ARITHMETIC, "2+2 = 4")])
+        # The text must MENTION the number the gate verifies. A claim whose
+        # prose never refers to the computed value is not established by that
+        # computation -- see TestAWarrantMustBearOnTheClaim.
+        rec = o.run_pass(ELIM, [], [
+            Claim("c1", "the total is 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
         assert (rec.auto_accepted, rec.auto_rejected, rec.escalated) == (1, 0, 0)
 
     def test_gate_fail_eliminates_the_carrying_candidate(self):
@@ -1036,13 +1040,14 @@ class TestSequentialBlindedRun:
         claim is adjudicated once, but BOTH seats are recorded as having
         caught it. Seat-scoped ids would make every claim a singleton and
         inflate the Chao1 estimate of what nobody caught."""
-        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | total")
+        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | the total is 47")
         runner = AO.BlindedSeatRunner({"s1": both, "s2": both})
         o = Orchestrator([ArithmeticGate()])
         rec = o.run_sequential("art", [], runner, passes=[AO.DEFAULT_PASSES[0]])[0].record
         assert rec.proposed == 2          # two seats proposed it
         assert rec.auto_accepted == 1     # the gate ran once
-        cid = AO.content_claim_id(ClaimKind.ARITHMETIC, "12 + 35 = 47", "total")
+        cid = AO.content_claim_id(ClaimKind.ARITHMETIC, "12 + 35 = 47",
+                                  "the total is 47")
         assert o.detections_by_seat["s1"] == {cid}
         assert o.detections_by_seat["s2"] == {cid}
         # one error, caught twice -> a doubleton, not two singletons
@@ -1324,11 +1329,19 @@ class TestConjunctiveRouting:
             CitationResolutionGate(lambda i: resolves),
         ])
 
-    def test_admissible_and_resolving_is_accepted(self):
+    def test_admissible_and_resolving_escalates_the_proposition(self):
+        """Both citation gates pass, and the CLAIM is still not accepted.
+
+        Resolution proves the identifier is registered; field matching proves
+        it is the work named. Neither proves the work SAYS what the claim says
+        it says, and no network call can. Accepting here let a bare valid DOI
+        certify any sentence attached to it."""
         o = self._orch(True)
         rec = o.run_pass(AO.DEFAULT_PASSES[0], [],
                          [Claim("c", "t", ClaimKind.CITATION, "10.1038/real")])
-        assert rec.auto_accepted == 1
+        assert rec.auto_accepted == 0
+        assert rec.warrant_only == 1
+        assert "PROPOSITION NOT ESTABLISHED" in o.verdicts["c"].detail
 
     def test_admissible_but_not_resolving_is_rejected(self):
         o = self._orch(False)
@@ -1894,8 +1907,11 @@ class TestAuditIntegratedWithARun:
     def test_pass_entries_carry_gate_outcomes_and_divergence(self):
         log = AuditLog("run-e2e")
         runner = AO.BlindedSeatRunner({
-            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | ok"),
-            "s2": _seat("CLAIM | arithmetic | 2+2 = 5 | wrong"),
+            # The claim text names the value, so the verified arithmetic
+            # actually bears on the proposition. Text like "ok" does not, and
+            # now escalates rather than being accepted.
+            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | the total is 4"),
+            "s2": _seat("CLAIM | arithmetic | 2+2 = 5 | the total is 5"),
         })
         o = Orchestrator([ArithmeticGate()])
         o.run_sequential("art", [], runner, audit=log, passes=[AO.DEFAULT_PASSES[0]])
@@ -4790,7 +4806,10 @@ class TestAClaimAlwaysHasAnIdentity:
 
     def test_every_distinct_claim_is_adjudicated(self):
         """The regression itself: three distinct claims, three verdicts."""
-        claims = [Claim(id="", kind=ClaimKind.ARITHMETIC, text=f"c{i}",
+        # The text names the computed value, so the warrant bears on the
+        # claim. Without that these escalate, correctly.
+        claims = [Claim(id="", kind=ClaimKind.ARITHMETIC,
+                        text=f"the answer is {i + 1}",
                         warrant=f"{i} + 1 = {i + 1}") for i in range(3)]
         orch = Orchestrator([ArithmeticGate()])
         rec = orch.run_pass(
@@ -4808,3 +4827,130 @@ class TestAClaimAlwaysHasAnIdentity:
             Orchestrator([ArithmeticGate()]).run_pass(
                 type("P", (), {"id": "p", "name": "n", "eliminative": False})(),
                 [], [c])
+
+
+class TestAWarrantMustBearOnTheClaim:
+    """Codex C5. A GATE CHECKS A WARRANT; IT DOES NOT CHECK THE PROPOSITION.
+
+    Reproduced before fixing, with ArithmeticGate and the true warrant
+    "2 + 2 = 4":
+
+        "The launch is SAFE to proceed"           -> PASS
+        "The launch is UNSAFE and must be aborted" -> PASS
+
+    Two contradictory propositions, both marked verified on one true equation,
+    both printed in the deliverable under a [PASS] marker. An earlier fix made
+    their claim IDs distinct, which stopped them SHARING a verdict and left
+    untouched the part that matters: a model can attach any true warrant to
+    any false assertion and have it certified. That defeats the whole tool
+    while every indicator reads green.
+
+    Unsupported claims ESCALATE. They are not accepted and not eliminated --
+    an unestablished claim could still be true.
+    """
+
+    def _run(self, *claims):
+        o = Orchestrator([ArithmeticGate()])
+        rec = o.run_pass(
+            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
+            [], list(claims))
+        return o, rec
+
+    def test_a_true_equation_cannot_certify_an_unrelated_sentence(self):
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                  text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
+        o, rec = self._run(c)
+        assert rec.auto_accepted == 0
+        assert rec.warrant_only == 1
+        assert "DOES NOT BEAR ON THE CLAIM" in o.verdicts[c.id].detail
+
+    def test_opposite_propositions_are_not_both_verified(self):
+        """The reproduction that made this undeniable."""
+        safe = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                     text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
+        unsafe = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                       text="The launch is UNSAFE and must be aborted",
+                       warrant="2 + 2 = 4")
+        _, rec = self._run(safe, unsafe)
+        assert rec.auto_accepted == 0
+
+    def test_an_unsupported_claim_escalates_rather_than_being_eliminated(self):
+        """Fail closed on the conclusion, open on the candidate. Eliminating
+        here would kill a claim that might be perfectly true."""
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                  text="Drinking poison is safe", warrant="1 + 1 = 2")
+        cand = Candidate("A", "poison is fine", [c])
+        o = Orchestrator([ArithmeticGate()])
+        rec = o.run_pass(
+            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
+            [cand], [c])
+        assert cand.eliminated is False
+        assert rec.escalated == 1
+
+    def test_a_claim_that_names_its_own_result_is_still_accepted(self):
+        """The rule must not break honest claims, or it would be switched off."""
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                  text="12 units at 50 each is 600 in total",
+                  warrant="12 * 50 = 600")
+        _, rec = self._run(c)
+        assert rec.auto_accepted == 1
+
+    def test_formatting_of_the_number_does_not_break_the_match(self):
+        """1,200 and 1200 are the same number to a reader and must be to this."""
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                  text="the total comes to 1,200 units", warrant="600 * 2 = 1200")
+        _, rec = self._run(c)
+        assert rec.auto_accepted == 1
+
+    def test_the_verdict_records_that_the_warrant_itself_checked_out(self):
+        """The arithmetic WAS verified. Discarding that would lose real work
+        and invite someone to re-verify it by hand."""
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
+                  text="the sky is green", warrant="2 + 2 = 4")
+        o, _ = self._run(c)
+        assert "the warrant itself checked out" in o.verdicts[c.id].detail
+
+    def test_a_citation_never_establishes_the_proposition(self):
+        """A resolving DOI rules out a fabricated reference. It says nothing
+        about whether the work supports the claim -- misrepresenting a real
+        paper is invisible to every mechanical check."""
+        c = Claim(id="", kind=ClaimKind.CITATION, text="vaccines cause autism",
+                  warrant="10.1038/s41586-020-2649-2")
+        assert "PROPOSITION NOT ESTABLISHED" in AO.warrant_supports(c)
+
+    def test_a_passing_command_does_not_establish_unrelated_prose(self):
+        """Two OPPOSITE claims carrying the same passing command both passed."""
+        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
+                  text="the deployment is production ready",
+                  warrant="pytest tests/test_parser.py -q")
+        assert "DOES NOT BEAR ON THE CLAIM" in AO.warrant_supports(c)
+
+    def test_a_command_the_claim_is_actually_about_is_supported(self):
+        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
+                  text="the parser tests pass",
+                  warrant="pytest tests/test_parser.py -q")
+        assert AO.warrant_supports(c) is None
+
+    def test_a_quote_sharing_no_content_with_the_claim_is_rejected(self):
+        c = Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
+                  text="revenue tripled in the fourth quarter",
+                  warrant="https://e.test/p :: photosynthesis converts sunlight")
+        assert "NOT ABOUT THIS CLAIM" in AO.warrant_supports(c)
+
+    def test_a_quote_on_the_same_subject_is_allowed_through(self):
+        c = Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
+                  text="revenue tripled in the fourth quarter",
+                  warrant="https://e.test/p :: quarterly revenue tripled")
+        assert AO.warrant_supports(c) is None
+
+    def test_warrant_only_is_counted_apart_from_ordinary_escalation(self):
+        """Different findings. An ordinary escalation had no mechanical
+        warrant; these had one that PASSED and simply is not about the claim.
+        Many of these means seats are attaching true evidence to unrelated
+        assertions, which is the specific attack this system exists to stop."""
+        _, rec = self._run(
+            Claim(id="", kind=ClaimKind.ARITHMETIC, text="unrelated prose",
+                  warrant="2 + 2 = 4"),
+            Claim(id="", kind=ClaimKind.JUDGMENT, text="a matter of taste"))
+        assert rec.escalated == 2
+        assert rec.warrant_only == 1

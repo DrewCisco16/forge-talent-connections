@@ -292,6 +292,121 @@ def _safe_eval(node: ast.AST) -> float:
     raise ValueError("unsupported expression")
 
 
+_NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
+_WORDISH = re.compile(r"[a-z0-9]+")
+
+
+def _numbers(text: str) -> set[str]:
+    """Numeric literals, normalised so 1,200 and 1200 and 1200.0 all match."""
+    out: set[str] = set()
+    for raw in _NUMBER.findall(text or ""):
+        cleaned = raw.replace(",", "").rstrip(".")
+        try:
+            v = float(cleaned)
+        except ValueError:
+            continue
+        out.add(str(int(v)) if v == int(v) else str(v))
+    return out
+
+
+def _tokens(text: str) -> set[str]:
+    return set(_WORDISH.findall((text or "").casefold()))
+
+
+def warrant_supports(claim: Claim) -> str | None:
+    """None if the warrant could establish this proposition; else why not.
+
+    A GATE CHECKS A WARRANT. IT DOES NOT CHECK THE PROPOSITION.
+    This is the difference the tool exists on, and it was missing.
+
+    ArithmeticGate recomputes "2 + 2 = 4" and reports PASS. It has said
+    nothing whatever about the claim's TEXT. Verified before this existed:
+
+        text "The launch is SAFE to proceed"          warrant "2 + 2 = 4"  PASS
+        text "The launch is UNSAFE and must be aborted" warrant "2 + 2 = 4"  PASS
+
+    Both contradictory propositions were marked verified on the strength of
+    one true equation, and both were printed in the deliverable under a [PASS]
+    marker. An earlier fix made their claim IDs distinct, which stopped them
+    sharing one verdict, and left untouched the part that matters: a model can
+    attach any true warrant to any false assertion and have it certified.
+    That defeats the entire tool, quietly, while every indicator reads green.
+
+    So: after a gate PASSes, the warrant must be shown to BEAR ON the text. If
+    that cannot be established mechanically, the claim escalates -- it is not
+    accepted and it is not eliminated. Fail closed on the conclusion, open on
+    the candidate, exactly as everywhere else.
+
+    The checks below are deliberately weak and deliberately one-directional.
+    They cannot confirm that a warrant proves a proposition -- that is
+    semantics, and no string comparison settles it. They can only catch a
+    warrant that is not even ABOUT the proposition, which is the attack.
+    Anything they cannot settle escalates to a person.
+    """
+    text = claim.text or ""
+    warrant = claim.warrant or ""
+
+    if claim.kind in (ClaimKind.ARITHMETIC, ClaimKind.UNIT):
+        # The computed result must appear in the proposition. If the claim
+        # never mentions the number the gate just verified, the gate verified
+        # something else.
+        _, _, rhs = warrant.rpartition("=")
+        results = _numbers(rhs)
+        if results and not (results & _numbers(text)):
+            return (
+                f"WARRANT DOES NOT BEAR ON THE CLAIM: the check verified "
+                f"{warrant.strip()!r}, but the claim text does not mention "
+                f"{' or '.join(sorted(results))}. A true equation attached to "
+                f"an unrelated sentence verifies the equation, not the "
+                f"sentence."
+            )
+        return None
+
+    if claim.kind is ClaimKind.CITATION:
+        # Resolution proves the identifier is registered. Field matching proves
+        # it is the work that was named. NEITHER proves the work SAYS what the
+        # claim says it says, and no network call can. A bare valid DOI
+        # attached to any sentence passed admissibility and resolution.
+        return (
+            "SOURCE VERIFIED, PROPOSITION NOT ESTABLISHED: the citation "
+            "resolves and matches the work named, which rules out a fabricated "
+            "reference. It does not establish that the work supports this "
+            "claim -- misrepresenting a real paper is invisible to every "
+            "mechanical check and needs a person who has read it."
+        )
+
+    if claim.kind is ClaimKind.QUOTE_VERIFICATION:
+        # The quote is present at the URL. Whether it supports the claim is a
+        # reading, but a quote sharing no content words with the claim is not
+        # even on the subject.
+        _, _, quote = warrant.partition("::")
+        qt = {t for t in _tokens(quote) if len(t) > 3}
+        tt = {t for t in _tokens(text) if len(t) > 3}
+        if qt and tt and not (qt & tt):
+            return (
+                "QUOTE IS NOT ABOUT THIS CLAIM: the quoted text was found at "
+                "the cited URL, but it shares no substantive word with the "
+                "claim it is offered to support."
+            )
+        return None
+
+    if claim.kind is ClaimKind.CODE_BEHAVIOR:
+        # A command exiting zero establishes that the command exits zero.
+        # Verified: two OPPOSITE claims carrying the same passing command both
+        # received PASS.
+        ct = {t for t in _tokens(warrant) if len(t) > 2}
+        tt = {t for t in _tokens(text) if len(t) > 2}
+        if ct and tt and not (ct & tt):
+            return (
+                f"COMMAND DOES NOT BEAR ON THE CLAIM: {warrant.strip()!r} "
+                f"exited zero, which establishes that it exited zero. The "
+                f"claim text is about something else."
+            )
+        return None
+
+    return None
+
+
 class ArithmeticGate:
     """
     Recomputes a stated numeric result. warrant format: "<expression> = <claimed>"
@@ -1291,6 +1406,16 @@ class PassRecord:
     auto_accepted: int
     auto_rejected: int
     escalated: int
+    warrant_only: int = 0
+    """Claims whose warrant checked out but does not establish the claim.
+
+    Counted separately from ordinary escalations because they are a different
+    finding: an ordinary escalation had no mechanical warrant at all, while
+    these had one that passed and simply is not about the proposition. A run
+    with many of these is a run where seats are attaching true evidence to
+    unrelated assertions, which is the specific attack this system exists to
+    stop.
+    """
     repeats: int = 0
     """Claims re-proposed after being adjudicated in an earlier pass.
 
@@ -1635,6 +1760,22 @@ class Orchestrator:
             )
 
             if result.status is GateStatus.PASS:
+                # THE GATE CHECKED THE WARRANT. Does the warrant bear on the
+                # PROPOSITION? If that cannot be established, the claim is not
+                # accepted -- it escalates. Not eliminated either: an
+                # unestablished claim could still be true, and killing it here
+                # would break the rule this whole system runs on.
+                unsupported = warrant_supports(claim)
+                if unsupported is not None:
+                    self.verdicts[claim.id] = ClaimVerdict(
+                        claim.id, p.id, None, result.gate,
+                        f"{unsupported} (the warrant itself checked out: "
+                        f"{result.detail})",
+                    )
+                    self.escalation_queue.append(claim)
+                    rec.escalated += 1
+                    rec.warrant_only += 1
+                    continue
                 rec.auto_accepted += 1
                 continue
 
