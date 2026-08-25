@@ -513,6 +513,53 @@ def live_seats(
 # report
 # ---------------------------------------------------------------------------
 
+def kill_provenance(answer: AdjudicationAnswer) -> dict[str, int]:
+    """Split eliminations into EARNED and STRUCTURAL.
+
+    EARNED means a gate recomputed, resolved, or parsed the claim and it did
+    not hold. STRUCTURAL means the candidate went because models found it less
+    persuasive.
+
+    This architecture cannot produce a structural kill: nothing here removes a
+    candidate on preference, and elimination_reason always names the gate that
+    failed. The count is reported anyway, and reported as zero, because a
+    reader cannot otherwise tell "the design forbids it" from "it did not
+    happen this time" -- and if a future change ever introduces one, this
+    number moves and someone notices.
+
+    ZERO EARNED KILLS IS THE ALARM. A run that narrows the field without a
+    single mechanical refutation has produced agreement, not elimination.
+    Convergence is what this architecture yields whether or not the answer is
+    right, so a clean-looking answer with nothing earned behind it is the case
+    most likely to be believed and least likely to deserve it.
+    """
+    earned = structural = 0
+    for c in answer.eliminated:
+        reason = c.elimination_reason or ""
+        if "failed --" in reason:
+            earned += 1
+        else:
+            structural += 1
+    return {"earned": earned, "structural": structural}
+
+
+def verdict_header(answer: AdjudicationAnswer) -> str:
+    """One line at the top saying how much the run actually established."""
+    prov = kill_provenance(answer)
+    if answer.eliminated and prov["earned"] == 0:
+        return ("CONSENSUS ONLY -- candidates were narrowed without a single "
+                "mechanical refutation")
+    if not answer.eliminated:
+        return ("CONSENSUS ONLY -- nothing was eliminated; no candidate was "
+                "mechanically refuted")
+    if answer.resolved:
+        return "RESOLVED -- one candidate survives and nothing is outstanding"
+    if len(answer.survivors) > 1:
+        return (f"PROVISIONAL -- {len(answer.survivors)} candidates survive; "
+                f"the evidence does not separate them")
+    return "PROVISIONAL -- one candidate survives but holes remain"
+
+
 def _cov(answer: AdjudicationAnswer, cand_id: str) -> str:
     """Claim coverage suffix for a survivor line.
 
@@ -534,6 +581,7 @@ def render_report(answer: AdjudicationAnswer) -> str:
 
     add("=" * 72)
     add("ADJUDICATION RUN")
+    add(verdict_header(answer))
     add("=" * 72)
     add(f"artifact sha256 : {answer.artifact_digest}")
     if answer.audit_path:
@@ -585,7 +633,13 @@ def render_report(answer: AdjudicationAnswer) -> str:
         for c in answer.survivors:
             add(f"    {c.id}{_cov(answer, c.id)}")
     for c in answer.eliminated:
-        add(f"  removed {c.id}: {c.elimination_reason}")
+        reason = c.elimination_reason or ""
+        tag = "EARNED" if "failed --" in reason else "STRUCTURAL"
+        add(f"  removed {c.id} [{tag}]: {reason}")
+    prov = kill_provenance(answer)
+    add(f"  kills: {prov['earned']} earned, {prov['structural']} structural")
+    if answer.eliminated and prov["earned"] == 0:
+        add("  NOTHING WAS EARNED. This run produced consensus, not elimination.")
     add("")
 
     if answer.conduct is not None and answer.conduct.seats:
