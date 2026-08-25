@@ -41,6 +41,21 @@ BUNDLES = [
      "Which of these tests would STILL PASS if the behaviour it names were deleted?\n"
      "Name the test and name the deletion.",
      ["test_suite.py", "test_properties.py"]),
+    ("bundle-5-verification.txt", "COST CEILINGS, DOI RESOLUTION, SEAT CONDUCT",
+     "The ceiling is checked BEFORE each call -- find the path where a call is made\n"
+     "anyway. The DOI resolver must return False on every non-confirming path; find\n"
+     "one that returns True by accident, because a permissive resolver passes every\n"
+     "citation while the report still reads green. The conduct ledger attributes a\n"
+     "false claim to every seat that proposed it -- find a way to be blamed for a\n"
+     "claim you did not make, or to escape one you did.",
+     ["cost_ledger.py", "doi_resolver.py", "seat_conduct.py"]),
+    ("bundle-6-intake.txt", "INTAKE, DOMAIN PROFILES, CONSOLE",
+     "Intake must never invent a warrant and must never be talked past its two\n"
+     "refusals (no disproof test, fewer than two candidates). Find an input that\n"
+     "gets past either one. The patent profile is RED-gated: find a path that sends\n"
+     "unpublished material to a vendor. The console must never hide which action\n"
+     "spends money.",
+     ["intake.py", "domains.py", "console.py", "diagnose-seats.py"]),
 ]
 
 # A real key, not a fixture. Fixture values in the suite are plain words
@@ -51,9 +66,32 @@ LIVE_SECRET = re.compile(
 )
 
 
+def unbundled(root: pathlib.Path) -> list[str]:
+    """Every .py in the folder that no bundle carries.
+
+    The file list was hardcoded and went stale: six modules were added and
+    none of them reached a reviewer, which is worse than not sending bundles
+    at all -- it produces a review that reads as complete while the newest and
+    least-examined code was never in it. This makes that failure loud.
+    """
+    covered = {f for _, _, _, files in BUNDLES for f in files}
+    return sorted(p.name for p in root.glob("*.py")
+                  if p.name != pathlib.Path(__file__).name
+                  and p.name not in covered)
+
+
 def build(root: pathlib.Path, out: pathlib.Path) -> int:
     out.mkdir(exist_ok=True)
     failures = 0
+    missing = unbundled(root)
+    if missing:
+        print("REFUSING: these .py files are in no bundle, so no reviewer would "
+              "see them:", file=sys.stderr)
+        for m in missing:
+            print(f"  - {m}", file=sys.stderr)
+        print("Add each to a bundle in BUNDLES, or the review is a false clean "
+              "bill of health.", file=sys.stderr)
+        return len(missing)
     for name, title, ask, files in BUNDLES:
         parts = [
             "=" * 78,
