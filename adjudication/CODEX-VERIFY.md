@@ -14,7 +14,7 @@ below can be established by reading the code and running the offline suite.
 `.env` and `profiles.json` hold my live settings; please do not open, print, or
 transmit either. Nothing in this review requires them.
 
-Current state: **1009 tests, 82% coverage, ruff / mypy / bandit clean.**
+Current state: **1011 tests, 82% coverage, ruff / mypy / bandit clean.**
 
 Commits since your review:
 ```
@@ -25,7 +25,14 @@ cad8335  keep the test suite hermetic
 219b3cf  S1-3 to S1-7
 f2b5fbc  S2-1, S2-2, S4-2
 5791360  S3-1
+de2cbc4  fix the correctness-matrix demo (from a parallel session)
+44d0a5f  S4-8 -- CI demo step and mypy now discover instead of enumerate
 ```
+
+Two of those commits fix regressions I introduced while fixing your findings,
+one of them caught by a parallel session rather than by me. That is the pattern
+I most want you to look for: **I changed a contract and verified the callers I
+was thinking about rather than all of them.**
 
 ---
 
@@ -141,7 +148,6 @@ single interactive run:
 - **S4-5**: pairwise rho cannot justify claims about unanimous agreement.
 - **S4-6**: a credential in an endpoint query string can still reach
   `describe()` output.
-- **S4-8**: the CI demo step and mypy's explicit file list.
 - **S2-4, S2-5**: contamination reasons are conflated, and an exception with an
   empty message produces an empty durable reason.
 - **S1-6 remainder**: approved commands get a minimal environment and their
