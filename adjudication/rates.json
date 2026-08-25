@@ -1,0 +1,58 @@
+{
+  "_README": [
+    "Per-million-token prices, each stamped with the date it was read off the",
+    "vendor's own pricing page. cost_ledger.Rate.is_stale() flags anything older",
+    "than the configured window, because a ceiling computed from unchecked prices",
+    "does not bound anything.",
+    "",
+    "These are STANDARD tier, prompts under 200k tokens. Batch, flex, and priority",
+    "tiers differ; so does long-context pricing above 200k. If a run ever sends a",
+    "prompt over 200k tokens these numbers are wrong and the ceiling is too loose.",
+    "",
+    "Re-check every 90 days. Vendors change prices without notice."
+  ],
+  "seat_1": {
+    "_vendor": "OpenAI",
+    "_model": "gpt-5.6-sol",
+    "_source": "https://developers.openai.com/api/docs/models",
+    "input_per_mtok": 4.0,
+    "output_per_mtok": 20.0,
+    "verified_on": "2026-08-25"
+  },
+  "seat_2": {
+    "_vendor": "Google",
+    "_model": "gemini-3.1-pro-preview",
+    "_source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "_note": "standard tier, prompts <= 200k. Above 200k it is $4.00/$18.00.",
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 12.0,
+    "verified_on": "2026-08-25"
+  },
+  "seat_3": {
+    "_vendor": "Mistral",
+    "_model": "mistral-medium-latest",
+    "_source": "https://docs.mistral.ai/inference/pricing",
+    "_note": "Mistral Medium 3.5, standard regional inference tier.",
+    "input_per_mtok": 1.5,
+    "output_per_mtok": 7.5,
+    "verified_on": "2026-08-25"
+  },
+  "seat_4": {
+    "_vendor": "xAI",
+    "_model": "grok-4.6",
+    "_source": "https://docs.x.ai/docs/models",
+    "_note": "prompts under 200k. Above 200k it is $4.00/$12.00.",
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 6.0,
+    "verified_on": "2026-08-25"
+  },
+  "seat_5": {
+    "_vendor": "Anthropic",
+    "_model": "claude-opus-5",
+    "_source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "_note": "base input / output. Cache reads are 0.1x input if caching is ever enabled.",
+    "input_per_mtok": 5.0,
+    "output_per_mtok": 25.0,
+    "verified_on": "2026-08-25"
+  }
+}
