@@ -546,6 +546,34 @@ def gates_from_names(spec: str) -> list[Gate]:
     return [_SELECTABLE_GATES[n]() for n in names]
 
 
+def night_gates() -> list[Gate]:
+    """The gates the guided night run uses.
+
+    THE DEFAULTS LEFT CITATIONS UNCHECKED. _default_gates carries arithmetic,
+    schema, unit and quote only, so a citation claim on the console night path
+    -- the path an operator actually uses -- reached no citation gate at all
+    and escalated with no gate applied. The tool advertises DOI resolution and
+    citation-field matching as central to its value, and the paid run did
+    neither unless a different caller supplied them.
+
+    They are added here rather than to _default_gates because they make
+    network requests to Crossref and doi.org. Those are free and take no
+    credential, but a default that quietly reaches the network is not a
+    default: this is the mode where an operator has already accepted that
+    lookups happen, and the console prints the gate list before asking them to
+    spend.
+    """
+    from adjudication_orchestrator import CitationResolutionGate
+    from citation_gate import CitationFieldMatchGate
+    from doi_resolver import build_resolver
+
+    return [
+        *_default_gates(),
+        CitationResolutionGate(build_resolver()),
+        CitationFieldMatchGate(),
+    ]
+
+
 def _default_gates() -> list[Gate]:
     """Gates that are safe with NO operator configuration. Deliberately few.
 

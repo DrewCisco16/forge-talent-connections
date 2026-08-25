@@ -699,11 +699,25 @@ def _check_summary(orch: Orchestrator, claims: Sequence[Claim]) -> str:
     for c in claims:
         v = orch.verdicts.get(c.id)
         if v is None or v.status is None:
-            # status None is the ESCALATED case and is documented as such: no
-            # gate applied, so the run holds no mechanical opinion. It is the
-            # absence of a measurement, not a soft unknown to be defaulted.
-            lines.append(f"  ESCALATED  {c.text}  (no gate applied -- a human "
-                         f"must settle this; it is not evidence either way)")
+            # TWO DIFFERENT THINGS SHARE status None, and printing both as
+            # "no gate applied" loses the more useful one.
+            #
+            # A claim nobody could check has no evidence at all. A claim whose
+            # WARRANT was checked and held -- a DOI that resolves to the paper
+            # named, a quote found at its URL -- has real evidence behind it;
+            # what is open is whether that evidence establishes the claim. An
+            # operator working the queue needs to know which is which, and the
+            # second is much closer to settled.
+            if v is not None and v.gate:
+                lines.append(
+                    f"  WARRANT OK  {c.text}\n"
+                    f"             the {v.gate} check ran and held; whether it "
+                    f"establishes this claim is open\n"
+                    f"             {v.detail}")
+            else:
+                lines.append(
+                    f"  ESCALATED  {c.text}  (no gate applied -- a human must "
+                    f"settle this; it is not evidence either way)")
             continue
         status = v.status.value.upper()
         lines.append(f"  {status:10} {c.text}\n             evidence: {v.detail}")
@@ -1189,7 +1203,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     # ways this is actually started -- reached this point with no models and
     # no credentials in the environment at all. Idempotent, and override=False
     # means a real shell export still wins over a possibly-stale file.
-    from run_adjudication import _default_gates, live_seats, load_env_file
+    from run_adjudication import live_seats, load_env_file, night_gates
     load_env_file()
 
     identity = panel_identity(profiles_path)
@@ -1205,7 +1219,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     # without seeing anyone else's, not that it never sees anything
     # afterwards. Its pass is written cold; merging is a separate act later.
     closer = seats[closer_seat]
-    orch = Orchestrator(list(gates) if gates is not None else _default_gates())
+    orch = Orchestrator(list(gates) if gates is not None else night_gates())
     # THE PANEL THAT ACTUALLY RAN, written down. Without it, a run months
     # later cannot be told from one where every seat pointed at the same
     # model -- and the independence claim in the deliverable is unverifiable
@@ -1640,9 +1654,27 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         lines.append(f"- [{v.status.value.upper()}] {text}")
         lines.append(f"      evidence: {v.detail}")
     if orch.escalation_queue:
-        lines += ["", "## Still open -- no mechanical check applied", ""]
+        checked: list[Claim] = []
+        unchecked: list[Claim] = []
         for c in orch.escalation_queue:
-            lines.append(f"- {c.text}")
+            seen = orch.verdicts.get(c.id)
+            (checked if seen is not None and seen.gate else unchecked).append(c)
+        if checked:
+            lines += ["", "## Evidence verified, proposition open", "",
+                      "The check named below ran and held. What is open is "
+                      "whether it establishes the claim -- which is a reading, "
+                      "and the reason you are being asked.", ""]
+            for c in checked:
+                cv = orch.verdicts.get(c.id)
+                gate = cv.gate if cv is not None else "?"
+                detail = (cv.detail if cv is not None else "") or ""
+                lines.append(f"- {c.text}")
+                lines.append(f"      {gate} check: "
+                             f"{detail.split('(the warrant')[-1].strip(' )')}")
+        if unchecked:
+            lines += ["", "## Still open -- no mechanical check applied", ""]
+            for c in unchecked:
+                lines.append(f"- {c.text}")
     if contaminated_rounds:
         lines += [
             "", "## WARNING -- the merged answer carries refuted claims", "",

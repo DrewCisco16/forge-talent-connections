@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 from typing import ClassVar
 
 import pytest
@@ -1644,3 +1645,93 @@ class TestTheOptionSetComesFromTheSeats:
         text = OS.render_pool(pool)
         assert "may not add an option" in text
         assert "MERGE |" in text
+
+
+class TestTheNightPathActuallyChecksCitations:
+    """Re-check #11. The console night path used _default_gates, which carries
+    arithmetic, schema, unit and quote only -- so a citation claim on the path
+    an operator actually uses reached no citation gate at all and escalated
+    with no gate applied. The tool advertises DOI resolution and citation-field
+    matching as central to its value, and the paid run did neither."""
+
+    def _citation_claim(self):
+        line = ("CLAIM | citation | 10.1038/s41586-020-2649-2 :: Harris ;; "
+                "2020 ;; Array programming with NumPy | the paper exists")
+        return NL.line_claim_extractor(line, "seat_1", "r1")[0]
+
+    def test_a_citation_claim_reaches_a_citation_gate(self):
+        from run_adjudication import night_gates
+        applicable = [g.name for g in night_gates()
+                      if g.applies_to(self._citation_claim())]
+        assert "citation_resolution" in applicable
+        assert "citation_field_match" in applicable
+
+    def test_the_defaults_stay_network_free(self):
+        """A default that quietly reaches the network is not a default. The
+        citation gates are added for the mode where the operator has already
+        been told lookups happen."""
+        from run_adjudication import _default_gates
+        assert [g.name for g in _default_gates()
+                if "citation" in g.name] == []
+
+    def test_the_console_shows_the_gate_set_before_asking_to_spend(self):
+        """A run could be paid for on the understanding that DOIs would be
+        verified when nothing verified them."""
+        src = pathlib.Path("console.py").read_text()
+        night = src[src.index("def night("):]
+        assert "checks that will run" in night
+        assert night.index("checks that will run") < night.index("Type YES")
+
+
+class TestWarrantVerifiedIsNotTheSameAsUnchecked:
+    """Re-check #11. Two different things shared status None and both printed
+    as "no gate applied" -- losing the more useful one. A claim nobody could
+    check has no evidence at all; a claim whose WARRANT was checked and held
+    has real evidence, and what is open is whether it establishes the claim."""
+
+    def _summary(self, kind, warrant, gates):
+        from adjudication_orchestrator import Orchestrator
+        claim = Claim(id="", kind=kind, text="a proposition", warrant=warrant)
+        o = Orchestrator(gates)
+        o.run_pass(type("P", (), {"id": "p", "name": "n",
+                                  "eliminative": False})(), [], [claim])
+        return NL._check_summary(o, [claim])
+
+    def test_a_verified_warrant_reports_as_warrant_ok(self):
+        from citation_gate import CitationFieldMatchGate
+        rec = {"title": ["Array programming with NumPy"],
+               "author": [{"family": "Harris"}],
+               "issued": {"date-parts": [[2020, 1, 1]]}}
+        text = self._summary(
+            ClaimKind.CITATION,
+            "10.1/x :: Harris ;; 2020 ;; Array programming with NumPy",
+            [CitationFieldMatchGate(record_fn=lambda _d: rec)])
+        assert "WARRANT OK" in text
+        assert "ran and held" in text
+
+    def test_a_claim_with_no_gate_still_reports_as_escalated(self):
+        text = self._summary(ClaimKind.JUDGMENT, None, [ArithmeticGate()])
+        assert "ESCALATED" in text
+        assert "no gate applied" in text
+
+    def test_the_packet_separates_the_two(self, tmp_path):
+        from adjudication_orchestrator import Orchestrator
+        from citation_gate import CitationFieldMatchGate
+        rec = {"title": ["Array programming with NumPy"],
+               "author": [{"family": "Harris"}],
+               "issued": {"date-parts": [[2020, 1, 1]]}}
+
+        def seat(_p):
+            return ("1. Cite the paper and act on it\n"
+                    "2. Do something else entirely\n"
+                    "CLAIM | citation | 10.1/x :: Harris ;; 2020 ;; Array "
+                    "programming with NumPy | the paper supports this\n"
+                    "CLAIM | judgment |  | this is a matter of taste\n")
+        NL.run_night("ask", {f"seat_{i}": seat for i in range(1, 6)},
+                     lambda _p: "no merges",
+                     Orchestrator([ArithmeticGate(),
+                                   CitationFieldMatchGate(record_fn=lambda _d: rec)]),
+                     str(tmp_path), rounds=NL.ROUNDS[:1])
+        packet = (tmp_path / "VERIFIER-PACKET.md").read_text()
+        assert "Evidence verified, proposition open" in packet
+        assert "Still open -- no mechanical check applied" in packet

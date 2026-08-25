@@ -217,6 +217,15 @@ def night() -> None:
     cap = f"{ask_ceiling():.2f}"
     _p()
     _p("-" * 68)
+    # THE OPERATOR SHOULD KNOW WHAT WILL ACTUALLY BE CHECKED before being
+    # asked to spend. The gate set was invisible here, and it did not include
+    # the citation gates at all -- so a run could be paid for on the
+    # understanding that DOIs would be verified when nothing verified them.
+    from run_adjudication import night_gates
+    _p(f"  checks that will run: "
+       f"{', '.join(g.name for g in night_gates())}")
+    _p("  citation and quote checks make free lookups to Crossref, doi.org,")
+    _p("  and the pages a seat cites. No credential is sent to them.")
     _p(f"  5 rounds x 5 blind seats + 5 merges = 30 calls. Ceiling ${cap}.")
     _p("  The ceiling is checked against an ESTIMATE of each call, because no")
     _p("  vendor publishes a guaranteed maximum for a request plus all its")
