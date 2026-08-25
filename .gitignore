@@ -8,3 +8,7 @@ adjudication/profiles.json
 # specific run, not repository content, and may quote the adjudicated artifact.
 adjudication/run-*.jsonl
 adjudication/run-*.jsonl.head
+
+# Run folders are the operator working set: artifacts, candidates, audit logs.
+# Not repository content.
+adjudication/runs/
