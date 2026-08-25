@@ -475,6 +475,22 @@ if __name__ == "__main__":
     ):
         orch = Orchestrator([ArithmeticGate()])
         res = orch.run_sequential("artifact", [], BlindedSeatRunner(fns))
-        rep = diagnose_run(res, orch.verdicts)
-        print(f"[{label}] {rep['coverage_summary']}")
-        print(f"[{label}] {rep.get('reading')}\n")
+
+        # BOTH REGIMES, because the difference between them is the whole
+        # point of task_kind and the demo showed neither.
+        #
+        # It called diagnose_run with no task_kind, took the OPEN_ENDED
+        # default, and then indexed rep['coverage_summary'] -- a key that
+        # branch deliberately omits, as its docstring says: "NO diagnostic
+        # keys are present, rather than a NaN an operator would read as a
+        # small number." So the demo raised KeyError and CI went red. The
+        # omission is the design; the demo was what went stale.
+        open_rep = diagnose_run(res, orch.verdicts)
+        print(f"[{label}] open_ended  measurable={open_rep['measurable']}")
+        print(f"[{label}]   {open_rep['blockers'][0]}")
+
+        shared_rep = diagnose_run(res, orch.verdicts,
+                                  task_kind=SHARED_DETECTION)
+        print(f"[{label}] shared_detection  "
+              f"{shared_rep.get('coverage_summary')}")
+        print(f"[{label}]   {shared_rep.get('reading')}\n")

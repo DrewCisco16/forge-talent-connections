@@ -1408,6 +1408,33 @@ class TestTheTwoPathsAgreeAboutIndependence:
         with pytest.raises(ValueError, match="task_kind"):
             diagnose_run([], {}, task_kind="whatever")
 
+    def test_the_open_ended_report_omits_every_diagnostic_key(self):
+        """The docstring promises "NO diagnostic keys are present, rather
+        than a NaN an operator would read as a small number." Nothing
+        asserted it, and correctness_matrix's own __main__ demo indexed
+        rep['coverage_summary'] on this branch and raised KeyError -- which
+        is what turned CI red on f2b5fbc.
+
+        Pinning the omission makes the contract explicit in both
+        directions: absent means unmeasurable, and a caller reaching for
+        one of these keys without checking `measurable` is the caller's
+        error rather than a surprise."""
+        from correctness_matrix import diagnose_run
+        report = diagnose_run([], {})
+        for key in ("coverage_summary", "reading", "rho",
+                    "effective_seats", "mean_error_correlation"):
+            assert key not in report, (
+                f"{key!r} present on an unmeasurable report; a reader takes "
+                f"any number here as a measurement")
+        assert report["coverage"] is None
+
+    def test_the_shared_detection_report_carries_the_coverage_summary(self):
+        """The other half. Absent on open_ended must not mean absent
+        everywhere, or the omission above would pass vacuously."""
+        from correctness_matrix import SHARED_DETECTION, diagnose_run
+        report = diagnose_run([], {}, task_kind=SHARED_DETECTION)
+        assert "coverage_summary" in report
+
     def test_both_paths_say_the_same_thing(self):
         from correctness_matrix import diagnose_run
         assert NL.measure_rho({"a": [], "b": []}, {})[0] is None
