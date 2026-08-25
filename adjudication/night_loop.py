@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -598,6 +599,12 @@ class RoundResult:
     degraded: bool = False
     closer_claims: int = 0
     closer_failed_claims: int = 0
+    closer_invented: list[str] = field(default_factory=list)
+    """Sentences the closer wrote that no seat's answer supports.
+
+    A model at the closing position that can introduce propositions is a sixth
+    seat writing straight into the deliverable -- with the authority of the
+    five that were checked and none of the scrutiny."""
     closer_unparsed: bool = False
     """The closer wrote claim-like prose that produced no parseable claim."""
     rho: float | None = None
@@ -831,15 +838,29 @@ def run_night(
         # into every round after the one where it was new and be flagged
         # exactly once -- the repeat offence, which is the worse one, was the
         # invisible one.
+        # CONTENT NO SEAT PROPOSED. The closer's output was checked only for
+        # explicit CLAIM lines, so free-form prose sailed past: a merge reading
+        # "Recommendation: BUY POISON immediately." produced zero closer
+        # claims, closer_contaminated False, an ADJUDICATED verdict, and was
+        # printed to the operator as the answer. The closer is the last step
+        # and the only one whose output nothing reviews.
+        res.closer_invented = closer_introduced(merged_new, texts)
+        if res.closer_invented:
+            res.closer_contaminated = True
+
         res.closer_failed_claims = crec.auto_rejected + crec.repeated_failures
         if res.closer_failed_claims:
             # The closer asserted something the gates refuted. Do not carry it
             # forward silently; the working answer is contaminated.
             res.closer_contaminated = True
 
-        emit(f"  merged in {now() - t0:.0f}s"
-             + ("  [CONTAMINATED: carries a claim the gates refuted]"
-                if res.closer_contaminated else ""))
+        note = ""
+        if res.closer_invented:
+            note = (f"  [CONTAMINATED: {len(res.closer_invented)} sentence(s) "
+                    f"no seat proposed]")
+        elif res.closer_contaminated:
+            note = "  [CONTAMINATED: carries a claim the gates refuted]"
+        emit(f"  merged in {now() - t0:.0f}s{note}")
         merged = merged_new
         res.merged = merged
         with open(os.path.join(rd, f"merged-{r.n}.md"), "w",
@@ -930,6 +951,7 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          # dropped before they reached disk, which is the same as not having
          # them: the operator keeps this file, not the process memory.
          "personas": r.personas,
+         "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
          "closer_unparsed": r.closer_unparsed}
@@ -939,6 +961,108 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write("# status\n\n```json\n" + json.dumps(payload, indent=2) + "\n```\n")
     os.replace(tmp, os.path.join(out_dir, "status.md"))
+
+
+def _stem(word: str) -> str:
+    """Crudest possible suffix strip, so "renting" matches "rent".
+
+    Without it the check fires on ordinary paraphrase: a closer writing
+    "renting capacity defers the decision" over seats who wrote "rent
+    capacity" and "decide" looked like invention. Consolidating IS rephrasing,
+    so a check that cannot see through inflection would flag the closer for
+    doing its job, and would then be switched off.
+
+    Deliberately not a real stemmer. Over-stemming merges unrelated words and
+    makes the check MISS an invention, which is the safe direction only if it
+    is rare -- so this strips the four inflections that carry no meaning and
+    stops.
+    """
+    for suffix in ("ing", "ed", "es", "s", "ly"):
+        if len(word) - len(suffix) >= 4 and word.endswith(suffix):
+            return word[: -len(suffix)]
+    return word
+
+
+_SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
+_CONTENT = re.compile(r"[a-z0-9]{4,}")
+
+_CONNECTIVE = frozenset(["that", "this", "these", "those", "there", "their", "them", "then", "than", "with", "from", "into", "onto", "upon", "about", "above", "below", "under", "over", "between", "among", "during", "before", "after", "while", "which", "what", "when", "where", "whose", "because", "since", "unless", "until", "although", "though", "however", "therefore", "thus", "hence", "also", "more", "most", "less", "least", "much", "many", "some", "both", "each", "every", "other", "another", "such", "same", "only", "just", "even", "still", "yet", "been", "being", "have", "has", "had", "will", "would", "should", "could", "must", "may", "might", "can", "cannot", "does", "did", "done", "answer", "answers", "option", "options", "round", "rounds", "claim", "claims", "evidence", "verified", "check", "checks", "checked", "open", "holes", "hole", "missing", "insufficient", "unknown", "unresolved", "following", "remain", "remains", "remaining", "next", "first", "second", "third", "fourth", "fifth", "last", "above", "below", "list", "listed", "lists", "summary", "summarised", "summarized", "note", "noted", "based", "given", "further", "additional", "overall", "together", "respectively", "section", "sections", "item", "items", "point", "points", "question", "questions", "consider", "considered", "considering", "require", "required", "requires", "need", "needs", "survive", "survived", "surviving", "eliminate", "eliminated", "removed", "refuted", "proposed", "proposal", "stated", "states", "outstanding"])
+"""Words about the DOCUMENT rather than about the world.
+
+A closer legitimately writes connective prose, headings, and statements about
+the state of the round -- "the following options remain open". Those sentences
+assert nothing about the subject matter, so flagging them would bury the real
+signal and the check would be switched off. The list is vocabulary for talking
+ABOUT an analysis; a sentence made only of these is not a proposition.
+
+"recommendation" and "conclusion" are deliberately NOT here. They look like
+document words, but a sentence is only reached at all once it has enough
+novel content, and treating the label as free pushed "Recommendation: BUY
+POISON immediately" -- the exact attack -- below the length floor. A label in
+front of an invented instruction does not make it less invented."""
+
+MIN_CONTENT_WORDS = 4
+MAX_UNSUPPORTED_FRACTION = 0.50
+
+MIN_WORDS_WHEN_WHOLLY_UNSUPPORTED = 3
+"""A shorter sentence is flagged when NONE of its content words appear.
+
+Tuned on the actual attack. "Recommendation: BUY POISON immediately." carries
+three content words -- recommendation, poison, immediately -- so a flat
+four-word floor skipped the exact sentence this check exists to catch. A
+sentence of three substantive words that no seat used is an assertion the
+panel never made, however short.
+
+Not two: at two words the check starts flagging the closer naming a hole
+("Missing: pricing data"), which is its job.
+"""
+
+
+def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str]:
+    """Sentences in the merge whose content appears in no seat's answer.
+
+    THE FAILURE THIS EXISTS TO STOP. The closer's output was checked only for
+    explicit `CLAIM |` lines. Free-form prose carrying no claim line was
+    accepted whole. Reproduced: five seats proposed shared claims, two were
+    mechanically refuted, and the closer returned
+
+        "Recommendation: BUY POISON immediately."
+
+    The run reported ADJUDICATED, closer_contaminated False, zero closer
+    claims, and printed that sentence to the operator as the answer. Nothing
+    in the pipeline had examined it, because it never used the word "claim".
+
+    The closer is the LAST step and the only one whose output is not itself
+    reviewed by anything. A model at that position that can introduce
+    propositions is a sixth seat writing straight into the deliverable, with
+    the authority of the five that were checked and none of the scrutiny.
+
+    This does not stop the closer writing -- it must summarise, connect and
+    name holes. It catches a sentence making a substantive assertion that no
+    seat made, which is the difference between consolidating and authoring.
+
+    Deliberately conservative. Short sentences, headings and connective prose
+    are ignored, and a sentence is flagged only when MOST of its content words
+    are absent from every seat. False negatives are accepted; false positives
+    would make the signal noise.
+    """
+    seat_words = {_stem(w) for t in thinker_texts.values()
+                  for w in _CONTENT.findall((t or "").casefold())}
+
+    out: list[str] = []
+    for raw in _SENTENCE.findall(merged or ""):
+        sentence = raw.strip()
+        words = [w for w in _CONTENT.findall(sentence.casefold())
+                 if w not in _CONNECTIVE]
+        if len(words) < MIN_WORDS_WHEN_WHOLLY_UNSUPPORTED:
+            continue
+        missing = [w for w in words if _stem(w) not in seat_words]
+        wholly_new = len(missing) == len(words)
+        mostly_new = (len(words) >= MIN_CONTENT_WORDS
+                      and len(missing) / len(words) > MAX_UNSUPPORTED_FRACTION)
+        if wholly_new or mostly_new:
+            out.append(sentence)
+    return out
 
 
 MAX_ESCALATION_FRACTION = 0.50
@@ -1005,6 +1129,14 @@ def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
             "every seat had ruled on, which means the seats were largely not "
             "addressing the same points. Whether they fail together is "
             "unknown, so their agreement is not corroboration."
+        )
+    invented = [r.n for r in results if r.closer_invented]
+    if invented:
+        reasons.append(
+            f"THE MERGED ANSWER CONTAINS CONTENT NO SEAT PROPOSED, in "
+            f"round(s) {', '.join(str(n) for n in invented)}. The closing "
+            f"model wrote assertions that appear in no seat's answer and that "
+            f"nothing checked. It was asked to consolidate, and it authored."
         )
     if contaminated:
         reasons.append(

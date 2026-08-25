@@ -883,3 +883,87 @@ class TestTheCloserSeesLensesNotVendors:
     def test_an_unassigned_seat_is_labelled_without_inventing_a_lens(self):
         p = self._p({"seat_9": "x"}, {})
         assert "no assigned lens" in p
+
+
+# ---------------------------------------------------------------------------
+# 16. Codex C4 — the closer consolidates; it does not author
+# ---------------------------------------------------------------------------
+
+class TestTheCloserCannotIntroduceContent:
+
+    TEXTS = {
+        "s1": "We should compare build against buy. Building costs more up "
+              "front and needs two engineers.",
+        "s2": "Buying is faster but locks us in to the vendor roadmap.",
+        "s3": "A third path is to rent capacity for six months.",
+    }
+
+    def test_an_invented_recommendation_is_caught(self):
+        """Codex C4, reproduced before fixing. The closer's output was checked
+        only for explicit CLAIM lines, so prose carrying none sailed past: the
+        run reported ADJUDICATED, closer_contaminated False, and printed
+        'Recommendation: BUY POISON immediately.' to the operator as the
+        answer. Nothing had examined it, because it never said 'claim'."""
+        assert NL.closer_introduced(
+            "Recommendation: BUY POISON immediately.", self.TEXTS)
+
+    def test_other_inventions_are_caught_too(self):
+        for attack in (
+            "The company should immediately liquidate all inventory and "
+            "relocate offshore.",
+            "Acquire the Zurich subsidiary before the quarter closes.",
+            "Conclusion: terminate the pension scheme.",
+        ):
+            assert NL.closer_introduced(attack, self.TEXTS), attack
+
+    def test_a_faithful_merge_is_not_flagged(self):
+        assert not NL.closer_introduced(
+            "Building costs more up front and needs two engineers.", self.TEXTS)
+
+    def test_connective_prose_is_not_flagged(self):
+        """A closer must summarise, connect and name holes. Flagging that
+        would bury the real signal and the check would be switched off."""
+        for benign in (
+            "Therefore, the following options remain open for the next round.",
+            "## Options that survived",
+            "Two options survive and the evidence does not separate them.",
+            "KILLED: nothing was eliminated this round.",
+        ):
+            assert not NL.closer_introduced(benign, self.TEXTS), benign
+
+    def test_naming_a_hole_is_not_invention(self):
+        """Saying what is missing is the closer's job."""
+        assert not NL.closer_introduced(
+            "Insufficient evidence. Missing: pricing data.", self.TEXTS)
+
+    def test_rephrasing_is_not_invention(self):
+        """Consolidating IS rephrasing. A check that cannot see through
+        inflection would flag the closer for doing its job."""
+        assert not NL.closer_introduced(
+            "Renting capacity for six months defers the decision.", self.TEXTS)
+
+    def test_a_labelled_but_faithful_recommendation_passes(self):
+        assert not NL.closer_introduced(
+            "Recommendation: rent capacity for six months.", self.TEXTS)
+
+    def test_invention_contaminates_the_round(self, tmp_path):
+        res = NL.run_night("ask", _panel(),
+                           _seat("Acquire the Zurich subsidiary immediately."),
+                           _orch(), str(tmp_path), rounds=NL.ROUNDS[:1])
+        assert res[0].closer_invented
+        assert res[0].closer_contaminated is True
+
+    def test_invention_blocks_adjudication(self):
+        r = _round(failed=3, rho=0.05)
+        r.closer_invented = ["Acquire the Zurich subsidiary."]
+        verdict, reasons = NL.run_verdict([r])
+        assert verdict == "INCONCLUSIVE"
+        assert any("CONTENT NO SEAT PROPOSED" in x for x in reasons)
+
+    def test_the_invented_sentences_reach_disk(self, tmp_path):
+        NL.run_night("ask", _panel(),
+                     _seat("Acquire the Zurich subsidiary immediately."),
+                     _orch(), str(tmp_path), rounds=NL.ROUNDS[:1])
+        payload = json.loads(
+            (tmp_path / "status.md").read_text().split("```json")[1].split("```")[0])
+        assert payload[0]["closer_invented"]
