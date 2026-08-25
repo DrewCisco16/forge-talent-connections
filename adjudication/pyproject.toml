@@ -30,32 +30,21 @@ ignore_missing_imports = true
 # Any, a body template that could fill to a non-object and be posted anyway,
 # and an unannotated aggregator in the leave-one-seat-out diagnostic.
 strict = true
-files = [
-    # THE ENGINES
-    "adjudication_orchestrator.py",
-    "night_loop.py",
-    "run_adjudication.py",
-    # THE GATES
-    "citation_gate.py",
-    "quote_gate.py",
-    "doi_resolver.py",
-    "recency_canary.py",
-    "approved_test_gate.py",
-    # SEATS, COST, AND CONDUCT
-    "seat_adapter.py",
-    "seat_profiles.py",
-    "seat_independence.py",
-    "cost_ledger.py",
-    "seat_conduct.py",
-    # STATISTICS AND RECORD
-    "correctness_matrix.py",
-    "validation_harness.py",
-    "audit_log.py",
-    # OPERATOR SURFACE
-    "console.py",
-    "intake.py",
-    "domains.py",
-    "watcher.py",
+# DISCOVERY, NOT A LIST. This named twenty files, and option_set.py -- added
+# two commits after the list was last touched, and holding the survivor-set
+# logic the whole design now rests on -- was checked by nobody. A new module
+# has to be type-checked by default or the gate only covers the code that
+# happened to predate it.
+files = ["."]
+exclude = [
+    '^\.venv/',
+    # Tests are checked by running them; type-checking pytest fixtures adds
+    # noise without adding a guarantee.
+    '^test_.*\.py$',
+    # Operator scripts run by hand against a live panel, not imported by
+    # anything and not part of the engine.
+    '^diagnose-.*\.py$',
+    '^make_review_bundles\.py$',
 ]
 
 [tool.pytest.ini_options]

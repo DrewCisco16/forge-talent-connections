@@ -99,7 +99,28 @@ jobs:
           # The demo exits 1 by design (an escalated claim remains), so
           # assert the ANSWER rather than the exit code -- "|| true"
           # would swallow a crash just as happily as a hole.
-          python run_adjudication.py --demo | grep "SURVIVOR: c_true" > /dev/null
+          # THE DEMO EXITS 1 BY DESIGN -- an escalated claim remains, which is
+          # the honest outcome. Under GitHub's bash defaults (-e -o pipefail)
+          # the pipeline therefore returns 1 and this step FAILED on the
+          # demo's intended result. Without pipefail it would instead pass
+          # whenever the sentinel had been printed before a crash.
+          #
+          # Capture the output and the status separately, then assert all
+          # three things that matter: the expected status, the sentinel, and
+          # the absence of a traceback.
+          set +e
+          demo_out=$(python run_adjudication.py --demo 2>&1)
+          demo_rc=$?
+          set -e
+          echo "$demo_out"
+          if [ "$demo_rc" -ne 1 ]; then
+            echo "expected the demo to exit 1 (a hole remains); got $demo_rc"
+            exit 1
+          fi
+          echo "$demo_out" | grep -q "SURVIVOR: c_true" || {
+            echo "the demo did not eliminate down to c_true"; exit 1; }
+          echo "$demo_out" | grep -qi "traceback" && {
+            echo "the demo printed a traceback"; exit 1; }
           # The shipped template MUST fail validation while unfilled.
           # It validating clean is the fail-open this layer exists to stop.
           # `cmd && exit 1 || true` succeeds on ANY nonzero status, so a
