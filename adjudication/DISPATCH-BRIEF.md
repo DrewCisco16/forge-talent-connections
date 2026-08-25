@@ -1,4 +1,4 @@
-# BRIEF FOR CLAUDE DISPATCH — set up Elimination Protocol Five on this Mac
+# BRIEF FOR CLAUDE DISPATCH — set up Adjudication Five on this Mac
 
 **Paste this whole file to Claude Dispatch and say: "Do everything in this brief."**
 
