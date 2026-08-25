@@ -25,9 +25,12 @@ and, through the cascade below, let an outage eliminate a true candidate.
 from __future__ import annotations
 
 import html
+import ipaddress
 import re
+import socket
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 
@@ -36,6 +39,53 @@ from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 USER_AGENT = (
     "AdjudicationFive/1.0 (adjudication panel; quote verification)"
 )
+
+MAX_BYTES = 4_000_000
+"""Cap on what a fetch will read.
+
+The quote URL comes from a model. An unbounded read lets a hostile or merely
+broken endpoint stream until memory runs out, which stops the whole run.
+"""
+
+
+def _is_public(host: str) -> bool:
+    """Resolve the host and refuse anything not on the public internet.
+
+    The URL in a quote_verification warrant is model-controlled, so the gate
+    is a server-side request forgery primitive unless this exists: a model
+    could point it at 127.0.0.1, at 169.254.169.254, or at anything reachable
+    from this machine but not from the internet, and the gate would fetch it
+    and report on the contents.
+
+    Resolution happens here rather than trusting the hostname, because
+    a name under an attacker's control can point anywhere.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:  # noqa: BLE001 - unresolvable is not public
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+    return True
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects. A public https URL that redirects to loopback or to
+    plaintext is the standard way past an origin check done only on hop one."""
+
+    def redirect_request(self, req: object, fp: object, code: int, msg: str,
+                         headers: object, newurl: str) -> None:
+        raise urllib.error.HTTPError(
+            getattr(req, "full_url", ""), code,
+            f"refusing a {code} redirect to {newurl!r}", headers, fp,  # type: ignore[arg-type]
+        )
+
 
 MIN_TEXT_CHARS = 400
 """Below this, treat the fetch as BLOCKED rather than as a failed match.
@@ -121,6 +171,13 @@ class QuoteVerificationGate:
 
     # -- the fetch ----------------------------------------------------------
     def _fetch(self, url: str) -> tuple[int, str]:
+        host = urllib.parse.urlparse(url).hostname or ""
+        if not _is_public(host):
+            raise ValueError(
+                f"refusing {host!r}: not a public address. This URL came from "
+                f"a model, and fetching a private or loopback host on its "
+                f"say-so is server-side request forgery."
+            )
         req = urllib.request.Request(
             url, method="GET",
             headers={"User-Agent": USER_AGENT,
@@ -128,9 +185,10 @@ class QuoteVerificationGate:
         )
         # https is enforced in parse_warrant; nosec on the next line because
         # bandit reads everything after it as test ids.
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as r:  # nosec B310
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=self.timeout_s) as r:  # nosec B310
             ctype = r.headers.get("Content-Type", "")
-            return r.status, extract_text(r.read(), ctype)
+            return r.status, extract_text(r.read(MAX_BYTES), ctype)
 
     def _get(self, url: str) -> tuple[int, str]:
         if url in self.cache:

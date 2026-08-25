@@ -65,6 +65,10 @@ testpaths = ["test_suite.py", "test_properties.py"]
                 # where that has to be legible at the call site.
 ]
 "quote_gate.py" = [
+    "PLR0913", "PLR0917",  # redirect_request's signature is urllib's, not
+                # ours -- it must match HTTPRedirectHandler exactly or the
+                # override is silently not called and redirects resume being
+                # followed with the credential attached.
     "PLR0911",  # check() returns one verdict per distinct outcome -- unreachable,
                 # 404, paywall, rate limit, client-rendered stub, exact match,
                 # case-folded match, absent. Each is a different fact with a

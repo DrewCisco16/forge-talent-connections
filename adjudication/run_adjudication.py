@@ -158,7 +158,10 @@ def urllib_transport(
         turns it into a visible seat failure with the status attached.
         """
 
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
+        def redirect_request(
+            self, req: Any, fp: Any, code: int, msg: str, headers: Any,
+            newurl: str,
+        ) -> None:
             raise urllib.error.HTTPError(
                 req.full_url, code,
                 f"refusing to follow a {code} redirect to {newurl!r}: the "

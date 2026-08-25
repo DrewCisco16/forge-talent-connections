@@ -42,6 +42,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from adjudication_orchestrator import (
+    BudgetExceeded,
     Claim,
     Orchestrator,
     line_claim_extractor,
@@ -205,6 +206,14 @@ class RoundResult:
     merged: str | None = None
     closer_failed: str | None = None
     degraded: bool = False
+    closer_claims: int = 0
+    closer_failed_claims: int = 0
+    closer_contaminated: bool = False
+    """The closer asserted something the gates refuted in the same round.
+
+    Recorded rather than silently accepted: the merged answer that carries
+    forward, and ends up in the deliverable, contains a claim already shown to
+    be false."""
 
 
 def _check_summary(orch: Orchestrator, claims: Sequence[Claim]) -> str:
@@ -255,6 +264,8 @@ def run_night(
         for seat_id, fn in thinkers.items():
             try:
                 raw = fn(prompt)
+            except BudgetExceeded:
+                raise                       # see the closer's handler below
             except Exception as exc:  # noqa: BLE001 - a dead seat is not a finding
                 res.thinkers_failed[seat_id] = f"{type(exc).__name__}: {exc}"
                 continue
@@ -297,6 +308,12 @@ def run_night(
         # 6: the closer, last, with everything
         try:
             merged_new = closer(closer_prompt(r, ask, texts, summary, merged))
+        except BudgetExceeded:
+            # A ceiling is not a closer failure. Swallowing it here left the
+            # watcher's PARTIAL path unreachable: the run returned normally,
+            # the input moved to done/, and nothing recorded that the money
+            # ran out.
+            raise
         except Exception as exc:  # noqa: BLE001
             res.closer_failed = f"{type(exc).__name__}: {exc}"
             results.append(res)
@@ -308,6 +325,30 @@ def run_night(
             _write_status(out_dir, results)
             break
 
+        # THE CLOSER IS A MODEL, AND ITS OUTPUT IS NOT A VERDICT. Its merged
+        # text was previously accepted whole and carried into the deliverable
+        # ungated -- so a closer that invented an option nobody proposed, or
+        # restated a claim the gates had just refuted, was believed. That is
+        # the one thing this architecture exists to prevent, and it had been
+        # reintroduced at the last step of the loop.
+        closer_claims = line_claim_extractor(merged_new, "closer", f"r{r.n}")
+        crec = orch.run_pass(
+            type("P", (), {"id": f"r{r.n}-closer", "name": f"{r.name} (closer)",
+                           "eliminative": False})(),
+            [], closer_claims,
+        )
+        res.closer_claims = len(closer_claims)
+        res.closer_failed_claims = crec.auto_rejected
+        with open(os.path.join(rd, "closer-check.md"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(f"# Round {r.n} closer claims\n\n"
+                     f"{_check_summary(orch, closer_claims)}\n")
+
+        if crec.auto_rejected:
+            # The closer asserted something the gates refuted. Do not carry it
+            # forward silently; the working answer is contaminated.
+            res.closer_contaminated = True
+
         merged = merged_new
         res.merged = merged
         with open(os.path.join(rd, f"merged-{r.n}.md"), "w",
@@ -317,7 +358,10 @@ def run_night(
         _write_status(out_dir, results)
 
     if merged is not None:
-        write_verifier_packet(out_dir, ask, merged, orch)
+        write_verifier_packet(
+            out_dir, ask, merged, orch,
+            [r.n for r in results if r.closer_contaminated],
+        )
     return results
 
 
@@ -364,7 +408,8 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
 
 
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
-                          orch: Orchestrator) -> str:
+                          orch: Orchestrator,
+                          contaminated_rounds: Sequence[int] = ()) -> str:
     """The packet to paste into a fresh Claude Project chat.
 
     Claude Projects are a claude.ai feature with no API equivalent -- there is
@@ -410,6 +455,15 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         lines += ["", "## Still open -- no mechanical check applied", ""]
         for c in orch.escalation_queue:
             lines.append(f"- {c.text}")
+    if contaminated_rounds:
+        lines += [
+            "", "## WARNING -- the merged answer carries refuted claims", "",
+            f"In round(s) {', '.join(str(n) for n in contaminated_rounds)} the",
+            "closing model asserted something the mechanical checks had already",
+            "refuted in that same round. Its text was still carried forward,",
+            "because removing it would mean a model editing a model. Read the",
+            "round's closer-check.md before trusting any of this answer.",
+        ]
     lines += ["", "---", "",
               "BLOCKED means a check could not be performed -- a paywall, a",
               "timeout, a rate limit. It is not evidence against the claim and",
