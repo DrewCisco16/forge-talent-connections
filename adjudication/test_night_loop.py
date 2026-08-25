@@ -474,40 +474,61 @@ class TestConfidenceCeiling:
 # ---------------------------------------------------------------------------
 
 class TestRhoMeasurement:
+    """Codex H16. measure_rho computed a number, and the number was invented.
+
+    Error correlation needs a per-SEAT correctness vector: for each item, was
+    THIS seat right or wrong. A gate verdict is per-CLAIM, so building the
+    matrix by repeating one global verdict across every seat column produced
+    five identical columns and rho = 1.0 by construction, whatever the seats
+    had actually done. Reproduced: five seats, six shared claims, three true
+    and three false, reported "rho = 1.0000, measured".
+
+    It now reports UNMEASURED, which is the honest answer for a panel that
+    answers open-ended: a seat that never raised a claim has not been shown
+    right or wrong about it, and that is missing data rather than an error.
+    """
+
+    def _shared(self, n_seats=5):
+        import adjudication_orchestrator as AO
+        warrants = [("2+2 = 4", "the value is 4"), ("3*3 = 9", "the value is 9"),
+                    ("5+5 = 11", "the value is 11"), ("2*3 = 7", "the value is 7")]
+        per_seat = {f"seat_{i}": [
+            AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC, text=t, warrant=w)
+            for w, t in warrants] for i in range(1, n_seats + 1)}
+        o = _orch()
+        o.run_pass(type("P", (), {"id": "p", "name": "n",
+                                  "eliminative": False})(),
+                   [], [c for cs in per_seat.values() for c in cs])
+        return per_seat, o.verdicts
+
+    def test_a_correlation_is_not_invented_from_per_claim_verdicts(self):
+        """The reproduction. Five identical columns are not a measurement."""
+        rho, why = NL.measure_rho(*self._shared())
+        assert rho is None
+        assert "NOT MEASURED" in why
+
+    def test_the_reason_names_the_structural_cause(self):
+        """A bare None reads as a bug in this run. It is a property of the
+        design, and the operator needs to know which."""
+        _, why = NL.measure_rho(*self._shared())
+        assert "per-SEAT" in why or "each SEAT" in why
+        assert "seeded" in why
 
     def test_one_seat_is_not_a_correlation(self):
         rho, why = NL.measure_rho({"seat_1": []}, {})
         assert rho is None
         assert "pair" in why
 
-    def test_too_few_shared_items_is_unmeasured_not_low(self):
-        """The measured live case: overlap between 0.0057 and 0.0238 left
-        almost nothing every seat had ruled on."""
-        rho, why = NL.measure_rho({"a": [], "b": []}, {})
-        assert rho is None
-        assert "UNMEASURED" in why
-        assert "not the same as" in why
-
     def test_the_reason_is_always_recorded(self):
-        """A bare None in a file months later is indistinguishable from a bug."""
         for args in (({"a": []}, {}), ({"a": [], "b": []}, {})):
             _, why = NL.measure_rho(*args)
             assert why.strip()
 
-    def test_identical_scores_are_not_evidence_of_independence(self):
-        """Zero variance yields NaN, and NaN must not be reported as rho = 0,
-        which would read as a perfectly independent panel."""
-        import adjudication_orchestrator as AO
-
-        class V:
-            status = AO.GateStatus.PASS
-
-        claims = [AO.Claim(id=f"c{i}", kind=AO.ClaimKind.JUDGMENT,
-                           text=f"t{i}", warrant=None) for i in range(6)]
-        rho, why = NL.measure_rho({"a": claims, "b": claims},
-                                  {c.id: V() for c in claims})
-        assert rho is None
-        assert "no variance" in why
+    def test_unmeasured_is_reported_as_neither_low_nor_high(self):
+        """Unmeasured independence is not low independence and it is not high.
+        Collapsing it either way is a claim nobody can defend."""
+        _, why = NL.measure_rho(*self._shared())
+        assert "not low" in why and "not high" in why
 
     def test_rho_and_its_reason_reach_disk(self, tmp_path):
         NL.run_night("ask", _panel(), _seat("merged"), _orch(),
@@ -516,6 +537,33 @@ class TestRhoMeasurement:
             (tmp_path / "status.md").read_text().split("```json")[1].split("```")[0])
         assert "rho" in payload[0]
         assert payload[0]["rho_note"].strip()
+
+
+class TestUnmeasurableRhoNeverBecomesConfidence:
+    """Codex H16, third defect. NaN was clamped toward zero, and rho = 0.0
+    means a perfectly independent panel -- so an UNMEASURABLE correlation
+    produced five effective seats and HIGH confidence. Exactly the runs where
+    nobody could measure independence were told their panel was ideal."""
+
+    def test_a_nonfinite_rho_caps_confidence_at_the_floor(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            assert SI.confidence_ceiling(5, bad) == "Low"
+
+    def test_a_nonfinite_rho_cannot_be_turned_into_effective_seats(self):
+        """Raising is deliberate: there is no number to return, and every
+        number this function could return is a claim about independence."""
+        with pytest.raises(ValueError, match="could not be measured"):
+            SI.effective_seats(5, float("nan"))
+
+    def test_a_claimed_confidence_is_capped_when_rho_is_unmeasurable(self):
+        value, why = SI.cap_confidence("High", 5, float("nan"))
+        assert value == "Low"
+        assert why
+
+    def test_a_real_rho_still_produces_a_real_ceiling(self):
+        """The guard must not disable the measurement it protects."""
+        assert SI.confidence_ceiling(5, 0.0) == "High"
+        assert SI.effective_seats(5, 0.0) == 5.0
 
 
 # ---------------------------------------------------------------------------
@@ -751,12 +799,30 @@ class TestARunThatRefutedNothingSaysSo:
         assert verdict == "INCONCLUSIVE"
         assert any("MOST OF IT IS UNCHECKED" in r for r in reasons)
 
-    def test_unmeasured_independence_alone_blocks_adjudication(self):
-        """Seats that never addressed the same points cannot corroborate each
-        other, however much they appear to agree."""
+    def test_unmeasured_independence_blocks_a_clean_verdict_not_the_run(self):
+        """CORRECTED once rho was made honest.
+
+        This asserted NOT ADJUDICATED. But rho is not measurable from
+        open-ended generation at all, so that rule would stamp NOT ADJUDICATED
+        on every run this tool can ever produce -- including runs that
+        eliminated real answers for real reasons. A verdict that is always the
+        same carries no information and gets ignored, and the genuine
+        NOT ADJUDICATED runs get ignored with it.
+
+        Adjudication asks whether anything was mechanically eliminated.
+        Confidence asks what the surviving agreement is worth. Independence
+        belongs to the second, so it caps confidence at Low and downgrades the
+        verdict to INCONCLUSIVE with the reason stated -- it does not erase
+        the elimination that actually happened."""
         verdict, reasons = NL.run_verdict([_round(failed=3, rho=None)])
+        assert verdict == "INCONCLUSIVE"
+        assert any("INDEPENDENCE IS NOT MEASURED" in r for r in reasons)
+        assert SI.confidence_ceiling(5, float("nan")) == "Low"
+
+    def test_a_run_that_eliminated_nothing_is_still_not_adjudicated(self):
+        """The separation must not weaken the case it was built for."""
+        verdict, _ = NL.run_verdict([_round(failed=0, rho=None)])
         assert verdict == "NOT ADJUDICATED"
-        assert any("INDEPENDENCE WAS NEVER MEASURED" in r for r in reasons)
 
     def test_a_contaminated_merge_blocks_adjudication(self):
         verdict, reasons = NL.run_verdict(
@@ -968,3 +1034,69 @@ class TestTheCloserCannotIntroduceContent:
         payload = json.loads(
             (tmp_path / "status.md").read_text().split("```json")[1].split("```")[0])
         assert payload[0]["closer_invented"]
+
+
+# ---------------------------------------------------------------------------
+# 17. Codex H19 — "five different vendors" must be an invariant, not prose
+# ---------------------------------------------------------------------------
+
+class TestThePanelIsFiveDistinctVendors:
+    """The premise every statistic in this tool rests on, and nothing checked
+    it. Profiles only had to be non-empty, so five seat entries pointing at
+    ONE provider and model passed validation, ran, and produced a deliverable
+    describing a five-vendor panel. That is not a degraded panel -- it is one
+    model sampled five times with the correlation structure hidden."""
+
+    def _panel(self, n=5, vendor=None, model=None):
+        return {f"seat_{i}": (vendor or f"Vendor{i}", model or f"model-{i}")
+                for i in range(1, n + 1)}
+
+    def test_a_real_five_vendor_panel_is_accepted(self):
+        NL.check_panel_is_five_vendors(self._panel())
+
+    def test_five_seats_on_one_model_are_refused(self):
+        with pytest.raises(ValueError, match="not five distinct"):
+            NL.check_panel_is_five_vendors(
+                self._panel(vendor="OpenAI", model="gpt-5.6"))
+
+    def test_even_one_duplicated_pair_is_refused(self):
+        """Two seats sharing a model fail the same way, and nothing downstream
+        can detect it because their agreement looks like corroboration."""
+        panel = self._panel()
+        panel["seat_5"] = panel["seat_1"]
+        with pytest.raises(ValueError, match="not five distinct"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_a_short_panel_is_refused(self):
+        """A shorter panel is a different instrument, and every independence
+        figure in the output would describe one that was not run."""
+        with pytest.raises(ValueError, match="exactly 5 seats"):
+            NL.check_panel_is_five_vendors(self._panel(n=3))
+
+    def test_the_refusal_names_the_offending_seats(self):
+        panel = self._panel()
+        panel["seat_4"] = panel["seat_2"]
+        with pytest.raises(ValueError, match="seat_2, seat_4"):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_the_check_is_case_insensitive(self):
+        """'OpenAI' and 'openai' are one vendor."""
+        panel = self._panel()
+        panel["seat_1"] = ("OpenAI", "GPT-5.6")
+        panel["seat_2"] = ("openai", "gpt-5.6")
+        with pytest.raises(ValueError):
+            NL.check_panel_is_five_vendors(panel)
+
+    def test_the_configured_panel_passes_its_own_check(self):
+        """The profile file this repository ships with must satisfy the
+        invariant, or the check is theatre."""
+        identity = NL.panel_identity("profiles.json")
+        NL.check_panel_is_five_vendors(identity)
+
+    def test_panel_identity_carries_no_credential(self):
+        """Vendor and model are configuration. Nothing else leaves this."""
+        identity = NL.panel_identity("profiles.json")
+        for vendor, model in identity.values():
+            for value in (vendor, model):
+                assert "sk-" not in value
+                assert len(value) < 80

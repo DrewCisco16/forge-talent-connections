@@ -37,15 +37,12 @@ An instruction found inside a reply is recorded as a finding, never obeyed.
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
-
-import numpy as np
 
 from adjudication_orchestrator import (
     BudgetExceeded,
@@ -57,7 +54,6 @@ from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
     effective_seats,
-    mean_error_correlation,
 )
 
 # --------------------------------------------------------------------------
@@ -378,65 +374,54 @@ def measure_rho(seat_claims: Mapping[str, Sequence[Claim]],
                 verdicts: Mapping[str, object]) -> tuple[float | None, str]:
     """Measured error correlation across the seats, or None with the reason.
 
-    Returns (rho, explanation). rho is None whenever it cannot be measured
-    HONESTLY, and the explanation always says which case applied, because
-    "independence was not measured" and "independence was measured and is
-    good" must never look alike in the record.
+    IT RETURNS None, AND THAT IS THE HONEST ANSWER FOR THIS PANEL.
 
-    HOW. Claim ids are content-addressed, so two seats asserting the same thing
-    produce the same id. An item is usable only when EVERY seat ruled on it:
-    a seat that did not raise a claim has not been shown to be right or wrong
-    about it, and scoring that silence as either would manufacture agreement
-    or disagreement that was never observed. Correctness is the gate verdict --
-    PASS is 1, FAIL is 0. BLOCKED items are dropped entirely, since a check
-    that did not happen is not evidence about the seat.
+    An earlier version of this function computed a number, and the number was
+    fabricated. Error correlation needs a per-SEAT correctness vector: for each
+    item, was THIS seat right or wrong. A gate verdict is per-CLAIM -- the
+    claim either held or it did not -- so building the matrix by repeating one
+    global verdict across every seat column produced five identical columns
+    and a correlation of 1.0 by construction, whatever the seats had actually
+    done. Verified: five seats, six shared claims, three true and three false,
+    reported rho = 1.0000 and a note saying it had been "measured".
 
-    WHY IT OFTEN RETURNS None. On a live run of this tool, pairwise claim
-    overlap sat between 0.0057 and 0.0238: the seats were not addressing the
-    same points, so there was almost nothing every seat had ruled on. That is
-    a real and reportable finding about the panel -- it means independence is
-    UNVERIFIED, not that it is high -- and the caller caps confidence at Low
-    on the strength of it.
+    Nor can the missing half be recovered from open-ended generation. A seat
+    that never raised a claim has not been shown right or wrong about it; that
+    is MISSING DATA. Scoring silence as an error, which correctness_matrix
+    does for its own purposes, manufactures disagreement that was never
+    observed -- five seats each finding one different true claim score as
+    maximally independent, which is backwards.
+
+    WHAT WOULD ACTUALLY MEASURE IT: a seeded set of propositions with known
+    truth that every seat is REQUIRED to decide, so each produces a real
+    correctness vector over common ground. This panel has no such set, so the
+    correlation is unmeasured, the confidence ceiling is Low, and the run says
+    so rather than reporting a number nobody can defend.
+
+    The signature is kept so the caller still records WHY, and so the seeded
+    version can replace the body without moving anything else.
     """
     if len(seat_claims) < 2:
         return None, "fewer than two seats produced claims; rho needs a pair"
 
-    seat_ids = sorted(seat_claims)
     per_seat = {sid: {c.id for c in cs} for sid, cs in seat_claims.items()}
     shared = set.intersection(*per_seat.values()) if per_seat else set()
+    ruled = [cid for cid in sorted(shared)
+             if getattr(getattr(verdicts.get(cid), "status", None), "value",
+                        None) in ("pass", "fail")]
 
-    usable: list[str] = []
-    for cid in sorted(shared):
-        status = getattr(verdicts.get(cid), "status", None)
-        value = getattr(status, "value", None)
-        if value in ("pass", "fail"):
-            usable.append(cid)
-
-    if len(usable) < MIN_SHARED_ITEMS_FOR_RHO:
-        return None, (
-            f"only {len(usable)} claim(s) were ruled PASS or FAIL for every "
-            f"seat, below the minimum of {MIN_SHARED_ITEMS_FOR_RHO}. Error "
-            f"correlation is therefore UNMEASURED -- which is not the same as "
-            f"low. The seats were largely not addressing the same points, so "
-            f"whether they fail together is unknown."
-        )
-
-    matrix = [
-        [1 if getattr(getattr(verdicts.get(cid), "status", None), "value", None)
-         == "pass" else 0
-         for _sid in seat_ids]
-        for cid in usable
-    ]
-    rho = mean_error_correlation(np.asarray(matrix, dtype=float))
-    if math.isnan(rho):
-        return None, (
-            f"rho was not computable over {len(usable)} shared claim(s): every "
-            f"seat scored identically on all of them, so there is no variance "
-            f"to correlate. Identical scores are not evidence of independence."
-        )
-    return rho, (
-        f"rho = {rho:.4f}, measured over {len(usable)} claim(s) that every "
-        f"seat had ruled PASS or FAIL"
+    return None, (
+        f"ERROR CORRELATION IS NOT MEASURED, and this is a property of the "
+        f"design rather than of this run. A gate verdict says whether a CLAIM "
+        f"held; it does not say whether each SEAT was right, and error "
+        f"correlation needs the second. Seats answer open-ended, so a seat "
+        f"that did not raise a claim has not been shown right or wrong about "
+        f"it -- that is missing data, not a mistake. "
+        f"({len(ruled)} claim(s) were ruled PASS or FAIL for every seat this "
+        f"round, which is not enough to recover per-seat correctness.) "
+        f"Measuring it needs a seeded set of propositions with known truth "
+        f"that every seat must decide. Until then, unmeasured is reported as "
+        f"unmeasured -- it is not low, and it is not high."
     )
 
 
@@ -899,6 +884,64 @@ def run_night(
     return results
 
 
+EXPECTED_SEATS = 5
+
+
+def panel_identity(profiles_path: str) -> dict[str, tuple[str, str]]:
+    """seat_id -> (vendor, model), read from the profile file.
+
+    No credential is read, printed, or returned. Vendor and model are
+    configuration, and the whole independence argument rests on them.
+    """
+    with open(profiles_path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    seats = raw.get("seats", raw)
+    out: dict[str, tuple[str, str]] = {}
+    for sid, cfg in seats.items():
+        if sid.startswith("_") or not isinstance(cfg, dict):
+            continue
+        out[sid] = (str(cfg.get("name") or cfg.get("_vendor") or sid),
+                    str(cfg.get("model") or cfg.get("_model") or "?"))
+    return out
+
+
+def check_panel_is_five_vendors(identity: Mapping[str, tuple[str, str]]) -> None:
+    """Refuse a panel that cannot support the claim made about it.
+
+    "Five models from five different vendors, answering independently" is the
+    premise every statistic in this tool rests on, and nothing checked it.
+    Profiles only had to be non-empty, so five seat entries pointing at ONE
+    provider and model passed validation, ran, and produced a deliverable
+    describing a five-vendor panel. That is not a degraded panel, it is one
+    model sampled five times with the correlation structure hidden.
+
+    Enforced at start-up rather than reported at the end, because the end is
+    after the money.
+    """
+    if len(identity) != EXPECTED_SEATS:
+        raise ValueError(
+            f"this mode needs exactly {EXPECTED_SEATS} seats and the profile "
+            f"file defines {len(identity)}: {sorted(identity)}. A shorter "
+            f"panel is a different instrument, and every independence figure "
+            f"in the output would describe one that was not run."
+        )
+    seen: dict[str, list[str]] = {}
+    for sid, (vendor, model) in sorted(identity.items()):
+        seen.setdefault(f"{vendor.casefold()}|{model.casefold()}", []).append(sid)
+    duplicates = {k: v for k, v in seen.items() if len(v) > 1}
+    if duplicates:
+        detail = "; ".join(
+            f"{', '.join(sids)} all use {key.split('|')[0]} {key.split('|')[1]}"
+            for key, sids in duplicates.items())
+        raise ValueError(
+            f"the panel is not five distinct vendor/model pairs: {detail}. "
+            f"Seats sharing a model fail the same way, which is precisely the "
+            f"correlation this design exists to avoid -- and nothing "
+            f"downstream can detect it, because their agreement looks like "
+            f"corroboration."
+        )
+
+
 def live_night(ask: str, profiles_path: str, out_dir: str,
                gates: Sequence[Any] | None = None,
                ledger: Any = None,
@@ -919,6 +962,8 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     from adjudication_orchestrator import Orchestrator
     from run_adjudication import _default_gates, live_seats
 
+    identity = panel_identity(profiles_path)
+    check_panel_is_five_vendors(identity)
     seats = live_seats(profiles_path, ledger=ledger)
     if closer_seat not in seats:
         raise ValueError(
@@ -931,6 +976,17 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     # afterwards. Its pass is written cold; merging is a separate act later.
     closer = seats[closer_seat]
     orch = Orchestrator(list(gates) if gates is not None else _default_gates())
+    # THE PANEL THAT ACTUALLY RAN, written down. Without it, a run months
+    # later cannot be told from one where every seat pointed at the same
+    # model -- and the independence claim in the deliverable is unverifiable
+    # after the fact. No credential is recorded; vendor and model are
+    # configuration, and they are what the claim rests on.
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "panel.md"), "w", encoding="utf-8") as fh:
+        fh.write("# Panel\n\n")
+        for sid, (vendor, model) in sorted(identity.items()):
+            role = " (also closes)" if sid == closer_seat else ""
+            fh.write(f"- {sid}: {vendor} {model}{role}\n")
     return run_night(ask, seats, closer, orch, out_dir, on_event=on_event)
 
 
@@ -1102,33 +1158,54 @@ def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
     if not results:
         return "NOT ADJUDICATED", ["no round completed"]
 
+    # ONE POPULATION FOR BOTH HALVES OF THE FRACTION.
+    #
+    # claims counted RAW occurrences -- five seats repeating one claim counted
+    # five -- while escalated counted DISTINCT claims, each adjudicated once.
+    # Five seats repeating ten judgment claims and five arithmetic ones
+    # therefore reported "10 of 75 open, 13.3%" and returned ADJUDICATED, when
+    # two thirds of the distinct claim set was in fact unresolved. Any seat
+    # that repeats itself dilutes the denominator, so the measure got better
+    # the more the panel duplicated -- backwards.
     refuted = sum(r.failed for r in results)
-    claims = sum(r.claims for r in results)
     escalated = sum(r.escalated for r in results)
+    accepted = sum(r.passed for r in results)
+    blocked = sum(r.blocked for r in results)
+    # Every distinct claim that reached a verdict, which is the same set the
+    # escalation count is drawn from.
+    claims = accepted + refuted + escalated + blocked
     contaminated = [r.n for r in results if r.closer_contaminated]
     degraded = [r.n for r in results if r.degraded]
     measured = [r for r in results if r.rho is not None]
 
     if refuted == 0:
         reasons.append(
-            f"NOTHING WAS REFUTED. {claims} claim(s) were proposed across "
+            f"NOTHING WAS REFUTED. {claims} distinct claim(s) were "
+            f"adjudicated across "
             f"{len(results)} round(s) and no mechanical check ruled any of "
             f"them false. Nothing was eliminated, so the merged text below is "
             f"what the seats agreed on -- not what survived being attacked."
         )
     if claims and escalated / claims > MAX_ESCALATION_FRACTION:
         reasons.append(
-            f"MOST OF IT IS UNCHECKED. {escalated} of {claims} claim(s) "
+            f"MOST OF IT IS UNCHECKED. {escalated} of {claims} distinct "
+            f"claim(s) "
             f"({escalated / claims:.0%}) carried no mechanical warrant and "
             f"were left to a human. The panel narrowed little; it produced a "
             f"queue."
         )
     if not measured:
         reasons.append(
-            "INDEPENDENCE WAS NEVER MEASURED. No round had enough claims that "
-            "every seat had ruled on, which means the seats were largely not "
-            "addressing the same points. Whether they fail together is "
-            "unknown, so their agreement is not corroboration."
+            "INDEPENDENCE IS NOT MEASURED, and this is structural rather than "
+            "a fault of this run. Error correlation needs to know whether each "
+            "SEAT was right or wrong on common items; a gate verdict only says "
+            "whether a CLAIM held. Seats answer open-ended, so a seat that "
+            "never raised a claim has not been shown right or wrong about it. "
+            "Measuring it would need a seeded set of propositions with known "
+            "truth that every seat must decide. Until then, whether these "
+            "seats fail together is unknown -- which is not the same as their "
+            "failing independently -- so their agreement is not corroboration "
+            "and confidence is capped at Low."
         )
     invented = [r.n for r in results if r.closer_invented]
     if invented:
@@ -1152,7 +1229,24 @@ def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
             f"specified."
         )
 
-    if refuted == 0 or not measured:
+    # ADJUDICATION AND CONFIDENCE ARE DIFFERENT QUESTIONS.
+    #
+    # Adjudication asks whether anything was mechanically eliminated. That is
+    # a fact about what the gates did, and it is either true or it is not.
+    # Confidence asks what the surviving agreement is WORTH, which is where
+    # independence belongs.
+    #
+    # Unmeasured independence used to force NOT ADJUDICATED. Once rho was made
+    # honest -- it is not measurable from open-ended generation at all -- that
+    # rule would have stamped NOT ADJUDICATED on every run this tool can ever
+    # produce, including runs that eliminated real answers for real reasons. A
+    # verdict that is always the same carries no information and gets ignored,
+    # and then the genuine NOT ADJUDICATED runs are ignored with it.
+    #
+    # So: nothing refuted is NOT ADJUDICATED. Everything else that is wrong,
+    # unmeasured independence included, is INCONCLUSIVE with the reason
+    # stated, and the confidence ceiling stays at Low.
+    if refuted == 0:
         return "NOT ADJUDICATED", reasons
     if reasons:
         return "INCONCLUSIVE", reasons

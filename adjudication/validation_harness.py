@@ -22,6 +22,7 @@ Run: python validation_harness.py
 """
 
 
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -98,7 +99,8 @@ def run(label: str, catches: dict[str, set[str]]) -> Orchestrator:
     print(f"  singleton fraction             {ch['singleton_fraction']:.3f}")
     print(f"  mean error correlation rho     {rho:+.3f}")
     print(f"  effective seats (of {len(seat_ids)})          "
-          f"{SI.effective_seats(len(seat_ids), rho):.2f}")
+          + (f"{SI.effective_seats(len(seat_ids), rho):.2f}"
+             if math.isfinite(rho) else "not measurable"))
 
     yields = SI.marginal_yield_by_pass(
         [(p.name, {e for e in found if PASS_OF[e] == k})

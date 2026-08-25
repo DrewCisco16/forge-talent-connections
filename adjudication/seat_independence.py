@@ -44,6 +44,7 @@ References for the estimators (verify before citing):
 from __future__ import annotations
 
 import itertools
+import math
 from collections import Counter
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
@@ -128,7 +129,22 @@ def effective_seats(n_seats: int, rho: float) -> float:
     plain language ("5 seats behave like 1.47"), so "0.67 seats" would be read
     as meaningful rather than as the nonsense it is. Found by property test.
     """
-    rho = min(1.0, max(0.0, float(rho)))
+    # NaN IS NOT ZERO. It was clamped to 0.0 by max(0.0, nan) -- which returns
+    # nan on some paths and 0.0 on others -- and a rho of 0.0 means perfectly
+    # independent seats. So an UNMEASURABLE correlation produced the maximum
+    # possible independence and, through confidence_ceiling, HIGH confidence.
+    # That is the single worst direction this function can fail in: it is
+    # exactly the runs where nobody could measure independence that get told
+    # their panel is ideal.
+    r = float(rho)
+    if math.isnan(r):
+        raise ValueError(
+            "rho is NaN, which means it could not be measured. It must not be "
+            "passed here: treating an unmeasurable correlation as 0.0 reports "
+            "a perfectly independent panel. Handle the unmeasured case at the "
+            "call site instead."
+        )
+    rho = min(1.0, max(0.0, r))
     if n_seats <= 1:
         return float(n_seats)
     return n_seats / (1.0 + (n_seats - 1) * rho)
@@ -472,7 +488,11 @@ def diagnose(
         rho = mean_error_correlation(X)
         report["mean_error_correlation_rho"] = rho
         report["n_seats"] = int(X.shape[1])
-        report["effective_seats"] = effective_seats(X.shape[1], rho)
+        # None, not a number, when rho could not be measured. Passing NaN
+        # here used to yield the full seat count -- a perfectly independent
+        # panel -- on exactly the runs where independence was unknowable.
+        report["effective_seats"] = (
+            effective_seats(X.shape[1], rho) if math.isfinite(rho) else None)
         report["independence_gap"] = independence_gap(X)
 
     if answers is not None and truth is not None:
@@ -508,7 +528,8 @@ if __name__ == "__main__":
     rho = mean_error_correlation(X)
     print(f"[synthetic] mean error correlation rho = {rho:.3f}")
     print(f"[synthetic] effective seats (of {n_seats}) = "
-          f"{effective_seats(n_seats, rho):.2f}")
+          + (f"{effective_seats(n_seats, rho):.2f}"
+             if math.isfinite(rho) else "not measurable"))
     gap = independence_gap(X)
     print(f"[synthetic] observed majority acc  = {gap['observed_majority_accuracy']:.3f}")
     print(f"[synthetic] independence predicted = {gap['independence_predicted_accuracy']:.3f}")
@@ -571,6 +592,11 @@ def confidence_ceiling(n_seats: int, rho: float) -> str:
     pass; a "High confidence" stamped on that output would have described the
     panel's size rather than its evidence.
     """
+    if not math.isfinite(float(rho)):
+        # Unmeasured independence is not high independence. Nothing has been
+        # established about whether these seats fail together, and agreement
+        # between seats not shown to fail differently is not corroboration.
+        return CONFIDENCE_LEVELS[0]
     n_eff = effective_seats(n_seats, rho)
     if n_eff < MEDIUM_NEEDS_EFFECTIVE_SEATS:
         return "Low"
@@ -597,7 +623,8 @@ def cap_confidence(claimed: str, n_seats: int, rho: float) -> tuple[str, str | N
     system can express. Default is denied, so it lands at Low.
     """
     ceiling = confidence_ceiling(n_seats, rho)
-    n_eff = effective_seats(n_seats, rho)
+    n_eff = (effective_seats(n_seats, rho)
+             if math.isfinite(float(rho)) else float("nan"))
     limit = CONFIDENCE_LEVELS.index(ceiling)
 
     if claimed not in CONFIDENCE_LEVELS:
