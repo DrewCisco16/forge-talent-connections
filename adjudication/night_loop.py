@@ -196,7 +196,15 @@ claim was mechanically refuted, and the refuting warrant actually bears on
 what the claim says.
 
 <warrant> is the mechanically checkable evidence:
-    arithmetic          an expression and its result, as "3 * 4 = 12"
+    arithmetic          an expression and its result, as "3 * 4 = 12".
+                        PUT THE UNITS IN THE WARRANT if the claim states any:
+                        "12 * 4000 dollars = 47000 dollars", not
+                        "12 * 4000 = 47000" beside a claim about dollars. A
+                        bare number establishes a number; the currency, the
+                        period, and the thing being counted are separate
+                        assertions, and a check that never saw them cannot
+                        settle them. The claim is then accepted as written
+                        rather than escalated for a person to read.
     citation            a DOI or an https URL. To have the DOI checked against
                         the paper you named, write it as
                         "<doi> :: <surname> ;; <year> ;; <title>" -- the inner

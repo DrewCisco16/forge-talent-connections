@@ -420,6 +420,109 @@ def _content_words(text: str) -> list[str]:
     return [w for w in _WORDISH.findall((text or "").casefold()) if len(w) > 1]
 
 
+_PER_PHRASE = re.compile(r"\bper\s+\w+", re.IGNORECASE)
+
+_LINKING = re.compile(
+    r"\b(?:is|are|was|were|totals|totalling|comes to|come to|amounts to|"
+    r"equals|costs|adds up to|works out to|will be|would be)\b",
+    re.IGNORECASE)
+"""Verbs that introduce what a quantity claim ASSERTS.
+
+Bare "total" is deliberately absent. It matched "in total" at the end of an
+ordinary cost sentence, so the assertion after the last linking verb was the
+empty string and every genuine claim was rejected."""
+
+
+def _quantity_claim_unsupported(claim: Claim, warrant: str,
+                                text: str) -> str | None:
+    """Whether a verified quantity establishes what this claim asserts.
+
+    THE RULE IS POSITIONAL: the checked value must be what the sentence
+    ASSERTS, not merely a token it contains.
+
+    Everything before the linking verb NAMES the quantity and may say
+    anything -- "the vendor licence", "two engineers for two quarters",
+    "renting for six months". Everything after it is the assertion, and must
+    be the computed value plus quantity words.
+
+    An earlier rule required the whole sentence to contain nothing outside a
+    fixed vocabulary. It was safe and useless: a five-round dry run with three
+    genuine cost claims eliminated NOTHING, because "the vendor licence is
+    47000 per year in total" mentions a vendor and a licence. A tool that
+    cannot rule on an ordinary cost claim produces a reading list rather than
+    an answer, which is the other way to be worthless.
+
+    It still catches the case it was built for. "The launch is SAFE to
+    proceed, code 4" carries 4, but what it ASSERTS after the verb is being
+    safe -- and arithmetic settles nothing about that.
+    """
+    _, _, rhs = warrant.rpartition("=")
+    results = _numbers(rhs)
+    claimed = _numbers(text)
+    if results and not (results & claimed):
+        return (
+            f"WARRANT DOES NOT BEAR ON THE CLAIM: the check verified "
+            f"{warrant.strip()!r}, and the claim text does not mention "
+            f"{' or '.join(sorted(results))}."
+        )
+
+    verbs = list(_LINKING.finditer(text))
+    assertion = text[verbs[-1].end():] if verbs else text
+
+    # "per year", "per seat", "per request" name what the quantity is PER.
+    # That is the same labelling job the words before the verb do, and it is
+    # stripped for the same reason: rejecting it made every ordinary rate --
+    # "the licence is 47000 dollars per year" -- unusable, while the number
+    # asserted is exactly the one that was computed.
+    assertion_core = _PER_PHRASE.sub(" ", assertion)
+    asserted = _content_words(assertion_core)
+
+    hedges = sorted(set(asserted) & _QUALIFIERS)
+    if hedges:
+        return (
+            f"THE CLAIM QUALIFIES THE NUMBER: "
+            f"{', '.join(repr(h) for h in hedges)}. The check confirmed a "
+            f"value; it established nothing about being under, over, or near "
+            f"it."
+        )
+
+    if results and not (results & _numbers(assertion)):
+        return (
+            f"THE NUMBER IS NOT WHAT THE CLAIM ASSERTS: it says "
+            f"{assertion.strip()[:60]!r}, and mentions "
+            f"{' or '.join(sorted(results))} elsewhere. A verified quantity "
+            f"settles the quantity, not whatever else the sentence says."
+        )
+
+    # A unit the warrant does not measure means a different quantity. "5 km =
+    # 5000 m" is a true conversion and establishes nothing about 5000 dollars.
+    warrant_units = set(_content_words(warrant)) & _UNIT_WORDS
+    foreign = sorted((set(asserted) & _UNIT_WORDS) - warrant_units)
+    if foreign:
+        return (
+            f"THE CLAIM IS ABOUT A DIFFERENT QUANTITY: it asserts "
+            f"{', '.join(repr(u) for u in foreign)}, which the warrant "
+            f"{warrant.strip()!r} does not measure. A number without its "
+            f"dimension is not the same claim."
+        )
+
+    extra = sorted({w for w in asserted
+                    if w not in _QUANTITY_VOCABULARY
+                    and w not in _UNIT_WORDS
+                    and not w.isdigit()
+                    and w not in _content_words(warrant)})
+    if extra:
+        return (
+            f"THE CLAIM ASSERTS MORE THAN THE WARRANT CHECKS: "
+            f"{warrant.strip()!r} was recomputed and held, but what the claim "
+            f"states is {assertion.strip()[:50]!r}, which also asserts "
+            f"something about {', '.join(repr(w) for w in extra[:3])}"
+            + (" and more" if len(extra) > 3 else "")
+            + ". Arithmetic settles the arithmetic and nothing else."
+        )
+    return None
+
+
 def warrant_supports(claim: Claim) -> str | None:
     """None if the warrant ESTABLISHES this proposition; else why it does not.
 
@@ -461,53 +564,7 @@ def warrant_supports(claim: Claim) -> str | None:
         )
 
     if claim.kind in (ClaimKind.ARITHMETIC, ClaimKind.UNIT):
-        _, _, rhs = warrant.rpartition("=")
-        results = _numbers(rhs)
-        claimed = _numbers(text)
-        if results and not (results & claimed):
-            return (
-                f"WARRANT DOES NOT BEAR ON THE CLAIM: the check verified "
-                f"{warrant.strip()!r}, and the claim text does not mention "
-                f"{' or '.join(sorted(results))}."
-            )
-        # The numbers matching is not enough. "The launch is SAFE, code 4"
-        # mentions 4 and asserts something the arithmetic never touched, so
-        # the claim must carry NO assertion beyond the quantity it states.
-        words = _content_words(text)
-
-        hedges = sorted(set(words) & _QUALIFIERS)
-        if hedges:
-            return (
-                f"THE CLAIM QUALIFIES THE NUMBER: "
-                f"{', '.join(repr(h) for h in hedges)}. The check confirmed a "
-                f"value; it established nothing about being under, over, or "
-                f"near it."
-            )
-
-        warrant_units = set(_content_words(warrant)) & _UNIT_WORDS
-        foreign = sorted((set(words) & _UNIT_WORDS) - warrant_units)
-        if foreign:
-            return (
-                f"THE CLAIM IS ABOUT A DIFFERENT QUANTITY: it asserts "
-                f"{', '.join(repr(u) for u in foreign)}, which the warrant "
-                f"{warrant.strip()!r} does not measure. A number without its "
-                f"dimension is not the same claim."
-            )
-
-        extra = sorted({w for w in words
-                        if w not in _QUANTITY_VOCABULARY
-                        and not w.isdigit()
-                        and w not in _content_words(warrant)})
-        if extra:
-            return (
-                f"THE CLAIM ASSERTS MORE THAN THE WARRANT CHECKS: "
-                f"{warrant.strip()!r} was recomputed and held, but the claim "
-                f"also asserts something about "
-                f"{', '.join(repr(w) for w in extra[:4])}"
-                + (" and more" if len(extra) > 4 else "")
-                + ". Arithmetic settles the arithmetic and nothing else."
-            )
-        return None
+        return _quantity_claim_unsupported(claim, warrant, text)
 
     if claim.kind is ClaimKind.CITATION:
         return (

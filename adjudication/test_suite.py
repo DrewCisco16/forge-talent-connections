@@ -5367,3 +5367,66 @@ class TestAWarrantMustBearOnTheClaimRoundTwo:
                               ("12 units at 50 each is 600 in total",
                                "12 * 50 = 600")):
             assert self._accepts(text, warrant), text
+
+
+class TestAQuantityClaimIsUsableAndStillSafe:
+    """The rule that decides whether this tool answers or just escalates.
+
+    An earlier version required a quantity claim's whole sentence to contain
+    nothing outside a fixed vocabulary. It was safe and useless: a five-round
+    dry run with three genuine cost claims eliminated NOTHING, because "the
+    vendor licence is 47000 per year in total" mentions a vendor and a licence.
+    A tool that cannot rule on an ordinary cost claim produces a reading list
+    rather than an answer, which is the other way to be worthless.
+
+    The rule is now POSITIONAL. Everything before the linking verb NAMES the
+    quantity and may say anything; everything after it is the assertion and
+    must be the computed value plus quantity words.
+    """
+
+    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
+        return AO.warrant_supports(
+            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
+
+    @pytest.mark.parametrize("text,warrant", [
+        ("the vendor licence is 47000 per year in total", "12 * 4000 = 47000"),
+        ("the vendor licence is 47000 dollars per year",
+         "12 * 4000 dollars = 47000 dollars"),
+        ("two engineers for two quarters is 180000 in total",
+         "2 * 90000 = 180000"),
+        ("renting for six months is 18000 in total", "6 * 3000 = 18000"),
+        ("12 units at 50 each is 600 in total", "12 * 50 = 600"),
+        ("the total is 4", "2 + 2 = 4"),
+    ])
+    def test_an_ordinary_cost_claim_is_usable(self, text, warrant):
+        assert self._accepts(text, warrant), text
+
+    @pytest.mark.parametrize("text,warrant", [
+        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
+        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
+        ("Launch immediately.", "2 + 2 = 5"),
+        ("the parser is secure", "2 + 2 = 4"),
+        ("the total is under 4", "2 + 2 = 4"),
+        ("the total is about 4", "2 + 2 = 4"),
+        ("the price is 4 dollars", "2 + 2 = 4"),
+    ])
+    def test_the_number_must_be_what_the_claim_asserts(self, text, warrant):
+        """"The launch is SAFE to proceed, code 4" carries 4, but what it
+        ASSERTS after the verb is being safe -- and arithmetic settles nothing
+        about that."""
+        assert not self._accepts(text, warrant), text
+
+    def test_a_dimension_the_warrant_does_not_measure_is_refused(self):
+        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
+                                 ClaimKind.UNIT)
+
+    def test_the_same_dimension_is_allowed(self):
+        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
+                             ClaimKind.UNIT)
+
+    def test_a_rate_period_is_labelling_not_a_dimension(self):
+        """"per year" names what the quantity is PER, the same labelling job
+        the words before the verb do. Rejecting it made every ordinary rate
+        unusable while the number asserted was exactly the one computed."""
+        assert self._accepts("the licence is 47000 dollars per year",
+                             "12 * 4000 dollars = 47000 dollars")
