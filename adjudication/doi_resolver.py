@@ -83,8 +83,12 @@ def _is_public_host(host: str) -> bool:
             ip = ipaddress.ip_address(info[4][0])
         except ValueError:
             return False
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        # is_global, not a hand-written list of categories. The list missed
+        # carrier-grade NAT (100.64.0.0/10), which is routed inside VPN and
+        # overlay networks and is not an ordinary public destination:
+        # 100.64.0.1 has is_global False and was accepted. Any future special
+        # range is covered without anyone remembering to add it.
+        if not ip.is_global:
             return False
     return True
 

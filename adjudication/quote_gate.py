@@ -73,8 +73,12 @@ def _resolve_public(host: str) -> str | None:
             ip = ipaddress.ip_address(addr)
         except ValueError:
             return None
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        # is_global, not a hand-written list of categories. The list missed
+        # carrier-grade NAT (100.64.0.0/10), which is routed inside VPN and
+        # overlay networks and is not an ordinary public destination:
+        # 100.64.0.1 has is_global False and was accepted. Any future special
+        # range is covered without anyone remembering to add it.
+        if not ip.is_global:
             return None
         if first is None:
             first = addr
@@ -103,8 +107,12 @@ def _is_public(host: str) -> bool:
             ip = ipaddress.ip_address(info[4][0])
         except ValueError:
             return False
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        # is_global, not a hand-written list of categories. The list missed
+        # carrier-grade NAT (100.64.0.0/10), which is routed inside VPN and
+        # overlay networks and is not an ordinary public destination:
+        # 100.64.0.1 has is_global False and was accepted. Any future special
+        # range is covered without anyone remembering to add it.
+        if not ip.is_global:
             return False
     return True
 
@@ -155,11 +163,41 @@ class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
 
 
 _INTERSTITIAL = (
-    "subscribe to continue", "subscription required", "create a free account",
-    "sign in to read", "log in to continue", "you have reached your",
-    "enable javascript", "verify you are human", "checking your browser",
+    "subscribe to continue", "subscription required", "reserved for subscribers",
+    "already a subscriber", "subscribers only", "members only",
+    "create a free account", "register to continue", "sign up to continue",
+    "sign in to read", "sign in to continue", "log in to continue",
+    "sign in here", "you have reached your", "free articles remaining",
+    "this article is for", "to continue reading", "unlock this article",
+    "enable javascript", "javascript is required", "verify you are human",
+    "checking your browser", "are you a robot", "unusual traffic",
     "access denied", "please accept cookies", "cookie consent",
+    "we use cookies", "accept all cookies", "privacy preferences",
+    "page not found", "404", "temporarily unavailable",
 )
+
+MIN_UNIQUE_WORD_RATIO = 0.06
+"""Below this share of distinct words, the page is not an article.
+
+A PHRASE LIST CANNOT BE COMPLETE, and a reviewer found a wall it did not
+contain. But the reproduction had a second, structural tell: a short
+interstitial REPEATED until it cleared the length minimum. Real prose does not
+do that. An article of 2,000 words has hundreds of distinct ones; a sentence
+repeated forty times has a dozen.
+
+Set low on purpose. This is a last-resort signal for pages the phrase list
+misses, and a false BLOCKED costs an escalation while a false FAIL refutes an
+honest citation.
+"""
+
+
+def _is_repetitive(text: str) -> bool:
+    """True when the page is one short passage repeated to look long."""
+    words = text.split()
+    if len(words) < 200:
+        return False
+    unique = {w.casefold() for w in words}
+    return len(unique) / len(words) < MIN_UNIQUE_WORD_RATIO
 
 
 def _looks_like_an_interstitial(text: str) -> bool:
@@ -172,7 +210,9 @@ def _looks_like_an_interstitial(text: str) -> bool:
     correctly.
     """
     low = (text or "").casefold()[:4000]
-    return any(marker in low for marker in _INTERSTITIAL)
+    if any(marker in low for marker in _INTERSTITIAL):
+        return True
+    return _is_repetitive(text or "")
 
 
 MIN_TEXT_CHARS = 400
@@ -219,6 +259,62 @@ def normalize(text: str) -> str:
 _CHARSET = re.compile(r"charset\s*=\s*[\"']?([\w.-]+)", re.IGNORECASE)
 
 
+_META_CHARSET = re.compile(
+    rb"""<meta[^>]+charset\s*=\s*["']?\s*([\w.-]+)""", re.IGNORECASE)
+_META_HTTP_EQUIV = re.compile(
+    rb"""<meta[^>]+http-equiv\s*=\s*["']?content-type["']?[^>]+"""
+    rb"""content\s*=\s*["'][^"']*charset\s*=\s*([\w.-]+)""", re.IGNORECASE)
+
+_BOMS = (
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+    (b"\xff\xfe\x00\x00", "utf-32-le"),
+    (b"\x00\x00\xfe\xff", "utf-32-be"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
+
+
+def _detect_encoding(raw: bytes, content_type: str) -> tuple[str, bytes]:
+    """The encoding this page is actually in, and the bytes to decode.
+
+    THE ORDER IS BOM, THEN HTTP HEADER, THEN THE PAGE'S OWN META TAG.
+
+    Only the HTTP header was consulted. A page declaring
+    <meta charset="windows-1252"> with no charset in its Content-Type
+    therefore decoded as UTF-8 with errors="replace", every non-ASCII
+    character became U+FFFD, and a quote genuinely present in the page could
+    not match -- which the gate then recorded as FAIL, refuting an honest
+    citation because of how the page was encoded.
+
+    Returns the bytes alongside the encoding because a UTF-16 or UTF-32 BOM
+    must be consumed by the codec rather than left in the text.
+    """
+    for bom, codec in _BOMS:
+        if raw.startswith(bom):
+            return codec, raw
+
+    m = _CHARSET.search(content_type or "")
+    if m:
+        name = m.group(1).strip().lower()
+        try:
+            codecs.lookup(name)
+            return name, raw
+        except LookupError:
+            pass
+
+    head = raw[:4096]
+    for pattern in (_META_HTTP_EQUIV, _META_CHARSET):
+        mm = pattern.search(head)
+        if mm:
+            name = mm.group(1).decode("ascii", "ignore").strip().lower()
+            try:
+                codecs.lookup(name)
+                return name, raw
+            except LookupError:
+                continue
+    return "utf-8", raw
+
+
 def extract_text(raw: bytes, content_type: str) -> str:
     """Page bytes to matchable text. HTML is stripped; anything else is decoded.
 
@@ -229,19 +325,7 @@ def extract_text(raw: bytes, content_type: str) -> str:
     through the cascade eliminates a candidate whose quote was real and
     correctly transcribed.
     """
-    encoding = "utf-8"
-    m = _CHARSET.search(content_type or "")
-    if m:
-        candidate = m.group(1).strip().lower()
-        try:
-            # codecs.lookup, not a trial decode of b"": decoding empty bytes
-            # succeeds for names Python cannot actually resolve, so the probe
-            # accepted "x-not-a-charset" and the real decode then raised
-            # LookupError out of the gate.
-            codecs.lookup(candidate)
-            encoding = candidate
-        except LookupError:
-            encoding = "utf-8"
+    encoding, raw = _detect_encoding(raw, content_type)
     body = raw.decode(encoding, errors="replace")
     if "html" in content_type.lower() or body.lstrip()[:1] == "<":
         body = _TAG.sub(" ", body)

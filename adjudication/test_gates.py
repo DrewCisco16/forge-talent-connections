@@ -1004,6 +1004,27 @@ class TestAnApprovedCommandCannotReachTheCredentials:
         assert "1" in r.detail
 
 
+ARTICLE = (
+    "The company reported results across every division this year. Management "
+    "attributed the improvement to disciplined cost control and a favourable "
+    "product mix. Analysts had expected a weaker outcome given the "
+    "macroeconomic backdrop, and several revised their targets upward after "
+    "the announcement. Regional performance varied considerably, with "
+    "stronger demand in northern markets offsetting softness elsewhere. The "
+    "board declined to give guidance beyond the current period, citing "
+    "uncertainty in input prices and shipping capacity. Headcount was broadly "
+    "flat, and the pension scheme remained fully funded on an accounting "
+    "basis. Several one-off items affected the comparison with last year. "
+)
+"""Real prose, not a repeated sentence.
+
+Test pages built by multiplying one short string are not page-like, and the
+interstitial detector now recognises exactly that shape -- a short passage
+repeated to reach a length threshold is how an unrecognised subscription wall
+gets past a minimum-length check. Fixtures have to look like the thing they
+stand in for."""
+
+
 class TestAnIncompleteReadIsNotAFinding:
     """Codex M1 / H12. A non-match only means something if we actually read
     the page the claim cited. Each case below returned FAIL before fixing, and
@@ -1042,14 +1063,13 @@ class TestAnIncompleteReadIsNotAFinding:
     def test_a_truncated_read_cannot_produce_a_confident_failure(self):
         """The quote may sit just past the byte cap, so a non-match is a fact
         about our read limit and not about the source."""
-        r = self._check(text="unrelated filler. " * 60, truncated=True)
+        r = self._check(text=ARTICLE, truncated=True)
         assert r.status is GateStatus.BLOCKED
         assert "read cap" in r.detail
 
     def test_a_truncated_read_that_still_matches_passes(self):
         """Finding the quote is conclusive however much was left unread."""
-        r = self._check(text=f"lead-in text. {self.QUOTE}. more text. " * 20,
-                        truncated=True)
+        r = self._check(text=ARTICLE + self.QUOTE + ".", truncated=True)
         assert r.status is GateStatus.PASS
 
     def test_a_non_utf8_page_is_decoded_by_its_declared_charset(self):
@@ -1068,7 +1088,7 @@ class TestAnIncompleteReadIsNotAFinding:
     def test_a_genuine_absence_is_still_a_finding(self):
         """The whole point of the gate. If every awkward case became BLOCKED
         it would never catch anything."""
-        r = self._check(text="entirely unrelated prose about botany. " * 40)
+        r = self._check(text=ARTICLE)
         assert r.status is GateStatus.FAIL
 
     def test_tls_validates_the_hostname_not_the_pinned_address(self):
@@ -1145,3 +1165,156 @@ class TestCitationMatchingCatchesSubstitutionAndSpareHonestMetadata:
 
     def test_polarity_does_not_fire_on_an_ordinary_title(self):
         assert CG.polarity_conflict(NUMPY_TITLE, NUMPY_TITLE) is None
+
+
+class TestTheCheckingLayerRoundTwo:
+    """Codex S1-3 through S1-7, each reproduced before it was changed."""
+
+    # -- S1-4: negation is the most identifying word in a title -------------
+    def _cite(self, warrant, record):
+        return CG.CitationFieldMatchGate(record_fn=lambda _d: record).check(
+            _claim(warrant))
+
+    def test_a_negated_title_is_not_the_same_paper(self):
+        """"not" was a stopword, so "Treatment is not safe for children" and
+        "Treatment is safe for children" tokenised identically and the gate
+        reported PASS on a paper asserting the opposite of the citation."""
+        r = self._cite("10.1/x :: Harris ;; 2020 ;; Treatment is not safe for children",
+                       _record(title="Treatment is safe for children"))
+        assert r.status is GateStatus.FAIL
+
+    def test_the_reverse_direction_is_caught_too(self):
+        r = self._cite("10.1/x :: Harris ;; 2020 ;; Treatment is safe for children",
+                       _record(title="Treatment is not safe for children"))
+        assert r.status is GateStatus.FAIL
+
+    def test_a_matching_title_still_passes(self):
+        r = self._cite(f"{NUMPY_DOI} :: Harris ;; 2020 ;; {NUMPY_TITLE}", _record())
+        assert r.status is GateStatus.PASS
+
+    def test_an_author_entry_that_is_not_an_object_blocks(self):
+        """A record containing author=[None] raised AttributeError out of the
+        gate. An unexpected resolver schema must BLOCK -- the check did not
+        happen -- never crash the run and never become a finding."""
+        rec = _record()
+        rec["author"] = [None]
+        r = self._cite(f"{NUMPY_DOI} :: Harris ;; 2020 ;; {NUMPY_TITLE}", rec)
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_string_valued_title_blocks(self):
+        """Crossref returns title as a LIST. Indexing a string yields its first
+        CHARACTER, so a one-character title was compared against the citation
+        and every result after that was meaningless."""
+        r = self._cite(f"{NUMPY_DOI} :: Harris ;; 2020 ;; {NUMPY_TITLE}",
+                       {"title": NUMPY_TITLE, "author": [{"family": "Harris"}],
+                        "issued": {"date-parts": [[2020, 1, 1]]}})
+        assert r.status is GateStatus.BLOCKED
+
+    # -- S1-5: is_global is the whole test ----------------------------------
+    def test_carrier_grade_nat_is_not_a_public_destination(self):
+        """100.64.0.0/10 is routed inside VPN and overlay networks. It has
+        is_global False and was accepted by a hand-written category list."""
+        assert QG._resolve_public("100.64.0.1") is None
+        assert DR._is_public_host("100.64.0.1") is False
+
+    def test_every_non_global_address_is_refused(self):
+        for addr in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "192.0.2.1",
+                     "100.64.0.1", "::1", "fc00::1"):
+            assert QG._resolve_public(addr) is None, addr
+            assert DR._is_public_host(addr) is False, addr
+
+    # -- S1-7: a negated known answer is not a correct answer ---------------
+    def test_a_negated_canary_answer_does_not_pass(self):
+        """Both replies CONTAIN the expected substring, so a containment test
+        scored them PASS -- the canary reporting that a seat can see the
+        present, on replies asserting it cannot."""
+        c = RC.Canary(id="t", question="q", expect_substring="gpt-5.6-sol")
+        for reply in ("ANSWER: There is no gpt-5.6-sol",
+                      "ANSWER: The current model is not gpt-5.6-sol"):
+            assert RC.judge(reply, c).verdict == "PRIOR_OVERRIDE", reply
+
+    def test_a_direct_canary_answer_still_passes(self):
+        c = RC.Canary(id="t", question="q", expect_substring="gpt-5.6-sol")
+        for reply in ("ANSWER: gpt-5.6-sol",
+                      "ANSWER: The current flagship is gpt-5.6-sol"):
+            assert RC.judge(reply, c).verdict == "PASS", reply
+
+    # -- S1-3: the page must be decodable and be an article -----------------
+    def test_a_meta_charset_is_honoured_when_the_header_omits_one(self):
+        """The page declared windows-1252 in its own markup and the header
+        said nothing, so it decoded as UTF-8 with replacement characters and a
+        quote genuinely present could not match -- recorded as FAIL."""
+        quote = "quarterly revenue tripled"
+        raw = (f'<html><meta charset="windows-1252"><body>Caf\xe9: {quote}.'
+               f'</body></html>').encode("windows-1252")
+        text = QG.extract_text(raw, "text/html")
+        assert QG.normalize(quote) in text
+        assert "�" not in text
+
+    def test_an_http_equiv_meta_is_honoured(self):
+        quote = "quarterly revenue tripled"
+        raw = (f'<html><meta http-equiv="content-type" content="text/html; '
+               f'charset=iso-8859-1"><body>Caf\xe9: {quote}.</body></html>'
+               ).encode("iso-8859-1")
+        assert QG.normalize(quote) in QG.extract_text(raw, "text/html")
+
+    def test_a_byte_order_mark_is_consumed_not_matched(self):
+        raw = b"\xef\xbb\xbf" + "Café: the quote is here.".encode()
+        text = QG.extract_text(raw, "text/html")
+        assert text.startswith("Caf") and "﻿" not in text
+
+    def test_the_http_header_still_wins_over_the_page(self):
+        """A server that declares an encoding is more authoritative than
+        markup that may be stale."""
+        raw = "Caf\xe9: quarterly revenue tripled.".encode("iso-8859-1")
+        assert "�" not in QG.extract_text(
+            raw, "text/html; charset=ISO-8859-1")
+
+    def test_a_repeated_passage_is_not_an_article(self):
+        """A phrase list cannot be complete, and a reviewer found a wall it did
+        not contain. The reproduction had a second, structural tell: a short
+        interstitial repeated until it cleared the length minimum. Real prose
+        does not do that."""
+        wall = ("This content is reserved for subscribers. Already a "
+                "subscriber? Sign in here. ") * 12
+        assert QG._looks_like_an_interstitial(wall)
+
+    def test_real_prose_is_not_mistaken_for_a_wall(self):
+        assert not QG._looks_like_an_interstitial(ARTICLE)
+
+    # -- S1-6: containment, not just an allowlist ---------------------------
+    def test_a_timed_out_command_takes_its_descendants_with_it(self, tmp_path):
+        """subprocess.run raises TimeoutExpired, which carries the COMMAND but
+        not the process, so the kill looked up a pid that was never there. A
+        timed-out command's children survived and kept working after the gate
+        had already reported BLOCKED."""
+        import time
+        marker = tmp_path / "survived.txt"
+        (tmp_path / "spawn.py").write_text(
+            "import subprocess, sys, time\n"
+            "subprocess.Popen([sys.executable, '-c',\n"
+            f"  \"import time,pathlib; time.sleep(2); "
+            f"pathlib.Path({str(marker)!r}).write_text('x')\"])\n"
+            "time.sleep(30)\n")
+        (tmp_path / "a.json").write_text(json.dumps({"approved": ["python3 spawn.py"]}))
+        r = ATG.ApprovedCommandRunner(allowlist_path=str(tmp_path / "a.json"),
+                                      cwd=str(tmp_path), timeout_s=0.6)
+        with pytest.raises(TimeoutError):
+            r.run("python3 spawn.py")
+        time.sleep(3.5)
+        assert not marker.exists(), "a descendant outlived the timeout"
+
+    def test_an_error_on_stderr_is_not_hidden_by_output_on_stdout(self, tmp_path):
+        """The detail took stdout when it was non-empty, so a command that
+        printed a startup banner and then failed recorded the banner. The
+        operator saw the greeting and never the error."""
+        (tmp_path / "noisy.py").write_text(
+            "import sys\nprint('starting test run v2.1')\n"
+            "print('ERROR: assertion failed in test_parser', file=sys.stderr)\n"
+            "sys.exit(1)\n")
+        (tmp_path / "a.json").write_text(json.dumps({"approved": ["python3 noisy.py"]}))
+        ok, detail = ATG.ApprovedCommandRunner(
+            allowlist_path=str(tmp_path / "a.json"), cwd=str(tmp_path)
+        ).run("python3 noisy.py")
+        assert ok is False
+        assert "assertion failed" in detail

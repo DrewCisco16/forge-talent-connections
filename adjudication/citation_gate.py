@@ -64,6 +64,16 @@ year. A two-year gap is a different work.
 
 _STOP = {"a", "an", "the", "of", "for", "and", "in", "on", "with", "to",
          "from", "by", "at", "as", "is", "are", "using", "via"}
+"""Words carrying no identifying content. NEGATIONS ARE DELIBERATELY ABSENT.
+
+"not" used to be here, so "Treatment is not safe for children" and "Treatment
+is safe for children" tokenised identically and the gate reported PASS on a
+paper asserting the opposite of the citation. A word that reverses a title's
+meaning is the most identifying word in it."""
+
+_NEGATORS = frozenset({"not", "no", "never", "without", "non", "un",
+                       "cannot", "fails", "failed", "absent", "lack",
+                       "lacking", "neither", "nor"})
 _WORD = re.compile(r"\w+", re.UNICODE)
 """UNICODE, not [a-z0-9]. The ASCII class tokenised a CJK title to nothing, so
 two IDENTICAL Chinese titles scored 0% overlap and the gate reported
@@ -100,8 +110,21 @@ see this; it has to be checked for separately."""
 
 
 def polarity_conflict(claimed: str, actual: str) -> str | None:
-    """A directional term present in one title whose opposite is in the other."""
+    """A term in one title whose meaning is reversed in the other."""
     a, b = _tokens_raw(claimed), _tokens_raw(actual)
+
+    # NEGATION FIRST, and separately, because a negator has no "opposite word"
+    # to look up -- its counterpart is its ABSENCE. The map-based check below
+    # skipped "not" entirely for that reason, which is how a negated title
+    # passed with the same author and year.
+    only_in_claimed = sorted((a & _NEGATORS) - b)
+    only_in_actual = sorted((b & _NEGATORS) - a)
+    if only_in_claimed or only_in_actual:
+        side = "the cited title" if only_in_claimed else "the record"
+        words = only_in_claimed or only_in_actual
+        return (f"{', '.join(repr(w) for w in words)} appears in {side} and "
+                f"not in the other")
+
     for word, opposite in _POLARITY.items():
         if not opposite:
             continue
@@ -153,9 +176,34 @@ def _record_year(rec: dict[str, Any]) -> int | None:
     return None
 
 
+def _first_title(rec: dict[str, Any]) -> str:
+    """Crossref returns title as a LIST. A string is a schema we do not know.
+
+    Indexing a string yields its first CHARACTER, so a string-valued title
+    silently became a one-character title and every comparison after it was
+    meaningless. Returning "" makes the caller block instead.
+    """
+    raw = rec.get("title")
+    if isinstance(raw, list) and raw and isinstance(raw[0], str):
+        return raw[0]
+    return ""
+
+
 def _surnames(rec: dict[str, Any]) -> set[str]:
-    return {_fold(a.get("family", "")) for a in (rec.get("author") or [])
-            if a.get("family")}
+    """Author surnames, tolerating entries this code does not understand.
+
+    A record containing author=[None] raised AttributeError out of the gate.
+    An unexpected resolver schema must BLOCK -- the check did not happen --
+    never crash the run and never become a finding against the seat.
+    """
+    out: set[str] = set()
+    for entry in (rec.get("author") or []):
+        if not isinstance(entry, dict):
+            continue
+        family = entry.get("family")
+        if isinstance(family, str) and family.strip():
+            out.add(_fold(family))
+    return out
 
 
 class CitationFieldMatchGate:
@@ -222,7 +270,7 @@ class CitationFieldMatchGate:
                 f"happen, which is not a finding against the citation",
             )
 
-        got_title = (rec.get("title") or [""])[0]
+        got_title = _first_title(rec)
         got_year = _record_year(rec)
         got_surnames = _surnames(rec)
 
@@ -294,7 +342,9 @@ class CitationFieldMatchGate:
         if got_year != year:
             note = (f" (record year {got_year} vs cited {year}, within the "
                     f"{YEAR_TOLERANCE}-year tolerance)")
-        venue = (rec.get("container-title") or [""])[0]
+        venue_raw = rec.get("container-title")
+        venue = (venue_raw[0] if isinstance(venue_raw, list) and venue_raw
+                 and isinstance(venue_raw[0], str) else "")
         return GateResult(
             self.name, GateStatus.PASS,
             f"{doi} is \"{got_title[:70]}\", {surname} {got_year}"

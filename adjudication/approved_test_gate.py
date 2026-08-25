@@ -175,10 +175,17 @@ class ApprovedCommandRunner:
         if not argv:
             raise PermissionError(f"approved entry {cmd!r} has no executable")
 
+        # Popen, not run(): the timeout cleanup needs the PID.
+        #
+        # subprocess.run raises TimeoutExpired, which carries the COMMAND but
+        # not the process, so the kill below looked up a pid that was never
+        # there and did nothing. A timed-out command's descendants survived
+        # and kept working after the gate had already reported BLOCKED.
         try:
-            proc = subprocess.run(  # nosec B603
-                argv, cwd=self.cwd, timeout=self.timeout_s,
-                capture_output=True, text=True, shell=False, check=False,
+            proc = subprocess.Popen(  # nosec B603
+                argv, cwd=self.cwd,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, shell=False,
                 # THE CHILD MUST NOT INHERIT THE PANEL'S CREDENTIALS.
                 #
                 # This is the whole point. An approved command is approved to
@@ -196,11 +203,23 @@ class ApprovedCommandRunner:
                 start_new_session=True,
                 stdin=subprocess.DEVNULL,
             )
-        except subprocess.TimeoutExpired as exc:
-            self._kill_group(exc)
+        except OSError as exc:
+            raise PermissionError(f"could not start {cmd!r}: {exc}") from None
+
+        try:
+            out, err = proc.communicate(timeout=self.timeout_s)
+        except subprocess.TimeoutExpired:
+            self._kill_tree(proc)
+            proc.communicate()
             raise TimeoutError(f"{cmd!r} exceeded {self.timeout_s}s") from None
-        tail = (proc.stdout or proc.stderr or "").strip().splitlines()
-        detail = tail[-1][:200] if tail else f"exit {proc.returncode}"
+
+        # BOTH STREAMS. The detail took stdout when it was non-empty and only
+        # then fell back to stderr, so a command that printed a startup banner
+        # and then failed recorded the banner -- the operator saw the greeting
+        # and never the error.
+        lines = [ln for ln in ((err or "") + "\n" + (out or "")).splitlines()
+                 if ln.strip()]
+        detail = lines[0][:200] if lines else f"exit {proc.returncode}"
         return proc.returncode == 0, redact(detail)
 
     # -- isolation ---------------------------------------------------------
@@ -219,18 +238,17 @@ class ApprovedCommandRunner:
         return env
 
     @staticmethod
-    def _kill_group(exc: subprocess.TimeoutExpired) -> None:
+    def _kill_tree(proc: subprocess.Popen[str]) -> None:
         """Terminate the timed-out command and everything it started.
 
         subprocess kills only the process it launched. A test runner that
         spawned workers leaves them running, still holding whatever the parent
         had, doing work the gate has already stopped waiting for.
         """
-        pid = getattr(getattr(exc, "process", None), "pid", None)
-        if pid is None:
-            return
         with contextlib.suppress(OSError, ProcessLookupError):
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        with contextlib.suppress(OSError, ProcessLookupError):
+            proc.kill()
 
 
 class ApprovedTestGate:

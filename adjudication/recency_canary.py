@@ -95,6 +95,11 @@ def load_canaries(path: str = DEFAULT_CANARY_FILE) -> list[Canary]:
             for c in (items or []) if c.get("id") and c.get("question")]
 
 
+_LOCAL_NEGATORS = ("no", "not", "never", "isn't", "isnt", "aren't", "arent",
+                   "wasn't", "wasnt", "without", "cannot", "can't", "cant",
+                   "unaware", "unknown", "unable")
+"""Words that reverse the meaning of a token sitting just after them."""
+
 _DENIAL = ("does not exist", "doesn't exist", "nonexistent", "non-existent",
            "is not a real", "no such model", "not a real model",
            "is fictional", "made up", "i could not find any evidence that it "
@@ -121,6 +126,21 @@ def judge(reply: str, canary: Canary) -> CanaryResult:
             "asserted the fact does not exist. No document states that a "
             "thing is nonexistent; this converts a failure to confirm into a "
             "positive finding.")
+    # A NEGATION AROUND THE EXPECTED TOKEN IS NOT A CORRECT ANSWER.
+    #
+    # "There is no gpt-5.6-sol" and "The current model is not gpt-5.6-sol"
+    # both CONTAIN the expected substring, so a plain containment test scored
+    # them PASS -- the canary reporting that a seat can see the present, on
+    # replies asserting it cannot. The denial list above catches the standard
+    # phrasings; this catches a negator sitting next to the token itself.
+    if canary.expect_substring and canary.expect_substring in low:
+        where = low.index(canary.expect_substring)
+        before = low[max(0, where - 40):where]
+        if any(f" {n} " in f" {before} " for n in _LOCAL_NEGATORS):
+            return CanaryResult(
+                "", canary.id, "PRIOR_OVERRIDE", answer,
+                "named the documented fact and negated it, which is the "
+                "failure this test looks for rather than a report of it")
     if canary.expect_substring and canary.expect_substring in low:
         return CanaryResult("", canary.id, "PASS", answer,
                             "reported the documented fact")
