@@ -198,8 +198,14 @@ class TestArithmeticGate:
         assert self.g.check(self._claim("1/3 = 0.3333333333333333")).status is GateStatus.PASS
 
     def test_malformed_warrant_fails_closed(self):
-        """Unparseable input must FAIL, never PASS."""
-        assert self.g.check(self._claim("banana")).status is GateStatus.FAIL
+        """Unparseable input must never PASS.
+
+        It asserted FAIL. "banana" has no "=", so this gate does not apply to
+        it -- and even a parse failure is not a refutation. Fail closed means
+        never accepted; it does not mean "call it false"."""
+        status = self.g.check(self._claim("banana")).status
+        assert status is not GateStatus.PASS
+        assert status is GateStatus.INAPPLICABLE
 
     def test_applies_only_to_arithmetic_with_warrant(self):
         assert not self.g.applies_to(Claim("c", "t", ClaimKind.JUDGMENT, "1+1=2"))
@@ -291,8 +297,21 @@ class TestExpressionEvaluatorSafety:
         "globals() = 1",
     ])
     def test_code_execution_attempts_are_rejected(self, payload):
+        """The property is NOT EVALUATED and NOT ACCEPTED.
+
+        This asserted FAIL. The status is now BLOCKED, because the evaluator
+        refused the expression and therefore learned nothing about the claim's
+        truth -- FAIL would state a finding it did not make. Neither status
+        weakens the protection: the refusal happens before any evaluation, and
+        test_no_side_effect_file_is_created proves nothing ran.
+
+        A warrant containing exec( or globals() is also a conduct matter, but
+        that belongs in the seat conduct ledger, not in a verdict about
+        whether a proposition is true."""
         r = self.g.check(Claim("c", "t", ClaimKind.ARITHMETIC, payload))
-        assert r.status is GateStatus.FAIL, f"SECURITY: evaluated {payload!r}"
+        assert r.status is not GateStatus.PASS, \
+            f"SECURITY: evaluated {payload!r}"
+        assert r.status is GateStatus.BLOCKED
 
     def test_no_side_effect_file_is_created(self, tmp_path):
         marker = tmp_path / "pwned.txt"
@@ -2356,8 +2375,20 @@ class TestBooleanLiteralsAreNotArithmetic:
         "-True = -1",
     ])
     def test_boolean_literals_never_satisfy_an_arithmetic_warrant(self, warrant):
+        """The property is NEVER ACCEPTED, which is what this test was for.
+
+        It asserted FAIL specifically. An outside review pointed out that an
+        expression this evaluator cannot parse has established nothing about
+        whether the claim is true, so recording it as FAIL states a finding
+        the gate did not make -- and eliminates a candidate on the strength of
+        it. `sqrt(4) = 2` is true and was being called false. Refusing a
+        boolean is the same case: the evaluator declines to compute it.
+
+        BLOCKED keeps the protection this test exists for -- nothing is
+        accepted -- without inventing a refutation."""
         r = self._check(warrant)
-        assert r.status is GateStatus.FAIL
+        assert r.status is not GateStatus.PASS
+        assert r.status is GateStatus.BLOCKED
         assert "unsupported expression" in r.detail
 
     @pytest.mark.parametrize("warrant,expected", [
@@ -3185,10 +3216,19 @@ class TestTheClaimLineFieldOrder:
         prompt = AO.build_blinded_prompt(_ONE_PASS[0], "s1", "artifact").render()
         assert "CLAIM | <kind> | <warrant> | <text>" in prompt
 
-    def test_reversing_warrant_and_text_fails_the_gate(self):
+    def test_reversing_warrant_and_text_is_never_accepted(self):
+        """Was asserting FAIL. The gate cannot parse "the total is 4" as an
+        expression, so it has learned nothing -- BLOCKED is the accurate
+        status and it keeps the property this test protects: a reversed line
+        cannot reach the answer as verified."""
         reversed_line = "CLAIM | arithmetic | the total is 4 | 2 + 2 = 4"
         claim = AO.line_claim_extractor(reversed_line, "s1", "p1")[0]
-        assert ArithmeticGate().check(claim).status is GateStatus.FAIL
+        status = ArithmeticGate().check(claim).status
+        assert status is not GateStatus.PASS
+        # INAPPLICABLE: the warrant field holds prose with no "=", so this gate
+        # does not apply to it at all -- a different fact from "we tried and
+        # could not parse it", and both are different from "it is false".
+        assert status is GateStatus.INAPPLICABLE
 
 
 class TestFivePassesOneAtATime:
@@ -4809,7 +4849,7 @@ class TestAClaimAlwaysHasAnIdentity:
         # The text names the computed value, so the warrant bears on the
         # claim. Without that these escalate, correctly.
         claims = [Claim(id="", kind=ClaimKind.ARITHMETIC,
-                        text=f"the answer is {i + 1}",
+                        text=f"the total is {i + 1}",
                         warrant=f"{i} + 1 = {i + 1}") for i in range(3)]
         orch = Orchestrator([ArithmeticGate()])
         rec = orch.run_pass(
@@ -4931,17 +4971,23 @@ class TestAWarrantMustBearOnTheClaim:
                   warrant="pytest tests/test_parser.py -q")
         assert AO.warrant_supports(c) is None
 
-    def test_a_quote_sharing_no_content_with_the_claim_is_rejected(self):
-        c = Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
-                  text="revenue tripled in the fourth quarter",
-                  warrant="https://e.test/p :: photosynthesis converts sunlight")
-        assert "NOT ABOUT THIS CLAIM" in AO.warrant_supports(c)
+    def test_a_found_quote_never_establishes_the_proposition(self):
+        """CORRECTED. These two tests asserted that shared content words make
+        a quote support a claim, and that a lack of them makes it not. Both
+        encoded lexical overlap as entailment, which it is not: a page reading
+        "revenue tripled" shares every content word with "revenue did not
+        triple". Finding the quote rules out a fabricated quote and settles
+        nothing else."""
+        def why(text):
+            return AO.warrant_supports(Claim(
+                id="", kind=ClaimKind.QUOTE_VERIFICATION, text=text,
+                warrant="https://e.test/p :: quarterly revenue tripled"))
 
-    def test_a_quote_on_the_same_subject_is_allowed_through(self):
-        c = Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
-                  text="revenue tripled in the fourth quarter",
-                  warrant="https://e.test/p :: quarterly revenue tripled")
-        assert AO.warrant_supports(c) is None
+        # Neither is accepted, and each says the accurate thing about itself.
+        assert "PROPOSITION NOT ESTABLISHED" in why(
+            "revenue tripled in the fourth quarter")
+        assert "NOT A RESTATEMENT" in why(
+            "revenue did not triple in the fourth quarter")
 
     def test_warrant_only_is_counted_apart_from_ordinary_escalation(self):
         """Different findings. An ordinary escalation had no mechanical
@@ -5048,3 +5094,128 @@ class TestTheEscalationQueueRoundTrips:
     def test_a_wholly_wrong_shape_is_named(self):
         with pytest.raises(RA.AdjudicationFileError, match="export-queue"):
             RA.parse_adjudications("not a queue at all")
+
+
+class TestLexicalOverlapNeverAccepts:
+    """Codex S1-1, the critical finding. Token overlap is not entailment.
+
+    Both of these were accepted on the warrant "2 + 2 = 4", because both
+    contain the token 4:
+
+        "The launch is SAFE to proceed, code 4"
+        "The launch is NOT SAFE to proceed, code 4"
+
+    An equation establishes neither. The check confirmed that 2 + 2 is 4 and
+    said nothing whatever about a launch.
+    """
+
+    def _accepts(self, kind, text, warrant):
+        return AO.warrant_supports(
+            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
+
+    @pytest.mark.parametrize("text", [
+        "The launch is SAFE to proceed, code 4",
+        "The launch is NOT SAFE to proceed, code 4",
+    ])
+    def test_opposite_propositions_sharing_a_token_are_both_refused(self, text):
+        assert not self._accepts(ClaimKind.ARITHMETIC, text, "2 + 2 = 4")
+
+    def test_a_restatement_of_the_arithmetic_is_still_accepted(self):
+        """The rule must not cost genuine arithmetic, or it gets switched off."""
+        assert self._accepts(ClaimKind.ARITHMETIC,
+                             "12 units at 50 each is 600 in total",
+                             "12 * 50 = 600")
+
+    def test_a_negation_anywhere_prevents_acceptance(self):
+        """No token comparison can tell which way a negated claim points."""
+        assert not self._accepts(ClaimKind.ARITHMETIC,
+                                 "the total is not 600", "12 * 50 = 600")
+
+    def test_schema_validity_establishes_no_proposition(self):
+        """Structure is a fact about shape and carries no information about
+        an assertion made alongside it."""
+        assert not self._accepts(ClaimKind.SCHEMA,
+                                 "The launch is SAFE to proceed", '{"a": 1}')
+
+    def test_a_citation_establishes_no_proposition(self):
+        assert not self._accepts(ClaimKind.CITATION, "vaccines cause autism",
+                                 "10.1038/s41586-020-2649-2")
+
+    def test_a_found_quote_establishes_no_proposition(self):
+        """A page reading "revenue tripled" shares every content word with
+        "revenue did not triple"."""
+        assert not self._accepts(
+            ClaimKind.QUOTE_VERIFICATION, "revenue tripled last quarter",
+            "https://e.test/p :: quarterly revenue tripled")
+
+    def test_the_intake_path_applies_the_same_rule(self):
+        """gate_candidate_claims recorded the gate status directly, so a
+        candidate whose claim carried a valid warrant beside unrelated prose
+        was marked PASS at intake and never reconsidered -- the one place a
+        candidate's own assertions are ruled on, applying a weaker rule than
+        the one seats are held to."""
+        c = Candidate("A", "the launch may proceed", [Claim(
+            id="", kind=ClaimKind.ARITHMETIC,
+            text="The launch is SAFE to proceed, code 4", warrant="2 + 2 = 4")])
+        o = Orchestrator([ArithmeticGate()])
+        ruled = o.gate_candidate_claims([c])
+        assert ruled == [], "intake accepted it without a proposition check"
+        assert len(o.escalation_queue) == 1
+        assert o.verdicts[c.claims[0].id].status is None
+
+
+class TestArithmeticIsExactAndBounded:
+    """Codex S1-2. Both sides were coerced to float and compared with a
+    RELATIVE tolerance of 1e-9, so a verifier could not tell two different
+    numbers apart."""
+
+    g = ArithmeticGate()
+
+    def _check(self, warrant):
+        return self.g.check(Claim("c", "t", ClaimKind.ARITHMETIC, warrant))
+
+    def test_adjacent_large_integers_are_not_equal(self):
+        """At a billion, rel_tol=1e-9 permits a gap of one."""
+        assert self._check("1000000000 = 1000000001").status is GateStatus.FAIL
+
+    def test_integers_beyond_binary64_precision_are_distinguished(self):
+        """Past 2**53 adjacent integers are not distinct as floats."""
+        r = self._check("9007199254740993 = 9007199254740992")
+        assert r.status is GateStatus.FAIL
+
+    def test_a_decimal_is_read_as_written(self):
+        """0.1 must mean one tenth, not the binary double nearest to it."""
+        assert self._check("0.10 = 0.1").status is GateStatus.PASS
+
+    def test_unsupported_syntax_is_blocked_not_refuted(self):
+        """`sqrt(4) = 2` is TRUE. An evaluator with no sqrt has learned
+        nothing about it, and calling it false eliminated the candidate."""
+        r = self._check("sqrt(4) = 2")
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_huge_exponent_is_refused_without_evaluating_it(self):
+        """`2 ** 1000000000` is a legal expression of supported operators. The
+        evaluator would try to build the integer, in the process adjudicating
+        the operator's question. A reviewer declined to run this reproduction
+        because it could exhaust the machine, which is the finding."""
+        r = self._check("2 ** 1000000000 = 1")
+        assert r.status is GateStatus.BLOCKED
+        assert "exponent" in r.detail
+
+    def test_an_enormous_literal_is_refused(self):
+        r = self._check(f"{'9' * 200} = 1")
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_very_large_expression_is_refused(self):
+        """Parentheses collapse in the AST, so the bound is on NODE COUNT: a
+        long chain of real operations is what actually costs time."""
+        assert self._check("1+" * 150 + "1 = 151").status is GateStatus.BLOCKED
+
+    def test_ordinary_arithmetic_still_passes(self):
+        for warrant in ("2 + 2 = 4", "12 * 50 = 600", "10 / 4 = 2.5",
+                        "2 ** 10 = 1024", "100 - 1 = 99"):
+            assert self._check(warrant).status is GateStatus.PASS, warrant
+
+    def test_ordinary_wrong_arithmetic_still_fails(self):
+        for warrant in ("2 + 2 = 5", "12 * 50 = 700"):
+            assert self._check(warrant).status is GateStatus.FAIL, warrant

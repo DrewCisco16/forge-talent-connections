@@ -45,7 +45,9 @@ import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
+from fractions import Fraction
 from typing import Any, Protocol
 
 # ===========================================================================
@@ -313,89 +315,116 @@ def _tokens(text: str) -> set[str]:
     return set(_WORDISH.findall((text or "").casefold()))
 
 
+_NEGATION = frozenset(["not", "no", "never", "none", "nor", "cannot", "cant", "won't", "wont", "doesn't", "doesnt", "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt", "shouldn't", "shouldnt", "without", "fails", "failed", "unable", "false", "untrue", "incorrect", "wrong", "denies", "denied", "refutes", "refuted", "contradicts"])
+
+_QUANTITY_VOCABULARY = frozenset(["total", "totals", "totalling", "sum", "sums", "adds", "add", "equals", "equal", "is", "are", "was", "were", "comes", "come", "to", "of", "at", "each", "per", "unit", "units", "item", "items", "cost", "costs", "price", "prices", "dollar", "dollars", "value", "values", "amount", "amounts", "figure", "figures", "result", "results", "count", "counts", "number", "numbers", "times", "multiplied", "divided", "plus", "minus", "less", "more", "over", "under", "about", "approximately", "roughly", "exactly", "and", "the", "a", "an", "it", "that", "this", "in", "for", "from", "with", "by", "percent", "pct"])
+
+
+def _content_words(text: str) -> list[str]:
+    return [w for w in _WORDISH.findall((text or "").casefold()) if len(w) > 1]
+
+
 def warrant_supports(claim: Claim) -> str | None:
-    """None if the warrant could establish this proposition; else why not.
+    """None if the warrant ESTABLISHES this proposition; else why it does not.
 
     A GATE CHECKS A WARRANT. IT DOES NOT CHECK THE PROPOSITION.
-    This is the difference the tool exists on, and it was missing.
 
-    ArithmeticGate recomputes "2 + 2 = 4" and reports PASS. It has said
-    nothing whatever about the claim's TEXT. Verified before this existed:
+    An earlier version of this function used shared words and shared numbers
+    as a test of relevance. That was wrong in the way that matters: token
+    overlap is not entailment. Both of these were accepted on the warrant
+    "2 + 2 = 4", because both contain the token 4:
 
-        text "The launch is SAFE to proceed"          warrant "2 + 2 = 4"  PASS
-        text "The launch is UNSAFE and must be aborted" warrant "2 + 2 = 4"  PASS
+        "The launch is SAFE to proceed, code 4"
+        "The launch is NOT SAFE to proceed, code 4"
 
-    Both contradictory propositions were marked verified on the strength of
-    one true equation, and both were printed in the deliverable under a [PASS]
-    marker. An earlier fix made their claim IDs distinct, which stopped them
-    sharing one verdict, and left untouched the part that matters: a model can
-    attach any true warrant to any false assertion and have it certified.
-    That defeats the entire tool, quietly, while every indicator reads green.
+    An equation establishes neither. The check confirmed that 2 + 2 is 4 and
+    said nothing whatever about a launch.
 
-    So: after a gate PASSes, the warrant must be shown to BEAR ON the text. If
-    that cannot be established mechanically, the claim escalates -- it is not
-    accepted and it is not eliminated. Fail closed on the conclusion, open on
-    the candidate, exactly as everywhere else.
+    So lexical similarity no longer ACCEPTS anything. A verified warrant
+    accepts a claim only when the claim is a RESTATEMENT of that warrant --
+    when the checked object and the accepted proposition are the same object.
+    Everything else escalates to a person: not eliminated, because it may well
+    be true, and not accepted, because nothing here established it.
 
-    The checks below are deliberately weak and deliberately one-directional.
-    They cannot confirm that a warrant proves a proposition -- that is
-    semantics, and no string comparison settles it. They can only catch a
-    warrant that is not even ABOUT the proposition, which is the failure mode.
-    Anything they cannot settle escalates to a person.
+    That is deliberately strict and it will escalate more. The alternative is
+    a system that stamps [PASS] on prose nothing examined, which is the one
+    failure that makes every other safeguard pointless.
     """
     text = claim.text or ""
     warrant = claim.warrant or ""
 
+    # A negation or contrast marker anywhere means the proposition is not a
+    # plain restatement, and no token comparison can tell which way it points.
+    negations = sorted(set(_content_words(text)) & _NEGATION)
+    if negations:
+        return (
+            f"NOT A RESTATEMENT OF THE WARRANT: the claim contains "
+            f"{', '.join(repr(n) for n in negations)}, so what it asserts is "
+            f"not what the check confirmed. A verified warrant cannot settle "
+            f"a proposition that qualifies or reverses it."
+        )
+
     if claim.kind in (ClaimKind.ARITHMETIC, ClaimKind.UNIT):
-        # The computed result must appear in the proposition. If the claim
-        # never mentions the number the gate just verified, the gate verified
-        # something else.
         _, _, rhs = warrant.rpartition("=")
         results = _numbers(rhs)
-        if results and not (results & _numbers(text)):
+        claimed = _numbers(text)
+        if results and not (results & claimed):
             return (
                 f"WARRANT DOES NOT BEAR ON THE CLAIM: the check verified "
-                f"{warrant.strip()!r}, but the claim text does not mention "
-                f"{' or '.join(sorted(results))}. A true equation attached to "
-                f"an unrelated sentence verifies the equation, not the "
-                f"sentence."
+                f"{warrant.strip()!r}, and the claim text does not mention "
+                f"{' or '.join(sorted(results))}."
+            )
+        # The numbers matching is not enough. "The launch is SAFE, code 4"
+        # mentions 4 and asserts something the arithmetic never touched, so
+        # the claim must carry NO assertion beyond the quantity it states.
+        extra = sorted({w for w in _content_words(text)
+                        if w not in _QUANTITY_VOCABULARY
+                        and not w.isdigit()
+                        and w not in _content_words(warrant)})
+        if extra:
+            return (
+                f"THE CLAIM ASSERTS MORE THAN THE WARRANT CHECKS: "
+                f"{warrant.strip()!r} was recomputed and held, but the claim "
+                f"also asserts something about "
+                f"{', '.join(repr(w) for w in extra[:4])}"
+                + (" and more" if len(extra) > 4 else "")
+                + ". Arithmetic settles the arithmetic and nothing else."
             )
         return None
 
     if claim.kind is ClaimKind.CITATION:
-        # Resolution proves the identifier is registered. Field matching proves
-        # it is the work that was named. NEITHER proves the work SAYS what the
-        # claim says it says, and no network call can. A bare valid DOI
-        # attached to any sentence passed admissibility and resolution.
         return (
             "SOURCE VERIFIED, PROPOSITION NOT ESTABLISHED: the citation "
             "resolves and matches the work named, which rules out a fabricated "
-            "reference. It does not establish that the work supports this "
+            "reference. It does not establish that the work SUPPORTS this "
             "claim -- misrepresenting a real paper is invisible to every "
             "mechanical check and needs a person who has read it."
         )
 
+    if claim.kind is ClaimKind.SCHEMA:
+        return (
+            "SHAPE VALID, PROPOSITION NOT ESTABLISHED: the document parsed "
+            "and matched its schema. Schema validity is a fact about "
+            "structure and carries no information about any assertion made "
+            "alongside it."
+        )
+
     if claim.kind is ClaimKind.QUOTE_VERIFICATION:
-        # The quote is present at the URL. Whether it supports the claim is a
-        # reading, but a quote sharing no content words with the claim is not
-        # even on the subject.
-        _, _, quote = warrant.partition("::")
-        qt = {t for t in _tokens(quote) if len(t) > 3}
-        tt = {t for t in _tokens(text) if len(t) > 3}
-        if qt and tt and not (qt & tt):
-            return (
-                "QUOTE IS NOT ABOUT THIS CLAIM: the quoted text was found at "
-                "the cited URL, but it shares no substantive word with the "
-                "claim it is offered to support."
-            )
-        return None
+        # The quote is present at the URL. Whether the source SAYS what the
+        # claim says is a reading, and a shared-word test cannot make it: a
+        # page reading "revenue tripled" shares every content word with
+        # "revenue did not triple". The negation check above catches the
+        # reversal; the rest is a person's judgement.
+        return (
+            "QUOTE FOUND, PROPOSITION NOT ESTABLISHED: the quoted text is "
+            "present at the cited URL, which rules out a fabricated quote. "
+            "Whether it supports this claim is a reading, and no string "
+            "comparison settles it."
+        )
 
     if claim.kind is ClaimKind.CODE_BEHAVIOR:
-        # A command exiting zero establishes that the command exits zero.
-        # Verified: two OPPOSITE claims carrying the same passing command both
-        # received PASS.
-        ct = {t for t in _tokens(warrant) if len(t) > 2}
-        tt = {t for t in _tokens(text) if len(t) > 2}
+        ct = {w for w in _content_words(warrant) if len(w) > 2}
+        tt = {w for w in _content_words(text) if len(w) > 2}
         if ct and tt and not (ct & tt):
             return (
                 f"COMMAND DOES NOT BEAR ON THE CLAIM: {warrant.strip()!r} "
@@ -405,6 +434,74 @@ def warrant_supports(claim: Claim) -> str | None:
         return None
 
     return None
+
+
+MAX_AST_NODES = 200
+MAX_EXPONENT = 64
+MAX_INT_DIGITS = 100
+
+
+def _reject_unbounded(tree: ast.AST) -> str | None:
+    """Refuse an expression that could take unbounded time or memory.
+
+    `2 ** 1000000000` is a legal expression made of supported operators. The
+    evaluator would simply try to build the integer, and the process this runs
+    in is the one adjudicating the operator's question. A reviewer declined to
+    execute that reproduction because it could exhaust the machine, which is
+    the finding.
+
+    BLOCKED rather than FAIL: an expression we refused to evaluate has not
+    been shown false.
+    """
+    nodes = list(ast.walk(tree))
+    if len(nodes) > MAX_AST_NODES:
+        return (f"expression has {len(nodes)} nodes, over the "
+                f"{MAX_AST_NODES} allowed; it was not evaluated")
+    for node in nodes:
+        if (isinstance(node, ast.Constant) and isinstance(node.value, int)
+                and not isinstance(node.value, bool)
+                and len(str(abs(node.value))) > MAX_INT_DIGITS):
+            return (f"a literal has more than {MAX_INT_DIGITS} digits; "
+                    f"it was not evaluated")
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            right = node.right
+            if not (isinstance(right, ast.Constant)
+                    and isinstance(right.value, (int, float))
+                    and abs(right.value) <= MAX_EXPONENT):
+                return (f"exponent must be a literal no greater than "
+                        f"{MAX_EXPONENT}; the expression was not evaluated")
+    return None
+
+
+def _exact(value: object) -> Fraction:
+    """A value as an exact rational, or raise.
+
+    Decimal via str() so "0.1" is one tenth rather than the binary double
+    nearest to it -- a verifier that reads the operator's decimal as something
+    else is checking a different number from the one written down.
+    """
+    if isinstance(value, bool):
+        raise ValueError("a boolean is not a number here")
+    if isinstance(value, int):
+        return Fraction(value)
+    if isinstance(value, Fraction):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("not finite")
+        if value != int(value):
+            raise ValueError("not an exact integer")
+        return Fraction(int(value))
+    if isinstance(value, str):
+        return Fraction(Decimal(value.strip()))
+    raise ValueError(f"cannot make {type(value).__name__} exact")
+
+
+def _show(value: object) -> str:
+    """Print a number without inventing precision it does not have."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 class ArithmeticGate:
@@ -423,18 +520,73 @@ class ArithmeticGate:
         if not warrant:
             return GateResult(self.name, GateStatus.FAIL,
                               "no warrant supplied")
-        try:
-            expr, claimed = warrant.rsplit("=", 1)
-            actual = _safe_eval(ast.parse(expr.strip(), mode="eval"))
-            expected = float(claimed.strip())
-        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
-            return GateResult(self.name, GateStatus.FAIL, f"unparseable warrant: {exc}")
+        if "=" not in warrant:
+            return GateResult(self.name, GateStatus.INAPPLICABLE,
+                              "warrant is not '<expression> = <value>'")
+        expr, claimed = warrant.rsplit("=", 1)
 
-        if math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-9):
-            return GateResult(self.name, GateStatus.PASS, f"{actual} confirmed")
+        try:
+            tree = ast.parse(expr.strip(), mode="eval")
+        except SyntaxError as exc:
+            # NOT A FINDING. An expression this evaluator cannot parse has told
+            # us nothing about whether the claim is true. Recording it as FAIL
+            # made "we could not check this" indistinguishable from "we checked
+            # and it is false" -- and eliminated the candidate on the strength
+            # of it. `sqrt(4) = 2` is true; the evaluator simply has no sqrt.
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"could not parse the expression: {exc.msg}")
+        blocked = _reject_unbounded(tree)
+        if blocked is not None:
+            return GateResult(self.name, GateStatus.BLOCKED, blocked)
+
+        try:
+            actual = _safe_eval(tree)
+        except ValueError as exc:
+            # The evaluator refuses names, calls and operators it does not
+            # support. Same reasoning as above: unsupported is not false.
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"this evaluator cannot compute it: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"evaluation failed: {type(exc).__name__}: {exc}")
+
+        try:
+            expected = _exact(claimed.strip())
+        except (ValueError, ArithmeticError):
+            return GateResult(self.name, GateStatus.INAPPLICABLE,
+                              f"{claimed.strip()!r} is not a number")
+
+        # EXACT COMPARISON WHERE BOTH SIDES ARE EXACT.
+        #
+        # Both were coerced to float and compared with rel_tol=1e-9, which is a
+        # RELATIVE tolerance: at a billion it permits a gap of one, so
+        # "1000000000 = 1000000001" passed. Past 2**53 adjacent integers are
+        # not even distinct as floats, so "9007199254740993 = 9007199254740992"
+        # passed too. A verifier that cannot tell two different numbers apart
+        # is not verifying arithmetic.
+        try:
+            exact_actual = _exact(actual)
+        except (ValueError, ArithmeticError):
+            exact_actual = None
+        if exact_actual is not None:
+            if exact_actual == expected:
+                return GateResult(self.name, GateStatus.PASS,
+                                  f"{_show(actual)} confirmed exactly")
+            return GateResult(
+                self.name, GateStatus.FAIL,
+                f"claimed {_show(claimed.strip())}, recomputed "
+                f"{_show(actual)}")
+
+        # Only a genuine float result reaches here, where a tolerance is the
+        # honest comparison -- and it is stated in the detail so nobody reads
+        # "confirmed" as "exact".
+        if math.isclose(float(actual), float(expected),
+                        rel_tol=1e-12, abs_tol=1e-12):
+            return GateResult(self.name, GateStatus.PASS,
+                              f"{actual} confirmed to 1e-12")
         return GateResult(
-            self.name, GateStatus.FAIL, f"claimed {expected}, recomputed {actual}"
-        )
+            self.name, GateStatus.FAIL,
+            f"claimed {expected}, recomputed {actual}")
 
 
 class CitationResolutionGate:
@@ -1620,6 +1772,23 @@ class Orchestrator:
                     self._seen_claims.add(claim.id)
                     continue
                 self._seen_claims.add(claim.id)
+                # THE SAME WARRANT-TO-PROPOSITION TEST AS run_pass.
+                #
+                # This path recorded result.status directly, so a candidate
+                # whose claim carried a valid warrant beside unrelated prose
+                # was marked PASS at intake and never reconsidered -- the one
+                # place a candidate's own assertions are ruled on, applying a
+                # weaker rule than the one seats are held to.
+                if result.status is GateStatus.PASS:
+                    unsupported = warrant_supports(claim)
+                    if unsupported is not None:
+                        self.verdicts[claim.id] = ClaimVerdict(
+                            claim.id, "intake", None, result.gate,
+                            f"{unsupported} (the warrant itself checked out: "
+                            f"{result.detail})",
+                        )
+                        self.escalation_queue.append(claim)
+                        continue
                 self.verdicts[claim.id] = ClaimVerdict(
                     claim.id, "intake", result.status, result.gate, result.detail
                 )

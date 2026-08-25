@@ -662,7 +662,7 @@ class TestRepeatedFailuresStayVisible:
         orch = _orch()
         # Text names the value, so the warrant bears on the claim.
         claim = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
-                         text="two and two is 4", warrant="2 + 2 = 4")
+                         text="the total is 4", warrant="2 + 2 = 4")
         p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
         first = orch.run_pass(p, [], [claim])
         second = orch.run_pass(p, [], [claim])

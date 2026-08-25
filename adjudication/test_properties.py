@@ -298,8 +298,14 @@ class TestArithmeticGateFuzz:
     @given(warrant=st.text(max_size=200))
     @SETTINGS
     def test_never_raises_on_arbitrary_text(self, warrant):
+        """Any of the four statuses is fine; raising is not.
+
+        This allowed only PASS or FAIL, which forced every unparseable warrant
+        to be recorded as a refutation -- stating a finding the gate never
+        made, and eliminating candidates on the strength of it."""
         r = self.gate.check(AO.Claim("c", "t", AO.ClaimKind.ARITHMETIC, warrant))
-        assert r.status in (AO.GateStatus.PASS, AO.GateStatus.FAIL)
+        assert r.status in (AO.GateStatus.PASS, AO.GateStatus.FAIL,
+                            AO.GateStatus.BLOCKED, AO.GateStatus.INAPPLICABLE)
 
     @given(warrant=st.text(max_size=200))
     @SETTINGS
@@ -342,7 +348,12 @@ class TestArithmeticGateFuzz:
         for expr in (f"{name}({arg!r})", f"{name}.{name}", f"[{arg!r}].{name}",
                      f"{name}", "(lambda: 1)()", "{}.get"):
             r = self.gate.check(AO.Claim("c", "t", AO.ClaimKind.ARITHMETIC, f"{expr} = 1"))
-            assert r.status is AO.GateStatus.FAIL, expr
+            # NEVER EVALUATED, therefore never accepted. The status is BLOCKED
+            # rather than FAIL because refusing to evaluate an expression
+            # establishes nothing about the claim's truth.
+            assert r.status is not AO.GateStatus.PASS, expr
+            assert r.status in (AO.GateStatus.BLOCKED,
+                                AO.GateStatus.INAPPLICABLE), expr
 
 
 class TestClassifySourceFuzz:

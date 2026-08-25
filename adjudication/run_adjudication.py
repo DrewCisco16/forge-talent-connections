@@ -617,6 +617,25 @@ def build_ledger(per_run: float | None, per_stage: float | None,
     unset: a ledger that bounds nothing but appears in the report reads as
     protection that is not there.
     """
+    # EVERY SUPPLIED CEILING MUST BE A REAL LIMIT.
+    #
+    # NaN fails every comparison, so `spent + would_add > nan` is False
+    # forever and a NaN ceiling authorises everything while printing back a
+    # figure that looks like a limit. Infinity is a limit that cannot be
+    # reached. Zero or negative is not a budget. All three were accepted.
+    for label, value in (("--max-cost", per_run),
+                         ("--max-cost-per-stage", per_stage),
+                         ("--max-cost-per-day", per_day)):
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not math.isfinite(float(value)) or float(value) <= 0:
+            raise ValueError(
+                f"{label}={value!r} is not a finite positive number of "
+                f"dollars. A ceiling that cannot be reached is not a ceiling, "
+                f"and NaN compares False against every total, so it would "
+                f"authorise every call while looking like a limit."
+            )
     if per_run is None and per_stage is None and per_day is None:
         return None
     if not os.path.exists(rates_path):

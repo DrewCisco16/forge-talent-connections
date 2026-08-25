@@ -9,6 +9,7 @@ A menu that hides which button spends is the wrong menu.
 from __future__ import annotations
 
 import json
+import math
 import os
 
 # Reason kept OFF the nosec line: bandit reads everything after "nosec" as
@@ -87,14 +88,44 @@ def new_problem() -> None:
     _p(f"  artifact   : {os.path.relpath(spec['artifact'], HERE)}")
     if spec["gateable"] == 0:
         _p("  NOTE       : nothing in this run can be checked mechanically.")
+    cap = ask_ceiling()
+    _p(f"  ceiling    : ${cap:.2f}")
     _p("-" * 68)
     if input("  Type YES to spend: ").strip() != "YES":
         _p("  Not run. The folder is saved -- you can run it later from the menu.")
         return
-    execute(spec["run_dir"], spec["gates"], spec["resolve_dois"])
+    execute(spec["run_dir"], spec["gates"], spec["resolve_dois"], cap)
 
 
-def execute(run_dir: str, gates: str, dois: bool) -> None:
+def ask_ceiling(default: str = "3.00") -> float | None:
+    """A finite positive spend ceiling, or None if the operator backs out.
+
+    THE PAID PATHS DID NOT ASK FOR ONE. execute() built the command line with
+    no --max-cost, so build_ledger returned None and the run had no ceiling at
+    all. The console said "about 25 calls" and "Type YES to spend", the
+    operator typed YES, and five vendors were called with nothing bounding the
+    bill. Only the night path asked.
+    """
+    from intake import ask as _ask
+    while True:
+        raw = _ask(f"  Hard spend ceiling in dollars [{default}]:",
+                   allow_blank=True) or default
+        try:
+            value = float(raw)
+        except ValueError:
+            _p(f"  {raw!r} is not a number of dollars.")
+            continue
+        if not math.isfinite(value) or value <= 0:
+            _p("  A ceiling must be a finite positive number. 'nan' and 'inf' "
+               "compare False against every total, so they bound nothing.")
+            continue
+        return value
+
+
+def execute(run_dir: str, gates: str, dois: bool,
+            max_cost: float | None = None) -> None:
+    if max_cost is None:
+        max_cost = ask_ceiling()
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     art = os.path.join(run_dir, "artifact.txt")
     cand = os.path.join(run_dir, "candidates.json")
@@ -102,7 +133,9 @@ def execute(run_dir: str, gates: str, dois: bool) -> None:
     queue = os.path.join(run_dir, f"queue-{stamp}.json")
     args = [PY, "run_adjudication.py", art, "--profiles", "profiles.json",
             "--candidates", cand, "--gates", gates,
-            "--export-queue", queue, "--audit", audit]
+            "--export-queue", queue, "--audit", audit,
+            # Without this the run has no ledger and therefore no ceiling.
+            "--max-cost", f"{max_cost:.2f}"]
     if dois:
         args.append("--resolve-dois")
     code = sh(args)
