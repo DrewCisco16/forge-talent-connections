@@ -22,7 +22,12 @@ import pytest
 
 import night_loop as NL
 import seat_independence as SI
-from adjudication_orchestrator import ArithmeticGate, Orchestrator
+from adjudication_orchestrator import (
+    ArithmeticGate,
+    Claim,
+    ClaimKind,
+    Orchestrator,
+)
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -1289,58 +1294,98 @@ class TestCodeOwnsTheSurvivorSet:
     whole and became the next round's starting point, so a proposition the
     gates had just refuted rode through untouched.
 
-    A better detector would not have fixed this. A detector asks "did the
-    model smuggle something?" and can always be evaded by prose that reads
-    differently. Code now answers a different question -- what is still
-    standing? -- from gate verdicts, and the closer renders that answer
-    instead of deciding it.
+    The fix is structural, and the second review showed the first attempt was
+    not structural enough: claims were attached to options by TEXT MATCH, and
+    elimination did not check whether the refuted warrant bore on the claim.
+    An unrelated false equation could therefore delete an option outright.
+    Both are now closed -- an edge must be DECLARED, and removal needs the
+    warrant to bear on the proposition.
     """
 
-    def _run(self, tmp_path, rounds=1):
+    OPT_LIQUIDATE = OS.option_id("Liquidate inventory immediately.")
+    OPT_HOLD = OS.option_id("Hold inventory and reprice next quarter.")
+
+    def _run(self, tmp_path, claim_line, rounds=1):
         def seat(_p):
-            return ("analysis\n"
-                    "1. Liquidate inventory immediately.\n"
+            return ("1. Liquidate inventory immediately.\n"
                     "2. Hold inventory and reprice next quarter.\n"
-                    "CLAIM | arithmetic | 2 + 2 = 5 | Liquidate inventory "
-                    "immediately.\n")
+                    + claim_line)
+
         def closer(_p):
             return ("1. Liquidate inventory immediately.\n"
                     "2. Hold inventory and reprice next quarter.\n")
-        return NL.run_night("what to do", {f"seat_{i}": seat for i in range(1, 6)},
+        return NL.run_night("what to do",
+                            {f"seat_{i}": seat for i in range(1, 6)},
                             closer, _orch(), str(tmp_path),
                             rounds=NL.ROUNDS[:rounds])
 
-    def test_a_refuted_option_is_removed_by_code(self, tmp_path):
-        """Codex S2-1, the exact reproduction."""
-        res = self._run(tmp_path)
+    def _on_point(self):
+        """A refuted claim that DECLARES its option and whose warrant bears on
+        what it says. Only this may remove anything."""
+        return (f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_LIQUIDATE} | "
+                f"the total is 5\n")
+
+    def test_a_declared_on_point_refutation_removes_the_option(self, tmp_path):
+        res = self._run(tmp_path, self._on_point())
         assert res[0].options_created == 2
-        assert len(res[0].options_removed) == 1
-        assert len(res[0].options_alive) == 1
+        assert res[0].options_removed == [self.OPT_LIQUIDATE]
 
-    def test_the_refuted_option_does_not_seed_the_next_round(self, tmp_path):
-        """The carried-forward text is assembled from what survived, so a
-        removed proposition cannot appear in the next round's prompt."""
-        res = self._run(tmp_path)
-        standing = res[0].merged.split("## Removed")[0]
-        assert "Liquidate inventory immediately" not in standing
-        assert "Hold inventory" in standing
+    def test_an_unrelated_false_warrant_removes_nothing(self, tmp_path):
+        """The decisive re-check failure. "2 + 2 = 5" is false and says
+        nothing about liquidating inventory, but it removed the option and the
+        run reported MECHANICAL ADJUDICATION: COMPLETE with no caveats.
 
-    def test_the_removal_is_recorded_with_its_reason(self, tmp_path):
-        res = self._run(tmp_path)
-        assert "Removed" in res[0].merged
-        assert "mechanically refuted" in res[0].merged
+        Removing on an unrelated warrant is strictly worse than accepting on
+        one: a false acceptance leaves a wrong answer among the candidates, a
+        false removal deletes the right one and makes the survivor look
+        earned."""
+        res = self._run(
+            tmp_path,
+            f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_LIQUIDATE} | "
+            f"Liquidate inventory immediately.\n")
+        assert res[0].options_removed == []
+        assert len(res[0].options_alive) == 2
 
-    def test_the_packet_does_not_present_it_as_standing(self, tmp_path):
-        res = self._run(tmp_path)
-        packet = (tmp_path / "VERIFIER-PACKET.md").read_text()
-        assert "Liquidate inventory immediately" not in \
-            packet.split("## Removed")[0]
-        assert res  # the run completed
+    def test_a_claim_naming_no_option_removes_nothing(self, tmp_path):
+        """Nobody said what it was about."""
+        res = self._run(
+            tmp_path,
+            "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5\n")
+        assert res[0].options_removed == []
+
+    def test_a_claim_naming_a_different_option_removes_only_that_one(self, tmp_path):
+        res = self._run(
+            tmp_path,
+            f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_HOLD} | the total is 5\n")
+        assert res[0].options_removed == [self.OPT_HOLD]
+
+    def test_a_negation_borrowing_an_options_words_does_not_attach(self):
+        """"Do not liquidate inventory immediately" CONTAINS "liquidate
+        inventory immediately", so text matching removed the option asserting
+        the opposite of the refuted claim."""
+        opt = OS.Option(id="opt_aaaaaa",
+                        text="Do not liquidate inventory immediately")
+        claim = Claim(id="c1", kind=ClaimKind.ARITHMETIC,
+                      text="Liquidate inventory immediately", warrant="2 + 2 = 5")
+        OS.attach_claims([opt], [claim])
+        assert opt.claims == []
+
+    def test_the_removed_option_does_not_seed_the_next_round(self, tmp_path):
+        """render() included a "## Removed" section with each elimination
+        reason, and that whole text became the next round's starting point --
+        so a refuted proposition appeared three times in every seat's
+        round-two prompt. Removing an option and then printing it to everyone
+        is not removing it."""
+        res = self._run(tmp_path, self._on_point(), rounds=2)
+        assert "Liquidate inventory immediately" not in res[0].merged
+        assert "Liquidate inventory immediately" in res[0].record_text
+
+    def test_the_removal_is_kept_in_the_record(self, tmp_path):
+        res = self._run(tmp_path, self._on_point())
+        assert "Removed" in res[0].record_text
+        assert "mechanically refuted" in res[0].record_text
 
     def test_options_keep_their_identity_across_rounds(self):
-        """A positional id would move whenever the closer reordered its list,
-        and every elimination recorded against position 3 would silently point
-        at a different answer next round."""
         a = OS.parse_options("1. Build it in house over two quarters\n"
                              "2. Buy the vendor platform")
         b = OS.parse_options("1. Buy the vendor platform\n"
@@ -1352,24 +1397,63 @@ class TestCodeOwnsTheSurvivorSet:
         ruled on. Neither can take an option out."""
         import adjudication_orchestrator as AO
 
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        claim = Claim(id="c1", kind=AO.ClaimKind.ARITHMETIC,
+                      text="the total is 5", warrant="2 + 2 = 5",
+                      about_option="opt_aaaaaa")
         for status in (AO.GateStatus.BLOCKED, AO.GateStatus.PASS,
                        AO.GateStatus.INAPPLICABLE):
+            opt = OS.Option(id="opt_aaaaaa", text="the total is 5",
+                            claims=["c1"])
             verdict = type("V", (), {"status": status, "detail": "d"})()
-            assert OS.eliminate([opt], {"c1": verdict}, 1) == []
+            assert OS.eliminate([opt], {"c1": verdict}, 1, {"c1": claim}) == []
+        opt = OS.Option(id="opt_aaaaaa", text="the total is 5", claims=["c1"])
         fail = type("V", (), {"status": AO.GateStatus.FAIL, "detail": "d"})()
-        assert OS.eliminate([opt], {"c1": fail}, 1) == [opt]
+        assert OS.eliminate([opt], {"c1": fail}, 1, {"c1": claim}) == [opt]
 
     def test_an_escalated_claim_never_removes_an_option(self):
         opt = OS.Option(id="o1", text="an option", claims=["c1"])
         assert OS.eliminate([opt], {"c1": None}, 1) == []
 
-    def test_an_untested_survivor_is_reported_as_such(self):
-        """It survived because nothing examined it, which on the page looks
-        identical to surviving scrutiny."""
-        tested = OS.Option(id="o1", text="tested", claims=["c1"])
-        untested = OS.Option(id="o2", text="never examined")
-        assert OS.unexamined([tested, untested]) == [untested]
+    def test_a_blocked_only_survivor_is_not_examined(self):
+        """An option whose sole dependency was BLOCKED counted as examined,
+        and a sole survivor resting on one blocked `sqrt(4) = 2` was presented
+        under "the answer that survived"."""
+        import adjudication_orchestrator as AO
+
+        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        blocked = type("V", (), {"status": AO.GateStatus.BLOCKED, "detail": "d"})()
+        assert OS.unexamined([opt], {"c1": blocked}) == [opt]
+
+    def test_an_escalated_only_survivor_is_not_examined(self):
+        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        assert OS.unexamined([opt], {"c1": None}) == [opt]
+
+    def test_a_ruled_survivor_is_examined(self):
+        import adjudication_orchestrator as AO
+
+        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        passed = type("V", (), {"status": AO.GateStatus.PASS, "detail": "d"})()
+        assert OS.unexamined([opt], {"c1": passed}) == []
+
+    def test_an_open_list_is_not_parsed_as_options(self):
+        """The closer is required to end with an OPEN list naming what the
+        round could not settle. Those bullets became candidate answers."""
+        opts = OS.parse_options(
+            "1. Build the ingest service in house\n"
+            "2. Buy the vendor platform and migrate\n"
+            "\nOPEN:\n"
+            "- whether the vendor roadmap is credible\n"
+            "- what migration would actually cost\n")
+        assert len(opts) == 2
+
+    def test_an_oversized_option_set_is_refused_not_truncated(self):
+        """Cutting to the first twelve dropped answers by the order they
+        happened to be written in, with nothing recorded. Reversing the
+        closer's ordering changed which option vanished."""
+        text = "\n".join(f"{i}. option number {i} written out here"
+                         for i in range(1, 15))
+        with pytest.raises(OS.TooManyOptions):
+            OS.parse_options(text)
 
     def test_prose_around_the_list_is_not_an_option(self):
         opts = OS.parse_options(

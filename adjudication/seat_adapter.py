@@ -393,13 +393,22 @@ class HttpSeat:
                 last = f"transient HTTP {status}"
                 continue
             if status < 200 or status >= 300:
+                # A TERMINAL NON-2XX STILL REACHED THE VENDOR. It was raised
+                # without any ledger entry, so a final 401 cost nothing on
+                # paper and could be repeated without limit.
+                self._record_unmeasured(f"HTTP {status}")
                 raise SeatError(
                     f"seat {self.seat_id}: HTTP {status} from {self.profile.name}"
                     + ("" if status not in RETRYABLE_STATUS else " (retries exhausted)")
                 )
-            text = self._parse(raw)
+            # BOOK BEFORE PARSING. _parse raises on invalid JSON, on a
+            # payload that is not an object, and on a reply the configured
+            # text path cannot reach -- and every one of those raises happened
+            # BEFORE the ledger saw the call. A 200 we could not read cost
+            # nothing on paper and could be repeated without limit. The vendor
+            # billed it either way.
             self._book(raw)
-            return text
+            return self._parse(raw)
 
         raise SeatError(f"seat {self.seat_id}: {last} (retries exhausted)")
 
@@ -419,9 +428,17 @@ class HttpSeat:
         except Exception:  # noqa: BLE001 - unmeasured is honest, guessing is not
             tin = tout = None
         self.last_usage = (tin, tout)
-        # authorised= is what the pre-call check allowed. record() compares
-        # the bill against it and stops the run if the estimate did not hold.
+        # A SUCCESSFUL CALL WITH NO USABLE USAGE KEEPS ITS RESERVATION.
+        #
+        # This passed no estimate, and record() defaults it to zero, so an
+        # HTTP 200 whose usage block was missing, malformed, or
+        # self-contradictory consumed NOTHING. Twenty such calls ran under a
+        # $0.01 ceiling with committed spend at $0.00 and no overrun recorded
+        # -- an unlimited, repeatable spend route straight through the control
+        # that exists to stop it. Only a call we could actually price may
+        # settle its reservation.
         self.ledger.record(self.seat_id, tin, tout, pass_id=self.pass_id,
+                           estimated_dollars=self._last_worst_case,
                            authorised=self._last_worst_case)
 
     def set_pass(self, pass_id: str | None) -> None:

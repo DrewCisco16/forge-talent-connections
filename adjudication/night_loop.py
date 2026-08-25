@@ -52,10 +52,12 @@ from adjudication_orchestrator import (
 )
 from option_set import (
     Option,
+    TooManyOptions,
     attach_claims,
     eliminate,
     parse_options,
-    render,
+    render_record,
+    render_working,
     unexamined,
 )
 from seat_conduct import ConductLedger
@@ -172,6 +174,24 @@ nothing after them:
 
 <kind> is one of: arithmetic, citation, code_behavior, schema, unit,
 quote_verification, judgment
+
+## Saying which option a claim is about
+
+From round two on you are shown the surviving options, each with a bracketed
+id like [opt_3f9a2c]. If a claim bears on one of them, put that id in front of
+the claim text:
+
+    CLAIM | arithmetic | 12 * 50 = 600 | opt_3f9a2c | the build option totals 600
+
+THIS IS THE ONLY WAY A CLAIM CAN REMOVE AN OPTION. Nothing infers the link
+from wording. Describing an option does not connect a claim to it, and a claim
+that borrowed an option's words while asserting the OPPOSITE used to remove
+that very option. A claim with no id is still checked and still reported; it
+simply cannot eliminate anything, because nobody said what it was about.
+
+An option is removed only when a claim declared it is about that option, the
+claim was mechanically refuted, and the refuting warrant actually bears on
+what the claim says.
 
 <warrant> is the mechanically checkable evidence:
     arithmetic          an expression and its result, as "3 * 4 = 12"
@@ -625,6 +645,11 @@ class RoundResult:
     They survived because nothing tested them, which is a completely different
     fact from surviving scrutiny -- and on the page the two look identical."""
     options_unparsed: bool = False
+    record_text: str = ""
+    """The full option picture including what was removed and why.
+
+    Kept apart from `merged`, which is what the next round sees. The operator
+    needs the removals; the seats need to not be thinking about them."""
     closer_invented: list[str] = field(default_factory=list)
     """Sentences the closer wrote that no seat's answer supports.
 
@@ -921,7 +946,15 @@ def run_night(
         # ids, and every later round removes from that list on verdicts. The
         # text that carries forward is assembled from what survived.
         if r.invents and not options:
-            options = parse_options(merged_new)
+            try:
+                options = parse_options(merged_new)
+            except TooManyOptions as exc:
+                # Refused rather than truncated. Cutting the list to the first
+                # twelve dropped answers by the order they happened to be
+                # written in, with nothing recorded.
+                emit(f"  {exc}")
+                res.options_unparsed = True
+                options = []
             attach_claims(options, claims)
             res.options_created = len(options)
         else:
@@ -930,7 +963,8 @@ def run_night(
                             {c.id: c for c in claims})
         res.options_removed = [o.id for o in removed]
         res.options_alive = [o.id for o in options if o.alive]
-        res.options_unexamined = [o.id for o in unexamined(options)]
+        res.options_unexamined = [o.id for o in unexamined(options,
+                                                            orch.verdicts)]
         if removed:
             emit(f"  removed {len(removed)} option(s) on refuted claims")
 
@@ -938,9 +972,26 @@ def run_night(
             # The closer's text is COMMENTARY on the survivor list, not the
             # list itself. Anything it says about membership is advisory; the
             # list above it is the answer.
-            merged = (render(options)
-                      + "\n\n## The closer's reading of what survived\n\n"
-                      + merged_new.strip())
+            # WHAT THE NEXT ROUND SEES IS BUILT BY CODE, AND ONLY FROM
+            # OPTIONS THAT ARE STILL STANDING.
+            #
+            # The closer's prose was appended to it, and that prose restates
+            # the options -- including the ones just removed. So a refuted
+            # proposition still reached every seat's next prompt, three times
+            # over, through the commentary rather than through the list.
+            # Removing an option and then quoting it to everyone is not
+            # removing it.
+            #
+            # The commentary is not discarded. It goes to the record and the
+            # operator's packet, which is where a human needs it. The seats
+            # need the surviving set and this round's lens, and nothing else:
+            # rounds two onward eliminate from a standing set, they do not
+            # re-read the last round's discussion.
+            merged = render_working(options)
+            res.record_text = (
+                render_record(options)
+                + "\n\n## The closer's reading of what survived\n\n"
+                + merged_new.strip())
         else:
             # Round one produced no parseable list. Fall back to the closer's
             # text so the run still says something, and record that no option
@@ -1313,8 +1364,21 @@ class RunVerdict:
 
     @property
     def trustworthy(self) -> bool:
-        """Only when code removed something AND nothing else is wrong."""
-        return self.adjudication != "NONE" and not self.caveats
+        """Whether this result may be presented as one machinery established.
+
+        CONFIDENCE IS PART OF THE ANSWER. This ignored it, so a run reporting
+        MECHANICAL ADJUDICATION: COMPLETE with CORROBORATION CONFIDENCE:
+        UNMEASURED and no caveats came back trustworthy -- and that is exactly
+        the state a five-round false result produced. Two fields exist so both
+        can be told; recombining them by dropping one defeats the point of
+        separating them.
+
+        Unmeasured independence means nobody knows whether these seats fail
+        together. An answer they agreed on, in that state, is not established.
+        """
+        return (self.adjudication != "NONE"
+                and self.confidence == "MEASURED"
+                and not self.caveats)
 
 
 def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
@@ -1519,7 +1583,8 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         ("## The answer that survived"
          if run.trustworthy
          else "## The working answer (see the two fields above for what it is worth)"),
-        merged.strip(),
+        (rounds_run[-1].record_text.strip() if rounds_run
+         and rounds_run[-1].record_text else merged.strip()),
         "",
         "## Claims it rests on, with what the mechanical checks found",
         "",

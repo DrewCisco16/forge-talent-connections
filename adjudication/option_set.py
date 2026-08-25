@@ -33,9 +33,31 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from adjudication_orchestrator import Claim
+from adjudication_orchestrator import Claim, warrant_supports
 
 _NUMBERED = re.compile(r"^\s{0,3}(?:\d{1,2}[.)]|[-*])\s+(.+?)\s*$")
+
+
+class TooManyOptions(ValueError):
+    """Round one produced more options than a later round can work through.
+
+    SILENTLY TRUNCATING WAS WORSE THAN REFUSING. The list was cut to the first
+    twelve, so reversing the closer's ordering changed which option vanished --
+    an answer could be dropped from consideration by the order it happened to
+    be written in, with nothing recorded anywhere.
+    """
+
+
+_SECTION_HEADING = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s*)?(OPEN|KILLED|REMOVED|HOLES|NOTES|CAVEATS|"
+    r"STILL OPEN|WHAT THIS ROUND COULD NOT CLOSE)\b", re.IGNORECASE)
+"""Headings after which list items are NOT options.
+
+The closer is required to end with an OPEN list naming what the round could
+not settle. Those bullets were parsed as options, so a hole became a candidate
+answer.
+"""
+
 MAX_OPTIONS = 12
 """More than this and round one has not narrowed anything.
 
@@ -83,9 +105,18 @@ def parse_options(text: str) -> list[Option]:
     """
     out: list[Option] = []
     seen: set[str] = set()
+    in_options = True
     for line in (text or "").splitlines():
+        if _SECTION_HEADING.match(line):
+            # Everything after an OPEN or KILLED heading is commentary about
+            # the round, not a further answer to consider.
+            in_options = False
+            continue
+        if line.strip().startswith("#"):
+            in_options = True          # a new heading; options may resume
+            continue
         m = _NUMBERED.match(line)
-        if not m:
+        if not m or not in_options:
             continue
         body = m.group(1).strip()
         if len(body) < MIN_OPTION_CHARS:
@@ -95,42 +126,76 @@ def parse_options(text: str) -> list[Option]:
             continue
         seen.add(oid)
         out.append(Option(id=oid, text=body))
-        if len(out) >= MAX_OPTIONS:
-            break
+    if len(out) > MAX_OPTIONS:
+        raise TooManyOptions(
+            f"round one produced {len(out)} options, over the {MAX_OPTIONS} a "
+            f"later round can work through. Truncating would drop answers by "
+            f"the order they happened to be written in; the round is recorded "
+            f"as producing no usable option set instead."
+        )
     return out
 
 
 def attach_claims(options: Sequence[Option],
                   claims: Sequence[Claim]) -> None:
-    """Record which claims each option rests on.
+    """Record which claims each option depends on, from DECLARED edges only.
 
-    A claim belongs to an option when the option's text contains a distinctive
-    run of the claim's text, or the claim names the option's id outright. This
-    is the one place a textual association survives, and it is used ONLY to
-    attach evidence -- never to decide membership, which is what made prose
-    dangerous in the first place. An option with no attached claims is not
-    eliminable by evidence, and says so in the report rather than looking
-    examined.
+    THE TEXT-MATCHING VERSION WAS UNSOUND IN BOTH DIRECTIONS. It attached a
+    claim when the claim's text appeared inside the option's text, so:
+
+      - a paraphrase attached to nothing, and its option survived untested
+        while looking examined;
+      - a NEGATION attached, because "Do not liquidate inventory immediately"
+        contains "Liquidate inventory immediately" -- so a refuted claim
+        removed the option asserting its opposite.
+
+    Similarity is not dependency. A seat that wants to say a claim bears on an
+    option names that option's id, which it can do because the ids are printed
+    in the prompt it was given. A claim naming no option still gets
+    adjudicated and still appears in the report; it simply cannot remove
+    anything, which is the correct treatment of an assertion whose target
+    nobody stated.
     """
-    for opt in options:
-        haystack = " ".join(opt.text.split()).casefold()
-        for claim in claims:
-            needle = " ".join((claim.text or "").split()).casefold()
-            if (len(needle) >= MIN_OPTION_CHARS and needle in haystack
-                    and claim.id not in opt.claims):
-                opt.claims.append(claim.id)
+    by_id = {o.id: o for o in options}
+    for claim in claims:
+        target = by_id.get((claim.about_option or "").lower())
+        if target is not None and claim.id not in target.claims:
+            target.claims.append(claim.id)
 
 
 def eliminate(options: Sequence[Option],
               verdicts: Mapping[str, object],
               round_n: int,
               claims_by_id: Mapping[str, Claim] | None = None) -> list[Option]:
-    """Remove options whose own claims were refuted. Returns those removed.
+    """Remove options whose declared dependencies were refuted ON THE POINT.
 
-    ONLY A STANDING FAIL REMOVES ANYTHING. A blocked check did not happen and
-    an escalated claim has not been ruled on, so neither can take an option
-    out -- that is the same rule the rest of the system runs on, applied here
-    rather than left to a model's prose.
+    THREE CONDITIONS, ALL REQUIRED:
+
+      1. the claim DECLARED that it is about this option;
+      2. its standing verdict is FAIL;
+      3. the refuted warrant actually BEARS ON the claim's proposition.
+
+    The third was missing, and its absence was the worst defect this tool has
+    had. warrant_supports() ran only after a gate PASSed, so the acceptance
+    side was bound to the proposition and the ELIMINATION side was not. An
+    unrelated false equation therefore destroyed an option outright:
+
+        1. Launch immediately.
+        2. Abort immediately.
+        CLAIM | arithmetic | 2 + 2 = 5 | Launch immediately.
+
+    "2 + 2 = 5" is false. It says nothing whatever about launching. The run
+    removed "Launch immediately", kept "Abort immediately", and reported
+    MECHANICAL ADJUDICATION: COMPLETE with no caveats -- a confident wrong
+    answer to a launch-or-abort question, produced by machinery that had
+    checked arithmetic and nothing else.
+
+    Removing on an unrelated warrant is strictly worse than accepting on one.
+    A false acceptance leaves a wrong answer among the candidates; a false
+    removal deletes the right one and makes the survivor look earned.
+
+    BLOCKED and ESCALATED remove nothing: a check that did not happen and a
+    claim nobody ruled on are not refutations.
     """
     removed: list[Option] = []
     for opt in options:
@@ -141,32 +206,56 @@ def eliminate(options: Sequence[Option],
             if getattr(getattr(verdict, "status", None), "value", None) != "fail":
                 continue
             claim = (claims_by_id or {}).get(cid)
-            what = f" ({claim.text})" if claim is not None else ""
+            if claim is None:
+                continue
+            unbound = warrant_supports(claim)
+            if unbound is not None:
+                # Refuted, but not on this proposition. The claim stays
+                # refuted in the record; the option stands.
+                continue
             opt.eliminated_in_round = round_n
             opt.elimination_reason = (
-                f"round {round_n}: a claim it rests on was mechanically "
-                f"refuted{what} -- {getattr(verdict, 'detail', '')}"
+                f"round {round_n}: a claim it declared it rests on was "
+                f"mechanically refuted ({claim.text}) -- "
+                f"{getattr(verdict, 'detail', '')}"
             )
             removed.append(opt)
             break
     return removed
 
 
-def render(options: Sequence[Option]) -> str:
-    """The working answer, assembled by code from what is still standing.
+def render_working(options: Sequence[Option]) -> str:
+    """What carries into the next round: LIVING OPTIONS ONLY.
 
-    THIS TEXT, NOT THE CLOSER'S, IS WHAT CARRIES FORWARD. The closer's prose
-    is attached to it as commentary. That is the whole point: a proposition
-    the gates removed cannot reappear in the next round's prompt, because the
-    next round's prompt is built from this list and this list is arithmetic
-    over verdicts.
+    render() used to include a "## Removed" section with each elimination
+    reason, and that whole text became the next round's starting point -- so a
+    refuted proposition appeared three times in every seat's round-two prompt.
+    Removing an option from a list and then printing it to everyone is not
+    removing it.
+
+    The removed set is not lost. It goes to the audit record and the
+    operator's packet, where it belongs: the operator needs to know what was
+    ruled out and why, and the seats need to not be thinking about it.
     """
     alive = [o for o in options if o.alive]
     lines = ["## Options still standing", ""]
     if not alive:
-        lines.append("(none -- every option had a claim mechanically refuted)")
+        lines.append("(none -- every option had a declared claim refuted)")
     for i, opt in enumerate(alive, 1):
         lines.append(f"{i}. [{opt.id}] {opt.text}")
+    lines += [
+        "",
+        "Cite an option by its bracketed id when a claim bears on it:",
+        "    CLAIM | <kind> | <warrant> | <option id> | <the claim>",
+        "A claim that names no option is still checked and still reported, but",
+        "cannot remove anything -- nobody said what it was about.",
+    ]
+    return "\n".join(lines)
+
+
+def render_record(options: Sequence[Option]) -> str:
+    """The full picture for the audit trail and the operator's packet."""
+    lines = [render_working(options)]
     gone = [o for o in options if not o.alive]
     if gone:
         lines += ["", "## Removed", ""]
@@ -176,10 +265,34 @@ def render(options: Sequence[Option]) -> str:
     return "\n".join(lines)
 
 
-def unexamined(options: Sequence[Option]) -> list[Option]:
-    """Surviving options that no claim was ever attached to.
+def unexamined(options: Sequence[Option],
+               verdicts: Mapping[str, object] | None = None) -> list[Option]:
+    """Surviving options that nothing actually RULED ON.
 
-    They survived because nothing tested them, which is a completely different
-    fact from surviving scrutiny -- and on the page the two look identical.
+    An option survives because nothing removed it. That is a completely
+    different fact from surviving scrutiny, and on the page the two look
+    identical -- so the difference has to be reported.
+
+    A NON-EMPTY CLAIM LIST IS NOT EXAMINATION. This returned only options with
+    no attached claims at all, so an option whose sole dependency was BLOCKED
+    (a check that could not run) or ESCALATED (nobody ruled on it) counted as
+    examined. A sole survivor resting on one blocked `sqrt(4) = 2` was
+    presented under "the answer that survived".
+
+    Examined means at least one declared dependency reached a real verdict --
+    PASS or FAIL. Anything else leaves the option untested.
     """
-    return [o for o in options if o.alive and not o.claims]
+    if verdicts is None:
+        return [o for o in options if o.alive and not o.claims]
+    out: list[Option] = []
+    for opt in options:
+        if not opt.alive:
+            continue
+        ruled = any(
+            getattr(getattr(verdicts.get(cid), "status", None), "value", None)
+            in ("pass", "fail")
+            for cid in opt.claims
+        )
+        if not ruled:
+            out.append(opt)
+    return out

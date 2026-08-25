@@ -159,6 +159,19 @@ class Claim:
     warrant: str | None = None   # expression, DOI, test command, schema...
     source_pass: str | None = None
     source_seat: str | None = None
+    about_option: str | None = None
+    """The id of the option this claim is about, as the seat declared it.
+
+    A STRUCTURAL EDGE, DECLARED, NOT INFERRED. Options were matched to claims
+    by testing whether the claim's text appeared inside the option's text. A
+    paraphrase therefore attached to nothing and its option survived
+    untested, while a NEGATION -- "Do not liquidate inventory" contains
+    "liquidate inventory" -- attached and removed the option that said the
+    opposite of the refuted claim.
+
+    Text similarity cannot carry this relationship. The seat is shown the
+    option ids and names one.
+    """
     supports: list[str] = field(default_factory=list)
     """Claim ids this claim is offered as evidence FOR.
 
@@ -1154,6 +1167,10 @@ def content_claim_id(kind: ClaimKind, warrant: str | None, text: str) -> str:
 
 
 _CLAIM_LINE = re.compile(r"^\s*CLAIM\s*\|([^|]*)\|([^|]*)\|(.*)$", re.IGNORECASE)
+_ABOUT = re.compile(r"^\s*(opt_[0-9a-f]{6,})\s*\|\s*(.*)$", re.IGNORECASE)
+"""An option id at the head of the text field: "CLAIM | kind | warrant |
+opt_abc123 | the claim". Optional, and only meaningful in a round where
+options exist -- round one creates them, so nothing there can name one."""
 
 
 def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
@@ -1188,9 +1205,14 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
             ))
             continue
         warrant = warrant_raw or None
+        about = None
+        m_about = _ABOUT.match(text)
+        if m_about:
+            about, text = m_about.group(1).lower(), m_about.group(2).strip()
         claims.append(Claim(
             content_claim_id(kind, warrant, text),
             text, kind, warrant, pass_id, seat_id,
+            about_option=about,
         ))
     return claims
 
