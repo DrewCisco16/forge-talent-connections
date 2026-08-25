@@ -30,11 +30,47 @@ ignore_missing_imports = true
 # Any, a body template that could fill to a non-object and be posted anyway,
 # and an unannotated aggregator in the leave-one-seat-out diagnostic.
 strict = true
-files = ["seat_independence.py", "adjudication_orchestrator.py", "validation_harness.py", "audit_log.py", "seat_adapter.py", "correctness_matrix.py", "run_adjudication.py", "seat_profiles.py"]
+files = [
+    # THE ENGINES
+    "adjudication_orchestrator.py",
+    "night_loop.py",
+    "run_adjudication.py",
+    # THE GATES
+    "citation_gate.py",
+    "quote_gate.py",
+    "doi_resolver.py",
+    "recency_canary.py",
+    # SEATS, COST, AND CONDUCT
+    "seat_adapter.py",
+    "seat_profiles.py",
+    "seat_independence.py",
+    "cost_ledger.py",
+    "seat_conduct.py",
+    # STATISTICS AND RECORD
+    "correctness_matrix.py",
+    "validation_harness.py",
+    "audit_log.py",
+    # OPERATOR SURFACE
+    "console.py",
+    "intake.py",
+    "domains.py",
+    "watcher.py",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"
-testpaths = ["test_suite.py", "test_properties.py"]
+
+# DISCOVERY, NOT A LIST. This was a hardcoded pair of filenames, which meant a
+# new test file was collected by nobody: test_night_loop.py existed, passed
+# when invoked directly, and contributed nothing to `pytest` -- 40 tests that
+# read as coverage while never running in the gate. A file that is silently
+# skipped is worse than a file that does not exist, because its absence is
+# invisible. Discovery by pattern cannot forget a file.
+#
+# .venv is excluded by pytest's default norecursedirs, which skips dotted
+# directories.
+testpaths = ["."]
+python_files = ["test_*.py"]
 
 # --- deliberate exemptions, each with its reason -------------------------
 [tool.ruff.lint.extend-per-file-ignores]

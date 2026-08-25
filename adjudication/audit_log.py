@@ -282,6 +282,16 @@ class RunRecorder:
                 ),
                 "seats_responding": list(div.seats_responding),
                 "seats_errored": list(div.seats_errored),
+                # WHY, not just WHICH. The console report gained this and the
+                # durable record did not, so the audit -- the thing the
+                # operator keeps -- could not say why a seat failed. A live
+                # run lost a seat in four of five passes and the reason
+                # existed only in a terminal window that later hung.
+                "seat_errors": dict(getattr(div, "seat_errors", {}) or {}),
+                # blocked serialised as None because the field postdated this
+                # writer. A blocked count of "None" reads as "not applicable"
+                # when it means zero checks were prevented.
+                "blocked": int(getattr(rec, "blocked", 0) or 0),
                 "mean_pairwise_jaccard": div.mean_pairwise_jaccard,
                 "unanimous": div.unanimous,
                 "all_seats_silent": div.all_seats_silent,

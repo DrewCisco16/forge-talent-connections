@@ -57,6 +57,41 @@ from adjudication_orchestrator import ResolvedSeat
 Transport = Callable[[str, str, Mapping[str, str], bytes, float], tuple[int, bytes]]
 
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """True if this exception is, or wraps, a read timeout.
+
+    urllib usually lets socket.timeout (an alias of TimeoutError since 3.10)
+    propagate, which is what a live grok-4.6 call produced. But a transport is
+    injectable here, and some wrap the timeout in URLError or OSError. Matching
+    only the bare type would send those down the retry path, which is the exact
+    behaviour this distinction exists to stop.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, TimeoutError):
+            return True
+        reason = getattr(cur, "reason", None)
+        if isinstance(reason, BaseException):
+            cur = reason
+            continue
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+TIMEOUT_IS_NOT_RETRYABLE = True
+"""A read timeout means the model is still thinking, not that the call failed.
+
+Measured live: grok-4.6 answered a 632-token prompt after 275 seconds. Under
+the old 120-second timeout every attempt expired, all three retries expired
+with it, and the seat was marked FAILED after burning six minutes -- in four
+of five passes of a real run. Retrying a timeout re-sends the same prompt to
+the same model and waits for the same duration, so it converts one slow call
+into three, and the vendor may bill the abandoned generations.
+"""
 """
 Transient by definition: rate limiting, timeouts, and upstream faults.
 
@@ -164,7 +199,7 @@ class HttpSeat:
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.0,
-        timeout_s: float = 120.0,
+        timeout_s: float = 600.0,
         retry: RetryPolicy | None = None,
         sleeper: Callable[[float], None] | None = None,
         ledger: Any = None,
@@ -252,6 +287,28 @@ class HttpSeat:
                     "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
                 )
             except Exception as exc:  # fail closed on any transport fault
+                # A READ TIMEOUT IS THE MODEL STILL THINKING, NOT A FAULT,
+                # and it is the one transport failure that must not be retried.
+                #
+                # Retrying resends the identical prompt to the identical model
+                # and waits the identical duration, so it turns one slow call
+                # into max_attempts slow calls, and the vendor may bill every
+                # abandoned generation. Measured live: grok-4.6 answered a
+                # 632-token prompt after 275 seconds. Under the old 120-second
+                # timeout every attempt expired, all three retries expired with
+                # it, and the seat was recorded FAILED after burning six
+                # minutes -- in four of five passes of a real run.
+                #
+                # Fail once, immediately, and name the duration, because the
+                # duration is the entire diagnosis.
+                if _is_timeout(exc):
+                    raise SeatError(
+                        f"seat {self.seat_id}: {self.profile.name} did not "
+                        f"reply within {self.timeout_s:.0f}s. Reasoning models "
+                        f"routinely exceed this on a full-size prompt. Raise "
+                        f"timeout_s -- do not lower max_tokens, which "
+                        f"truncates the reply instead of speeding it up."
+                    ) from exc
                 # The message is the exception TYPE and text, never the request,
                 # because the request carries the credential.
                 last = f"transport raised {type(exc).__name__}: {exc}"

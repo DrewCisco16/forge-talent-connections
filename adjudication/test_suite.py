@@ -27,6 +27,7 @@ import pytest
 
 import adjudication_orchestrator as AO
 import audit_log as AL
+import cost_ledger as CL
 import seat_adapter as SA
 import seat_independence as SI
 from adjudication_orchestrator import (
@@ -3946,7 +3947,13 @@ class TestTheTransportRetryPathAnOperatorWillActuallyHit:
         def flaky(method, url, headers, body, timeout):
             calls["n"] += 1
             if calls["n"] == 1:
-                raise TimeoutError("timed out")
+                # Was TimeoutError, used here only as a stand-in for "some
+                # transient transport fault". A read timeout is now deliberately
+                # NOT retried -- it means the model is still thinking, and
+                # resending the same prompt just waits the same duration again
+                # (see TestTimeoutIsNotRetried). A reset connection is a real
+                # transient fault and is what this test means.
+                raise ConnectionResetError("connection reset by peer")
             return 200, _json.dumps(
                 {"choices": [{"message": {"content": "recovered"}}]}
             ).encode()
@@ -4444,15 +4451,20 @@ class TestTheTransportReturnsAnErrorRatherThanRaising:
         is what made the first live run's failures unreadable."""
         import io as _io
         import urllib.error
-
-        def boom(req, timeout=None):
-            raise urllib.error.HTTPError(
-                req.full_url, 400, "Bad Request", {},
-                _io.BytesIO(b'{"error":"max_tokens too large"}'))
-
-        # urllib is imported inside the function, so patch the module itself.
         import urllib.request as _ureq
-        monkeypatch.setattr(_ureq, "urlopen", boom)
+
+        class _Opener:
+            def open(self, req, timeout=None):
+                raise urllib.error.HTTPError(
+                    req.full_url, 400, "Bad Request", {},
+                    _io.BytesIO(b'{"error":"max_tokens too large"}'))
+
+        # PATCH build_opener, NOT urlopen. urllib_transport installs a
+        # _NoRedirect handler and calls opener.open, so it never reaches
+        # urlopen -- patching that seam silently missed and the test made a
+        # real DNS lookup for api.example.invalid, passing or failing on
+        # whether the machine had a network rather than on the code.
+        monkeypatch.setattr(_ureq, "build_opener", lambda *_h: _Opener())
         status, body = RA.urllib_transport(
             "POST", "https://api.example.invalid/v1/x", {}, b"{}", 10.0)
         assert status == 400
@@ -4486,3 +4498,142 @@ class TestTheReportDistinguishesSurvivorCounts:
             ]))
         assert "removed c2 [EARNED]" in out
         assert "removed c3 [STRUCTURAL]" in out
+
+# ---------------------------------------------------------------------------
+# 7. Reasoning tokens are billed and are not in the output field
+#
+# The grok numbers below are transcribed from a live call on 2026-08-25 that
+# returned HTTP 200 after 275.4 seconds. They are measurements, not examples.
+# ---------------------------------------------------------------------------
+
+OPENAI_STYLE = (["usage", "prompt_tokens"], ["usage", "completion_tokens"])
+
+
+class TestReasoningTokenAccounting:
+
+    def test_grok_reasoning_tokens_land_in_output(self):
+        """The measured case: 2433 reported, about 15,000 actually billed."""
+        payload = {"usage": {"prompt_tokens": 1320,
+                             "completion_tokens": 2433,
+                             "total_tokens": 16748,
+                             "prompt_tokens_details": {"text_tokens": 1320,
+                                                       "cached_tokens": 512}}}
+        tin, tout = CL.usage_from_payload(payload, *OPENAI_STYLE)
+        assert tin == 1320
+        assert tout == 16748 - 1320
+        assert tout > 2433 * 6, "the reported output field was 4.5x too low"
+
+    def test_ceiling_now_sees_the_real_spend(self):
+        """A ceiling must trip on tokens billed, not tokens advertised."""
+        payload = {"usage": {"prompt_tokens": 1320, "completion_tokens": 2433,
+                             "total_tokens": 16748}}
+        _, honest = CL.usage_from_payload(payload, *OPENAI_STYLE)
+        assert honest > 2433
+
+    def test_gemini_shape_is_reconciled_too(self):
+        """usageMetadata, not usage. A hard-coded container name misses this."""
+        payload = {"usageMetadata": {"promptTokenCount": 900,
+                                     "candidatesTokenCount": 300,
+                                     "thoughtsTokenCount": 4000,
+                                     "totalTokenCount": 5200}}
+        tin, tout = CL.usage_from_payload(
+            payload, ["usageMetadata", "promptTokenCount"],
+            ["usageMetadata", "candidatesTokenCount"])
+        assert tin == 900
+        assert tout == 4300, "thinking tokens must land in the output figure"
+
+    def test_anthropic_shape_is_left_alone(self):
+        """Anthropic reports no total and already folds thinking into
+        output_tokens. Adjusting it would be inventing a number."""
+        payload = {"usage": {"input_tokens": 500, "output_tokens": 1200}}
+        assert CL.usage_from_payload(
+            payload, ["usage", "input_tokens"],
+            ["usage", "output_tokens"]) == (500, 1200)
+
+    def test_consistent_total_changes_nothing(self):
+        payload = {"usage": {"prompt_tokens": 100, "completion_tokens": 50,
+                             "total_tokens": 150}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (100, 50)
+
+    def test_missing_total_is_not_zero(self):
+        """A missing total must not subtract its way to a negative count."""
+        payload = {"usage": {"prompt_tokens": 100, "completion_tokens": 50}}
+        tin, tout = CL.usage_from_payload(payload, *OPENAI_STYLE)
+        assert (tin, tout) == (100, 50)
+        assert tout >= 0
+
+    def test_bool_is_not_a_token_count(self):
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                             "total_tokens": True}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (10, 5)
+
+
+# ---------------------------------------------------------------------------
+# 8. A read timeout is the model still thinking, and must not be retried
+# ---------------------------------------------------------------------------
+
+def _counting_transport(raises):
+    """A transport that always raises, and counts how often it was called."""
+    calls = {"n": 0}
+
+    def t(method, url, headers, data, timeout):
+        calls["n"] += 1
+        raise raises
+    return t, calls
+
+
+class TestTimeoutIsNotRetried:
+
+    def _seat(self, exc, attempts=3):
+        t, calls = _counting_transport(exc)
+        seat = HttpSeat(_resolved_seat(seat_id="seat_4"), _profile(), t,
+                        retry=SA.RetryPolicy(max_attempts=attempts),
+                        sleeper=lambda _s: None)
+        return seat, calls
+
+    def test_timeout_is_attempted_exactly_once(self):
+        """Three attempts at 600s each is thirty minutes spent to learn nothing
+        that the first attempt did not already establish."""
+        seat, calls = self._seat(TimeoutError("The read operation timed out"))
+        with pytest.raises(SA.SeatError, match="did not reply within"):
+            seat("prompt")
+        assert calls["n"] == 1, "a read timeout was retried"
+
+    def test_the_error_names_the_duration(self):
+        """The duration is the diagnosis. Without it the operator sees only
+        'seat_4 failed' and cannot tell a slow model from a broken one -- which
+        is exactly the ambiguity that cost a full live run."""
+        seat, _ = self._seat(TimeoutError("timed out"))
+        with pytest.raises(SA.SeatError) as err:
+            seat("prompt")
+        assert str(int(seat.timeout_s)) in str(err.value)
+
+    def test_the_error_does_not_advise_lowering_max_tokens(self):
+        """Truncating the reply does not make a reasoning model think faster;
+        it makes it produce a shorter answer after the same wait."""
+        seat, _ = self._seat(TimeoutError("timed out"))
+        with pytest.raises(SA.SeatError) as err:
+            seat("prompt")
+        assert "do not lower max_tokens" in str(err.value)
+
+    def test_a_wrapped_timeout_is_still_a_timeout(self):
+        """Transports are injectable and some wrap the timeout in URLError.
+        Matching only the bare type sends those down the retry path."""
+        import urllib.error
+        seat, calls = self._seat(urllib.error.URLError(TimeoutError("timed out")))
+        with pytest.raises(SA.SeatError):
+            seat("prompt")
+        assert calls["n"] == 1, "a wrapped timeout was retried"
+
+    def test_other_transport_faults_still_retry(self):
+        """The narrowing must not disable retry for genuinely transient faults."""
+        seat, calls = self._seat(ConnectionResetError("reset by peer"), attempts=3)
+        with pytest.raises(SA.SeatError):
+            seat("prompt")
+        assert calls["n"] == 3, "a resettable connection stopped retrying"
+
+    def test_default_timeout_fits_a_reasoning_model(self):
+        """grok-4.6 was measured at 275.4s on a 632-token prompt. A default
+        below that guarantees the failure this change exists to remove."""
+        seat = HttpSeat(_resolved_seat(), _profile(), _transport())
+        assert seat.timeout_s >= 275.4 * 2

@@ -262,4 +262,65 @@ def usage_from_payload(payload: Mapping[str, object],
                 cur = cur[step]
         return int(cur) if isinstance(cur, (int, float)) else None
 
-    return walk(input_path), walk(output_path)
+    tin, tout = walk(input_path), walk(output_path)
+
+    # REASONING TOKENS ARE BILLED AND DO NOT APPEAR IN THE OUTPUT FIELD.
+    #
+    # Measured live on grok-4.6 with a real pass-1 prompt:
+    #   prompt_tokens 1320, completion_tokens 2433, total_tokens 16748
+    # About 13,000 tokens were generated, billed, and invisible to the
+    # configured output path. Reading the output field alone under-counted
+    # billable output by roughly 4.5x, so every ceiling in this ledger was
+    # being enforced against a fraction of the real spend -- the failure mode
+    # a ceiling exists to prevent, wearing the ceiling's own green light.
+    #
+    # The vendor's own total is the authority on what it charged for. Where a
+    # total is present and exceeds input + output, the difference is real
+    # generation and belongs in the output figure. Where no total is reported
+    # (Anthropic folds thinking tokens into output_tokens already), nothing
+    # changes.
+    #
+    # The total is found as a SIBLING of the input field rather than under a
+    # hard-coded "usage" key, because hard-coding a vendor's container name in
+    # here is the exact thing the paths above exist to avoid: Anthropic uses
+    # usage.input_tokens, Gemini uses usageMetadata.promptTokenCount, and a
+    # literal "usage" would silently do nothing for one of them while looking
+    # like it worked.
+    total = _sibling_total(payload, input_path)
+    if total is not None and tin is not None and tout is not None and total > tin + tout:
+        tout = total - tin
+    return tin, tout
+
+
+TOTAL_FIELD_NAMES = ("total_tokens", "totalTokenCount", "total_token_count")
+"""Names a vendor may give the all-in token count, checked as siblings of the
+input-token field. Not a vendor list -- a list of spellings of one idea."""
+
+
+def _sibling_total(payload: Mapping[str, object],
+                   input_path: Sequence[object] | None) -> int | None:
+    """The all-in token count sitting alongside the input-token count.
+
+    Returns None when the vendor reports no total. None means "not reported",
+    never "zero": treating a missing total as zero would make the reconcile
+    above subtract its way to a negative output count.
+    """
+    if not input_path or len(input_path) < 2:
+        return None
+    cur: object = payload
+    for step in input_path[:-1]:
+        if isinstance(step, int):
+            if not isinstance(cur, list) or not -len(cur) <= step < len(cur):
+                return None
+            cur = cur[step]
+        else:
+            if not isinstance(cur, dict) or step not in cur:
+                return None
+            cur = cur[step]
+    if not isinstance(cur, dict):
+        return None
+    for name in TOTAL_FIELD_NAMES:
+        v = cur.get(name)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return int(v)
+    return None

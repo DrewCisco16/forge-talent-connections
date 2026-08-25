@@ -32,6 +32,7 @@ import json
 import os
 import re
 from datetime import datetime
+from typing import Any
 
 from domains import ALL, Domain
 
@@ -154,9 +155,9 @@ def collect_artifact(d: Domain) -> str:
     return ask_multiline("Paste the artifact:")
 
 
-def collect_claims(d: Domain, cand_id: str) -> list[dict]:
+def collect_claims(d: Domain, cand_id: str) -> list[dict[str, Any]]:
     """One candidate's claims. Warrants are asked for, never invented."""
-    claims: list[dict] = []
+    claims: list[dict[str, Any]] = []
     _p(f"  Claims for {cand_id}. What does this position STAND ON?")
     _p(f"  (this domain leans on: {', '.join(d.primary_claim_kinds)})")
     while True:
@@ -204,7 +205,7 @@ def collect_claims(d: Domain, cand_id: str) -> list[dict]:
     return claims
 
 
-def collect_candidates(d: Domain) -> list[dict] | None:
+def collect_candidates(d: Domain) -> list[dict[str, Any]] | None:
     _p()
     _p("-" * 68)
     _p("  CANDIDATES -- the competing answers, 2 to 5")
@@ -214,7 +215,7 @@ def collect_candidates(d: Domain) -> list[dict] | None:
     for ex in d.candidate_examples:
         _p(f"    - {ex}")
     _p()
-    cands: list[dict] = []
+    cands: list[dict[str, Any]] = []
     while len(cands) < 5:
         n = len(cands) + 1
         content = ask(f"  Candidate {n} (blank to finish):", allow_blank=True)
@@ -236,7 +237,7 @@ def collect_candidates(d: Domain) -> list[dict] | None:
 # entry point
 # ---------------------------------------------------------------------------
 
-def run_intake() -> dict | None:
+def run_intake() -> dict[str, Any] | None:
     """Walks the operator through formulation. Returns a run spec, or None."""
     _p()
     _p("=" * 68)

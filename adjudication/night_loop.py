@@ -40,6 +40,7 @@ import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from adjudication_orchestrator import (
     BudgetExceeded,
@@ -61,7 +62,7 @@ class Round:
 
 
 ROUNDS: tuple[Round, ...] = (
-    Round(1, "Propose + Invert",
+    Round(1, "Inversion Analysis",
           "Propose two to four genuinely different ways to go. Then attack "
           "each of your own proposals: what would knock it down?", invents=True),
     Round(2, "FMEA + FTA + FMEDA",
@@ -79,6 +80,28 @@ ROUNDS: tuple[Round, ...] = (
           "For each surviving option: what would move belief, and by how "
           "much? Kill options that require numbers nobody can derive."),
 )
+
+CLOSER_SYSTEM_PROMPT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "closer-system-prompt.md")
+"""House rules the closer is given on every merging call.
+
+Claude PROJECTS are a claude.ai feature: project instructions, project
+knowledge, and skills are injected by that surface and do not exist on the
+API. An API key reaches the same model with none of them. Left alone, the
+closer arrives at the merge with its training and nothing else.
+
+Carrying the rules here is stronger than a Project for this purpose, because
+the file is read at runtime and recorded in the run, so what the closer was
+told is answerable months later rather than living somewhere opaque.
+"""
+
+
+def load_closer_rules(path: str = CLOSER_SYSTEM_PROMPT) -> str:
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as fh:
+        return fh.read().strip()
+
 
 MIN_THINKERS = 2
 """Below this the round is not a panel.
@@ -130,14 +153,189 @@ evaluate true is worse than no claim at all.
 
 If you quote any source, add a quote_verification claim for that quote. A
 quote is checked against the page it is attributed to.
+
+## Claim discipline -- read this before writing a single claim line
+
+Claim only what is LOAD-BEARING: a statement that, if false, changes the
+answer. If refuting it would leave your conclusion standing, it is background,
+not a claim. Write it in the prose instead.
+
+Hard ceiling: {max_claims} claim lines. This is not a target to fill. Fewer,
+heavier claims are the goal, and a round that produces four decisive checkable
+claims is worth more than forty restatements.
+
+At most {max_judgment} of your claims may be kind `judgment`. A judgment claim
+carries no warrant, so no code can rule on it and a human must settle it by
+hand. They are the expensive kind, and they are the kind that multiplies
+fastest, because every opinion can be phrased as one.
+
+WHY THIS RULE EXISTS, MEASURED. A live five-pass run produced 352 claims, of
+which 210 -- 59% -- were unwarranted judgments that escalated to the operator.
+Nothing was eliminated in any pass. The panel had not failed to reason; it had
+buried its reasoning in a queue no human would ever work through, which is the
+same thing as producing nothing. A claim a person will never adjudicate is not
+evidence. It is volume.
+
+Before you write each claim line, ask: would a person reading only my claim
+lines be able to act? If the answer needs them to read forty of them first,
+cut until it does not.
+"""
+
+MAX_CLAIMS_PER_THINKER = 12
+"""Ceiling on claim lines from one seat in one round.
+
+Five seats at this ceiling is 60 claims per round, which an operator can read.
+The measured alternative was 352 across a run, 59% of them unadjudicable.
+"""
+
+MAX_JUDGMENT_CLAIMS = 3
+"""Ceiling on WARRANTLESS claims from one seat in one round.
+
+Judgment claims cannot be checked by code and land on a human. Capping them
+forces the scarce slots onto the points that actually decide the answer, and
+pushes everything else toward a kind that a gate can rule on unattended.
 """
 
 
-def thinker_prompt(r: Round, ask: str, merged: str | None) -> str:
-    """Round 1 sees the ask alone. Later rounds see the merged answer."""
+def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
+                   max_judgment: int = MAX_JUDGMENT_CLAIMS) -> str:
+    """The claim contract with its ceilings filled in."""
+    return CLAIM_CONTRACT.format(max_claims=max_claims, max_judgment=max_judgment)
+
+
+# --------------------------------------------------------------------------
+# personas
+#
+# WHY THESE EXIST, AND WHAT THEY ARE NOT.
+#
+# The independence math in seat_independence.py says the value of five seats is
+# not five, it is five discounted by rho -- the rate at which they make the
+# SAME error. Five strong models given one identical prompt are not five
+# samples of the problem; they are five samples of one reading of the problem,
+# and they miss the same things together. Measured on a live run, pairwise
+# claim overlap sat between 0.0000 and 0.0238: the seats were not agreeing,
+# they were not even addressing the same points, and nothing was eliminated.
+#
+# A persona changes what a seat LOOKS FOR, not what it is allowed to conclude.
+# It is a search strategy, not a licence. Every persona is bound by the same
+# claim contract, the same warrants, and the same gates, and a persona that
+# produced a claim no gate would pass has produced nothing.
+#
+# A persona is NOT a role-play instruction and must never become one. "Act as
+# a skeptical engineer" invites a model to perform skepticism -- to generate
+# the TEXTURE of doubt without the substance. Each stance below therefore names
+# the specific failure it is hunting, so the seat has something to find rather
+# than a manner to adopt.
+#
+# Personas are assigned by seat order and stay fixed for the whole run. A
+# persona that moved between rounds would make measured rho meaningless,
+# because the correlation would be between shuffled positions rather than
+# between stable, differently-aimed observers.
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Persona:
+    """One stance, and the specific failure it exists to catch."""
+
+    name: str
+    hunts: str
+    """The failure mode this stance is aimed at. Named so the seat has a
+    target, rather than a personality to perform."""
+    instruction: str
+
+
+PERSONAS: tuple[Persona, ...] = (
+    Persona(
+        name="Contrarian",
+        hunts="the answer everyone reaches because it is the obvious one",
+        instruction=(
+            "Take the most likely answer and try to break it. State the "
+            "strongest case AGAINST the option you yourself find most "
+            "plausible, and say what evidence would settle it. If you cannot "
+            "construct a case against your own answer, say so explicitly -- "
+            "that is a finding about the question, not a sign you are right."
+        ),
+    ),
+    Persona(
+        name="First Principles",
+        hunts="a conclusion inherited from a premise nobody checked",
+        instruction=(
+            "Ignore how this is normally done. Derive the answer from what is "
+            "actually established here. Name every premise you are standing "
+            "on, and mark any you cannot establish from the material as "
+            "[Assumption]. A premise carried in from convention is the most "
+            "expensive kind of error, because nobody looks at it."
+        ),
+    ),
+    Persona(
+        name="Expansionist",
+        hunts="the option that was never on the list",
+        instruction=(
+            "Widen the option set before narrowing it. What has not been "
+            "considered? What would a different field do here? An option "
+            "omitted at the start cannot be recovered later -- these rounds "
+            "only eliminate, so anything missing now is missing for good."
+        ),
+    ),
+    Persona(
+        name="Executor",
+        hunts="the answer that is correct and cannot actually be done",
+        instruction=(
+            "Judge every option by whether it can be carried out. Name the "
+            "first concrete step, what it costs, what it depends on, and what "
+            "blocks it. An option with no first step is not an option. Do not "
+            "invent a cost or a timeline -- where you do not have one, write "
+            "\"verify current pricing\" or name what is missing."
+        ),
+    ),
+    Persona(
+        name="Steward",
+        hunts="the win now that is a loss later",
+        instruction=(
+            "Judge every option by what it costs after it is adopted: "
+            "maintenance, reversibility, and who is left holding it. Ask what "
+            "breaks in a year and who absorbs it. Prefer the option that can "
+            "be undone over the option that is merely better today."
+        ),
+    ),
+)
+
+
+def persona_for(seat_id: str, seat_ids: Sequence[str]) -> Persona | None:
+    """The persona for a seat, assigned by position and stable across the run.
+
+    Returns None when there are more seats than personas rather than reusing
+    one: two seats sharing a stance is the correlated pair the personas exist
+    to prevent, and a duplicate would raise rho while looking like diversity.
+    """
+    try:
+        idx = list(seat_ids).index(seat_id)
+    except ValueError:
+        return None
+    return PERSONAS[idx] if idx < len(PERSONAS) else None
+
+
+def thinker_prompt(r: Round, ask: str, merged: str | None,
+                   persona: Persona | None = None) -> str:
+    """Round 1 sees the ask alone. Later rounds see the merged answer.
+
+    persona changes what this seat looks FOR. It never changes what the seat
+    is allowed to conclude, and it never relaxes the claim contract: a stance
+    that produced a claim no gate would pass has produced nothing.
+    """
     parts = [f"## Lens for this round\n{r.name}\n",
              f"## Your task\n{r.lens}\n",
              f"## The ask\n{ask}\n"]
+    if persona is not None:
+        parts.append(
+            f"## Your stance: {persona.name}\n"
+            f"{persona.instruction}\n\n"
+            f"You hold this stance because the panel needs someone hunting "
+            f"{persona.hunts}. It is a search strategy, not a licence: it "
+            f"changes what you look for, never what you may conclude, and "
+            f"never what counts as evidence. Do not perform the stance. Do "
+            f"not announce it. Use it, and report what it found.\n"
+        )
     if r.invents:
         parts.append(
             "You are working alone. Do not speculate about what anyone else "
@@ -152,7 +350,7 @@ def thinker_prompt(r: Round, ask: str, merged: str | None) -> str:
             + wrap_untrusted(merged or "(nothing yet)")
             + "\n\nDo not invent new options. This round only eliminates.\n"
         )
-    parts.append(CLAIM_CONTRACT)
+    parts.append(claim_contract())
     return "\n".join(parts)
 
 
@@ -174,7 +372,9 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
             if r.invents else
             "Keep what survived. Remove what the check refuted. Do not add "
             "anything new.")
+    rules = load_closer_rules()
     return "\n".join([
+        (f"{rules}\n\n{'=' * 68}\n" if rules else ""),
         f"## Lens for this round\n{r.name}\n",
         f"## The ask\n{ask}\n",
         ("## The working answer entering this round\n"
@@ -188,7 +388,7 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
         "Write the merged working answer. Then list, separately:\n"
         "  KILLED: each option removed this round and the reason\n"
         "  OPEN:   each question this round could not settle\n",
-        CLAIM_CONTRACT,
+        claim_contract(),
     ])
 
 
@@ -214,6 +414,15 @@ class RoundResult:
     closer_failed_claims: int = 0
     closer_unparsed: bool = False
     """The closer wrote claim-like prose that produced no parseable claim."""
+    personas: dict[str, str] = field(default_factory=dict)
+    """seat_id -> persona name for this round.
+
+    Recorded because a stance that is not written down cannot be evaluated.
+    The whole justification for personas is that they lower measured rho by
+    making seats fail differently; without knowing which seat held which
+    stance, a later analysis cannot tell whether they did, and the feature
+    stays a belief instead of a measurement.
+    """
     closer_contaminated: bool = False
     """The closer asserted something the gates refuted in the same round.
 
@@ -259,15 +468,28 @@ def run_night(
     merged: str | None = None
     results: list[RoundResult] = []
 
+    # Fixed for the whole run. A persona that moved between rounds would make
+    # measured rho meaningless: the correlation would be between shuffled
+    # positions rather than between stable, differently-aimed observers.
+    seat_order: list[str] = list(thinkers.keys())
+
     for r in rounds:
         rd = os.path.join(out_dir, f"round-{r.n}")
         os.makedirs(rd, exist_ok=True)
         res = RoundResult(r.n, r.name)
 
         # 1-4: the thinkers, each in isolation
+        #
+        # The prompt is built PER SEAT, not once and shared, because each seat
+        # carries a persona and a shared prompt would hand all five the same
+        # stance -- five samples of one reading of the problem, which is the
+        # correlated panel the independence math discounts to nearly one seat.
         texts: dict[str, str] = {}
-        prompt = thinker_prompt(r, ask, merged)
         for seat_id, fn in thinkers.items():
+            persona = persona_for(seat_id, seat_order)
+            if persona is not None:
+                res.personas[seat_id] = persona.name
+            prompt = thinker_prompt(r, ask, merged, persona)
             try:
                 raw = fn(prompt)
             except BudgetExceeded:
@@ -384,13 +606,20 @@ def run_night(
 
 
 def live_night(ask: str, profiles_path: str, out_dir: str,
-               gates=None, ledger=None, closer_seat: str = "seat_5"):
+               gates: Sequence[Any] | None = None,
+               ledger: Any = None,
+               closer_seat: str = "seat_5") -> list[RoundResult]:
     """Run the night loop against the real panel.
 
-    The closer is a seat like any other; it is simply called last and given
-    everything. Pulling it out of the thinker set is the whole design: a model
-    that helped write an answer cannot also be the one that decides what
-    survived.
+    The closer is a seat like any other. It thinks FIRST, blind, with the other
+    four, and is then called a second time and given everything.
+
+    What makes a seat independent is that it wrote its own answer without
+    seeing anyone else's -- not that it never sees anything afterwards. The
+    closer's own pass is written cold; merging is a separate act, later, with
+    the gate verdicts already fixed. Holding it out of the thinker set instead
+    would forfeit a fifth of the panel to protect an independence the two-step
+    order already protects.
     """
     from adjudication_orchestrator import Orchestrator
     from run_adjudication import _default_gates, live_seats
@@ -400,7 +629,12 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
         raise ValueError(
             f"closer seat {closer_seat!r} is not in the panel: {sorted(seats)}"
         )
-    closer = seats.pop(closer_seat)
+    # THE CLOSER ALSO THINKS, and thinks FIRST, blind, like every other seat.
+    # Removing it from the thinker set cost a fifth of the panel for no
+    # benefit: what makes a seat independent is that it wrote its answer
+    # without seeing anyone else's, not that it never sees anything
+    # afterwards. Its pass is written cold; merging is a separate act later.
+    closer = seats[closer_seat]
     orch = Orchestrator(list(gates) if gates is not None else _default_gates())
     return run_night(ask, seats, closer, orch, out_dir)
 
@@ -416,7 +650,14 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "thinkers_failed": r.thinkers_failed, "claims": r.claims,
          "passed": r.passed, "failed": r.failed, "blocked": r.blocked,
          "escalated": r.escalated, "degraded": r.degraded,
-         "closer_failed": r.closer_failed, "merged": bool(r.merged)}
+         "closer_failed": r.closer_failed, "merged": bool(r.merged),
+         # Which stance each seat held, and whether the closer carried a
+         # refuted claim into the merged answer. Both were computed and then
+         # dropped before they reached disk, which is the same as not having
+         # them: the operator keeps this file, not the process memory.
+         "personas": r.personas,
+         "closer_contaminated": r.closer_contaminated,
+         "closer_unparsed": r.closer_unparsed}
         for r in results
     ]
     tmp = os.path.join(out_dir, "status.md.tmp")
