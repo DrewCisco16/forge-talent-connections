@@ -1345,10 +1345,19 @@ class Orchestrator:
         if not applicable:
             return None  # no mechanical warrant -> escalate
         results = [g.check(claim) for g in applicable]
-        # BLOCKED outranks FAIL. If one gate could not perform its check at
-        # all, the conjunction is not "this claim is false" -- it is "this
-        # claim was not fully examined", and reporting the stronger verdict
-        # would let an outage read as a refutation.
+        # FAIL OUTRANKS BLOCKED, and this is a correction. The original
+        # reasoning was that an unreachable gate means "not fully examined",
+        # so BLOCKED should win -- but that is wrong, and two independent
+        # reviewers caught it. False AND unknown is false: if any applicable
+        # gate definitively refuted the claim, a second gate timing out does
+        # not make the refutation provisional. The earlier order let a proven
+        # falsehood survive whenever any other gate happened to be blocked.
+        #
+        # BLOCKED still outranks PASS, which is the half that was right: a
+        # claim is not verified while one of its checks did not happen.
+        for r in results:
+            if r.status is GateStatus.FAIL:
+                return r
         for r in results:
             if r.status is GateStatus.BLOCKED:
                 return r

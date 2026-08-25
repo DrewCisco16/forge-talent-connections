@@ -113,7 +113,11 @@ quote_verification, judgment
 
 <warrant> is the mechanically checkable evidence:
     arithmetic          an expression and its result, as "3 * 4 = 12"
-    citation            a DOI or an https URL
+    citation            a DOI or an https URL. To have the DOI checked against
+                        the paper you named, write it as
+                        "<doi> :: <surname> ;; <year> ;; <title>" -- the inner
+                        separator is ";;" because this line is already
+                        pipe-delimited
     unit                a conversion, as "5 km = 5000 m"
     quote_verification  "<https url> :: <the exact quoted string>"
     code_behavior       a command that can be run

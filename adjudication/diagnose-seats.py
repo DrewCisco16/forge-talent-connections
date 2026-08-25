@@ -50,7 +50,7 @@ for sid in SEATS:
     try:
         # Endpoint comes from profiles.json, which validate_config refuses
         # unless it is https. Reason off the nosec line by convention.
-        with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=60) as resp:  # nosec B310
             status, raw = resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         status, raw = exc.code, exc.read()

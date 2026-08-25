@@ -92,6 +92,11 @@ testpaths = ["test_suite.py", "test_properties.py"]
                 # serialised into the audit chain; StrEnum changes str() output
                 # and would silently alter records already written.
 ]
+"diagnose-seats.py" = [
+    "PLR0913", "PLR0917",  # redirect_request's signature is urllib's; it must
+                # match exactly or the override is never called and redirects
+                # resume being followed with the credential attached.
+]
 "seat_independence.py" = [
     "PLR0913", "PLR0917",  # diagnose() takes six optional data sources by design
     "SIM108",   # the chao1 f2>0 branch is clearer as if/else than as a ternary

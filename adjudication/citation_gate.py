@@ -17,7 +17,13 @@ other check in the system and reaches a committee.
 
 WARRANT FORMAT, extending the citation warrant rather than adding a kind:
 
-    10.1038/s41586-020-2649-2 :: Harris | 2020 | Array programming with NumPy
+    10.1038/s41586-020-2649-2 :: Harris ;; 2020 ;; Array programming with NumPy
+
+The inner separator is ";;" and NOT "|", because the outer claim line is
+already pipe-delimited: "CLAIM | kind | warrant | text". A warrant containing
+pipes was truncated by line_claim_extractor at the first inner one, so this
+gate never applied to anything a model actually emitted -- it passed its unit
+tests, where claims were constructed directly, and was dead in production.
 
 A bare DOI with no metadata still resolves, and still passes the resolution
 gate. It is weaker evidence and the report says so, because "this identifier
@@ -124,10 +130,10 @@ class CitationFieldMatchGate:
         if not warrant or "::" not in warrant:
             return None
         doi, _, meta = warrant.partition("::")
-        bits = [b.strip() for b in meta.split("|")]
+        bits = [b.strip() for b in meta.split(";;")]
         if len(bits) < 3:
             return None
-        surname, year_raw, title = bits[0], bits[1], "|".join(bits[2:]).strip()
+        surname, year_raw, title = bits[0], bits[1], ";;".join(bits[2:]).strip()
         if not (doi.strip() and surname and title):
             return None
         try:
@@ -152,7 +158,7 @@ class CitationFieldMatchGate:
         parsed = self.parse_warrant(claim.warrant)
         if parsed is None:  # unreachable via _route; guard, not cast
             return GateResult(self.name, GateStatus.INAPPLICABLE,
-                              "warrant is not '<doi> :: <surname> | <year> | <title>'")
+                              "warrant is not '<doi> :: <surname> ;; <year> ;; <title>'")
         doi, surname, year, title = parsed
         rec = self._record(doi)
         if rec is None:
