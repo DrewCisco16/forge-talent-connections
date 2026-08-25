@@ -17,7 +17,10 @@
     "_source": "https://developers.openai.com/api/docs/models",
     "input_per_mtok": 4.0,
     "output_per_mtok": 20.0,
-    "verified_on": "2026-08-25"
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
   },
   "seat_2": {
     "_vendor": "Google",
@@ -26,7 +29,10 @@
     "_note": "standard tier, prompts <= 200k. Above 200k it is $4.00/$18.00.",
     "input_per_mtok": 2.0,
     "output_per_mtok": 12.0,
-    "verified_on": "2026-08-25"
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
   },
   "seat_3": {
     "_vendor": "Mistral",
@@ -35,7 +41,10 @@
     "_note": "Mistral Medium 3.5, standard regional inference tier.",
     "input_per_mtok": 1.5,
     "output_per_mtok": 7.5,
-    "verified_on": "2026-08-25"
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
   },
   "seat_4": {
     "_vendor": "xAI",
@@ -44,7 +53,10 @@
     "_note": "prompts under 200k. Above 200k it is $4.00/$12.00.",
     "input_per_mtok": 2.0,
     "output_per_mtok": 6.0,
-    "verified_on": "2026-08-25"
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
   },
   "seat_5": {
     "_vendor": "Anthropic",
@@ -53,6 +65,9 @@
     "_note": "base input / output. Cache reads are 0.1x input if caching is ever enabled.",
     "input_per_mtok": 5.0,
     "output_per_mtok": 25.0,
-    "verified_on": "2026-08-25"
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it."
   }
 }

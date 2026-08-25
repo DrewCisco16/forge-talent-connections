@@ -594,3 +594,174 @@ class TestPassIdReachesTheLedgerFromTheRealPath:
         assert all(c.pass_id for c in led.calls), "a call was not attributed"
         assert led.stage_spent("r1") > 0
         assert led.stage_spent("r2") > 0
+
+
+# ---------------------------------------------------------------------------
+# Codex S3-1 — the pre-call figure is an ESTIMATE, and the code now says so
+#
+# It cannot be a guarantee: no provider publishes a contractual maximum for
+# the complete serialised request plus all billable output. The reviewer's
+# conclusion was that if such a bound is unavailable, the code cannot honestly
+# offer a hard pre-dispatch ceiling. So it offers what it can keep instead --
+# the estimate is made from the real request, sizes with no documented price
+# are refused, and a bill that exceeds its authorisation stops the run.
+# ---------------------------------------------------------------------------
+
+class TestTheEstimateIsMadeFromTheRealRequest:
+
+    def _seat(self, led, system="", max_tokens=4096, payload=None):
+        prof = SA.ProviderProfile(
+            name="v", endpoint="https://a.invalid/v1",
+            auth_header="authorization", auth_template="Bearer {key}",
+            build_body=lambda m, p, mt, t: {"model": m, "system": system,
+                                            "prompt": p},
+            extract_text=lambda p: p.get("text"),
+            usage_input_path=["usage", "prompt_tokens"],
+            usage_output_path=["usage", "completion_tokens"])
+        body = json.dumps(payload or {"text": "ok"}).encode()
+        return SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), prof,
+                           lambda *a, **k: (200, body), ledger=led,
+                           max_tokens=max_tokens)
+
+    def test_a_large_constant_field_in_the_body_is_priced(self):
+        """The estimate priced only the prompt, so a short question carrying a
+        1,000,000-character constant system field was checked as if it were
+        the question alone: a $0.004 ceiling authorised it and the reported
+        usage booked $0.333."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=0.004)
+        with pytest.raises(CL.CeilingReached):
+            self._seat(led, system="X" * 1_000_000)("a short question")
+        assert led.spent == 0.0
+
+    def test_the_body_estimate_over_counts_rather_than_under_counts(self):
+        assert CL.estimate_request_tokens(b"x" * 3000) > 900
+
+    def test_an_ordinary_request_still_goes_through(self):
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=5.00)
+        assert self._seat(led)("a normal question about build versus buy") == "ok"
+
+
+class TestPricingTiers:
+    """A run estimated at $0.686 against a $0.70 cap was authorised; at the
+    long-context rate the same call was $1.249."""
+
+    RATE = CL.Rate(3.0, 15.0, verified_on=date.today().isoformat(),
+                   tiers=((200_000, 6.0, 22.5),), max_input_tokens=1_000_000)
+
+    def test_a_call_below_the_threshold_uses_the_standard_price(self):
+        assert self.RATE.tier_for(50_000) == (3.0, 15.0)
+
+    def test_a_call_above_the_threshold_uses_the_long_context_price(self):
+        assert self.RATE.tier_for(220_001) == (6.0, 22.5)
+
+    def test_the_cost_changes_at_the_boundary(self):
+        below = self.RATE.cost(199_999, 20_480)
+        above = self.RATE.cost(200_001, 20_480)
+        assert above > below * 1.5
+
+    def test_a_request_larger_than_any_documented_price_is_refused(self):
+        """Pricing it at the closest tier would invent the number the ceiling
+        is computed from, which is the one thing a ceiling may not do."""
+        led = CL.CostLedger(rates={"seat_1": self.RATE}, per_run=1000.0)
+        with pytest.raises(CL.CeilingReached, match="exceeds the largest size"):
+            led.check_before_call("seat_1", 2_000_000, 1000)
+
+    def test_tiers_are_read_from_the_rates_file(self):
+        rates = CL.rates_from_config({"seat_1": {
+            "input_per_mtok": 3.0, "output_per_mtok": 15.0,
+            "verified_on": date.today().isoformat(),
+            "tiers": [[200000, 6.0, 22.5]], "max_input_tokens": 1000000}})
+        assert rates["seat_1"].tier_for(300_000) == (6.0, 22.5)
+        assert rates["seat_1"].max_input_tokens == 1_000_000
+
+    def test_a_malformed_tier_is_ignored_rather_than_trusted(self):
+        rates = CL.rates_from_config({"seat_1": {
+            "input_per_mtok": 3.0, "output_per_mtok": 15.0,
+            "verified_on": date.today().isoformat(),
+            "tiers": [[200000, "six", 22.5], "not a tier", [1, 2]]}})
+        assert rates["seat_1"].tiers == ()
+
+
+class TestAnOverrunStopsTheRun:
+    """The guarantee this code CAN keep. The operator is not promised the
+    limit will never be crossed -- nothing here can promise that. They are
+    promised it will not be crossed twice without them being told."""
+
+    def _seat(self, led, reported_tokens, max_tokens=100):
+        prof = SA.ProviderProfile(
+            name="v", endpoint="https://a.invalid/v1",
+            auth_header="authorization", auth_template="Bearer {key}",
+            build_body=lambda m, p, mt, t: {"model": m, "prompt": p},
+            extract_text=lambda p: p.get("text"),
+            usage_input_path=["usage", "prompt_tokens"],
+            usage_output_path=["usage", "completion_tokens"])
+        body = json.dumps({"text": "ok", "usage": {
+            "prompt_tokens": reported_tokens,
+            "completion_tokens": reported_tokens}}).encode()
+        return SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), prof,
+                           lambda *a, **k: (200, body), ledger=led,
+                           max_tokens=max_tokens)
+
+    def test_a_bill_above_the_authorisation_is_recorded(self):
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1000.0)
+        self._seat(led, 5_000_000)("a short question")
+        assert led.overruns
+        assert "authorised" in led.overruns[0]
+
+    def test_the_next_call_is_refused(self):
+        """An estimate that was wrong once is wrong for every call of the same
+        shape. Continuing spends against a bound already shown not to hold."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1000.0)
+        seat = self._seat(led, 5_000_000)
+        seat("a short question")
+        with pytest.raises(CL.CeilingOverrun):
+            seat("another question")
+
+    def test_a_bill_within_tolerance_does_not_halt(self):
+        """A vendor's token accounting differs slightly from ours, and halting
+        on a fraction of a cent would make the control unusable."""
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1000.0)
+        seat = self._seat(led, 10, max_tokens=4096)
+        seat("a short question")
+        seat("another question")
+        assert led.overruns == []
+
+    def test_the_report_says_the_figure_is_an_estimate(self):
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1000.0)
+        self._seat(led, 5_000_000)("a short question")
+        text = "\n".join(led.render())
+        assert "CEILING OVERRUN" in text
+        assert "ESTIMATE, not a guarantee" in text
+
+    def test_halting_can_be_switched_off_deliberately(self):
+        led = CL.CostLedger(rates={"seat_1": LIVE_RATE}, per_run=1000.0,
+                            halt_on_overrun=False)
+        seat = self._seat(led, 5_000_000)
+        seat("a short question")
+        seat("another question")
+        assert len(led.overruns) == 2
+
+
+class TestAnUnboundedRateIsVisible:
+
+    def test_a_rate_with_no_documented_maximum_is_named(self):
+        """Without one, a request of any size is authorised. Inventing a
+        context limit would be inventing the number the limit is made of, so
+        it is reported instead."""
+        led = CL.CostLedger(rates={"seat_1": CL.Rate(
+            2.0, 6.0, verified_on=date.today().isoformat())})
+        assert led.unbounded_rates() == ["seat_1"]
+        led.record("seat_1", 10, 10)
+        assert "NO DOCUMENTED MAXIMUM" in "\n".join(led.render())
+
+    def test_a_bounded_rate_is_not_named(self):
+        led = CL.CostLedger(rates={"seat_1": CL.Rate(
+            2.0, 6.0, verified_on=date.today().isoformat(),
+            max_input_tokens=200_000)})
+        assert led.unbounded_rates() == []
+
+    def test_the_shipped_rates_file_parses_with_the_new_fields(self):
+        with open("rates.json", encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        assert len(rates) == 5
+        assert CL.CostLedger(rates=rates).stale_rates() == []

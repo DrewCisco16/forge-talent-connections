@@ -108,7 +108,7 @@ def ask_ceiling(default: str = "3.00") -> float | None:
     """
     from intake import ask as _ask
     while True:
-        raw = _ask(f"  Hard spend ceiling in dollars [{default}]:",
+        raw = _ask(f"  Spend ceiling in dollars [{default}]:",
                    allow_blank=True) or default
         try:
             value = float(raw)
@@ -218,6 +218,10 @@ def night() -> None:
     _p()
     _p("-" * 68)
     _p(f"  5 rounds x 5 blind seats + 5 merges = 30 calls. Ceiling ${cap}.")
+    _p("  The ceiling is checked against an ESTIMATE of each call, because no")
+    _p("  vendor publishes a guaranteed maximum for a request plus all its")
+    _p("  billable output. If a call ever bills more than it was authorised")
+    _p("  for, the run stops there rather than spending again.")
     _p("  Allow 30-90 minutes. Reasoning models take minutes per call and")
     _p("  the seats run one at a time; progress prints as each one answers.")
     _p(f"  folder: {os.path.relpath(out, HERE)}")

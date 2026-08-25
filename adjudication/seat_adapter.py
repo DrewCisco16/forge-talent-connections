@@ -339,7 +339,7 @@ class HttpSeat:
             # ceiling check, and a vendor bills each of them. A timed-out
             # request produced no ledger entry at all, so a run that dispatched
             # work and paid for it reported "no billable call was made".
-            self._precheck(prompt)
+            self._precheck(prompt, body)
             try:
                 status, raw = self.transport(
                     "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
@@ -419,7 +419,10 @@ class HttpSeat:
         except Exception:  # noqa: BLE001 - unmeasured is honest, guessing is not
             tin = tout = None
         self.last_usage = (tin, tout)
-        self.ledger.record(self.seat_id, tin, tout, pass_id=self.pass_id)
+        # authorised= is what the pre-call check allowed. record() compares
+        # the bill against it and stops the run if the estimate did not hold.
+        self.ledger.record(self.seat_id, tin, tout, pass_id=self.pass_id,
+                           authorised=self._last_worst_case)
 
     def set_pass(self, pass_id: str | None) -> None:
         """Tell this seat which pass its next calls belong to.
@@ -437,7 +440,7 @@ class HttpSeat:
         self.pass_id = pass_id
 
 
-    def _precheck(self, prompt: str) -> None:
+    def _precheck(self, prompt: str, body: bytes = b"") -> None:
         """Refuse this dispatch if its worst case would cross a ceiling.
 
         The bound is derived from the ACTUAL prompt rather than a flat 3,000
@@ -448,16 +451,25 @@ class HttpSeat:
         """
         if self.ledger is None:
             return
-        from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER, estimate_input_tokens
-        self._last_worst_case = self._worst_case_dollars(prompt)
+        from cost_ledger import (
+            HIDDEN_OUTPUT_MULTIPLIER,
+            estimate_input_tokens,
+            estimate_request_tokens,
+        )
+        # THE SERIALISED BODY, not just the prompt. A short question carrying
+        # a large constant system field was checked as if it were the question
+        # alone: a $0.004 ceiling authorised a request that billed $0.333.
+        est_in = max(self.est_input_tokens,
+                     estimate_input_tokens(prompt),
+                     estimate_request_tokens(body))
+        self._last_worst_case = self._worst_case_dollars(prompt, body)
         self.ledger.check_before_call(
-            self.seat_id,
-            max(self.est_input_tokens, estimate_input_tokens(prompt)),
+            self.seat_id, est_in,
             int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER),
             pass_id=self.pass_id,
         )
 
-    def _worst_case_dollars(self, prompt: str) -> float:
+    def _worst_case_dollars(self, prompt: str, body: bytes = b"") -> float:
         """What this dispatch could have cost, for enforcement purposes."""
         if self.ledger is None:
             return 0.0
@@ -465,8 +477,10 @@ class HttpSeat:
         rate = getattr(self.ledger, "rates", {}).get(self.seat_id)
         if rate is None:
             return 0.0
+        from cost_ledger import estimate_request_tokens
         return float(rate.cost(
-            max(self.est_input_tokens, estimate_input_tokens(prompt)),
+            max(self.est_input_tokens, estimate_input_tokens(prompt),
+                estimate_request_tokens(body)),
             int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER)))
 
     def _record_unmeasured(self, why: str) -> None:
