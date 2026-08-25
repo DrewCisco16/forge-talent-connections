@@ -424,13 +424,61 @@ _PER_PHRASE = re.compile(r"\bper\s+\w+", re.IGNORECASE)
 
 _LINKING = re.compile(
     r"\b(?:is|are|was|were|totals|totalling|comes to|come to|amounts to|"
-    r"equals|costs|adds up to|works out to|will be|would be)\b",
+    r"equals|costs?|adds up to|works out to|will be|would be|uses?|requires?|"
+    r"takes?|needs?|avoids?|saves?|spends?|consumes?|yields?|produces?|"
+    r"means?|gives?|leaves?|returns?)\b",
     re.IGNORECASE)
+"""Verbs that introduce what a quantity claim ASSERTS.
+
+The list was six verbs long and real model output does not oblige. A live
+canary produced "At six API calls per round, a five-round run USES 30 API
+calls" -- a textbook restatement of arithmetic that had just passed -- and no
+verb matched, so the whole sentence counted as the assertion and it was
+rejected for mentioning five, round and run.
+
+Bare "total" is still deliberately absent: it matched "in total" at the end of
+an ordinary cost sentence and left the assertion empty."""
 """Verbs that introduce what a quantity claim ASSERTS.
 
 Bare "total" is deliberately absent. It matched "in total" at the end of an
 ordinary cost sentence, so the assertion after the last linking verb was the
 empty string and every genuine claim was rejected."""
+
+
+def _leading_token(assertion: str) -> str:
+    """The first content token of an assertion, normalised if numeric.
+
+    Articles and prepositions are skipped: "the 30 API calls" and "30 API
+    calls" assert the same thing.
+    """
+    skip = {"a", "an", "the", "of", "at", "in", "to", "for", "about", "only",
+            "just", "some", "around", "roughly"}
+    text = (assertion or "").strip()
+
+    # Drop leading articles and prepositions, then look for a number FIRST.
+    # Tokenising by word split "1,200" into "1" and "200", so a perfectly
+    # ordinary formatted figure looked like an assertion about 1.
+    while True:
+        m = re.match(r"\s*([A-Za-z]+)\b", text)
+        if not m or m.group(1).casefold() not in skip:
+            break
+        text = text[m.end():]
+
+    number = _NUMBER.match(text.strip())
+    if number:
+        nums = _numbers(number.group(0))
+        if nums:
+            return next(iter(nums))
+
+    # Raw tokens, not _content_words: that drops single characters, so an
+    # assertion of exactly "4" had no leading token at all and the plainest
+    # possible restatement -- "the total is 4" -- was rejected.
+    for word in _WORDISH.findall(text.casefold()):
+        if word in skip:
+            continue
+        nums = _numbers(word)
+        return next(iter(nums)) if nums else word
+    return ""
 
 
 def _quantity_claim_unsupported(claim: Claim, warrant: str,
@@ -456,6 +504,14 @@ def _quantity_claim_unsupported(claim: Claim, warrant: str,
     proceed, code 4" carries 4, but what it ASSERTS after the verb is being
     safe -- and arithmetic settles nothing about that.
     """
+    # THE MOST LITERAL RESTATEMENT: the claim IS the warrant. A seat writing
+    # "CLAIM | arithmetic | 2 + 2 = 4 | 2 + 2 = 4" has asserted exactly what
+    # was checked and nothing else, and every positional rule below is about
+    # sentences, which this is not.
+    squeeze = " ".join((text or "").split()).casefold()
+    if squeeze and squeeze == " ".join(warrant.split()).casefold():
+        return None
+
     _, _, rhs = warrant.rpartition("=")
     results = _numbers(rhs)
     claimed = _numbers(text)
@@ -506,19 +562,23 @@ def _quantity_claim_unsupported(claim: Claim, warrant: str,
             f"dimension is not the same claim."
         )
 
-    extra = sorted({w for w in asserted
-                    if w not in _QUANTITY_VOCABULARY
-                    and w not in _UNIT_WORDS
-                    and not w.isdigit()
-                    and w not in _content_words(warrant)})
-    if extra:
+    # THE VALUE MUST LEAD THE ASSERTION.
+    #
+    # Requiring the assertion to contain ONLY quantity words rejected every
+    # real claim: "30 API calls per item at six calls per round" mentions
+    # items and rounds, and is exactly a restatement of the arithmetic. What
+    # actually separates it from "SAFE to proceed, code 4" is WHERE the number
+    # sits. In a restatement the value is what the predicate is about, so it
+    # comes first; in the other the predicate is about being safe and the
+    # number trails as an aside.
+    lead = _leading_token(assertion_core)
+    if results and lead not in results:
         return (
-            f"THE CLAIM ASSERTS MORE THAN THE WARRANT CHECKS: "
-            f"{warrant.strip()!r} was recomputed and held, but what the claim "
-            f"states is {assertion.strip()[:50]!r}, which also asserts "
-            f"something about {', '.join(repr(w) for w in extra[:3])}"
-            + (" and more" if len(extra) > 3 else "")
-            + ". Arithmetic settles the arithmetic and nothing else."
+            f"THE NUMBER IS NOT WHAT THE CLAIM ASSERTS: after the verb it "
+            f"says {assertion.strip()[:60]!r}, which is about "
+            f"{lead or 'something else'} rather than "
+            f"{' or '.join(sorted(results))}. A verified quantity settles the "
+            f"quantity, not whatever else the sentence says."
         )
     return None
 
@@ -692,6 +752,33 @@ def _agrees_to_written_precision(actual: Fraction, claimed: str) -> bool:
         return False
 
 
+_UNIT_AFTER_NUMBER = re.compile(r"(?<=[\d)])\s*([A-Za-z][A-Za-z ]*)")
+
+
+def _split_unit(side: str) -> tuple[str, str]:
+    """An arithmetic side split into its expression and its unit label.
+
+    "30 API calls - 6 API calls" -> ("30  - 6 ", "api calls")
+
+    A unit is an alphabetic run FOLLOWING a number, wherever it appears --
+    seats write "30 API calls - 6 API calls", not just a trailing label. Runs
+    that do not follow a number are left alone, so `sqrt(4)` is still an
+    unsupported call rather than a quantity in sqrts.
+
+    A side using two different units returns no label, which leaves the
+    expression unparseable and the claim BLOCKED: this code does not know how
+    to add metres to seconds, and guessing is worse than saying so.
+    """
+    text = (side or "").strip()
+    found = [" ".join(m.group(1).split()).casefold()
+             for m in _UNIT_AFTER_NUMBER.finditer(text)]
+    if not found:
+        return text, ""
+    if len(set(found)) > 1:
+        return text, ""
+    return _UNIT_AFTER_NUMBER.sub(" ", text).strip(), found[0]
+
+
 def _show(value: object) -> str:
     """Print a number without inventing precision it does not have.
 
@@ -736,6 +823,26 @@ class ArithmeticGate:
             return GateResult(self.name, GateStatus.INAPPLICABLE,
                               "warrant is not '<expression> = <value>'")
         expr, claimed = warrant.rsplit("=", 1)
+
+        # A UNIT LABEL ON BOTH SIDES IS PART OF THE CLAIM, NOT A PARSE ERROR.
+        #
+        # The contract tells seats to put units in the warrant so the currency
+        # or the thing counted is checked rather than assumed. A live canary
+        # then produced "5 * 6 API calls = 30 API calls" and the evaluator
+        # BLOCKED all of them: it cannot parse "API calls", so following the
+        # instruction made the claim uncheckable. Guidance and gate have to
+        # agree.
+        #
+        # The label is stripped for evaluation and compared separately, so
+        # "5 dollars * 6 = 30 euros" is still refused -- the arithmetic holds
+        # and the units do not.
+        expr, expr_unit = _split_unit(expr)
+        claimed, claimed_unit = _split_unit(claimed)
+        if expr_unit and claimed_unit and expr_unit != claimed_unit:
+            return GateResult(
+                self.name, GateStatus.FAIL,
+                f"UNIT MISMATCH: the expression is in {expr_unit!r} and the "
+                f"result is claimed in {claimed_unit!r}")
 
         try:
             tree = ast.parse(expr.strip(), mode="eval")

@@ -1458,9 +1458,19 @@ class TestCodeOwnsTheSurvivorSet:
         happened to be written in, with nothing recorded. Reversing the
         closer's ordering changed which option vanished."""
         text = "\n".join(f"{i}. option number {i} written out here"
-                         for i in range(1, 15))
+                         for i in range(1, OS.MAX_OPTIONS + 3))
         with pytest.raises(OS.TooManyOptions):
             OS.parse_options(text)
+
+    def test_a_normal_five_seat_round_is_not_refused(self):
+        """The limit was 12, and a live canary produced 16 from five seats
+        proposing three or four options each -- so the whole run was recorded
+        as having no usable option set and nothing could be eliminated. The
+        guard is against a seat emitting a hundred lines, not against a panel
+        considering the answers it actually proposed."""
+        text = "\n".join(f"{i}. a genuinely distinct option number {i}"
+                         for i in range(1, 21))
+        assert len(OS.parse_options(text)) == 20
 
     def test_prose_around_the_list_is_not_an_option(self):
         opts = OS.parse_options(

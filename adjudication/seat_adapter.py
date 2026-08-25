@@ -145,6 +145,20 @@ def redact_url(url: str) -> str:
     return f"{p.scheme}://{userinfo}{host}{port}{p.path}{query}"
 
 
+def _stop_reason(payload: Mapping[str, Any]) -> str:
+    """Whatever this vendor calls the reason it stopped generating."""
+    for key in ("stop_reason", "finish_reason"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        value = choices[0].get("finish_reason")
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 class SeatError(RuntimeError):
     """A seat could not produce a verified reply. Carries no credential."""
 
@@ -550,10 +564,31 @@ class HttpSeat:
             ) from None
 
         if text is None:
+            # SAY WHY THE TEXT IS MISSING, not just that it is.
+            #
+            # "reply contained no text at the configured path" reads as a
+            # broken text_path, so the operator goes looking at their profile.
+            # The commonest cause is nothing of the sort: a reasoning model
+            # given a long prompt and a small cap spends the whole budget
+            # thinking and is cut off before it writes anything. Both look
+            # identical from here, and only one is fixed by editing a config
+            # file. A live canary lost its closer to exactly this and the
+            # message pointed at the wrong thing.
+            stop = _stop_reason(payload)
+            if stop in ("max_tokens", "length", "MAX_TOKENS"):
+                raise SeatError(
+                    f"seat {self.seat_id}: {self.profile.name} was cut off at "
+                    f"the {self.max_tokens}-token cap before writing any "
+                    f"reply (stop reason {stop!r}). On a reasoning model the "
+                    f"thinking counts against that cap, so a long prompt can "
+                    f"consume all of it. Raise max_tokens for this seat; the "
+                    f"text path is not the problem."
+                )
             raise SeatError(
                 f"seat {self.seat_id}: {self.profile.name} reply contained no "
-                f"text at the configured path. Top-level keys: "
-                f"{sorted(payload)[:8]}"
+                f"text at the configured path"
+                + (f" (stop reason {stop!r})" if stop else "")
+                + f". Top-level keys: {sorted(payload)[:8]}"
             )
         if not isinstance(text, str):
             raise SeatError(

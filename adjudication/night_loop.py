@@ -180,10 +180,14 @@ quote_verification, judgment
 ## Saying which option a claim is about
 
 From round two on you are shown the surviving options, each with a bracketed
-id like [opt_3f9a2c]. If a claim bears on one of them, put that id in front of
-the claim text:
+id. If a claim bears on one of them, copy that id in front of the claim text,
+exactly as it appears in the list above:
 
-    CLAIM | arithmetic | 12 * 50 = 600 | opt_3f9a2c | the build option totals 600
+    CLAIM | arithmetic | 12 * 50 = 600 | <paste an id from the list> | the build option totals 600
+
+COPY A REAL ID. Do not write the placeholder above and do not invent one that
+looks like an id -- an id that is not in the list names no option, so the claim
+cannot remove anything and the work of making it is wasted.
 
 THIS IS THE ONLY WAY A CLAIM CAN REMOVE AN OPTION. Nothing infers the link
 from wording. Describing an option does not connect a claim to it, and a claim
@@ -205,6 +209,8 @@ what the claim says.
                         assertions, and a check that never saw them cannot
                         settle them. The claim is then accepted as written
                         rather than escalated for a person to read.
+                        A unit may be a word: "5 * 6 API calls = 30 API calls"
+                        is checked, and both sides must name the same unit.
     citation            a DOI or an https URL. To have the DOI checked against
                         the paper you named, write it as
                         "<doi> :: <surname> ;; <year> ;; <title>" -- the inner

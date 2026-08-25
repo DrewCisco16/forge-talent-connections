@@ -58,12 +58,18 @@ not settle. Those bullets were parsed as options, so a hole became a candidate
 answer.
 """
 
-MAX_OPTIONS = 12
+MAX_OPTIONS = 30
 """More than this and round one has not narrowed anything.
 
-Five seats proposing two to four options each can produce twenty near
-duplicates. A list nobody can hold in mind is not an option set, and every
-later round would spend its budget re-reading it.
+WAS 12, AND THAT REFUSED A PERFECTLY NORMAL ROUND. Five seats each proposing
+three or four options is fifteen to twenty entries before any merging, and a
+live canary produced sixteen -- so the whole run was recorded as having no
+usable option set and nothing could be eliminated from it.
+
+The number has to sit above what five seats genuinely produce, because merging
+happens AFTER this and is what brings the count down. This is a guard against
+a seat emitting a hundred lines, not a limit on how many answers a panel may
+consider.
 """
 
 MIN_OPTION_CHARS = 12

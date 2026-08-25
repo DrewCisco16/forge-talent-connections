@@ -5430,3 +5430,88 @@ class TestAQuantityClaimIsUsableAndStillSafe:
         unusable while the number asserted was exactly the one computed."""
         assert self._accepts("the licence is 47000 dollars per year",
                              "12 * 4000 dollars = 47000 dollars")
+
+
+class TestQuantityClaimsFromARealPanel:
+    """Every claim below is verbatim from a live five-vendor canary, and every
+    one of them was REJECTED before this. The panel had done good work: it
+    proposed options, computed costs, and wrote them as restatements of the
+    arithmetic. My rule threw all of it away -- 26 claims, 22 escalated, zero
+    ruled. That is the reading list the reviewer warned about, and it cost
+    real money to discover."""
+
+    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
+        return AO.warrant_supports(
+            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
+
+    @pytest.mark.parametrize("text,warrant", [
+        ("At six API calls per round, a five-round run uses 30 API calls",
+         "5 * 6 API calls = 30 API calls"),
+        ("At six API calls per round, stopping after a round-one null avoids "
+         "24 API calls", "4 * 6 API calls = 24 API calls"),
+        ("AlwaysFive costs 30 API calls per item at six calls per round",
+         "5 * 6 API calls = 30 API calls"),
+        ("MinTwoThenZeroStop costs 12 API calls per item if round two also "
+         "removes nothing", "2 * 6 API calls = 12 API calls"),
+        ("the total comes to 1,200 units", "600 * 2 = 1200"),
+        ("2 + 2 = 4", "2 + 2 = 4"),
+    ])
+    def test_a_real_panels_quantity_claim_is_usable(self, text, warrant):
+        assert self._accepts(text, warrant), text
+
+    @pytest.mark.parametrize("text,warrant", [
+        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
+        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
+        ("Launch immediately.", "2 + 2 = 5"),
+        ("the parser is secure", "2 + 2 = 4"),
+        ("Running absolute exhaustion costs approximately 30 API calls",
+         "5 * 6 API calls = 30 API calls"),
+    ])
+    def test_the_attacks_are_still_blocked(self, text, warrant):
+        """What separates "30 API calls per item at six calls per round" from
+        "SAFE to proceed, code 4" is WHERE the number sits. In a restatement
+        the value is what the predicate is about, so it leads; in the other
+        the predicate is about being safe and the number trails as an aside."""
+        assert not self._accepts(text, warrant), text
+
+
+class TestUnitsInAnArithmeticWarrant:
+    """The contract tells seats to put units in the warrant so the currency or
+    the thing counted is checked rather than assumed. A live canary then wrote
+    "5 * 6 API calls = 30 API calls" and the evaluator BLOCKED every one of
+    them: it cannot parse "API calls". Following the instruction made the claim
+    uncheckable, so guidance and gate disagreed."""
+
+    g = ArithmeticGate()
+
+    def _check(self, warrant):
+        return self.g.check(Claim("c", "t", ClaimKind.ARITHMETIC, warrant))
+
+    @pytest.mark.parametrize("warrant", [
+        "5 * 6 API calls = 30 API calls",
+        "30 API calls - 6 API calls = 24 API calls",
+        "12 * 4000 dollars = 48000 dollars",
+    ])
+    def test_a_unit_label_does_not_block_the_check(self, warrant):
+        assert self._check(warrant).status is GateStatus.PASS, warrant
+
+    def test_the_arithmetic_is_still_checked_through_the_label(self):
+        assert self._check("5 * 6 API calls = 31 API calls").status \
+            is GateStatus.FAIL
+
+    def test_units_that_disagree_are_refused(self):
+        """The arithmetic holds and the units do not."""
+        assert self._check("5 dollars * 6 = 30 euros").status is GateStatus.FAIL
+
+    def test_two_different_units_on_one_side_are_blocked(self):
+        """This code does not know how to add metres to seconds, and guessing
+        is worse than saying so."""
+        assert self._check("5 metres + 3 seconds = 8 things").status \
+            is GateStatus.BLOCKED
+
+    def test_a_function_call_is_still_not_a_unit(self):
+        assert self._check("sqrt(4) = 2").status is GateStatus.BLOCKED
+
+    def test_ordinary_arithmetic_is_untouched(self):
+        for warrant in ("2 + 2 = 4", "2 ** 10 = 1024", "12 * 50 = 600"):
+            assert self._check(warrant).status is GateStatus.PASS, warrant
