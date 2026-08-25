@@ -144,3 +144,33 @@ python_files = ["test_*.py"]
 # Scans the engine modules. The test suite is excluded: it deliberately
 # constructs hostile payloads, and flagging those is noise, not signal.
 exclude_dirs = [".venv"]
+
+# ---------------------------------------------------------------------------
+# Coverage: source everything, omit deliberately, say why.
+#
+# CI previously named seven modules with --cov. A module added afterwards was
+# unmeasured BY DEFAULT, which is the wrong default for a gate -- night_loop.py
+# and cost_ledger.py both ran on a live paid panel without ever appearing in
+# the coverage report. Sourcing "." inverts that: new code counts unless an
+# entry below gives a reason it should not.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["."]
+omit = [
+    ".venv/*",
+    # Tests measure the code; measuring the tests measures nothing and
+    # inflates the total with thousands of trivially-executed lines.
+    "test_*.py",
+    # Operator scripts, run by hand against a live panel. They exist to
+    # reproduce a failure once, not to be exercised by CI, and covering them
+    # would mean mocking a vendor to test a diagnostic for that vendor.
+    "diagnose-*.py",
+    "make_review_bundles.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

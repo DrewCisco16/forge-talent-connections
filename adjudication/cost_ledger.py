@@ -224,7 +224,20 @@ def _as_float(v: object) -> float:
 
 
 def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate]:
-    """Build rates from a {seat_id: {input, output, verified_on}} mapping."""
+    """Build rates from a mapping of seat id to price.
+
+    Each entry takes input_per_mtok, output_per_mtok, and verified_on -- the
+    full field names, matching rates.json. An earlier version of this line
+    said "input, output", which no code has ever read: a config written to
+    that description produces a rate of $0.00 per million tokens on both
+    sides, and a seat priced at zero can never cross a ceiling.
+
+    That failure is caught rather than silent, but only indirectly: a zero
+    rate carries no verified_on it can justify, so the seat lands in
+    stale_rates() and the report says the ceiling does not bound anything.
+    Keys prefixed with an underscore are treated as comments and skipped,
+    which is how rates.json carries _vendor and _source alongside the prices.
+    """
     out: dict[str, Rate] = {}
     for seat, cfg in raw.items():
         if seat.startswith("_"):

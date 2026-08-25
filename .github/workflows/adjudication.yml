@@ -49,17 +49,28 @@ jobs:
       - name: Type check
         run: mypy
 
+      # DISCOVERY, NOT A LIST, on both axes.
+      #
+      # This step named two test files and seven covered modules. Both lists
+      # drifted: test_night_loop.py and test_cost_ledger.py were never run
+      # here, and night_loop.py -- the engine implementing the round design --
+      # was never measured. A new module was excluded from this gate BY
+      # DEFAULT, which is the wrong default for a gate: the green light kept
+      # its meaning only for the code that happened to predate it.
+      #
+      # pytest now discovers test files by pattern (see pyproject testpaths),
+      # and coverage sources everything with explicit, reasoned omissions in
+      # [tool.coverage.run]. New code is measured unless someone says why not.
       - name: Tests with coverage
-        run: |
-          pytest test_suite.py test_properties.py \
-            --cov=seat_independence --cov=adjudication_orchestrator --cov=audit_log --cov=seat_adapter \
-            --cov=correctness_matrix --cov=run_adjudication --cov=seat_profiles \
-            --cov-report=term-missing --cov-fail-under=90
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=90
 
       # SOP 8.4 non-AI verification layer. These fail independently of the
       # models, which is the whole reason for running them.
+      # Same reasoning as above: eight named files meant every module added
+      # since was scanned by nobody. Configured exclusions live in
+      # [tool.bandit] so a new module is scanned by default.
       - name: Security scan
-        run: bandit -q -r seat_independence.py adjudication_orchestrator.py audit_log.py validation_harness.py seat_adapter.py correctness_matrix.py run_adjudication.py seat_profiles.py
+        run: bandit -q -c pyproject.toml -r .
 
       - name: Dependency audit
         run: |
