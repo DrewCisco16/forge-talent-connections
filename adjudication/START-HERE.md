@@ -1,4 +1,6 @@
-# START HERE — Elimination Protocol Five
+# START HERE — Adjudication Five
+
+> **Adjudication Five** — five blinded models, claims verified by code, answers eliminated rather than voted on.
 
 Everything you need, in order. Nothing here assumes you know Python.
 

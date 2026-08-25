@@ -1,4 +1,6 @@
-# Review brief — Elimination Protocol Five
+# Review brief — Adjudication Five
+
+> **Adjudication Five** — five blinded models, claims verified by code, answers eliminated rather than voted on.
 
 Paste this brief **first**, then one code bundle, into each reviewer
 (ChatGPT Codex, Gemini). Ask each one separately. Do not show either reviewer

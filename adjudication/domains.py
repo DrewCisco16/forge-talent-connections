@@ -125,16 +125,17 @@ SOFTWARE = Domain(
     key="software",
     title="Software build under adjudication",
     blurb="One bounded build decision, adjudicated before you write the code.",
-    artifact_is="ONE build decision document -- not the whole design, and not the patent.",
+    artifact_is="ONE build decision document -- a bounded technical question, not the whole design.",
     artifact_examples=(
-        "Three ways to make shadow-region activation atomic under concurrent writers, "
-        "with throughput and memory for each",
-        "The DecisionToken validation path and the failure behaviour for each missing field",
+        "Three ways to make a write atomic under concurrent readers, with the "
+        "throughput and memory cost of each",
+        "The validation path for an incoming request and the failure behaviour "
+        "for every missing or malformed field",
     ),
     candidate_is="Competing implementations, each with the numbers it rests on.",
     candidate_examples=(
-        "Copy-on-write shadow page; activation is a pointer swap, O(1), one page per epoch",
-        "Append-only journal replayed on activation; O(n) activation, no page duplication",
+        "Copy-on-write page; activation is a pointer swap, O(1), one page per epoch",
+        "Append-only journal replayed on activation; O(n) activation, no duplication",
         "In-place under a lock with rollback; O(1), no extra memory, not crash-atomic",
     ),
     primary_claim_kinds=("arithmetic", "code_behavior", "unit"),

@@ -3,8 +3,7 @@
 Paste this whole document into the Claude Project MVP Code Generator.
 
 **Answer with decisions, not code.** Code from another model has to be reviewed line by
-line before it can enter a repo that produces evidence for a patent file and a federal
-proposal, so a decision I can implement and test is worth more to me than a patch I have
+line before it can enter a repo whose output is used to make real decisions, so a decision I can implement and test is worth more to me than a patch I have
 to audit. Where you do supply code, keep it to a short reference snippet showing the shape
 you mean.
 

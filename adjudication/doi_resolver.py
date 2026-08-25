@@ -42,7 +42,7 @@ DOI_ORG = "https://doi.org/"
 _DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
 
 USER_AGENT = (
-    "EliminationProtocolFive/1.0 (adjudication panel; mailto:noreply@example.com)"
+    "AdjudicationFive/1.0 (adjudication panel; mailto:noreply@example.com)"
 )
 """Crossref asks API users to identify themselves and gives politely-identified
 callers a faster pool. Replace the mailto with a real address you monitor if

@@ -104,7 +104,7 @@ def build(root: pathlib.Path, out: pathlib.Path) -> int:
     for name, title, ask, files in BUNDLES:
         parts = [
             "=" * 78,
-            f"ELIMINATION PROTOCOL FIVE  --  {title}",
+            f"ADJUDICATION FIVE  --  {title}",
             "=" * 78,
             "",
             "WHAT I WANT FROM YOU:",

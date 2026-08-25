@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Elimination Protocol Five — one-click setup for macOS
+# Adjudication Five — one-click setup for macOS
 #
 # DOUBLE-CLICK THIS FILE. That is the whole instruction.
 #
@@ -21,7 +21,7 @@ ok()   { printf "${GREEN}✅ %s${OFF}\n" "$*"; }
 warn() { printf "${YELLOW}⚠️  %s${OFF}\n" "$*"; }
 die()  { printf "${RED}❌ %s${OFF}\n" "$*"; printf "\nPress any key to close."; read -r -n 1; exit 1; }
 
-printf "\n${BOLD}Elimination Protocol Five — setup${OFF}\n"
+printf "\n${BOLD}Adjudication Five — setup${OFF}\n"
 say "Folder: $(pwd)"
 say ""
 

@@ -34,7 +34,7 @@ from collections.abc import Callable, Mapping
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
 USER_AGENT = (
-    "EliminationProtocolFive/1.0 (adjudication panel; quote verification)"
+    "AdjudicationFive/1.0 (adjudication panel; quote verification)"
 )
 
 MIN_TEXT_CHARS = 400
