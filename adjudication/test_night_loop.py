@@ -767,86 +767,124 @@ class TestConductRecord:
 # different facts: one survived attack, the other was never attacked.
 # ---------------------------------------------------------------------------
 
-def _round(n=1, claims=10, failed=0, escalated=0, rho=0.1, **kw):
+def _round(n=1, claims=10, failed=0, escalated=0, rho=0.1,  # noqa: PLR0913, PLR0917
+           created=3, removed=0, alive=None, **kw):
+    """A round result.
+
+    ADJUDICATION IS NOW COUNTED FROM ACTUAL OPTION REMOVALS, not from gate
+    failures. Those are different things: a refuted claim that no option rests
+    on removes nothing at all, so `failed` alone never proved anything was
+    eliminated. These fixtures therefore say what was removed.
+    """
     r = NL.RoundResult(n, f"round {n}")
     r.claims, r.failed, r.escalated, r.rho = claims, failed, escalated, rho
+    r.passed = max(0, claims - failed - escalated)
     r.thinkers_ok = ["seat_1", "seat_2", "seat_3", "seat_4", "seat_5"]
+    r.options_created = created
+    r.options_removed = [f"opt_{n}_{i}" for i in range(removed)]
+    r.options_alive = (list(alive) if alive is not None
+                       else [f"opt_alive_{i}" for i in range(max(0, created - removed))])
+    r.merged = "a merged answer"
     for k, v in kw.items():
         setattr(r, k, v)
     return r
 
 
-class TestARunThatRefutedNothingSaysSo:
+def _full_run(**kw):
+    """Five rounds, so the "not every round ran" caveat does not fire."""
+    rounds = [_round(n=i, **kw) for i in range(1, 6)]
+    return rounds
 
-    def test_zero_eliminations_is_not_adjudicated(self):
-        """The live run's exact shape. A merged paragraph from a panel that
-        eliminated nothing is consensus, and calling it an answer is the most
-        damaging thing this tool could do -- its whole claim on a reader's
-        trust is that something was ruled out."""
-        verdict, reasons = NL.run_verdict([_round(failed=0)])
-        assert verdict == "NOT ADJUDICATED"
-        assert any("NOTHING WAS REFUTED" in r for r in reasons)
 
-    def test_a_run_that_refuted_something_can_be_adjudicated(self):
-        verdict, _ = NL.run_verdict([_round(claims=10, failed=3, escalated=1)])
-        assert verdict == "ADJUDICATED"
+class TestAdjudicationAndConfidenceAreSeparateFacts:
+    """Codex S2 design challenge, and S2-2.
 
-    def test_mostly_escalated_is_not_adjudicated_even_with_a_refutation(self):
-        """210 of 352 escalated. The panel narrowed little; it produced a
-        queue, and a queue with an answer stapled to it reads as an answer."""
-        verdict, reasons = NL.run_verdict(
-            [_round(claims=352, failed=1, escalated=210)])
-        assert verdict == "INCONCLUSIVE"
-        assert any("MOST OF IT IS UNCHECKED" in r for r in reasons)
+    One label was answering two questions. "Did machinery remove anything?" is
+    a fact about the gates; "how much is the surviving agreement worth?" is a
+    fact about the panel. A single word forced a trade: a run that genuinely
+    refuted an option but could not measure independence had to be called
+    either ADJUDICATED, overstating it, or NOT ADJUDICATED, throwing away a
+    real result. Kept separate, both can be true and neither is softened.
+    """
 
-    def test_unmeasured_independence_blocks_a_clean_verdict_not_the_run(self):
-        """CORRECTED once rho was made honest.
+    def test_no_removal_is_no_adjudication(self):
+        v = NL.assess(_full_run(removed=0))
+        assert v.adjudication == "NONE"
+        assert any("NOTHING WAS REMOVED" in r for r in v.reasons)
 
-        This asserted NOT ADJUDICATED. But rho is not measurable from
-        open-ended generation at all, so that rule would stamp NOT ADJUDICATED
-        on every run this tool can ever produce -- including runs that
-        eliminated real answers for real reasons. A verdict that is always the
-        same carries no information and gets ignored, and the genuine
-        NOT ADJUDICATED runs get ignored with it.
+    def test_a_real_removal_is_partial_adjudication(self):
+        v = NL.assess(_full_run(removed=1, created=3))
+        assert v.adjudication == "PARTIAL"
 
-        Adjudication asks whether anything was mechanically eliminated.
-        Confidence asks what the surviving agreement is worth. Independence
-        belongs to the second, so it caps confidence at Low and downgrades the
-        verdict to INCONCLUSIVE with the reason stated -- it does not erase
-        the elimination that actually happened."""
-        verdict, reasons = NL.run_verdict([_round(failed=3, rho=None)])
-        assert verdict == "INCONCLUSIVE"
-        assert any("INDEPENDENCE IS NOT MEASURED" in r for r in reasons)
-        assert SI.confidence_ceiling(5, float("nan")) == "Low"
+    def test_narrowing_to_one_is_complete_adjudication(self):
+        v = NL.assess([_round(n=i, created=3, removed=2,
+                              alive=["opt_only"]) for i in range(1, 6)])
+        assert v.adjudication == "COMPLETE"
 
-    def test_a_run_that_eliminated_nothing_is_still_not_adjudicated(self):
-        """The separation must not weaken the case it was built for."""
-        verdict, _ = NL.run_verdict([_round(failed=0, rho=None)])
-        assert verdict == "NOT ADJUDICATED"
+    def test_gate_failures_alone_do_not_prove_a_removal(self):
+        """Codex S2-2. `failed` counts claims a gate refuted. A refuted claim
+        that no option rests on removes nothing, and the old code read the
+        two as the same thing."""
+        v = NL.assess(_full_run(failed=3, removed=0))
+        assert v.adjudication == "NONE"
 
-    def test_a_contaminated_merge_blocks_adjudication(self):
-        verdict, reasons = NL.run_verdict(
-            [_round(failed=3, closer_contaminated=True)])
-        assert verdict == "INCONCLUSIVE"
-        assert any("CARRIES REFUTED CLAIMS" in r for r in reasons)
+    def test_a_failed_merge_is_never_trustworthy(self):
+        """The exact constructed state that reported ADJUDICATED."""
+        r = _round(failed=1, removed=1, rho=0.1,
+                   closer_failed="TimeoutError: merge timed out")
+        v = NL.assess([r])
+        assert v.trustworthy is False
+        assert any("MERGE FAILED" in c for c in v.caveats)
 
-    def test_a_short_panel_blocks_adjudication(self):
-        verdict, reasons = NL.run_verdict([_round(failed=3, degraded=True)])
-        assert verdict == "INCONCLUSIVE"
-        assert any("PANEL WAS SHORT" in r for r in reasons)
+    def test_an_incomplete_run_is_never_trustworthy(self):
+        v = NL.assess([_round(removed=1)])
+        assert v.trustworthy is False
+        assert any("OF 5 ROUNDS" in c for c in v.caveats)
 
-    def test_no_rounds_at_all_is_not_adjudicated(self):
-        verdict, reasons = NL.run_verdict([])
-        assert verdict == "NOT ADJUDICATED"
-        assert reasons
+    def test_unmeasured_independence_does_not_erase_a_real_removal(self):
+        """A run that eliminated a real option eliminated it, whatever is
+        known about correlation."""
+        v = NL.assess(_full_run(removed=1, rho=None))
+        assert v.adjudication == "PARTIAL"
+        assert v.confidence == "UNMEASURED"
 
-    def test_every_verdict_carries_a_reason(self):
-        """A bare verdict is an assertion. The reason is what lets an operator
-        disagree with it."""
-        for rounds in ([], [_round(failed=0)], [_round(failed=3)],
-                       [_round(claims=100, failed=1, escalated=90)]):
-            _, reasons = NL.run_verdict(rounds)
-            assert reasons and all(r.strip() for r in reasons)
+    def test_measuring_only_some_rounds_is_low_confidence(self):
+        """A figure from one round does not describe the others."""
+        rounds = _full_run(removed=1, rho=None)
+        rounds[0].rho = 0.05
+        v = NL.assess(rounds)
+        assert v.confidence == "LOW"
+
+    def test_an_untested_survivor_is_a_caveat(self):
+        """It survived because nothing examined it, which on the page looks
+        identical to surviving scrutiny."""
+        rounds = _full_run(removed=1)
+        rounds[-1].options_unexamined = ["opt_alive_0"]
+        v = NL.assess(rounds)
+        assert v.trustworthy is False
+        assert any("NEVER TESTED" in c for c in v.caveats)
+
+    def test_mostly_escalated_is_a_caveat(self):
+        v = NL.assess(_full_run(claims=300, failed=1, escalated=200, removed=1))
+        assert v.trustworthy is False
+        assert any("MOST OF IT IS UNCHECKED" in c for c in v.caveats)
+
+    def test_an_unparseable_option_list_is_no_adjudication(self):
+        """Nothing can be eliminated from a set that was never built."""
+        rounds = _full_run(removed=0)
+        rounds[0].options_unparsed = True
+        v = NL.assess(rounds)
+        assert v.adjudication == "NONE"
+        assert any("NO OPTION SET" in r for r in v.reasons)
+
+    def test_the_headline_states_both_fields(self):
+        v = NL.assess(_full_run(removed=1, rho=None))
+        assert "MECHANICAL ADJUDICATION:" in v.headline
+        assert "CORROBORATION CONFIDENCE:" in v.headline
+
+    def test_the_single_label_is_still_derived_for_callers(self):
+        assert NL.run_verdict(_full_run(removed=0))[0] == "NOT ADJUDICATED"
+        assert NL.run_verdict(_full_run(removed=1, rho=None))[0] == "INCONCLUSIVE"
 
 
 class TestTheVerdictIsUnmissableInTheDeliverable:
@@ -856,13 +894,15 @@ class TestTheVerdictIsUnmissableInTheDeliverable:
                      str(tmp_path), rounds=NL.ROUNDS[:1])
         return (tmp_path / "VERIFIER-PACKET.md").read_text()
 
-    def test_the_verdict_appears_before_the_answer(self, tmp_path):
+    def test_both_fields_appear_before_the_answer(self, tmp_path):
         """Below it, a reader has absorbed the conclusion before learning what
         it is worth, and a caveat after a confident paragraph is a caveat
         nobody applies."""
         text = self._packet(tmp_path)
-        assert text.index("VERDICT:") < text.index("## The question")
-        assert text.index("VERDICT:") < text.index("MERGED: buy it.")
+        assert "MECHANICAL ADJUDICATION:" in text
+        assert "CORROBORATION CONFIDENCE:" in text
+        assert text.index("MECHANICAL ADJUDICATION:") < text.index("## The question")
+        assert text.index("MECHANICAL ADJUDICATION:") < text.index("MERGED: buy it.")
 
     def test_an_unadjudicated_answer_is_not_titled_as_having_survived(self,
                                                                      tmp_path):
@@ -871,9 +911,9 @@ class TestTheVerdictIsUnmissableInTheDeliverable:
         seats = {f"seat_{i}": _seat(f"a{i}\n\nCLAIM | judgment |  | opinion {i}")
                  for i in range(1, 6)}
         text = self._packet(tmp_path, seats=seats)
-        assert "NOT ADJUDICATED" in text
+        assert "MECHANICAL ADJUDICATION: NONE" in text
         assert "The answer that survived" not in text
-        assert "NOT established" in text
+        assert "what it is worth" in text
 
     def test_the_full_answer_is_still_present(self, tmp_path):
         """The verdict refuses to ASSERT adjudication. It does not withhold
@@ -1020,12 +1060,16 @@ class TestTheCloserCannotIntroduceContent:
         assert res[0].closer_invented
         assert res[0].closer_contaminated is True
 
-    def test_invention_blocks_adjudication(self):
-        r = _round(failed=3, rho=0.05)
-        r.closer_invented = ["Acquire the Zurich subsidiary."]
-        verdict, reasons = NL.run_verdict([r])
-        assert verdict == "INCONCLUSIVE"
-        assert any("CONTENT NO SEAT PROPOSED" in x for x in reasons)
+    def test_invention_is_a_caveat_on_an_otherwise_clean_run(self):
+        """Stated against a run that DID remove an option, so the caveat is
+        the only thing standing between it and a trustworthy result -- which
+        is the property worth testing."""
+        rounds = _full_run(removed=1, rho=None)
+        rounds[2].closer_invented = ["Acquire the Zurich subsidiary."]
+        v = NL.assess(rounds)
+        assert v.adjudication == "PARTIAL"
+        assert v.trustworthy is False
+        assert any("NO SEAT PROPOSED" in c for c in v.caveats)
 
     def test_the_invented_sentences_reach_disk(self, tmp_path):
         NL.run_night("ask", _panel(),
@@ -1231,3 +1275,140 @@ class TestOneVendorCannotWearFiveNames:
         identity = NL.panel_identity(str(path),
                                      env={"ADJ_SEAT_1_MODEL": "current-model"})
         assert identity["seat_1"][1] == "current-model"
+
+
+# ---------------------------------------------------------------------------
+# 18. Codex S2-1 / remediation #6 — code owns the survivor set
+# ---------------------------------------------------------------------------
+
+import option_set as OS  # noqa: E402
+
+
+class TestCodeOwnsTheSurvivorSet:
+    """The closer's prose USED TO BE the survivor set: it was carried forward
+    whole and became the next round's starting point, so a proposition the
+    gates had just refuted rode through untouched.
+
+    A better detector would not have fixed this. A detector asks "did the
+    model smuggle something?" and can always be evaded by prose that reads
+    differently. Code now answers a different question -- what is still
+    standing? -- from gate verdicts, and the closer renders that answer
+    instead of deciding it.
+    """
+
+    def _run(self, tmp_path, rounds=1):
+        def seat(_p):
+            return ("analysis\n"
+                    "1. Liquidate inventory immediately.\n"
+                    "2. Hold inventory and reprice next quarter.\n"
+                    "CLAIM | arithmetic | 2 + 2 = 5 | Liquidate inventory "
+                    "immediately.\n")
+        def closer(_p):
+            return ("1. Liquidate inventory immediately.\n"
+                    "2. Hold inventory and reprice next quarter.\n")
+        return NL.run_night("what to do", {f"seat_{i}": seat for i in range(1, 6)},
+                            closer, _orch(), str(tmp_path),
+                            rounds=NL.ROUNDS[:rounds])
+
+    def test_a_refuted_option_is_removed_by_code(self, tmp_path):
+        """Codex S2-1, the exact reproduction."""
+        res = self._run(tmp_path)
+        assert res[0].options_created == 2
+        assert len(res[0].options_removed) == 1
+        assert len(res[0].options_alive) == 1
+
+    def test_the_refuted_option_does_not_seed_the_next_round(self, tmp_path):
+        """The carried-forward text is assembled from what survived, so a
+        removed proposition cannot appear in the next round's prompt."""
+        res = self._run(tmp_path)
+        standing = res[0].merged.split("## Removed")[0]
+        assert "Liquidate inventory immediately" not in standing
+        assert "Hold inventory" in standing
+
+    def test_the_removal_is_recorded_with_its_reason(self, tmp_path):
+        res = self._run(tmp_path)
+        assert "Removed" in res[0].merged
+        assert "mechanically refuted" in res[0].merged
+
+    def test_the_packet_does_not_present_it_as_standing(self, tmp_path):
+        res = self._run(tmp_path)
+        packet = (tmp_path / "VERIFIER-PACKET.md").read_text()
+        assert "Liquidate inventory immediately" not in \
+            packet.split("## Removed")[0]
+        assert res  # the run completed
+
+    def test_options_keep_their_identity_across_rounds(self):
+        """A positional id would move whenever the closer reordered its list,
+        and every elimination recorded against position 3 would silently point
+        at a different answer next round."""
+        a = OS.parse_options("1. Build it in house over two quarters\n"
+                             "2. Buy the vendor platform")
+        b = OS.parse_options("1. Buy the vendor platform\n"
+                             "2. Build it in house over two quarters")
+        assert {o.id for o in a} == {o.id for o in b}
+
+    def test_only_a_standing_fail_removes_an_option(self):
+        """A blocked check did not happen and an escalated claim has not been
+        ruled on. Neither can take an option out."""
+        import adjudication_orchestrator as AO
+
+        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        for status in (AO.GateStatus.BLOCKED, AO.GateStatus.PASS,
+                       AO.GateStatus.INAPPLICABLE):
+            verdict = type("V", (), {"status": status, "detail": "d"})()
+            assert OS.eliminate([opt], {"c1": verdict}, 1) == []
+        fail = type("V", (), {"status": AO.GateStatus.FAIL, "detail": "d"})()
+        assert OS.eliminate([opt], {"c1": fail}, 1) == [opt]
+
+    def test_an_escalated_claim_never_removes_an_option(self):
+        opt = OS.Option(id="o1", text="an option", claims=["c1"])
+        assert OS.eliminate([opt], {"c1": None}, 1) == []
+
+    def test_an_untested_survivor_is_reported_as_such(self):
+        """It survived because nothing examined it, which on the page looks
+        identical to surviving scrutiny."""
+        tested = OS.Option(id="o1", text="tested", claims=["c1"])
+        untested = OS.Option(id="o2", text="never examined")
+        assert OS.unexamined([tested, untested]) == [untested]
+
+    def test_prose_around_the_list_is_not_an_option(self):
+        opts = OS.parse_options(
+            "Here are the distinct options:\n"
+            "1. Build the ingest service in house\n"
+            "2. Buy the vendor platform and migrate\n"
+            "That list is what later rounds eliminate from.")
+        assert len(opts) == 2
+
+    def test_duplicate_proposals_collapse_to_one_option(self):
+        opts = OS.parse_options("1. Build it in house\n2. Build it in house")
+        assert len(opts) == 1
+
+
+class TestTheTwoPathsAgreeAboutIndependence:
+    """Codex S4-2. On the same raw run, correctness_matrix reported
+    measurable=True with rho=-1.0 and effective_seats=2.0, while
+    night_loop.measure_rho() reported NOT MEASURED. Two paths disagreeing
+    about one run, and the invented figure was the one feeding a confidence
+    label."""
+
+    def test_the_matrix_refuses_open_ended_runs(self):
+        from correctness_matrix import diagnose_run
+        report = diagnose_run([], {})
+        assert report["measurable"] is False
+        assert any("open-ended" in b for b in report["blockers"])
+
+    def test_open_ended_is_the_default(self):
+        """The live panel answers open-ended, so a caller that does not say
+        which regime it is in must get the one where no figure is produced."""
+        from correctness_matrix import diagnose_run
+        assert diagnose_run([], {})["task_kind"] == "open_ended"
+
+    def test_an_unknown_regime_is_refused(self):
+        from correctness_matrix import diagnose_run
+        with pytest.raises(ValueError, match="task_kind"):
+            diagnose_run([], {}, task_kind="whatever")
+
+    def test_both_paths_say_the_same_thing(self):
+        from correctness_matrix import diagnose_run
+        assert NL.measure_rho({"a": [], "b": []}, {})[0] is None
+        assert diagnose_run([], {})["measurable"] is False

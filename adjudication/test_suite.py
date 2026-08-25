@@ -2820,6 +2820,7 @@ class TestNoUnsourcedBenchmarkClaims:
 # ===========================================================================
 
 from correctness_matrix import (  # noqa: E402
+    SHARED_DETECTION,
     AdjudicationConflict,
     build_correctness_matrix,
     build_detections,
@@ -2925,8 +2926,8 @@ class TestTheTwoExtremesThatMakeTheNumberMeanSomething:
                           passes=_ONE_PASS)
         both = f"{_TRUE_A}\n{_FALSE_A}"
         col, col_o = _run({"s1": both, "s2": both, "s3": both}, passes=_ONE_PASS)
-        d_rep = diagnose_run(div, div_o.verdicts)
-        c_rep = diagnose_run(col, col_o.verdicts)
+        d_rep = diagnose_run(div, div_o.verdicts, task_kind=SHARED_DETECTION)
+        c_rep = diagnose_run(col, col_o.verdicts, task_kind=SHARED_DETECTION)
         assert d_rep["effective_seats"] > c_rep["effective_seats"]
         assert d_rep["effective_seats"] == pytest.approx(3.0)
         assert c_rep["effective_seats"] == pytest.approx(1.0)
@@ -3021,7 +3022,7 @@ class TestFailsClosed:
 
     def test_no_adjudicated_claim_yields_no_diagnosis(self):
         results, orch = _run({"s1": _JUDGMENT, "s2": _JUDGMENT}, passes=_ONE_PASS)
-        report = diagnose_run(results, orch.verdicts)
+        report = diagnose_run(results, orch.verdicts, task_kind=SHARED_DETECTION)
         assert report["measurable"] is False
         assert report["blockers"]
         for key in ("mean_error_correlation_rho", "effective_seats",
@@ -3039,7 +3040,7 @@ class TestFailsClosed:
         in any pair. NaN is the honest answer; the reading must say so rather
         than let a NaN print as a value."""
         results, orch = _run({"s1": _TRUE_A, "s2": _TRUE_A}, passes=_ONE_PASS)
-        report = diagnose_run(results, orch.verdicts)
+        report = diagnose_run(results, orch.verdicts, task_kind=SHARED_DETECTION)
         assert math.isnan(report["mean_error_correlation_rho"])
         assert "absence of a measurement" in report["reading"]
 
@@ -3923,7 +3924,12 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         # Four seats scripted IDENTICALLY are a monoculture, and the run says
         # so on every pass rather than reading the agreement as confirmation.
         assert out.count("[collapse warning]") == 5
-        assert "rho is undefined" in out
+        # The independence diagnosis now refuses to produce a figure at all
+        # for open-ended seats, rather than reporting "rho is undefined" from
+        # a matrix built by reading each seat's silence as a correctness
+        # observation. Both paths in this tool now say the same thing about
+        # the same run, which they did not before.
+        assert "independence is not measurable from open-ended generation" in out
         # A lone survivor with six open holes is a shortlist, not an answer.
         assert rc == 1
         assert "NOT RESOLVED" in out

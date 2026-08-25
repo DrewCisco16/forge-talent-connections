@@ -50,6 +50,14 @@ from adjudication_orchestrator import (
     Orchestrator,
     line_claim_extractor,
 )
+from option_set import (
+    Option,
+    attach_claims,
+    eliminate,
+    parse_options,
+    render,
+    unexamined,
+)
 from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
@@ -608,6 +616,15 @@ class RoundResult:
     degraded: bool = False
     closer_claims: int = 0
     closer_failed_claims: int = 0
+    options_created: int = 0
+    options_removed: list[str] = field(default_factory=list)
+    options_alive: list[str] = field(default_factory=list)
+    options_unexamined: list[str] = field(default_factory=list)
+    """Surviving options no claim was ever attached to.
+
+    They survived because nothing tested them, which is a completely different
+    fact from surviving scrutiny -- and on the page the two look identical."""
+    options_unparsed: bool = False
     closer_invented: list[str] = field(default_factory=list)
     """Sentences the closer wrote that no seat's answer supports.
 
@@ -707,6 +724,9 @@ def run_night(
 
     merged: str | None = None
     results: list[RoundResult] = []
+    # THE SURVIVOR SET, OWNED BY CODE. Round one fills it from the closer's
+    # list; every round after that only removes from it, on gate verdicts.
+    options: list[Option] = []
 
     # Fixed for the whole run. A persona that moved between rounds would make
     # measured rho meaningless: the correlation would be between shuffled
@@ -889,7 +909,45 @@ def run_night(
         elif res.closer_contaminated:
             note = "  [CONTAMINATED: carries a claim the gates refuted]"
         emit(f"  merged in {now() - t0:.0f}s{note}")
-        merged = merged_new
+        # ---- CODE DECIDES WHAT IS STILL STANDING -------------------------
+        #
+        # The closer's prose used to BE the survivor set: it was carried
+        # forward whole and became the next round's starting point, so a
+        # proposition the gates had just refuted rode through untouched.
+        # Verified with a one-round panel whose closer returned the exact
+        # sentence of a claim that had been mechanically refuted.
+        #
+        # Now round one PARSES the closer's list into options with stable
+        # ids, and every later round removes from that list on verdicts. The
+        # text that carries forward is assembled from what survived.
+        if r.invents and not options:
+            options = parse_options(merged_new)
+            attach_claims(options, claims)
+            res.options_created = len(options)
+        else:
+            attach_claims(options, claims)
+        removed = eliminate(options, orch.verdicts, r.n,
+                            {c.id: c for c in claims})
+        res.options_removed = [o.id for o in removed]
+        res.options_alive = [o.id for o in options if o.alive]
+        res.options_unexamined = [o.id for o in unexamined(options)]
+        if removed:
+            emit(f"  removed {len(removed)} option(s) on refuted claims")
+
+        if options:
+            # The closer's text is COMMENTARY on the survivor list, not the
+            # list itself. Anything it says about membership is advisory; the
+            # list above it is the answer.
+            merged = (render(options)
+                      + "\n\n## The closer's reading of what survived\n\n"
+                      + merged_new.strip())
+        else:
+            # Round one produced no parseable list. Fall back to the closer's
+            # text so the run still says something, and record that no option
+            # set exists -- which run_verdict treats as unadjudicated, because
+            # nothing can be removed from a set that was never built.
+            res.options_unparsed = True
+            merged = merged_new
         res.merged = merged
         with open(os.path.join(rd, f"merged-{r.n}.md"), "w",
                   encoding="utf-8") as fh:
@@ -1099,6 +1157,10 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          # dropped before they reached disk, which is the same as not having
          # them: the operator keeps this file, not the process memory.
          "personas": r.personas,
+         "options_created": r.options_created,
+         "options_removed": r.options_removed,
+         "options_alive": r.options_alive,
+         "options_unexamined": r.options_unexamined,
          "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
@@ -1225,128 +1287,170 @@ part a reader will act on.
 """
 
 
+@dataclass
+class RunVerdict:
+    """What the run established, as TWO facts rather than one label.
+
+    One label was trying to answer two questions at once. "Did machinery
+    remove anything?" is a fact about the gates. "How much is the surviving
+    agreement worth?" is a fact about the panel. A single word made them
+    trade off: a run that genuinely refuted an option but could not measure
+    independence had to be called either ADJUDICATED, overstating it, or NOT
+    ADJUDICATED, throwing away a real result.
+
+    Kept separate, both can be true at once and neither has to be softened.
+    """
+
+    adjudication: str          # NONE | PARTIAL | COMPLETE
+    confidence: str            # UNMEASURED | LOW | MEASURED
+    reasons: list[str]
+    caveats: list[str]
+
+    @property
+    def headline(self) -> str:
+        return (f"MECHANICAL ADJUDICATION: {self.adjudication}   "
+                f"CORROBORATION CONFIDENCE: {self.confidence}")
+
+    @property
+    def trustworthy(self) -> bool:
+        """Only when code removed something AND nothing else is wrong."""
+        return self.adjudication != "NONE" and not self.caveats
+
+
 def run_verdict(results: Sequence[RoundResult]) -> tuple[str, list[str]]:
-    """What the run actually established. Returns (verdict, reasons).
+    """Backwards-compatible single label, derived from the two fields."""
+    v = assess(results)
+    if v.adjudication == "NONE":
+        return "NOT ADJUDICATED", v.reasons + v.caveats
+    if v.caveats or v.confidence != "MEASURED":
+        return "INCONCLUSIVE", v.reasons + v.caveats
+    return "ADJUDICATED", v.reasons
 
-    THE FAILURE THIS EXISTS TO STOP. On the live run every round completed,
-    nothing was ever refuted, the seats' claims overlapped between 0.0000 and
-    0.0238 -- they were not disagreeing, they were not addressing the same
-    points at all -- and the tool emitted something shaped like an answer.
-    Divergence was a footnote when it should have been a stop condition.
 
-    A merged paragraph produced by a panel that eliminated nothing is
-    CONSENSUS, not adjudication. The two look identical on the page and are
-    completely different facts: one survived attack, the other was never
-    attacked. Presenting the second as the first is the single most damaging
-    thing this tool could do, because its whole claim on a reader's trust is
-    that something was ruled out.
+def assess(results: Sequence[RoundResult]) -> RunVerdict:
+    """The two orthogonal facts, each with its own evidence.
 
-    This is the fail-closed rule applied to the CONCLUSION, which is where it
-    belongs. It refuses to assert that a run adjudicated. It does not discard
-    the work, eliminate anything, or withhold the text -- the merged answer
-    and every claim still appear below, and a reader can weigh them knowing
-    what they are.
+    ADJUDICATION IS COUNTED FROM ACTUAL REMOVALS, not from gate failures.
+    The previous version read `failed` -- the number of claims a gate refuted
+    -- as proof that a candidate had been removed. Those are different things:
+    a refuted claim that no option rested on removes nothing at all, and a
+    constructed state with failed=1 and a FAILED CLOSER still reported
+    ADJUDICATED. Now it counts options that code actually took out.
     """
     reasons: list[str] = []
+    caveats: list[str] = []
+
     if not results:
-        return "NOT ADJUDICATED", ["no round completed"]
+        return RunVerdict("NONE", "UNMEASURED", ["no round completed"], [])
 
-    # ONE POPULATION FOR BOTH HALVES OF THE FRACTION.
-    #
-    # claims counted RAW occurrences -- five seats repeating one claim counted
-    # five -- while escalated counted DISTINCT claims, each adjudicated once.
-    # Five seats repeating ten judgment claims and five arithmetic ones
-    # therefore reported "10 of 75 open, 13.3%" and returned ADJUDICATED, when
-    # two thirds of the distinct claim set was in fact unresolved. Any seat
-    # that repeats itself dilutes the denominator, so the measure got better
-    # the more the panel duplicated -- backwards.
-    refuted = sum(r.failed for r in results)
+    removed = sum(len(r.options_removed) for r in results)
+    alive = results[-1].options_alive
+    created = sum(r.options_created for r in results)
+    claims = sum(r.passed + r.failed + r.escalated + r.blocked for r in results)
     escalated = sum(r.escalated for r in results)
-    accepted = sum(r.passed for r in results)
-    blocked = sum(r.blocked for r in results)
-    # Every distinct claim that reached a verdict, which is the same set the
-    # escalation count is drawn from.
-    claims = accepted + refuted + escalated + blocked
-    contaminated = [r.n for r in results if r.closer_contaminated]
-    degraded = [r.n for r in results if r.degraded]
-    measured = [r for r in results if r.rho is not None]
+    unexamined_now = results[-1].options_unexamined
 
-    if refuted == 0:
+    # -- mechanical adjudication ------------------------------------------
+    if any(r.options_unparsed for r in results):
+        adjudication = "NONE"
         reasons.append(
-            f"NOTHING WAS REFUTED. {claims} distinct claim(s) were "
-            f"adjudicated across "
-            f"{len(results)} round(s) and no mechanical check ruled any of "
-            f"them false. Nothing was eliminated, so the merged text below is "
-            f"what the seats agreed on -- not what survived being attacked."
+            "NO OPTION SET WAS BUILT. Round one produced no list this code "
+            "could parse, so there was nothing for later rounds to remove "
+            "from. Nothing can be eliminated from a set that does not exist."
         )
-    if claims and escalated / claims > MAX_ESCALATION_FRACTION:
+    elif removed == 0:
+        adjudication = "NONE"
         reasons.append(
-            f"MOST OF IT IS UNCHECKED. {escalated} of {claims} distinct "
-            f"claim(s) "
-            f"({escalated / claims:.0%}) carried no mechanical warrant and "
-            f"were left to a human. The panel narrowed little; it produced a "
-            f"queue."
+            f"NOTHING WAS REMOVED. {created} option(s) were proposed and "
+            f"{claims} claim(s) adjudicated, and no option lost a claim it "
+            f"rests on. The text below is what the panel agreed on, not what "
+            f"survived being attacked."
         )
+    elif len(alive) <= 1:
+        adjudication = "COMPLETE"
+        reasons.append(
+            f"{removed} option(s) were removed by mechanical refutation and "
+            f"{len(alive)} remain.")
+    else:
+        adjudication = "PARTIAL"
+        reasons.append(
+            f"{removed} option(s) were removed by mechanical refutation. "
+            f"{len(alive)} remain and the evidence does not separate them.")
+
+    # -- corroboration confidence -----------------------------------------
+    measured = [r for r in results if r.rho is not None]
     if not measured:
+        confidence = "UNMEASURED"
         reasons.append(
             "INDEPENDENCE IS NOT MEASURED, and this is structural rather than "
             "a fault of this run. Error correlation needs to know whether each "
             "SEAT was right or wrong on common items; a gate verdict only says "
             "whether a CLAIM held. Seats answer open-ended, so a seat that "
             "never raised a claim has not been shown right or wrong about it. "
-            "Measuring it would need a seeded set of propositions with known "
-            "truth that every seat must decide. Until then, whether these "
-            "seats fail together is unknown -- which is not the same as their "
-            "failing independently -- so their agreement is not corroboration "
-            "and confidence is capped at Low."
+            "Measuring it needs a seeded set of propositions with known truth "
+            "that every seat must decide. Unmeasured is not low and is not "
+            "high: it means nobody knows whether these seats fail together."
         )
+    elif len(measured) < len(results):
+        confidence = "LOW"
+        caveats.append(
+            f"INDEPENDENCE WAS MEASURED IN ONLY {len(measured)} OF "
+            f"{len(results)} ROUND(S). A figure from one round does not "
+            f"describe the others.")
+    else:
+        worst = max(r.rho for r in measured if r.rho is not None)
+        confidence = confidence_ceiling(len(results[-1].thinkers_ok), worst).upper()
+        reasons.append(
+            f"Independence measured in every round; the worst correlation was "
+            f"rho = {worst:.4f}.")
+
+    # -- caveats: things that make either figure untrustworthy -------------
+    if unexamined_now:
+        caveats.append(
+            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED. No "
+            f"claim was ever attached to them, so they survived because "
+            f"nothing examined them -- which on the page looks identical to "
+            f"surviving scrutiny.")
+    if claims and escalated / claims > MAX_ESCALATION_FRACTION:
+        caveats.append(
+            f"MOST OF IT IS UNCHECKED. {escalated} of {claims} distinct "
+            f"claim(s) ({escalated / claims:.0%}) carried no mechanical "
+            f"warrant and were left to a human.")
     invented = [r.n for r in results if r.closer_invented]
     if invented:
-        reasons.append(
-            f"THE MERGED ANSWER CONTAINS CONTENT NO SEAT PROPOSED, in "
-            f"round(s) {', '.join(str(n) for n in invented)}. The closing "
-            f"model wrote assertions that appear in no seat's answer and that "
-            f"nothing checked. It was asked to consolidate, and it authored."
-        )
-    if contaminated:
-        reasons.append(
-            f"THE MERGED ANSWER CARRIES REFUTED CLAIMS, in round(s) "
-            f"{', '.join(str(n) for n in contaminated)}. The closing model "
-            f"asserted something the checks had already ruled false."
-        )
+        caveats.append(
+            f"THE MERGED TEXT CONTAINS STATEMENTS NO SEAT PROPOSED, in "
+            f"round(s) {', '.join(str(n) for n in invented)}.")
+    carried = [r.n for r in results if r.closer_failed_claims]
+    if carried:
+        caveats.append(
+            f"THE CLOSER RESTATED A REFUTED CLAIM, in round(s) "
+            f"{', '.join(str(n) for n in carried)}.")
+    unparsed = [r.n for r in results if r.closer_unparsed]
+    if unparsed:
+        caveats.append(
+            f"THE CLOSER WROTE CLAIM-LIKE PROSE THAT PARSED TO NOTHING, in "
+            f"round(s) {', '.join(str(n) for n in unparsed)}.")
+    degraded = [r.n for r in results if r.degraded]
     if degraded:
-        reasons.append(
+        caveats.append(
             f"THE PANEL WAS SHORT in round(s) "
-            f"{', '.join(str(n) for n in degraded)}. Fewer seats answered "
-            f"than were configured, so this is not the panel that was "
-            f"specified."
-        )
+            f"{', '.join(str(n) for n in degraded)}.")
+    failed_closer = [r.n for r in results if r.closer_failed]
+    if failed_closer:
+        caveats.append(
+            f"THE MERGE FAILED in round(s) "
+            f"{', '.join(str(n) for n in failed_closer)}, so those rounds "
+            f"produced no consolidated answer at all.")
+    if results[-1].merged is None:
+        caveats.append("THE FINAL ROUND PRODUCED NO MERGED ANSWER.")
+    if len(results) < len(ROUNDS):
+        caveats.append(
+            f"ONLY {len(results)} OF {len(ROUNDS)} ROUNDS RAN, so the "
+            f"frameworks the remaining rounds apply were never brought to "
+            f"bear.")
 
-    # ADJUDICATION AND CONFIDENCE ARE DIFFERENT QUESTIONS.
-    #
-    # Adjudication asks whether anything was mechanically eliminated. That is
-    # a fact about what the gates did, and it is either true or it is not.
-    # Confidence asks what the surviving agreement is WORTH, which is where
-    # independence belongs.
-    #
-    # Unmeasured independence used to force NOT ADJUDICATED. Once rho was made
-    # honest -- it is not measurable from open-ended generation at all -- that
-    # rule would have stamped NOT ADJUDICATED on every run this tool can ever
-    # produce, including runs that eliminated real answers for real reasons. A
-    # verdict that is always the same carries no information and gets ignored,
-    # and then the genuine NOT ADJUDICATED runs are ignored with it.
-    #
-    # So: nothing refuted is NOT ADJUDICATED. Everything else that is wrong,
-    # unmeasured independence included, is INCONCLUSIVE with the reason
-    # stated, and the confidence ceiling stays at Low.
-    if refuted == 0:
-        return "NOT ADJUDICATED", reasons
-    if reasons:
-        return "INCONCLUSIVE", reasons
-    return "ADJUDICATED", [
-        f"{refuted} claim(s) were mechanically refuted and removed; "
-        f"{escalated} of {claims} remain open for a human."
-    ]
+    return RunVerdict(adjudication, confidence, reasons, caveats)
 
 
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
@@ -1366,7 +1470,8 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
       Attribution stripped. No model names, no seat labels. The verifier must
       not be able to weight a claim by who made it.
     """
-    verdict, reasons = run_verdict(rounds_run)
+    run = assess(rounds_run)
+    verdict, reasons = (run.headline, run.reasons + run.caveats)
     lines = [
         "# Verifier packet",
         "",
@@ -1376,10 +1481,10 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         # learning what it is worth, and a caveat after a confident paragraph
         # is a caveat nobody applies. The live run emitted a merged answer
         # having refuted nothing, and nothing in the deliverable said so.
-        f"## VERDICT: {verdict}",
+        f"## {verdict}",
         "",
     ]
-    if verdict != "ADJUDICATED":
+    if not run.trustworthy:
         lines += [
             "**This run did not establish what it may appear to.** Read this "
             "before the answer below.",
@@ -1412,8 +1517,8 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
         ask.strip(),
         "",
         ("## The answer that survived"
-         if verdict == "ADJUDICATED"
-         else "## The merged answer (NOT established -- see the verdict above)"),
+         if run.trustworthy
+         else "## The working answer (see the two fields above for what it is worth)"),
         merged.strip(),
         "",
         "## Claims it rests on, with what the mechanical checks found",

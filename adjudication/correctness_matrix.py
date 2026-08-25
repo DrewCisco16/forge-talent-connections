@@ -339,11 +339,42 @@ def build_pass_detections(
     return [(res.pass_id, by_pass.get(res.pass_id, set())) for res in results]
 
 
+SHARED_DETECTION = "shared_detection"
+OPEN_ENDED = "open_ended"
+
+TASK_KINDS = (SHARED_DETECTION, OPEN_ENDED)
+"""How the seats were asked to work, which decides whether silence means
+anything.
+
+THIS MODULE'S CORE INFERENCE IS SOUND FOR ONE REGIME AND WRONG FOR THE OTHER.
+
+Under SHARED_DETECTION every seat is handed the same artifact and asked to
+find its defects. A seat that does not report a real defect has MISSED it, and
+scoring that as neutral would hide exactly the shared blind spot the statistic
+exists to measure. That is the regime this module was written for, and the
+reasoning in its header is correct there.
+
+Under OPEN_ENDED each seat writes its own answer to a question. A seat that
+did not mention another seat's true proposition has not missed a defect -- it
+wrote about something else. Silence is MISSING DATA, and reading it as an
+observation manufactures the measurement. Demonstrated on a two-seat run where
+each seat independently stated a different TRUE proposition: this module
+reported measurable=True, rho=-1.0 and effective_seats=2.0, while
+night_loop.measure_rho() on the same raw run correctly reported NOT MEASURED.
+Two paths disagreeing about one run, and the invented figure was the one that
+fed a confidence label.
+
+The regime is now required rather than assumed, because assuming it is how the
+two paths came to disagree.
+"""
+
+
 def diagnose_run(
     results: Sequence[SequentialPassResult],
     verdicts: Mapping[str, ClaimVerdict],
     adjudications: Mapping[str, bool] | None = None,
     total_seeded: int | None = None,
+    task_kind: str = OPEN_ENDED,
 ) -> dict[str, Any]:
     """
     The end-to-end answer: eliminative convergence, or collapse?
@@ -352,9 +383,33 @@ def diagnose_run(
     `measurable`. When the run cannot support the diagnosis, `measurable` is
     False, `blockers` says why, and NO diagnostic keys are present -- rather
     than a NaN an operator would read as a small number.
+
+    task_kind DEFAULTS TO OPEN_ENDED, which is the conservative direction: the
+    live panel answers open-ended, so a caller that does not say which regime
+    it is in gets the one where no independence figure is produced. A caller
+    with a genuine common-task design must say so explicitly.
     """
+    if task_kind not in TASK_KINDS:
+        raise ValueError(
+            f"task_kind must be one of {TASK_KINDS}, got {task_kind!r}")
+    if task_kind == OPEN_ENDED:
+        return {
+            "measurable": False,
+            "blockers": [
+                "independence is not measurable from open-ended generation. "
+                "This diagnosis reads a seat's silence about a proposition as "
+                "a correctness observation, which holds when every seat was "
+                "asked to decide the same items and does not hold when each "
+                "seat wrote its own answer -- there, silence is missing data. "
+                "Measuring it needs a seeded set of propositions with known "
+                "truth that every seat must decide."
+            ],
+            "coverage": None,
+            "task_kind": task_kind,
+        }
     matrix = build_correctness_matrix(results, verdicts, adjudications)
     report: dict[str, Any] = {
+        "task_kind": task_kind,
         "measurable": matrix.measurable,
         "blockers": list(matrix.blockers),
         "coverage": matrix.coverage,

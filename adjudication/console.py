@@ -251,19 +251,33 @@ def night() -> None:
     # THE VERDICT, BEFORE THE FILE PATH. The operator reads the last thing
     # printed. A run that refuted nothing must not end with a tidy "done" and
     # a path, because that reads as success.
-    from night_loop import run_verdict
-    verdict, reasons = run_verdict(res)
+    # TWO FIELDS, NOT ONE LABEL. The console printed "CONSENSUS is not
+    # ADJUDICATION" for every non-ADJUDICATED outcome, including runs where
+    # machinery HAD refuted something -- telling the operator their real
+    # result was consensus.
+    from night_loop import assess
+    v = assess(res)
     _p()
     _p("=" * 68)
-    _p(f"  VERDICT: {verdict}")
+    _p(f"  MECHANICAL ADJUDICATION : {v.adjudication}")
+    _p(f"  CORROBORATION CONFIDENCE: {v.confidence}")
     _p("=" * 68)
-    for reason in reasons:
+    for reason in v.reasons:
         for line in _wrap(reason, 64):
             _p(f"  {line}")
-    if verdict != "ADJUDICATED":
+    if v.caveats:
         _p()
-        _p("  CONSENSUS is not ADJUDICATION. Nothing was withheld -- the full")
-        _p("  answer is in the packet -- but it was not established here.")
+        _p("  CAVEATS")
+        for caveat in v.caveats:
+            for line in _wrap(caveat, 62):
+                _p(f"    {line}")
+    _p()
+    if v.adjudication == "NONE":
+        _p("  Nothing was removed by machinery, so the text below is what the")
+        _p("  panel agreed on rather than what survived being attacked.")
+    elif not v.trustworthy:
+        _p("  Machinery DID remove options -- that result is real. The caveats")
+        _p("  above say what it does not settle.")
     _p()
     _p(f"  verifier packet: {os.path.relpath(os.path.join(out, 'VERIFIER-PACKET.md'), HERE)}")
     _p("  Paste it into a NEW chat in your Claude Project. Nothing else.")
