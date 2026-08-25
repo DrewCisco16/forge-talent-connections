@@ -214,6 +214,29 @@ class CostLedger:
     day_state_path: str | None = None
     max_rate_age_days: int = 120
 
+    def __post_init__(self) -> None:
+        """Refuse a ceiling that cannot restrain anything, wherever it came from.
+
+        build_ledger validated these, and nothing else did -- so constructing
+        a CostLedger directly with per_run=nan authorised a call estimated at
+        a quadrillion tokens. NaN compares False against every total, so no
+        limit is ever reached; infinity is a limit that cannot be; zero and
+        negative are not budgets. The invariant belongs on the type, not only
+        on one of its builders.
+        """
+        for label in ("per_run", "per_stage", "per_day"):
+            value = getattr(self, label)
+            if value is None:
+                continue
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value)) or float(value) <= 0):
+                raise ValueError(
+                    f"{label}={value!r} is not a finite positive number of "
+                    f"dollars. A ceiling that cannot be reached is not a "
+                    f"ceiling, and NaN compares False against every total, so "
+                    f"it would authorise every call while looking like a limit."
+                )
+
     calls: list[CallCost] = field(default_factory=list)
     overruns: list[str] = field(default_factory=list)
     """Completed calls that cost more than they were authorised for.

@@ -765,3 +765,26 @@ class TestAnUnboundedRateIsVisible:
             rates = CL.rates_from_config(json.load(fh))
         assert len(rates) == 5
         assert CL.CostLedger(rates=rates).stale_rates() == []
+
+
+class TestTheLedgerValidatesItsOwnCeilings:
+    """Re-check #14. build_ledger validated these and nothing else did, so
+    constructing a CostLedger directly with per_run=nan authorised a call
+    estimated at a quadrillion tokens."""
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"),
+                                     float("-inf"), 0, -1, True])
+    def test_a_ceiling_that_cannot_restrain_is_refused(self, bad):
+        with pytest.raises(ValueError, match="finite positive"):
+            CL.CostLedger(rates={}, per_run=bad)
+
+    def test_every_ceiling_position_is_checked(self):
+        for field_name in ("per_run", "per_stage", "per_day"):
+            with pytest.raises(ValueError):
+                CL.CostLedger(rates={}, **{field_name: float("nan")})
+
+    def test_a_real_ceiling_is_accepted(self):
+        assert CL.CostLedger(rates={}, per_run=3.0).per_run == 3.0
+
+    def test_no_ceiling_at_all_is_still_allowed(self):
+        CL.CostLedger(rates={})

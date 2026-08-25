@@ -215,6 +215,15 @@ def _looks_like_an_interstitial(text: str) -> bool:
     return _is_repetitive(text or "")
 
 
+REPLACEMENT = "\ufffd"
+UNDECODABLE = "\x00UNDECODABLE\x00"
+"""Marker prefixed to text a fallback decode could not read cleanly.
+
+Carried in the text rather than returned alongside it because extract_text is
+also called directly by tests and diagnostics, and a second return value would
+be dropped silently by every one of them.
+"""
+
 MIN_TEXT_CHARS = 400
 """Below this, treat the fetch as BLOCKED rather than as a failed match.
 
@@ -327,6 +336,17 @@ def extract_text(raw: bytes, content_type: str) -> str:
     """
     encoding, raw = _detect_encoding(raw, content_type)
     body = raw.decode(encoding, errors="replace")
+    if REPLACEMENT in body:
+        # A PAGE WE COULD NOT FULLY DECODE IS NOT EVIDENCE ABOUT A QUOTE.
+        #
+        # A Windows-1252 page declaring nothing -- no HTTP charset, no BOM, no
+        # meta tag -- falls back to UTF-8, and every byte the fallback cannot
+        # read becomes U+FFFD. A quote containing an accented character then
+        # cannot match text that genuinely contains it, and the gate recorded
+        # FAIL: an honest citation refuted because of how its page was
+        # encoded. The marker travels with the text so the caller can block
+        # instead.
+        body = UNDECODABLE + body
     if "html" in content_type.lower() or body.lstrip()[:1] == "<":
         body = _TAG.sub(" ", body)
         body = _ANYTAG.sub(" ", body)
@@ -463,6 +483,12 @@ class QuoteVerificationGate:
         if status < 200 or status >= 300:
             return GateResult(self.name, GateStatus.BLOCKED,
                               f"HTTP {status} at {url}")
+        if text.startswith(UNDECODABLE):
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"{url} declared no character encoding and does not decode "
+                f"cleanly as UTF-8. A page we could not fully read is not "
+                f"evidence that a quote is absent from it")
         if _looks_like_an_interstitial(text):
             # A subscription wall, a consent gate, or a bot check served with
             # HTTP 200. The page we were given is not the page cited, so a

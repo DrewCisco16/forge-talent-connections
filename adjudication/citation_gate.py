@@ -71,9 +71,23 @@ is safe for children" tokenised identically and the gate reported PASS on a
 paper asserting the opposite of the citation. A word that reverses a title's
 meaning is the most identifying word in it."""
 
-_NEGATORS = frozenset({"not", "no", "never", "without", "non", "un",
-                       "cannot", "fails", "failed", "absent", "lack",
-                       "lacking", "neither", "nor"})
+_NEGATORS = frozenset({
+    "not", "no", "never", "without", "non", "un",
+    "cannot", "fails", "failed", "absent", "lack", "lacking",
+    "neither", "nor",
+    # CONTRACTIONS. _fold strips the apostrophe, so "isn't" arrives as "isnt"
+    # and matched nothing -- "Treatment isn't safe for children" passed as the
+    # same paper as "Treatment is safe for children".
+    "isnt", "arent", "wasnt", "werent", "doesnt", "dont", "didnt",
+    "cant", "couldnt", "wont", "wouldnt", "shouldnt", "hasnt", "havent",
+    "hadnt", "aint",
+    # DEGREE MODIFIERS that reverse or gut the claim. "hardly safe" and "less
+    # safe" are not "safe", and bag-of-words scored them as near-identical
+    # because only one short word differed.
+    "hardly", "barely", "scarcely", "rarely", "seldom", "less", "least",
+    "lower", "reduced", "weaker", "worse", "insufficient", "inadequate",
+    "limited", "questionable", "unclear", "doubtful", "unproven",
+})
 _WORD = re.compile(r"\w+", re.UNICODE)
 """UNICODE, not [a-z0-9]. The ASCII class tokenised a CJK title to nothing, so
 two IDENTICAL Chinese titles scored 0% overlap and the gate reported
@@ -138,10 +152,23 @@ def _tokens_raw(title: str) -> set[str]:
     return set(_WORD.findall(_fold(title)))
 
 
+_APOSTROPHES = "'\u2019\u02bc\u2018\u00b4`"
+
+
 def _fold(s: str) -> str:
-    """Case, diacritics, and punctuation removed. Muller and Müller are one name."""
+    """Case, diacritics, and punctuation removed. Muller and Müller are one name.
+
+    APOSTROPHES ARE REMOVED RATHER THAN LEFT TO SPLIT A WORD. The tokeniser
+    matches runs of word characters, so "isn't" arrived as "isn" and "t" and
+    matched no negator -- "Treatment isn't safe for children" therefore passed
+    as the same paper as "Treatment is safe for children". Removing them joins
+    the word back up, and does the same for O'Connor and O\u2019Connor, which
+    must be one surname however the source typed it.
+    """
     s = unicodedata.normalize("NFKD", s or "")
     s = "".join(c for c in s if not unicodedata.combining(c))
+    for mark in _APOSTROPHES:
+        s = s.replace(mark, "")
     return s.casefold()
 
 

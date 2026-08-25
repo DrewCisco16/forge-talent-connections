@@ -1318,3 +1318,70 @@ class TestTheCheckingLayerRoundTwo:
         ).run("python3 noisy.py")
         assert ok is False
         assert "assertion failed" in detail
+
+
+class TestTheCheckingLayerRoundThree:
+    """Re-check findings #9, #10, #12 and #14."""
+
+    # -- #10: contractions and degree modifiers reverse a title -------------
+    def _cite(self, claimed, registered="Treatment is safe for children"):
+        rec = {"title": [registered], "author": [{"family": "Harris"}],
+               "issued": {"date-parts": [[2020, 1, 1]]}}
+        return CG.CitationFieldMatchGate(record_fn=lambda _d: rec).check(
+            _claim(f"10.1/x :: Harris ;; 2020 ;; {claimed}"))
+
+    @pytest.mark.parametrize("claimed", [
+        "Treatment isn't safe for children",
+        "Treatment doesn't help children",
+        "Treatment is hardly safe for children",
+        "Treatment is less safe for children",
+        "Treatment is barely safe for children",
+    ])
+    def test_a_reversed_or_gutted_title_is_not_the_same_paper(self, claimed):
+        """The tokeniser matches runs of word characters, so "isn't" arrived
+        as "isn" and "t" and matched no negator. Degree modifiers were not
+        listed at all, and bag-of-words scored "hardly safe" against "safe" as
+        near-identical because only one short word differed."""
+        assert self._cite(claimed).status is GateStatus.FAIL
+
+    def test_the_matching_title_still_passes(self):
+        assert self._cite("Treatment is safe for children").status \
+            is GateStatus.PASS
+
+    def test_apostrophe_variants_of_a_surname_are_one_name(self):
+        # The curly apostrophe is the point of the test, so it is written as
+        # an escape: RUF001 flags the literal glyph as ambiguous, which is
+        # backwards here.
+        assert CG._fold("O'Connor") == CG._fold("O\u2019Connor")
+
+    # -- #9: a page we could not decode is not evidence ---------------------
+    def _quote_check(self, raw, ctype):
+        quote = "quarterly revenue tripled"
+        g = QG.QuoteVerificationGate(
+            fetcher=lambda _u: (200, QG.extract_text(raw, ctype), False))
+        return g.check(Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
+                             text="revenue",
+                             warrant=f"https://e.test/p :: {quote}"))
+
+    def test_an_undeclared_encoding_blocks_rather_than_refutes(self):
+        """A Windows-1252 page declaring nothing -- no HTTP charset, no BOM,
+        no meta tag -- falls back to UTF-8, and every byte the fallback cannot
+        read becomes U+FFFD. A quote containing an accented character then
+        cannot match text that genuinely contains it, and the gate recorded
+        FAIL: an honest citation refuted because of how its page was
+        encoded."""
+        raw = ("Caf\xe9 quarterly revenue tripled. ".encode("windows-1252")) * 30
+        r = self._quote_check(raw, "text/html")
+        assert r.status is GateStatus.BLOCKED
+        assert "declared no character encoding" in r.detail
+
+    def test_a_declared_encoding_still_passes(self):
+        raw = ("Caf\xe9 quarterly revenue tripled. ".encode("windows-1252")) * 30
+        assert self._quote_check(raw, "text/html; charset=windows-1252").status \
+            is GateStatus.PASS
+
+    def test_a_genuine_absence_in_clean_text_is_still_a_finding(self):
+        raw = (b"The company reported results across every division. "
+               b"Management attributed it to cost control and product mix. "
+               ) * 8
+        assert self._quote_check(raw, "text/html").status is GateStatus.FAIL

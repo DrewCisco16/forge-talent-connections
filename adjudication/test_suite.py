@@ -276,9 +276,34 @@ class TestSchemaGate:
         r = g.check(Claim("c", "t", ClaimKind.SCHEMA, '{"id": 1}'))
         assert r.status is GateStatus.FAIL and "value" in r.detail
 
-    def test_invalid_json_fails(self):
+    def test_invalid_json_is_blocked_not_refuted(self):
+        """CORRECTED. This asserted FAIL on a payload that will not parse.
+
+        The gate learned nothing about the claim from JSON it could not read,
+        so recording a refutation states a finding it never made -- and a FAIL
+        removes an option. Fail closed means never accepted; it does not mean
+        call it false."""
         g = SchemaGate([])
-        assert g.check(Claim("c", "t", ClaimKind.SCHEMA, "{bad")).status is GateStatus.FAIL
+        r = g.check(Claim("c", "t", ClaimKind.SCHEMA, "{bad"))
+        assert r.status is not GateStatus.PASS
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_key_check_on_a_non_object_is_blocked(self):
+        """`k not in payload` means something different for every type: on a
+        list it tests the ELEMENTS, so ["id"] satisfied a required key of
+        "id"; on a string it tests substrings; on a number or null it raised
+        TypeError and took the run with it."""
+        g = SchemaGate(["id"])
+        for payload in ("1", "null", '["id"]', '"id"'):
+            r = g.check(Claim("c", "t", ClaimKind.SCHEMA, payload))
+            assert r.status is GateStatus.BLOCKED, payload
+
+    def test_a_real_object_still_works(self):
+        g = SchemaGate(["id"])
+        assert g.check(Claim("c", "t", ClaimKind.SCHEMA, '{"id": 1}')).status \
+            is GateStatus.PASS
+        assert g.check(Claim("c", "t", ClaimKind.SCHEMA, '{"x": 1}')).status \
+            is GateStatus.FAIL
 
 
 class TestExecGate:

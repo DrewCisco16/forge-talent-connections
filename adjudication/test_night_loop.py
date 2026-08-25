@@ -1523,3 +1523,30 @@ class TestTheTwoPathsAgreeAboutIndependence:
         from correctness_matrix import diagnose_run
         assert NL.measure_rho({"a": [], "b": []}, {})[0] is None
         assert diagnose_run([], {})["measurable"] is False
+
+
+class TestAFailedRoundDoesNotOverstateCompletion:
+    """Re-check #12. A round whose closer failed never reaches the option
+    bookkeeping, so its options_alive keeps the empty default -- and reading
+    that as "no options remain" made a run with two live options report
+    COMPLETE."""
+
+    def _rounds(self):
+        r1 = NL.RoundResult(1, "one")
+        r1.options_created = 3
+        r1.options_removed = ["opt_a"]
+        r1.options_alive = ["opt_b", "opt_c"]
+        r1.rho = None
+        r1.merged = "x"
+        r1.thinkers_ok = [f"seat_{i}" for i in range(1, 6)]
+        r2 = NL.RoundResult(2, "two")
+        r2.closer_failed = "TimeoutError: merge timed out"
+        return [r1, r2]
+
+    def test_completion_is_read_from_the_last_round_that_knew(self):
+        assert NL.assess(self._rounds()).adjudication == "PARTIAL"
+
+    def test_the_failed_merge_is_still_a_caveat(self):
+        v = NL.assess(self._rounds())
+        assert v.trustworthy is False
+        assert any("MERGE FAILED" in c for c in v.caveats)

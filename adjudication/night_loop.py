@@ -1408,7 +1408,17 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
         return RunVerdict("NONE", "UNMEASURED", ["no round completed"], [])
 
     removed = sum(len(r.options_removed) for r in results)
-    alive = results[-1].options_alive
+    # THE LAST ROUND THAT ACTUALLY KNEW, not simply the last round.
+    #
+    # A round whose closer failed never reaches the option bookkeeping, so its
+    # options_alive keeps the empty default -- and reading that as "no options
+    # remain" made a run with two live options report COMPLETE. Completion is
+    # a fact about the option set, so it has to be read from the last result
+    # that observed one.
+    alive: list[str] = []
+    for r in results:
+        if r.options_alive or r.options_created:
+            alive = r.options_alive
     created = sum(r.options_created for r in results)
     claims = sum(r.passed + r.failed + r.escalated + r.blocked for r in results)
     escalated = sum(r.escalated for r in results)

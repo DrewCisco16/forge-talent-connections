@@ -903,8 +903,24 @@ class SchemaGate:
                               "no warrant supplied")
         try:
             payload = json.loads(warrant)
-        except Exception as exc:  # noqa: BLE001 - fail-closed: any error denies
-            return GateResult(self.name, GateStatus.FAIL, f"invalid JSON: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            # UNPARSEABLE IS NOT FALSE. The gate learned nothing about the
+            # claim from a payload it could not read, and recording that as a
+            # refutation is a finding it never made.
+            return GateResult(self.name, GateStatus.BLOCKED,
+                              f"the warrant is not valid JSON: {exc}")
+        if self.required_keys and not isinstance(payload, dict):
+            # `k not in payload` MEANS SOMETHING DIFFERENT FOR EVERY TYPE. On
+            # a list it tests membership among the ELEMENTS, so ["id"] passed
+            # a required key of "id"; on a string it tests substrings, so
+            # "id" passed too; on a number or null it raises TypeError and
+            # took the run with it. A key check only means anything on a
+            # mapping.
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"required keys were configured but the payload is a "
+                f"{type(payload).__name__}, not an object; there is nothing "
+                f"to look a key up in")
         missing = [k for k in self.required_keys if k not in payload]
         if missing:
             return GateResult(self.name, GateStatus.FAIL, f"missing keys: {missing}")
