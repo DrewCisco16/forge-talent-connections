@@ -19,6 +19,17 @@ import domains as D
 import validation_harness as VH
 import watcher as W
 
+NEVER_OPENED = "/nonexistent/settings-that-must-not-be-read.json"
+"""A settings path these tests hand to the watcher and nothing ever opens.
+
+live_night is monkeypatched in every test below, so the path is carried and
+discarded. It used to read "profiles.json" -- the OPERATOR's real settings
+file, gitignored because it holds live endpoints beside live keys. Nothing
+opened it, but naming it invited the next change to, and a test that reaches
+an untracked local file is a test of that machine. A path that cannot exist
+fails loudly if anything ever does open it.
+"""
+
 # ===========================================================================
 # the watcher: what may start a paid run
 # ===========================================================================
@@ -131,7 +142,7 @@ class TestWhereAFileEndsUp:
         f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: [])
-        W.process(p, f, 1.0, "profiles.json")
+        W.process(p, f, 1.0, NEVER_OPENED)
         assert os.path.exists(os.path.join(f.done, "ask.md"))
         assert not os.path.exists(p)
 
@@ -145,7 +156,7 @@ class TestWhereAFileEndsUp:
         def broke(*_a, **_k):
             raise CeilingReached("per-run", 3.0, 3.0, 0.5)
         monkeypatch.setattr("night_loop.live_night", broke)
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert os.path.exists(os.path.join(f.done, "ask.md"))
         with open(os.path.join(out, "PARTIAL.md")) as fh:
             assert "PARTIAL" in fh.read()
@@ -157,7 +168,7 @@ class TestWhereAFileEndsUp:
         def boom(*_a, **_k):
             raise RuntimeError("the panel exploded")
         monkeypatch.setattr("night_loop.live_night", boom)
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert os.path.exists(os.path.join(f.failed, "ask.md"))
         with open(os.path.join(out, "ERROR.md")) as fh:
             assert "the panel exploded" in fh.read()
@@ -169,7 +180,7 @@ class TestWhereAFileEndsUp:
         f, p = _inbox(tmp_path, "ask.md", "Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
-        W.process(p, f, 1.0, "profiles.json")
+        W.process(p, f, 1.0, NEVER_OPENED)
         assert W.candidates(f.inbox) == []
 
     def test_one_bad_file_does_not_stop_the_watcher(self, tmp_path, monkeypatch):
@@ -355,7 +366,7 @@ class TestTheWatcherClaimsItsInputBeforePaying:
         called = {"n": 0}
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: called.__setitem__("n", 1) or [])
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert called["n"] == 0, "a withdrawn file was paid for"
         assert os.path.exists(os.path.join(f.failed, "ask.md"))
         with open(os.path.join(out, "REJECTED.md")) as fh:
@@ -369,7 +380,7 @@ class TestTheWatcherClaimsItsInputBeforePaying:
         called = {"n": 0}
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: called.__setitem__("n", 1) or [])
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert called["n"] == 0
         with open(os.path.join(out, "REJECTED.md")) as fh:
             assert "mid-write" in fh.read()
@@ -381,7 +392,7 @@ class TestTheWatcherClaimsItsInputBeforePaying:
         called = {"n": 0}
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: called.__setitem__("n", 1) or [])
-        W.process(p, f, 1.0, "profiles.json")
+        W.process(p, f, 1.0, NEVER_OPENED)
         assert called["n"] == 1
 
 
@@ -423,7 +434,7 @@ class TestTheWatcherAlwaysLeavesACostRecord:
         with open(p, "w") as fh:
             fh.write("Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night", lambda *a, **k: [])
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert os.path.exists(os.path.join(out, "COST.md"))
 
     def test_a_crashed_run_still_writes_one(self, tmp_path, monkeypatch):
@@ -435,7 +446,7 @@ class TestTheWatcherAlwaysLeavesACostRecord:
             fh.write("Q: should we build the ingest service or buy one?\n")
         monkeypatch.setattr("night_loop.live_night",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
-        out = W.process(p, f, 1.0, "profiles.json")
+        out = W.process(p, f, 1.0, NEVER_OPENED)
         assert os.path.exists(os.path.join(out, "COST.md"))
 
     def test_a_scan_failure_does_not_end_the_loop(self, tmp_path, monkeypatch):
