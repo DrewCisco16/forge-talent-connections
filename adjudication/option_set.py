@@ -96,6 +96,11 @@ class Option:
         return self.eliminated_in_round is None
 
 
+def _parse_list(text: str) -> list[Option]:
+    """Shared list reader. See parse_options for the rules it applies."""
+    return parse_options(text)
+
+
 def parse_options(text: str) -> list[Option]:
     """Read a numbered or bulleted list into options.
 
@@ -296,3 +301,103 @@ def unexamined(options: Sequence[Option],
         if not ruled:
             out.append(opt)
     return out
+
+
+_MERGE = re.compile(r"^\s*MERGE\s*\|(.+)$", re.IGNORECASE)
+_OPT_ID = re.compile(r"opt_[0-9a-f]{6,}", re.IGNORECASE)
+
+
+def parse_proposals(thinker_texts: Mapping[str, str]) -> list[Option]:
+    """The option pool, built from what the THINKERS actually proposed.
+
+    ROUND ONE'S OPTION SET USED TO COME FROM THE CLOSER'S LIST, which meant
+    the closer decided what the answers were. It could recombine words from
+    two different proposals into a third that nobody made -- given "Hold all
+    inventory until next quarter" and "Liquidate only damaged inventory this
+    week", it emitted "Hold damaged inventory this week", and that became the
+    SOLE option. The invention detector missed it because every word had
+    occurred in some thinker's text.
+
+    So the pool comes from the seats that wrote blind, and nothing else may
+    add to it. Later immutable ids protected only the set the closer chose;
+    this protects which set that is.
+
+    Every proposal from every seat enters the pool. Identical wording collapses
+    by content id, and near-duplicates are what the merge step below is for --
+    which is a real job requiring judgement, and the one the closer keeps.
+    """
+    pool: list[Option] = []
+    seen: set[str] = set()
+    for _seat, text in sorted(thinker_texts.items()):
+        for opt in _parse_list(text):
+            if opt.id in seen:
+                continue
+            seen.add(opt.id)
+            pool.append(opt)
+    return pool
+
+
+def apply_merges(pool: Sequence[Option], closer_text: str) -> list[Option]:
+    """Collapse near-duplicates the closer identified, by id.
+
+    The closer is shown the pool with ids and answers in lines like
+
+        MERGE | opt_3f9a2c | opt_88ab01
+
+    meaning those name the same answer. It cannot introduce an option this
+    way: an id that is not in the pool is ignored, and prose is ignored
+    entirely. The surviving member of a group is the FIRST one in pool order,
+    chosen by this code rather than by the closer, so the wording that
+    survives is a seat's own.
+
+    A closer that merges nothing leaves the pool as it stands, which is the
+    honest result when nothing was a duplicate -- and the safe one when the
+    closer failed.
+    """
+    by_id = {o.id: o for o in pool}
+    absorbed: dict[str, str] = {}
+    for line in (closer_text or "").splitlines():
+        m = _MERGE.match(line)
+        if not m:
+            continue
+        ids = [i.lower() for i in _OPT_ID.findall(m.group(1))
+               if i.lower() in by_id]
+        # Follow any chain already recorded, so two merge lines naming an
+        # option that has itself been absorbed land on the same survivor.
+        ids = [_resolve(i, absorbed) for i in ids]
+        unique = list(dict.fromkeys(ids))
+        if len(unique) < 2:
+            continue
+        keeper = min(unique, key=lambda i: [o.id for o in pool].index(i))
+        for other in unique:
+            if other != keeper:
+                absorbed[other] = keeper
+    return [o for o in pool if o.id not in absorbed]
+
+
+def _resolve(option_id_: str, absorbed: Mapping[str, str]) -> str:
+    seen: set[str] = set()
+    while option_id_ in absorbed and option_id_ not in seen:
+        seen.add(option_id_)
+        option_id_ = absorbed[option_id_]
+    return option_id_
+
+
+def render_pool(pool: Sequence[Option]) -> str:
+    """The pool as the closer sees it, for the round-one merge step."""
+    lines = ["## Every option the seats proposed", ""]
+    for i, opt in enumerate(pool, 1):
+        lines.append(f"{i}. [{opt.id}] {opt.text}")
+    lines += [
+        "",
+        "Some of these are the same answer worded differently. Say so with",
+        "one line per group, naming the ids:",
+        "",
+        "    MERGE | opt_3f9a2c | opt_88ab01",
+        "",
+        "You may not add an option here, reword one, or leave one out. The",
+        "list above is what the seats proposed and it is the whole option set;",
+        "your merges only say which entries are the same answer. Anything you",
+        "write that is not a MERGE line is read as commentary.",
+    ]
+    return "\n".join(lines)

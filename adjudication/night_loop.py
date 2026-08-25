@@ -53,9 +53,11 @@ from adjudication_orchestrator import (
 from option_set import (
     Option,
     TooManyOptions,
+    apply_merges,
     attach_claims,
     eliminate,
-    parse_options,
+    parse_proposals,
+    render_pool,
     render_record,
     render_working,
     unexamined,
@@ -522,7 +524,8 @@ def confidence_clause(n_seats: int, rho: float | None) -> str:
 def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
                   check_summary: str, prev_merged: str | None,
                   n_seats: int = 5, rho: float | None = None,
-                  personas: Mapping[str, str] | None = None) -> str:
+                  personas: Mapping[str, str] | None = None,
+                  pool: Sequence[Option] | None = None) -> str:
     """The closer goes last, with everything in front of it.
 
     Thinker text arrives WITHOUT attribution. Which model said what is not
@@ -588,9 +591,10 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
         "filling it would make you a sixth seat writing unexamined content "
         "into an answer that has already stopped being reviewed."
     )
-    task = ("Collect every option proposed, remove duplicates, and produce ONE "
-            "numbered list of the distinct options. That list is what later "
-            "rounds eliminate from."
+    task = ("Say which of the options above are the same answer worded "
+            "differently, one MERGE line per group. That is the whole task "
+            "for this round: the option set is what the seats proposed and "
+            "you may not add to it, reword it, or leave anything out."
             if r.invents else
             "Keep what survived. Remove what the check refuted. Do not add "
             "anything new.") + plug
@@ -602,6 +606,7 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
         ("## The working answer entering this round\n"
          + wrap_untrusted(prev_merged) + "\n" if prev_merged else ""),
         f"## Contributions from this round\n{body}\n",
+        (render_pool(pool) + "\n") if (r.invents and pool) else "",
         absent,
         "## Mechanical check results\n"
         "These verdicts came from code, not from a model. They are not "
@@ -765,6 +770,7 @@ def run_night(
         emit(f"ROUND {r.n}/{len(rounds)}  {r.name}")
 
         # 1-4: the thinkers, each in isolation
+        pool: list[Option] = []
         #
         # The prompt is built PER SEAT, not once and shared, because each seat
         # carries a persona and a shared prompt would hand all five the same
@@ -832,6 +838,16 @@ def run_night(
         res.claims = len(claims)
         res.passed, res.failed = rec.auto_accepted, rec.auto_rejected
         res.escalated, res.blocked = rec.escalated, rec.blocked
+        if r.invents and not options:
+            # Built before the closer is asked anything, from the blind
+            # proposals only.
+            try:
+                pool = parse_proposals(texts)
+            except TooManyOptions as exc:
+                emit(f"  {exc}")
+                pool = []
+            emit(f"  {len(pool)} distinct option(s) proposed by the seats")
+
         summary = _check_summary(orch, claims)
 
         # Measured, not assumed. When it cannot be measured the closer is told
@@ -854,7 +870,8 @@ def run_night(
         try:
             merged_new = closer(closer_prompt(
                 r, ask, texts, summary, merged,
-                n_seats=len(texts), rho=rho, personas=res.personas))
+                n_seats=len(texts), rho=rho, personas=res.personas,
+                pool=pool))
         except BudgetExceeded:
             # A ceiling is not a closer failure. Swallowing it here left the
             # watcher's PARTIAL path unreachable: the run returned normally,
@@ -946,8 +963,20 @@ def run_night(
         # ids, and every later round removes from that list on verdicts. The
         # text that carries forward is assembled from what survived.
         if r.invents and not options:
+            # THE OPTION SET COMES FROM THE SEATS, NOT THE CLOSER.
+            #
+            # It used to be parsed out of the closer's list, which meant the
+            # closer decided what the answers were -- and it could recombine
+            # words from two proposals into a third nobody made. Given "Hold
+            # all inventory until next quarter" and "Liquidate only damaged
+            # inventory this week" it emitted "Hold damaged inventory this
+            # week", and that became the SOLE option. The invention detector
+            # missed it because every word had appeared in some seat's text.
+            #
+            # The pool is built from the blind proposals; the closer's merge
+            # lines only say which entries are the same answer.
             try:
-                options = parse_options(merged_new)
+                options = apply_merges(pool, merged_new)
             except TooManyOptions as exc:
                 # Refused rather than truncated. Cutting the list to the first
                 # twelve dropped answers by the order they happened to be

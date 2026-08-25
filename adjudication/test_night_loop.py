@@ -270,10 +270,15 @@ class TestCloser:
         p = NL.closer_prompt(NL.ROUNDS[0], "ask", {"s": "x"}, "sum", None)
         assert "simulate" in p.lower() or "role-play" in p.lower()
 
-    def test_round_one_merges_options_and_later_rounds_only_remove(self):
+    def test_round_one_merges_and_later_rounds_only_remove(self):
+        """Round one no longer asks the closer for a LIST -- that let it
+        decide what the answers were, and it recombined words from two
+        proposals into a third nobody made. It is asked only which entries
+        name the same answer."""
         first = NL.closer_prompt(NL.ROUNDS[0], "ask", {"s": "x"}, "sum", None)
         later = NL.closer_prompt(NL.ROUNDS[1], "ask", {"s": "x"}, "sum", "prev")
-        assert "numbered list" in first
+        assert "MERGE line per group" in first
+        assert "may not add to it" in first
         assert "Do not add" in later
 
     def test_the_closer_output_is_itself_gated(self, tmp_path):
@@ -1312,8 +1317,9 @@ class TestCodeOwnsTheSurvivorSet:
                     + claim_line)
 
         def closer(_p):
-            return ("1. Liquidate inventory immediately.\n"
-                    "2. Hold inventory and reprice next quarter.\n")
+            # Round one asks the closer only which entries are the same
+            # answer. The option set itself comes from the seats.
+            return "no merges needed; both are distinct answers\n"
         return NL.run_night("what to do",
                             {f"seat_{i}": seat for i in range(1, 6)},
                             closer, _orch(), str(tmp_path),
@@ -1550,3 +1556,91 @@ class TestAFailedRoundDoesNotOverstateCompletion:
         v = NL.assess(self._rounds())
         assert v.trustworthy is False
         assert any("MERGE FAILED" in c for c in v.caveats)
+
+
+class TestTheOptionSetComesFromTheSeats:
+    """Re-check #3. Round one parsed the option set out of the CLOSER's list,
+    so the closer decided what the answers were -- and it could recombine
+    words from two proposals into a third nobody made. Given "Hold all
+    inventory until next quarter" and "Liquidate only damaged inventory this
+    week" it emitted "Hold damaged inventory this week", and that became the
+    SOLE option. The invention detector missed it because every word had
+    appeared in some seat's text."""
+
+    PROPOSALS = ("1. Hold all inventory until next quarter\n"
+                 "2. Liquidate only damaged inventory this week\n")
+
+    def _run(self, tmp_path, closer_text):
+        return NL.run_night(
+            "what to do",
+            {f"seat_{i}": (lambda _p: self.PROPOSALS) for i in range(1, 6)},
+            lambda _p: closer_text, _orch(), str(tmp_path),
+            rounds=NL.ROUNDS[:1])
+
+    def test_a_recombination_never_becomes_an_option(self, tmp_path):
+        res = self._run(tmp_path, "1. Hold damaged inventory this week\n")
+        assert res[0].options_created == 2
+        assert "Hold damaged inventory this week" not in res[0].merged
+
+    def test_the_seats_proposals_are_the_option_set(self, tmp_path):
+        res = self._run(tmp_path, "no merges needed\n")
+        assert "Hold all inventory until next quarter" in res[0].merged
+        assert "Liquidate only damaged inventory this week" in res[0].merged
+
+    def test_a_wholly_invented_option_is_not_a_member(self, tmp_path):
+        """It was flagged as invented and still became a member and appeared
+        in the packet."""
+        res = self._run(tmp_path, "1. Acquire the Zurich subsidiary\n")
+        assert "Zurich" not in res[0].merged
+
+    def test_the_closer_can_still_merge_duplicates(self):
+        pool = OS.parse_proposals({
+            "s1": "1. Build it in house over two quarters\n"
+                  "2. Buy the vendor platform\n",
+            "s2": "1. Build the thing ourselves over two quarters\n"})
+        assert len(pool) == 3
+        merged = OS.apply_merges(pool, f"MERGE | {pool[0].id} | {pool[2].id}")
+        assert len(merged) == 2
+        # The surviving wording is a SEAT's, chosen by pool order rather than
+        # by the closer.
+        assert merged[0].text == "Build it in house over two quarters"
+
+    def test_a_merge_naming_an_unknown_id_changes_nothing(self):
+        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
+                                         "2. Buy the vendor platform\n"})
+        assert len(OS.apply_merges(
+            pool, "MERGE | opt_notreal01 | opt_notreal02")) == 2
+
+    def test_prose_in_the_merge_step_is_ignored(self):
+        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
+                                         "2. Buy the vendor platform\n"})
+        assert len(OS.apply_merges(
+            pool, "I think option 1 and option 2 are really the same.")) == 2
+
+    def test_chained_merges_land_on_one_survivor(self):
+        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
+                                         "2. Build the thing ourselves\n"
+                                         "3. Construct it internally\n"})
+        merged = OS.apply_merges(
+            pool, f"MERGE | {pool[1].id} | {pool[2].id}\n"
+                  f"MERGE | {pool[0].id} | {pool[1].id}")
+        assert len(merged) == 1
+        assert merged[0].id == pool[0].id
+
+    def test_every_seats_proposals_reach_the_pool(self):
+        pool = OS.parse_proposals({
+            "s1": "1. Build it in house\n",
+            "s2": "1. Buy the vendor platform\n",
+            "s3": "1. Rent capacity for six months\n"})
+        assert len(pool) == 3
+
+    def test_identical_wording_collapses_without_a_merge_line(self):
+        pool = OS.parse_proposals({"s1": "1. Build it in house\n",
+                                   "s2": "1. Build it in house\n"})
+        assert len(pool) == 1
+
+    def test_the_closer_is_told_it_may_not_add(self):
+        pool = OS.parse_proposals({"s1": "1. Build it in house\n"})
+        text = OS.render_pool(pool)
+        assert "may not add an option" in text
+        assert "MERGE |" in text
