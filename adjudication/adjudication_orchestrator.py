@@ -167,6 +167,30 @@ class Claim:
     misrepresented the state of the evidence.
     """
 
+    def __post_init__(self) -> None:
+        """An id-less claim gets its content id, rather than keeping "".
+
+        THE FAILURE THIS REMOVES. Every consumer treats the id as identity:
+        run_pass skips a claim whose id it has already adjudicated. Two claims
+        both carrying "" are therefore the SAME claim to that check, so the
+        first is gated and every later one is silently dropped -- not
+        escalated, not blocked, not recorded as anything. A candidate standing
+        on a dropped claim can never be eliminated, because the assertion that
+        would have killed it was never ruled on.
+
+        Both production entry points -- parse_candidates and
+        line_claim_extractor -- already assign a content id, so this was not
+        reachable through them. It was reachable from anywhere else, silently,
+        and "silently" is the part that matters: the run completes, the report
+        renders, and the missing verdicts leave no trace.
+
+        Computing the id here makes the invariant true by construction instead
+        of by convention. An explicitly supplied id is left alone, because
+        callers that mint their own ids depend on them.
+        """
+        if not self.id:
+            self.id = content_claim_id(self.kind, self.warrant, self.text)
+
 
 @dataclass
 class Candidate:
@@ -1565,6 +1589,18 @@ class Orchestrator:
         rec = PassRecord(p.id, len(proposed_claims), 0, 0, 0)
 
         for claim in proposed_claims:
+            if not claim.id:
+                # Unreachable via __post_init__, which fills an empty id. Kept
+                # because the consequence of an empty id is silent: it aliases
+                # to every other empty id, so the first claim is gated and the
+                # rest vanish without appearing in any count. A loud failure
+                # here costs one traceback; the alternative costs a run whose
+                # report looks complete.
+                raise ValueError(
+                    f"claim with no id: {claim.text!r}. An empty id aliases to "
+                    f"every other empty id, so this claim and all later ones "
+                    f"would be dropped without being adjudicated."
+                )
             self._proposed_index[claim.id] = claim
             if claim.source_seat:
                 self.detections_by_seat.setdefault(claim.source_seat, set()).add(claim.id)

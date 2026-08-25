@@ -392,3 +392,194 @@ class TestTheCanaryScoresDenialsBeforeSubstrings:
 
     def test_matching_is_case_folded(self):
         assert RC.judge("ANSWER: OPUS 5", _canary()).verdict == "PASS"
+
+
+# ===========================================================================
+# quote_gate — is the quoted string actually at the URL it is attributed to?
+#
+# The failure this catches: a quote that supports its answer perfectly and is
+# simply not in the source. In a three-run verification exercise on this
+# project it produced a confident, well-organised run asserting a parameter
+# table exists on a page where it does not, and it would have reversed a
+# correct conclusion because it looked better-sourced than the truth. It was
+# caught only because the operator had independently read the page.
+# ===========================================================================
+
+import quote_gate as QG  # noqa: E402
+
+PAGE = "The quick brown fox jumps over the lazy dog. " * 20
+
+
+def _qclaim(url, quote):
+    return Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
+                 text="a sourced assertion", warrant=f"{url} :: {quote}")
+
+
+def _gate(status=200, text=PAGE, raises=None):
+    def fetch(_url):
+        if raises is not None:
+            raise raises
+        return status, QG.normalize(text)
+    return QG.QuoteVerificationGate(fetcher=fetch)
+
+
+class TestTheQuoteWarrant:
+
+    def test_the_warrant_is_url_then_quote(self):
+        assert QG.QuoteVerificationGate.parse_warrant(
+            "https://e.test/p :: some words") == ("https://e.test/p", "some words")
+
+    def test_a_plaintext_url_is_refused(self):
+        """A quote fetched over http can be rewritten in transit by anything
+        on the path, so a match proves nothing about the real source."""
+        assert QG.QuoteVerificationGate.parse_warrant(
+            "http://e.test/p :: some words") is None
+
+    def test_an_empty_quote_or_missing_separator_does_not_parse(self):
+        for bad in (None, "", "https://e.test/p", "https://e.test/p :: ",
+                    ":: some words"):
+            assert QG.QuoteVerificationGate.parse_warrant(bad) is None
+
+    def test_the_gate_only_applies_to_quote_claims(self):
+        g = _gate()
+        assert g.applies_to(_qclaim("https://e.test/p", "quick brown")) is True
+        assert g.applies_to(Claim(id="", kind=ClaimKind.ARITHMETIC, text="x",
+                                  warrant="https://e.test/p :: q")) is False
+
+
+class TestTheQuoteIsEitherThereOrItIsNot:
+
+    def test_a_quote_present_in_the_page_passes(self):
+        r = _gate().check(_qclaim("https://e.test/p", "quick brown fox"))
+        assert r.status is GateStatus.PASS
+
+    def test_a_quote_absent_from_the_page_fails(self):
+        """The whole point. This is a statement about the citation, not about
+        the network, so it is a finding."""
+        r = _gate().check(_qclaim("https://e.test/p",
+                                  "a parameter table listing every default"))
+        assert r.status is GateStatus.FAIL
+        assert "QUOTE_NOT_IN_SOURCE" in r.detail
+
+    def test_case_differences_still_match_and_are_recorded(self):
+        r = _gate().check(_qclaim("https://e.test/p", "QUICK BROWN FOX"))
+        assert r.status is GateStatus.PASS
+        assert "case-folded" in r.detail
+
+    def test_smart_punctuation_matches_its_ascii_form(self):
+        """A quote typed with curly apostrophes must match a page using
+        straight ones, or every real quotation fails on typography."""
+        # The curly apostrophe is the entire point of the test, so RUF001 --
+        # which flags it as an ambiguous character -- is exactly backwards
+        # here: this gate exists to fold that glyph to its ASCII form.
+        page = "He said the model" + "\u2019" + "s output was wrong. " * 30
+        g = QG.QuoteVerificationGate(
+            fetcher=lambda _u: (200, QG.normalize(page)))
+        r = g.check(_qclaim("https://e.test/p", "the model's output was wrong"))
+        assert r.status is GateStatus.PASS
+
+    def test_whitespace_differences_do_not_break_a_match(self):
+        page = "The\n\n  quick   brown\tfox jumps. " * 30
+        g = QG.QuoteVerificationGate(
+            fetcher=lambda _u: (200, QG.normalize(page)))
+        r = g.check(_qclaim("https://e.test/p", "quick brown fox jumps"))
+        assert r.status is GateStatus.PASS
+
+
+class TestAnUnreadablePageIsBlockedNotFailed:
+
+    def test_a_transport_failure_is_blocked(self):
+        r = _gate(raises=ConnectionError("dns")).check(
+            _qclaim("https://e.test/p", "anything"))
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_paywall_or_rate_limit_is_blocked(self):
+        """Recorded as FAILED, a paywall masquerades as a fabrication and,
+        through the cascade, eliminates a true candidate."""
+        for code in (401, 403, 429, 500, 503):
+            r = _gate(status=code).check(_qclaim("https://e.test/p", "x"))
+            assert r.status is GateStatus.BLOCKED, code
+
+    def test_a_404_is_a_finding_not_a_blockage(self):
+        """The cited source is not there at all. That is a statement about the
+        citation, not about the network."""
+        r = _gate(status=404).check(_qclaim("https://e.test/p", "x"))
+        assert r.status is GateStatus.FAIL
+        assert "SOURCE_NOT_RETRIEVABLE" in r.detail
+
+    def test_a_page_too_short_to_search_is_blocked_not_failed(self):
+        """A page that renders its text with JavaScript yields a near-empty
+        document. Matching against that produces a false FAILED, and through
+        the cascade eliminates a candidate on a client-side rendering quirk."""
+        r = _gate(text="loading...").check(_qclaim("https://e.test/p", "x"))
+        assert r.status is GateStatus.BLOCKED
+        assert "renders client-side" in r.detail
+
+    def test_a_page_is_fetched_once_however_many_quotes_cite_it(self):
+        calls = {"n": 0}
+
+        def counting(_url):
+            calls["n"] += 1
+            return 200, QG.normalize(PAGE)
+        g = QG.QuoteVerificationGate(fetcher=counting)
+        g.check(_qclaim("https://e.test/p", "quick brown"))
+        g.check(_qclaim("https://e.test/p", "lazy dog"))
+        assert calls["n"] == 1
+
+
+class TestTheGateIsNotAServerSideRequestForgeryPrimitive:
+
+    def test_a_loopback_host_is_refused(self):
+        """The URL comes from a model. Fetching 127.0.0.1 on its say-so lets
+        it read anything reachable from this machine but not the internet."""
+        assert QG._resolve_public("localhost") is None
+
+    def test_the_cloud_metadata_address_is_refused(self):
+        assert QG._resolve_public("169.254.169.254") is None
+
+    def test_an_unresolvable_host_is_not_public(self):
+        assert QG._resolve_public("no-such-host.invalid") is None
+
+    def test_resolution_returns_the_address_that_was_approved(self):
+        """Checking the hostname and letting urllib resolve it again is a
+        time-of-check/time-of-use gap: a name whose DNS answer changes between
+        the two lookups -- DNS rebinding -- passes the check and then connects
+        somewhere else."""
+        assert QG._resolve_public("93.184.216.34") == "93.184.216.34"
+
+
+class TestTheCascade:
+
+    def _verdict(self, status):
+        return type("V", (), {"status": status, "detail": "d"})()
+
+    def test_a_refuted_quote_removes_the_claims_it_supported(self):
+        """A quote shown not to exist does not merely drop itself: every claim
+        it was offered in support of has lost its stated evidentiary basis."""
+        q = Claim(id="q1", kind=ClaimKind.QUOTE_VERIFICATION, text="t",
+                  warrant="https://e.test/p :: x", supports=["c1", "c2"])
+        out = QG.cascade_unsupported({"q1": self._verdict(GateStatus.FAIL)},
+                                     {"q1": q})
+        assert set(out) == {"c1", "c2"}
+        assert "UNSUPPORTED" in out["c1"]
+
+    def test_a_blocked_quote_cascades_nothing(self):
+        """The check did not happen, so the supported claim is exactly as well
+        or badly evidenced as it was before. Cascading here would let an
+        outage strip the evidence from a true answer."""
+        q = Claim(id="q1", kind=ClaimKind.QUOTE_VERIFICATION, text="t",
+                  warrant="https://e.test/p :: x", supports=["c1"])
+        assert QG.cascade_unsupported(
+            {"q1": self._verdict(GateStatus.BLOCKED)}, {"q1": q}) == {}
+
+    def test_a_passing_quote_cascades_nothing(self):
+        q = Claim(id="q1", kind=ClaimKind.QUOTE_VERIFICATION, text="t",
+                  warrant="https://e.test/p :: x", supports=["c1"])
+        assert QG.cascade_unsupported(
+            {"q1": self._verdict(GateStatus.PASS)}, {"q1": q}) == {}
+
+    def test_a_non_quote_claim_never_cascades(self):
+        c = Claim(id="a1", kind=ClaimKind.ARITHMETIC, text="t",
+                  warrant="2 + 2 = 5", supports=["c1"])
+        assert QG.cascade_unsupported(
+            {"a1": self._verdict(GateStatus.FAIL)}, {"a1": c}) == {}

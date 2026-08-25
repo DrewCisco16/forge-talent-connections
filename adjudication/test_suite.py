@@ -4684,3 +4684,127 @@ class TestReasoningTokensReachTheCeiling:
         led = self._ledger()
         self._seat_with_usage(led, 16748)("prompt")
         assert led.unmeasured_calls == 0
+
+
+class TestUnverifiedIsNotWrong:
+    """The rule the whole design turns on.
+
+    Fail closed on what is WRONG, not on what is merely unverified. An
+    unverified claim could be true, so eliminating it converts an outage, a
+    paywall, or a rate limit into a fabrication finding -- and kills a true
+    candidate on the strength of a network problem.
+
+    Applied to elimination it would be worse than unsafe, it would be biased:
+    the tool would systematically converge on whichever answer happened to
+    rest on mechanically checkable claims, preferring arithmetic over judgment
+    regardless of which was true. That is convergence to the wrong thing,
+    arrived at while every indicator reads green.
+
+    Three outcomes, not two. A pass/fail gate cannot express this.
+    """
+
+    def _run(self):
+        from citation_gate import CitationFieldMatchGate
+
+        right = Candidate(id="RIGHT", content="rests on arithmetic that holds",
+                          claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
+                                        text="12 units at 50 is 600",
+                                        warrant="12 * 50 = 600")])
+        wrong = Candidate(id="WRONG", content="rests on arithmetic that fails",
+                          claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
+                                        text="12 units at 50 is 700",
+                                        warrant="12 * 50 = 700")])
+        unknown = Candidate(id="UNKNOWN", content="rests on an unreachable source",
+                            claims=[Claim(id="", kind=ClaimKind.CITATION,
+                                          text="a real finding",
+                                          warrant="10.1/x :: Doe ;; 2020 ;; A paper")])
+        orch = Orchestrator([ArithmeticGate(),
+                             CitationFieldMatchGate(record_fn=lambda _d: None)])
+        cands = [right, wrong, unknown]
+        rec = orch.run_pass(
+            type("P", (), {"id": "p1", "name": "pass one", "eliminative": True})(),
+            cands, [c for cand in cands for c in cand.claims])
+        return rec, {c.id: c for c in cands}
+
+    def test_what_is_demonstrably_wrong_is_eliminated(self):
+        _, by_id = self._run()
+        assert by_id["WRONG"].eliminated is True
+
+    def test_what_could_not_be_checked_survives(self):
+        """It could be right. Nothing has been shown about it either way."""
+        _, by_id = self._run()
+        assert by_id["UNKNOWN"].eliminated is False
+
+    def test_what_was_verified_survives(self):
+        _, by_id = self._run()
+        assert by_id["RIGHT"].eliminated is False
+
+    def test_only_a_verified_claim_is_accepted(self):
+        """Unverified must not be accepted either. It is neither in nor out --
+        it is open, and a person settles it."""
+        rec, _ = self._run()
+        assert rec.auto_accepted == 1
+        assert rec.auto_rejected == 1
+        assert rec.blocked == 1
+
+    def test_the_elimination_names_what_was_wrong(self):
+        _, by_id = self._run()
+        assert "recomputed 600" in by_id["WRONG"].elimination_reason
+
+
+class TestAClaimAlwaysHasAnIdentity:
+    """An empty claim id aliases to every other empty claim id.
+
+    run_pass skips a claim whose id it has already adjudicated, so two claims
+    both carrying "" are the SAME claim to that check: the first is gated and
+    every later one is silently dropped -- not escalated, not blocked, not
+    counted. A candidate standing on a dropped claim can never be eliminated,
+    because the assertion that would have killed it was never ruled on.
+
+    Found by writing a three-outcome demonstration and watching a knowingly
+    false candidate survive with refuted == 0.
+    """
+
+    def test_an_id_less_claim_is_given_its_content_id(self):
+        c = Claim(id="", kind=ClaimKind.ARITHMETIC, text="t", warrant="1 + 1 = 2")
+        assert c.id
+        assert c.id == AO.content_claim_id(ClaimKind.ARITHMETIC, "1 + 1 = 2", "t")
+
+    def test_two_different_claims_do_not_share_an_identity(self):
+        a = Claim(id="", kind=ClaimKind.ARITHMETIC, text="right", warrant="12 * 50 = 600")
+        b = Claim(id="", kind=ClaimKind.ARITHMETIC, text="wrong", warrant="12 * 50 = 700")
+        assert a.id != b.id
+
+    def test_the_same_proposition_still_collides(self):
+        """Two seats making the same claim must share an id -- that is what
+        the capture-recapture statistics count."""
+        a = Claim(id="", kind=ClaimKind.ARITHMETIC, text="two and two",
+                  warrant="2 + 2 = 4", source_seat="seat_1")
+        b = Claim(id="", kind=ClaimKind.ARITHMETIC, text="Two and two.",
+                  warrant="2 + 2 = 4", source_seat="seat_4")
+        assert a.id == b.id
+
+    def test_an_explicit_id_is_left_alone(self):
+        """Callers that mint their own ids depend on them."""
+        assert Claim(id="mine", kind=ClaimKind.JUDGMENT, text="t").id == "mine"
+
+    def test_every_distinct_claim_is_adjudicated(self):
+        """The regression itself: three distinct claims, three verdicts."""
+        claims = [Claim(id="", kind=ClaimKind.ARITHMETIC, text=f"c{i}",
+                        warrant=f"{i} + 1 = {i + 1}") for i in range(3)]
+        orch = Orchestrator([ArithmeticGate()])
+        rec = orch.run_pass(
+            type("P", (), {"id": "p", "name": "n", "eliminative": False})(),
+            [], claims)
+        assert rec.auto_accepted == 3
+        assert rec.repeats == 0
+
+    def test_run_pass_refuses_an_empty_id_rather_than_dropping_it(self):
+        """Defence in depth. The cost of a loud failure is one traceback; the
+        cost of the silent one is a run whose report looks complete."""
+        c = Claim(id="x", kind=ClaimKind.ARITHMETIC, text="t", warrant="1 + 1 = 2")
+        c.id = ""          # bypass __post_init__ the way a mutation would
+        with pytest.raises(ValueError, match="no id"):
+            Orchestrator([ArithmeticGate()]).run_pass(
+                type("P", (), {"id": "p", "name": "n", "eliminative": False})(),
+                [], [c])
