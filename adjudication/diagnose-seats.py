@@ -27,6 +27,23 @@ print("env:", load_env_file(None))
 panel = {s.seat_id: s for s in load_panel(specs=PANEL_OF_FIVE_EXTERNAL)}
 profiles = load_profiles("profiles.json")
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse 3xx on a credentialed request.
+
+    Same leak the main transport had: urllib follows redirects and carries
+    the Authorization / x-api-key headers to the new origin, possibly over
+    plaintext. These requests carry a credential, so they must not follow.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913, PLR0917
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"refusing a {code} redirect to {newurl!r} on a credentialed request",
+            headers, fp,
+        )
+
+
 for sid in SEATS:
     seat = panel[sid]
     prof = profiles[sid]
