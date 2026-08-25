@@ -24,8 +24,8 @@ ASK = (
     "options and what would decide between them."
 )
 
-CEILING = 8.00
-CAP_TOKENS = 0   # 0 = use each seat's configured cap
+CEILING = 3.00
+ROUNDS_TO_RUN = 2
 
 def main() -> int:
     import json
@@ -41,10 +41,24 @@ def main() -> int:
     # makes one seat's worst case $2.06 and a five-round run's $25.51. The
     # ceiling correctly refused to start. For a smoke test, cap the reply at
     # a size that still fits two to four options and their claims.
-    if CAP_TOKENS:
-        for seat in seats.values():
-            if hasattr(seat, "max_tokens"):
-                seat.max_tokens = CAP_TOKENS
+    # Size the caps to the ceiling, the same way the console now does.
+    from cost_ledger import plan_run
+    with open("profiles.json", encoding="utf-8") as fh:
+        profiles = json.load(fh)
+    raw = profiles.get("seats", profiles)
+    caps = {s: (raw[s].get("max_tokens") or 4096)
+            for s in sorted(raw)
+            if not s.startswith("_") and isinstance(raw[s], dict)}
+    plan = plan_run(ledger, caps, rounds=ROUNDS_TO_RUN)
+    print(f"  plan: {plan.calls} calls, worst case ${plan.worst_case:.2f}, "
+          f"fits={plan.fits}")
+    print(f"        {plan.note}")
+    if not plan.fits:
+        return 2
+    for seat_id, cap in plan.caps.items():
+        seat = seats.get(seat_id)
+        if seat is not None and hasattr(seat, "max_tokens"):
+            seat.max_tokens = int(cap)
 
     closer = seats["seat_5"]
     orch = Orchestrator(night_gates())
@@ -52,7 +66,7 @@ def main() -> int:
     out = os.path.join("runs", f"canary-{time.strftime('%Y%m%d-%H%M%S')}")
     t0 = time.time()
     results = run_night(ASK, seats, closer, orch, out,
-                        rounds=ROUNDS[:1],
+                        rounds=ROUNDS[:ROUNDS_TO_RUN],
                         on_event=lambda m: print(f"  {m}", flush=True))
     print(f"\n  wall clock: {time.time() - t0:.0f}s")
     print("\n".join(ledger.render()))

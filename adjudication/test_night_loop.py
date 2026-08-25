@@ -1313,8 +1313,8 @@ class TestCodeOwnsTheSurvivorSet:
 
     def _run(self, tmp_path, claim_line, rounds=1):
         def seat(_p):
-            return ("1. Liquidate inventory immediately.\n"
-                    "2. Hold inventory and reprice next quarter.\n"
+            return ("OPTION | Liquidate inventory immediately.\n"
+                    "OPTION | Hold inventory and reprice next quarter.\n"
                     + claim_line)
 
         def closer(_p):
@@ -1393,10 +1393,10 @@ class TestCodeOwnsTheSurvivorSet:
         assert "mechanically refuted" in res[0].record_text
 
     def test_options_keep_their_identity_across_rounds(self):
-        a = OS.parse_options("1. Build it in house over two quarters\n"
-                             "2. Buy the vendor platform")
-        b = OS.parse_options("1. Buy the vendor platform\n"
-                             "2. Build it in house over two quarters")
+        a = OS.parse_options("OPTION | Build it in house over two quarters\n"
+                             "OPTION | Buy the vendor platform")
+        b = OS.parse_options("OPTION | Buy the vendor platform\n"
+                             "OPTION | Build it in house over two quarters")
         assert {o.id for o in a} == {o.id for o in b}
 
     def test_only_a_standing_fail_removes_an_option(self):
@@ -1446,8 +1446,8 @@ class TestCodeOwnsTheSurvivorSet:
         """The closer is required to end with an OPEN list naming what the
         round could not settle. Those bullets became candidate answers."""
         opts = OS.parse_options(
-            "1. Build the ingest service in house\n"
-            "2. Buy the vendor platform and migrate\n"
+            "OPTION | Build the ingest service in house\n"
+            "OPTION | Buy the vendor platform and migrate\n"
             "\nOPEN:\n"
             "- whether the vendor roadmap is credible\n"
             "- what migration would actually cost\n")
@@ -1457,7 +1457,7 @@ class TestCodeOwnsTheSurvivorSet:
         """Cutting to the first twelve dropped answers by the order they
         happened to be written in, with nothing recorded. Reversing the
         closer's ordering changed which option vanished."""
-        text = "\n".join(f"{i}. option number {i} written out here"
+        text = "\n".join(f"OPTION | option number {i} written out here"
                          for i in range(1, OS.MAX_OPTIONS + 3))
         with pytest.raises(OS.TooManyOptions):
             OS.parse_options(text)
@@ -1468,21 +1468,60 @@ class TestCodeOwnsTheSurvivorSet:
         as having no usable option set and nothing could be eliminated. The
         guard is against a seat emitting a hundred lines, not against a panel
         considering the answers it actually proposed."""
-        text = "\n".join(f"{i}. a genuinely distinct option number {i}"
+        text = "\n".join(f"OPTION | a genuinely distinct option number {i}"
                          for i in range(1, 21))
         assert len(OS.parse_options(text)) == 20
 
     def test_prose_around_the_list_is_not_an_option(self):
         opts = OS.parse_options(
             "Here are the distinct options:\n"
-            "1. Build the ingest service in house\n"
-            "2. Buy the vendor platform and migrate\n"
+            "OPTION | Build the ingest service in house\n"
+            "OPTION | Buy the vendor platform and migrate\n"
             "That list is what later rounds eliminate from.")
         assert len(opts) == 2
 
     def test_duplicate_proposals_collapse_to_one_option(self):
-        opts = OS.parse_options("1. Build it in house\n2. Build it in house")
+        opts = OS.parse_options(
+            "OPTION | Build it in house\nOPTION | Build it in house")
         assert len(opts) == 1
+
+    def test_a_premise_list_is_not_an_option_set(self):
+        """THE BUG THAT WOULD HAVE WASTED A PAID RUN. A live canary parsed ten
+        options out of five seats. Eight were one seat's numbered premises --
+        "The panel consists of five AI seats", "Each round costs approximately
+        six API calls" -- and the three answers that seat actually proposed,
+        written as "### Option 1:" headings, were not among them. Five rounds
+        would have adjudicated the panel's own setup while the real candidates
+        were never on the table.
+
+        Nothing in the layout separates a premise from a proposal; it is a
+        question of what the seat MEANT. So the seat has to say which it is."""
+        text = ("### Premises\n"
+                "1. The panel consists of five AI seats.\n"
+                "2. Each round costs approximately six API calls.\n"
+                "3. API calls have a marginal cost in time and money.\n")
+        assert OS.parse_options(text) == []
+
+    def test_a_heading_that_names_itself_an_option_counts(self):
+        """Four of five seats wrote their proposals this way unprompted, in
+        four different house styles. Reading what the models already produce
+        beats insisting they learn a new convention -- the OPTION line is
+        still what the contract asks for, and this catches the rest."""
+        text = ("### Option 1: Always run all five rounds\n"
+                "Some reasoning about it.\n"
+                "**Option 2: Stop at the first null round**\n"
+                "## Option C -- Patience-2 with a hard cap of five\n")
+        assert [o.text for o in OS.parse_options(text)] == [
+            "Always run all five rounds",
+            "Stop at the first null round",
+            "Patience-2 with a hard cap of five"]
+
+    def test_a_seat_that_declares_nothing_contributes_nothing(self):
+        """One canary seat wrote bold numbered lines with no such word. Those
+        were answers, and they are not recoverable without guessing. An empty
+        option set is recoverable; a wrong one is not."""
+        assert OS.parse_options("**1. Always run all five rounds.**\n"
+                                "**2. Stop at the first null round.**\n") == []
 
 
 class TestTheTwoPathsAgreeAboutIndependence:
@@ -1578,8 +1617,8 @@ class TestTheOptionSetComesFromTheSeats:
     SOLE option. The invention detector missed it because every word had
     appeared in some seat's text."""
 
-    PROPOSALS = ("1. Hold all inventory until next quarter\n"
-                 "2. Liquidate only damaged inventory this week\n")
+    PROPOSALS = ("OPTION | Hold all inventory until next quarter\n"
+                 "OPTION | Liquidate only damaged inventory this week\n")
 
     def _run(self, tmp_path, closer_text):
         return NL.run_night(
@@ -1589,7 +1628,7 @@ class TestTheOptionSetComesFromTheSeats:
             rounds=NL.ROUNDS[:1])
 
     def test_a_recombination_never_becomes_an_option(self, tmp_path):
-        res = self._run(tmp_path, "1. Hold damaged inventory this week\n")
+        res = self._run(tmp_path, "OPTION | Hold damaged inventory this week\n")
         assert res[0].options_created == 2
         assert "Hold damaged inventory this week" not in res[0].merged
 
@@ -1601,14 +1640,14 @@ class TestTheOptionSetComesFromTheSeats:
     def test_a_wholly_invented_option_is_not_a_member(self, tmp_path):
         """It was flagged as invented and still became a member and appeared
         in the packet."""
-        res = self._run(tmp_path, "1. Acquire the Zurich subsidiary\n")
+        res = self._run(tmp_path, "OPTION | Acquire the Zurich subsidiary\n")
         assert "Zurich" not in res[0].merged
 
     def test_the_closer_can_still_merge_duplicates(self):
         pool = OS.parse_proposals({
-            "s1": "1. Build it in house over two quarters\n"
-                  "2. Buy the vendor platform\n",
-            "s2": "1. Build the thing ourselves over two quarters\n"})
+            "s1": "OPTION | Build it in house over two quarters\n"
+                  "OPTION | Buy the vendor platform\n",
+            "s2": "OPTION | Build the thing ourselves over two quarters\n"})
         assert len(pool) == 3
         merged = OS.apply_merges(pool, f"MERGE | {pool[0].id} | {pool[2].id}")
         assert len(merged) == 2
@@ -1617,21 +1656,21 @@ class TestTheOptionSetComesFromTheSeats:
         assert merged[0].text == "Build it in house over two quarters"
 
     def test_a_merge_naming_an_unknown_id_changes_nothing(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Buy the vendor platform\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Buy the vendor platform\n"})
         assert len(OS.apply_merges(
             pool, "MERGE | opt_notreal01 | opt_notreal02")) == 2
 
     def test_prose_in_the_merge_step_is_ignored(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Buy the vendor platform\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Buy the vendor platform\n"})
         assert len(OS.apply_merges(
             pool, "I think option 1 and option 2 are really the same.")) == 2
 
     def test_chained_merges_land_on_one_survivor(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Build the thing ourselves\n"
-                                         "3. Construct it internally\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Build the thing ourselves\n"
+                                         "OPTION | Construct it internally\n"})
         merged = OS.apply_merges(
             pool, f"MERGE | {pool[1].id} | {pool[2].id}\n"
                   f"MERGE | {pool[0].id} | {pool[1].id}")
@@ -1640,18 +1679,18 @@ class TestTheOptionSetComesFromTheSeats:
 
     def test_every_seats_proposals_reach_the_pool(self):
         pool = OS.parse_proposals({
-            "s1": "1. Build it in house\n",
-            "s2": "1. Buy the vendor platform\n",
-            "s3": "1. Rent capacity for six months\n"})
+            "s1": "OPTION | Build it in house\n",
+            "s2": "OPTION | Buy the vendor platform\n",
+            "s3": "OPTION | Rent capacity for six months\n"})
         assert len(pool) == 3
 
     def test_identical_wording_collapses_without_a_merge_line(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n",
-                                   "s2": "1. Build it in house\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n",
+                                   "s2": "OPTION | Build it in house\n"})
         assert len(pool) == 1
 
     def test_the_closer_is_told_it_may_not_add(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"})
         text = OS.render_pool(pool)
         assert "may not add an option" in text
         assert "MERGE |" in text
@@ -1745,3 +1784,62 @@ class TestWarrantVerifiedIsNotTheSameAsUnchecked:
         packet = (tmp_path / "VERIFIER-PACKET.md").read_text()
         assert "Evidence verified, proposition open" in packet
         assert "Still open -- no mechanical check applied" in packet
+
+
+class TestEveryEntryPointPlansItsCaps:
+    """The canary planned its caps; live_night did not. The console and the
+    watcher are the two ways a real run is actually started, and both go
+    through live_night, so both ran with whatever profiles.json happened to
+    say. That is the $25.51 five-round worst case -- the ceiling then stopped
+    the run mid-flight, after paying for the rounds already done, and a
+    partial panel has adjudicated nothing.
+
+    Planning moved into live_night so no caller can forget it.
+    """
+
+    def _profiles(self, tmp_path, cap=32000):
+        import json
+        p = tmp_path / "profiles.json"
+        p.write_text(json.dumps({
+            f"seat_{i}": {"vendor": v, "model": f"m{i}", "max_tokens": cap}
+            for i, v in enumerate(
+                ("openai", "google", "mistral", "xai", "anthropic"), start=1)}))
+        return str(p)
+
+    def test_configured_caps_read_the_same_file_the_seats_come_from(
+            self, tmp_path):
+        caps = NL.configured_caps(self._profiles(tmp_path))
+        assert caps == {f"seat_{i}": 32000 for i in range(1, 6)}
+        assert sorted(caps) == [f"seat_{i}" for i in range(1, 6)]
+
+    def test_a_ceiling_that_cannot_fund_the_run_refuses_before_any_call(
+            self, tmp_path):
+        """Refusing here is free. Refusing in round three is not: the rounds
+        already paid for are thrown away, because whatever survived the rounds
+        that happened to fit is not an adjudicated answer."""
+        import json
+
+        import cost_ledger as CL
+
+        # Relative to THIS FILE, not the working directory: pytest run from
+        # the repo root instead of this folder would otherwise fail on a
+        # missing rates.json and look like a bug in the refusal.
+        rates_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "rates.json")
+        with open(rates_path, encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=0.50)
+        out = str(tmp_path / "o")
+        with pytest.raises(NL.RunTooExpensive) as exc:
+            NL.live_night("ask", self._profiles(tmp_path), out, ledger=led)
+        assert "needs about" in str(exc.value)
+        assert led.spent == 0.0
+        # It refused before the panel was built, so no credential was read and
+        # no run directory was created for a run that never started.
+        assert not os.path.exists(out)
+
+    def test_an_explicit_caps_argument_still_wins(self, tmp_path):
+        """The canary sizes its own caps for a two-round smoke test."""
+        import inspect
+        src = inspect.getsource(NL.live_night)
+        assert "if caps is None and ledger is not None:" in src

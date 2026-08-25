@@ -688,6 +688,25 @@ def _sibling_total(payload: Mapping[str, object],
     return None
 
 
+CLOSER_HEADROOM = 2.0
+"""How much more output room the merging seat gets than a thinker.
+
+Its prompt carries every thinker's reply, the option list, and the check
+results, and on a reasoning model the thinking is charged against the same
+cap. Given a thinker's share it produced nothing at all.
+"""
+
+MIN_CLOSER_CAP = 8192
+"""Smallest cap the merging seat can actually work in.
+
+MEASURED, NOT GUESSED. At 7,190 tokens it was cut off before writing a single
+character and the merge failed, ending a paid run after one round. At 16,384
+it used about 19,900 tokens across two calls and completed. A run whose
+ceiling cannot fund a working merge is a run that cannot produce an answer,
+and selling it a smaller cap instead of saying so wastes the whole budget
+rather than part of it.
+"""
+
 MIN_USEFUL_CAP = 2048
 """Smallest output cap worth sending to a reasoning model.
 
@@ -732,13 +751,15 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
     per_round = len(caps) + 1                       # thinkers plus one merge
     calls = per_round * rounds
 
+    closer = _closer_seats(caps)
+
     def worst(cap_for: Mapping[str, int]) -> float:
         total = 0.0
         for seat_id, cap in cap_for.items():
             rate = ledger.rates.get(seat_id)
             if rate is None:
                 continue
-            n = rounds * (2 if seat_id in _closer_seats(caps) else 1)
+            n = rounds * (2 if seat_id in closer else 1)
             total += n * rate.cost(est_input,
                                    int(cap * rate.output_multiplier))
         return total
@@ -753,10 +774,24 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
     # another, then converge: one division lands exactly on the ceiling, where
     # float error and the MIN_USEFUL_CAP floor can push the result a fraction
     # over and reject a plan that fits.
+    # THE MERGING SEAT NEEDS MORE ROOM THAN A THINKER, NOT THE SAME.
+    #
+    # It reads every thinker's reply plus the option list plus the check
+    # results -- about five times a thinker's input -- and it is a reasoning
+    # model, so the thinking counts against the same cap. Scaling every seat
+    # by one factor starved it: at a 7,190-token cap it was cut off before
+    # writing a single character, the merge failed, and the run ended after
+    # round one having paid for it.
     factor = ceiling / as_configured if as_configured else 1.0
-    for _ in range(40):
-        scaled = {s: max(MIN_USEFUL_CAP, int(c * factor))
+    for _ in range(60):
+        scaled = {s: max(MIN_USEFUL_CAP,
+                         int(c * factor * (CLOSER_HEADROOM if s in closer
+                                           else 1.0)))
                   for s, c in caps.items()}
+        # The merge has a hard floor: below it the seat produces nothing and
+        # the run ends having paid for everything up to that point.
+        for seat_id in closer:
+            scaled[seat_id] = max(scaled[seat_id], MIN_CLOSER_CAP)
         scaled_worst = worst(scaled)
         if scaled_worst <= ceiling:
             return RunPlan(
@@ -765,13 +800,18 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
         if all(c <= MIN_USEFUL_CAP for c in scaled.values()):
             break                       # already at the floor; cannot shrink
         factor *= 0.9
-    needed = worst(dict.fromkeys(caps, MIN_USEFUL_CAP))
+    floor = {s: (MIN_CLOSER_CAP if s in closer else MIN_USEFUL_CAP)
+             for s in caps}
+    needed = worst(floor)
     return RunPlan(
-        calls, needed, dict.fromkeys(caps, MIN_USEFUL_CAP), ceiling, False,
-        f"even at the {MIN_USEFUL_CAP}-token floor this panel needs about "
-        f"${needed:.2f}. Below that a reasoning model spends the whole budget "
-        f"thinking and returns nothing, so a smaller ceiling buys no answer "
-        f"rather than a shorter one")
+        calls, needed, floor, ceiling, False,
+        f"{rounds} rounds with this panel needs about ${needed:.2f}, with "
+        f"every reply already cut to the smallest size that still works. "
+        f"Below {MIN_USEFUL_CAP:,} tokens a reasoning model spends its whole "
+        f"budget thinking and returns nothing, and the merging seat -- which "
+        f"reads every other seat's reply -- needs {MIN_CLOSER_CAP:,} or it "
+        f"produces no answer at all. A smaller ceiling buys a failed run, not "
+        f"a shorter one. Raise it to ${needed:.2f}, or run fewer rounds")
 
 
 def _closer_seats(caps: Mapping[str, int]) -> set[str]:

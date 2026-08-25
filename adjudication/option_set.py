@@ -35,7 +35,52 @@ from dataclasses import dataclass, field
 
 from adjudication_orchestrator import Claim, warrant_supports
 
-_NUMBERED = re.compile(r"^\s{0,3}(?:\d{1,2}[.)]|[-*])\s+(.+?)\s*$")
+_OPTION_LINE = re.compile(r"^\s*OPTION\s*\|\s*(.+?)\s*$", re.IGNORECASE)
+"""How a seat marks an answer, matching the CLAIM convention it already uses.
+
+NUMBERING WAS NOT ENOUGH. A model numbers whatever it is enumerating -- its
+premises, its criteria, the evidence that would settle a point. A live canary
+produced forty "options" from bullets, and after restricting to numbered lines
+still produced ten, of which the first three were "The panel consists of five
+AI seats", "The panel evaluates over a maximum of five rounds", and "Each
+round costs approximately six API calls". Those are premises the seat was
+restating, not answers it was proposing.
+
+The seats follow CLAIM | faithfully, so options use the same shape. An
+explicit marker is the only thing that distinguishes "here is an answer" from
+"here is part of my reasoning", because in prose it is a matter of intent and
+nothing in the layout carries it.
+"""
+
+_DECLARED_OPTION = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s*)?(?:\*\*|__)?\s*"
+    r"(?:OPTION|ANSWER|PROPOSAL|CANDIDATE)\s*"
+    r"(?:\d{1,2}|[A-Z]|[IVX]{1,4})?\s*"
+    r"[:.\)\u2014\u2013-]{1,3}\s*"
+    r"(.+?)\s*(?:\*\*|__)?\s*$",
+    re.IGNORECASE)
+"""A heading in which the seat CALLS the thing an option.
+
+NUMBERING IS NOT A DECLARATION. Any numbered line used to count, and a model
+numbers whatever it is enumerating. A live canary produced forty "options" from
+bullets; restricting to numbered lines still produced ten, of which eight were
+one seat's premise list -- "The panel consists of five AI seats", "The panel
+evaluates over a maximum of five rounds", "Each round costs approximately six
+API calls". The three answers that seat actually proposed were not among them.
+The panel would have spent five rounds and real money adjudicating its own
+setup while the real candidates were never on the table.
+
+Telling a premise from a proposal is a question of what the writer MEANT, and
+no amount of layout carries it. So the seat has to say so. On the same canary
+four of five seats wrote exactly that unprompted, in four different house
+styles -- "### Option 1:", "**Option 1:**", "## Option A --" -- so this reads
+what the models already produce rather than imposing a new convention. The
+fifth wrote bold numbered lines with no such word, and contributes nothing
+here: an empty option set is recoverable and a wrong one is not.
+
+The required-output contract asks for OPTION | lines, which remain the primary
+path. This catches the seat that answered in its own format.
+"""
 
 
 class TooManyOptions(ValueError):
@@ -116,6 +161,28 @@ def parse_options(text: str) -> list[Option]:
     """
     out: list[Option] = []
     seen: set[str] = set()
+
+    # An explicit OPTION marker wins outright. Only when a seat used none do
+    # we fall back to reading numbered lines, so a seat that ignored the
+    # convention still contributes rather than silently counting for nothing.
+    explicit = [m.group(1).strip()
+                for m in (_OPTION_LINE.match(ln)
+                          for ln in (text or "").splitlines()) if m]
+    if explicit:
+        for body in explicit:
+            if len(body) < MIN_OPTION_CHARS:
+                continue
+            oid = option_id(body)
+            if oid in seen:
+                continue
+            seen.add(oid)
+            out.append(Option(id=oid, text=body))
+        if len(out) > MAX_OPTIONS:
+            raise TooManyOptions(
+                f"a seat proposed {len(out)} options, over the {MAX_OPTIONS} "
+                f"a later round can work through.")
+        return out
+
     in_options = True
     for line in (text or "").splitlines():
         if _SECTION_HEADING.match(line):
@@ -123,11 +190,14 @@ def parse_options(text: str) -> list[Option]:
             # the round, not a further answer to consider.
             in_options = False
             continue
-        if line.strip().startswith("#"):
-            in_options = True          # a new heading; options may resume
+        m = _DECLARED_OPTION.match(line)
+        if m is None:
+            if line.strip().startswith("#"):
+                in_options = True      # a new heading; options may resume
             continue
-        m = _NUMBERED.match(line)
-        if not m or not in_options:
+        if not in_options:
+            # An option heading under OPEN or KILLED is that section's
+            # subject, not a fresh answer being put forward.
             continue
         body = m.group(1).strip()
         if len(body) < MIN_OPTION_CHARS:

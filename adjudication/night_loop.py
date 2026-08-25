@@ -166,9 +166,27 @@ def wrap_untrusted(text: str) -> str:
     return UNTRUSTED_OPEN + text + UNTRUSTED_CLOSE
 
 
+OPTION_CONTRACT = """
+Every answer you are putting forward gets an OPTION line of its own:
+
+    OPTION | rent capacity for six months and decide afterwards
+
+ONLY OPTION LINES BECOME ANSWERS. Write the reasoning around them however you
+like -- the premises you stand on, the attack on each proposal, what would
+settle it. None of that is read as an answer. If you also head a section
+"Option 3", still write the OPTION line; the heading is a courtesy to a reader
+and this line is what the panel actually carries forward.
+
+A NUMBERED LIST OF YOUR PREMISES IS NOT A LIST OF ANSWERS. Four of five seats
+once wrote their proposals as headings and their setup as a numbered list, and
+the setup is what got adjudicated. State the answers here and there is nothing
+to guess.
+
+"""
+
 CLAIM_CONTRACT = """
 ## Required output
-
+{options}
 Write your analysis normally. Then end with claim lines, one per line, and
 nothing after them:
 
@@ -273,9 +291,20 @@ pushes everything else toward a kind that a gate can rule on unattended.
 
 
 def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
-                   max_judgment: int = MAX_JUDGMENT_CLAIMS) -> str:
-    """The claim contract with its ceilings filled in."""
-    return CLAIM_CONTRACT.format(max_claims=max_claims, max_judgment=max_judgment)
+                   max_judgment: int = MAX_JUDGMENT_CLAIMS,
+                   invents: bool = False) -> str:
+    """The claim contract with its ceilings filled in.
+
+    OPTIONS RIDE IN THE SAME BLOCK AS CLAIMS DELIBERATELY. On a live canary
+    every seat obeyed the CLAIM convention and not one seat wrote an OPTION
+    line, because options were asked for in a mid-prompt section while this
+    block said "write your analysis normally, then end with claim lines".
+    The seats followed the output contract, which is what an output contract
+    is for. So the option line lives in the contract too.
+    """
+    return CLAIM_CONTRACT.format(
+        max_claims=max_claims, max_judgment=max_judgment,
+        options=OPTION_CONTRACT if invents else "")
 
 
 # --------------------------------------------------------------------------
@@ -413,6 +442,11 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
         )
     if r.invents:
         parts.append(
+            "## Proposing answers\n"
+            "This round invents the options; later rounds only eliminate "
+            "from what you and the other seats put up now. An answer nobody "
+            "proposed here can never be chosen, so put up the ones worth "
+            "considering, including the one you expect to lose.\n\n"
             "You are working alone. Do not speculate about what anyone else "
             "might say, and do not assume anyone else exists.\n"
             "For EVERY option you propose, state plainly what evidence would "
@@ -425,7 +459,7 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
             + wrap_untrusted(merged or "(nothing yet)")
             + "\n\nDo not invent new options. This round only eliminates.\n"
         )
-    parts.append(claim_contract())
+    parts.append(claim_contract(invents=r.invents))
     return "\n".join(parts)
 
 
@@ -1193,6 +1227,30 @@ def check_panel_is_five_vendors(identity: Mapping[str, tuple[str, str]]) -> None
         )
 
 
+class RunTooExpensive(RuntimeError):
+    """The ceiling cannot fund the run, established before the first call.
+
+    Refusing here costs nothing. Discovering it in round three means the
+    rounds already paid for are thrown away, because a partial panel has not
+    adjudicated anything -- the answer it would print is whatever survived the
+    rounds that happened to fit.
+    """
+
+
+def configured_caps(profiles_path: str) -> dict[str, int]:
+    """The reply caps as configured, before any ceiling is applied.
+
+    Read from the same file the seats are built from, so planning and running
+    cannot disagree about what the panel is.
+    """
+    with open(profiles_path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    raw = raw.get("seats", raw)
+    return {s: int(raw[s].get("max_tokens") or 4096)
+            for s in sorted(raw)
+            if not s.startswith("_") and isinstance(raw[s], dict)}
+
+
 def live_night(ask: str, profiles_path: str, out_dir: str,
                gates: Sequence[Any] | None = None,
                ledger: Any = None,
@@ -1221,12 +1279,36 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     from run_adjudication import live_seats, load_env_file, night_gates
     load_env_file()
 
+    # REPLY CAPS SIZED TO THE OPERATOR'S CEILING, PLANNED HERE RATHER THAN IN
+    # EACH CALLER. Only the canary planned, and it does not come through this
+    # function -- so the console and the watcher, the two ways a real run is
+    # actually started, ran with whatever profiles.json happened to say. That
+    # is the $25.51 five-round worst case the ceiling then refused mid-run,
+    # after paying for the rounds already done, and it left the merging seat
+    # below the floor it needs to produce anything at all.
+    #
+    # Planning here means every entry point gets the same sizing and a run
+    # that cannot fit its ceiling refuses BEFORE the first call, when refusing
+    # is still free. An explicit caps= argument overrides, for the canary and
+    # for tests.
+    #
+    # It runs BEFORE the panel is built. Planning needs the configured caps
+    # and the prices, never a credential, so a run nobody can afford is turned
+    # away without loading a key at all.
+    if caps is None and ledger is not None:
+        from cost_ledger import plan_run
+        plan = plan_run(ledger, configured_caps(profiles_path),
+                        rounds=len(ROUNDS))
+        if on_event is not None:
+            on_event(f"plan: {plan.calls} calls, worst case "
+                     f"${plan.worst_case:.2f}")
+        if not plan.fits:
+            raise RunTooExpensive(plan.note)
+        caps = plan.caps
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)
     seats = live_seats(profiles_path, ledger=ledger)
 
-    # Reply caps sized to the operator's ceiling. Without this the configured
-    # caps decide the cost and a sensible ceiling simply refuses to start.
     for seat_id, cap in (caps or {}).items():
         seat = seats.get(seat_id)
         if seat is not None and hasattr(seat, "max_tokens"):

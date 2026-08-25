@@ -932,9 +932,9 @@ class TestTheCeilingDrivesTheCaps:
                               output_multiplier=2.5),
         }
 
-    def _plan(self, ceiling):
+    def _plan(self, ceiling, rounds=5):
         led = CL.CostLedger(rates=self._rates(), per_run=ceiling)
-        return CL.plan_run(led, self.CAPS)
+        return CL.plan_run(led, self.CAPS, rounds=rounds)
 
     def test_a_generous_ceiling_leaves_the_caps_alone(self):
         plan = self._plan(30.00)
@@ -942,16 +942,42 @@ class TestTheCeilingDrivesTheCaps:
         assert plan.caps == self.CAPS
 
     def test_a_modest_ceiling_shrinks_the_caps_rather_than_refusing(self):
-        plan = self._plan(5.00)
+        plan = self._plan(8.00)
         assert plan.fits
         assert max(plan.caps.values()) < max(self.CAPS.values())
-        assert plan.worst_case <= 5.00
+        assert plan.worst_case <= 8.00
 
-    def test_a_three_dollar_ceiling_now_runs(self):
+    def test_a_short_run_fits_a_small_ceiling(self):
         """The exact case that refused on the first call."""
-        plan = self._plan(3.00)
+        plan = self._plan(3.00, rounds=2)
         assert plan.fits
         assert plan.worst_case <= 3.00
+
+    def test_five_rounds_at_three_dollars_is_refused_with_the_real_number(self):
+        """CORRECTED once the merging seat got a measured floor. A $3 ceiling
+        can fund two rounds, not five -- and selling five would spend the whole
+        budget on rounds that could never produce an answer, because the merge
+        would be starved. The refusal names what it actually needs."""
+        plan = self._plan(3.00, rounds=5)
+        assert not plan.fits
+        assert plan.worst_case > 3.00
+        assert "or run fewer rounds" in plan.note
+
+    def test_the_merging_seat_gets_more_room_than_a_thinker(self):
+        """It reads every thinker's reply plus the option list plus the check
+        results, and on a reasoning model the thinking counts against the same
+        cap. Scaling every seat by one factor starved it: at 7,190 tokens it
+        was cut off before writing a single character, the merge failed, and a
+        paid run ended after round one."""
+        plan = self._plan(12.00)
+        assert plan.caps["seat_5"] > plan.caps["seat_2"]
+
+    def test_the_merging_seat_never_falls_below_its_measured_floor(self):
+        """At 7,190 it produced nothing. At 16,384 it completed."""
+        for ceiling in (8.00, 12.00, 30.00):
+            plan = self._plan(ceiling)
+            if plan.fits:
+                assert plan.caps["seat_5"] >= CL.MIN_CLOSER_CAP, ceiling
 
     def test_a_ceiling_below_the_floor_is_refused_with_the_real_number(self):
         """Below the floor a reasoning model spends the whole budget thinking
@@ -960,9 +986,11 @@ class TestTheCeilingDrivesTheCaps:
         plan = self._plan(1.00)
         assert not plan.fits
         assert "needs about" in plan.note
+        assert "a failed run, not" in plan.note
 
     def test_no_cap_falls_below_the_useful_floor(self):
-        assert all(c >= CL.MIN_USEFUL_CAP for c in self._plan(3.00).caps.values())
+        assert all(c >= CL.MIN_USEFUL_CAP
+                   for c in self._plan(3.00, rounds=2).caps.values())
 
     def test_the_closer_seat_is_counted_twice_a_round(self):
         """seat_5 thinks blind AND merges, so it is called twice per round.
@@ -980,8 +1008,9 @@ class TestTheCeilingDrivesTheCaps:
         """It reports. A smaller cap means shorter answers, and that is the
         operator's call to make."""
         caps = dict(self.CAPS)
-        self._plan(3.00)
+        plan = self._plan(3.00, rounds=2)
         assert caps == self.CAPS
+        assert plan.caps is not self.CAPS
 
 
 class TestThePerSeatOutputBound:
