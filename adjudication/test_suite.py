@@ -4192,3 +4192,273 @@ class TestAllFiveSeatsAreBlindedIdentically:
                 if "=" in line and not line.strip().startswith("#"):
                     assert line.split("=", 1)[1].strip() == "", (
                         f"{line.strip()!r} ships with a value")
+
+
+# ===========================================================================
+# THE VERDICT HEADER, KILL PROVENANCE, AND GATE SELECTION
+#
+# All three arrived with the live-run commits and reached no test. They are
+# the parts of the report a reader trusts fastest -- the one-line verdict at
+# the top, the EARNED/STRUCTURAL split beneath it, and which gates ran at all
+# -- so an error in any of them is an error the reader has no way to see.
+# ===========================================================================
+
+def _verdict_cand(cid: str, *, eliminated: bool = False,
+          kind: str | None = None) -> Candidate:
+    return Candidate(cid, f"body of {cid}", eliminated=eliminated,
+                     elimination_kind=kind)
+
+
+def _verdict_answer(**kw: object) -> AdjudicationAnswer:
+    base: dict[str, object] = {
+        "artifact_digest": "deadbeef", "passes": [], "survivors": [],
+        "eliminated": [], "stop": {}, "diagnosis": {}, "holes": [],
+    }
+    base.update(kw)
+    return AdjudicationAnswer(**base)
+
+
+class TestKillProvenanceIsReadFromTheFieldNotTheProse:
+    """Provenance used to be inferred by substring-matching the elimination
+    reason for "failed --". The quote cascade worded itself differently, so a
+    candidate killed by a quote proven absent from its source -- the most
+    earned kill available -- was reported STRUCTURAL and its run headed
+    CONSENSUS ONLY. These pin the field as the source of truth."""
+
+    def test_an_earned_kill_is_counted_earned(self):
+        a = _verdict_answer(eliminated=[_verdict_cand("c1", eliminated=True, kind="earned")])
+        assert RA.kill_provenance(a) == {"earned": 1, "structural": 0}
+
+    def test_an_unset_kind_counts_structural_rather_than_earned(self):
+        """Fail closed. An elimination whose site did not record provenance
+        must not be credited as a mechanical refutation -- that would inflate
+        the one number the CONSENSUS ONLY alarm reads."""
+        a = _verdict_answer(eliminated=[_verdict_cand("c1", eliminated=True, kind=None)])
+        assert RA.kill_provenance(a) == {"earned": 0, "structural": 1}
+
+    def test_prose_naming_a_failed_gate_does_not_make_a_kill_earned(self):
+        """The exact regression: reason text that looks earned, field unset."""
+        c = Candidate("c1", "body", eliminated=True,
+                      elimination_reason="arithmetic gate failed -- 2+2=5")
+        assert RA.kill_provenance(_verdict_answer(eliminated=[c]))["earned"] == 0
+
+
+class TestTheVerdictHeaderStatesWhatTheRunEstablished:
+
+    def test_eliminations_with_nothing_earned_are_headed_consensus_only(self):
+        """A run that narrowed the field without one mechanical refutation
+        produced agreement, not elimination."""
+        a = _verdict_answer(survivors=[_verdict_cand("c1")],
+                    eliminated=[_verdict_cand("c2", eliminated=True, kind=None)])
+        assert RA.verdict_header(a).startswith("CONSENSUS ONLY")
+
+    def test_eliminating_nothing_at_all_is_also_consensus_only(self):
+        a = _verdict_answer(survivors=[_verdict_cand("c1"), _verdict_cand("c2")])
+        assert "nothing was eliminated" in RA.verdict_header(a)
+
+    def test_one_survivor_no_holes_and_an_earned_kill_is_resolved(self):
+        a = _verdict_answer(survivors=[_verdict_cand("c1")],
+                    eliminated=[_verdict_cand("c2", eliminated=True, kind="earned")])
+        assert RA.verdict_header(a).startswith("RESOLVED")
+
+    def test_several_survivors_are_provisional_and_the_count_is_stated(self):
+        a = _verdict_answer(survivors=[_verdict_cand("c1"), _verdict_cand("c2")],
+                    eliminated=[_verdict_cand("c3", eliminated=True, kind="earned")])
+        head = RA.verdict_header(a)
+        assert head.startswith("PROVISIONAL") and "2 candidates survive" in head
+
+    def test_one_survivor_with_a_hole_is_provisional_not_resolved(self):
+        """resolved requires both halves. A single survivor over an open
+        queue is a leading candidate, and heading it RESOLVED is how a
+        shortlist ships as a conclusion."""
+        a = _verdict_answer(survivors=[_verdict_cand("c1")],
+                    eliminated=[_verdict_cand("c2", eliminated=True, kind="earned")],
+                    holes=[RA.Hole("queue", "1 claim escalated", "adjudicate it")])
+        assert RA.verdict_header(a).startswith("PROVISIONAL")
+
+
+class TestClaimCoverageIsLoudWhenPartial:
+    """A survivor nobody examined must not read like one that withstood
+    examination. run-003 reported three survivors when only one had been
+    looked at."""
+
+    def test_full_coverage_reads_plainly(self):
+        a = _verdict_answer(claim_coverage={"c1": (3, 3)})
+        assert RA._cov(a, "c1") == "   [3/3 claims tested]"
+
+    def test_partial_coverage_shouts_and_names_the_gap(self):
+        out = RA._cov(_verdict_answer(claim_coverage={"c1": (1, 6)}), "c1")
+        assert "ONLY 1/6" in out and "5 never reached a gate" in out
+
+    def test_a_candidate_carrying_no_claims_says_so(self):
+        out = RA._cov(_verdict_answer(claim_coverage={"c1": (0, 0)}), "c1")
+        assert "carries no claims" in out
+
+    def test_a_candidate_absent_from_the_map_is_treated_as_untestable(self):
+        """Absence must not read as full coverage."""
+        assert "carries no claims" in RA._cov(_verdict_answer(), "missing")
+
+
+class TestTheReportSurfacesBothAlarms:
+
+    def test_a_partially_tested_survivor_is_flagged_in_the_report(self):
+        a = _verdict_answer(survivors=[_verdict_cand("c1")],
+                    eliminated=[_verdict_cand("c2", eliminated=True, kind="earned")],
+                    claim_coverage={"c1": (1, 4)})
+        assert "ONLY 1/4" in render_report(a)
+
+    def test_a_run_with_no_earned_kill_is_headed_consensus_only(self):
+        a = _verdict_answer(survivors=[_verdict_cand("c1")],
+                    eliminated=[_verdict_cand("c2", eliminated=True, kind=None)],
+                    claim_coverage={"c1": (2, 2)})
+        assert "CONSENSUS ONLY" in render_report(a)
+
+
+class TestGateSelectionRefusesRatherThanRunningShort:
+    """--gates exists so an operator can add gates. A name it does not know
+    must stop the run: a gate quietly missing is a claim quietly unchecked,
+    and the report would look identical either way."""
+
+    def test_a_known_name_builds_that_gate(self):
+        gates = RA.gates_from_names("arithmetic")
+        assert len(gates) == 1 and isinstance(gates[0], ArithmeticGate)
+
+    def test_names_are_case_and_space_insensitive(self):
+        assert len(RA.gates_from_names(" Arithmetic , SCHEMA ")) == 2
+
+    def test_an_unknown_name_raises_and_lists_what_is_available(self):
+        with pytest.raises(ValueError) as e:
+            RA.gates_from_names("arithmetic,telepathy")
+        assert "telepathy" in str(e.value) and "Available:" in str(e.value)
+
+    def test_an_empty_spec_raises_rather_than_running_with_no_gates(self):
+        """Zero gates auto-accepts every claim. That must never be reachable
+        by passing an empty string."""
+        with pytest.raises(ValueError):
+            RA.gates_from_names(" , ")
+
+    def test_the_gates_needing_an_operator_callable_are_not_selectable(self):
+        """CitationResolutionGate and TestExecutionGate each need a resolver
+        or a runner the operator supplies, and SourceAdmissibilityGate alone
+        auto-accepted an invented DOI. Offering any of them as a name with
+        nothing behind it is the fail-open this module exists to prevent."""
+        for name in ("citation", "citation_resolution", "source_admissibility",
+                     "test_execution"):
+            with pytest.raises(ValueError):
+                RA.gates_from_names(name)
+
+
+class TestTheCostLedgerIsAbsentRatherThanUnenforcing:
+
+    def test_no_ceiling_asked_for_yields_no_ledger(self):
+        """A ledger that bounds nothing but appears in the report reads as
+        protection that is not there."""
+        assert RA.build_ledger(None, None, None) is None
+
+    def test_a_ceiling_without_a_rates_file_refuses(self, tmp_path):
+        """A limit computed from absent prices bounds nothing."""
+        with pytest.raises(ValueError) as e:
+            RA.build_ledger(3.0, None, None,
+                            rates_path=str(tmp_path / "nope.json"))
+        assert "bounds nothing" in str(e.value)
+
+    def test_a_ceiling_with_the_shipped_rates_builds_a_ledger(self):
+        path = _os.path.join(_os.path.dirname(RA.__file__), "rates.json")
+        assert RA.build_ledger(3.0, 1.0, 10.0, rates_path=path) is not None
+
+
+class TestTheCandidateFileRefusesWhatItCannotAdjudicate:
+    """parse_candidates is the only door candidates come through. Every
+    refusal here is a fail-closed one: the alternative is a run that looks
+    normal and adjudicates something other than what the operator wrote."""
+
+    def test_a_non_object_candidate_is_named_by_index(self):
+        with pytest.raises(CandidateFileError) as e:
+            parse_candidates(["just a string"])
+        assert "candidate 0" in str(e.value)
+
+    def test_a_candidate_without_a_usable_id_is_refused(self):
+        for bad in ({}, {"id": ""}, {"id": "   "}, {"id": 7}):
+            with pytest.raises(CandidateFileError):
+                parse_candidates([bad])
+
+    def test_a_duplicate_id_is_refused_and_the_reason_is_stated(self):
+        """Two candidates sharing an id means eliminating one silently
+        eliminates the other -- the run would report a removal it never made."""
+        with pytest.raises(CandidateFileError) as e:
+            parse_candidates([{"id": "c1"}, {"id": "c1"}])
+        assert "duplicate candidate id" in str(e.value)
+        assert "silently" in str(e.value)
+
+    def test_an_unknown_claim_kind_lists_the_valid_ones(self):
+        """The engine refused a file over the British spelling of judgment.
+        It refused loudly and listed the kinds, which is why this holds."""
+        with pytest.raises(CandidateFileError) as e:
+            parse_candidates([{"id": "c1",
+                               "claims": [{"kind": "judgement"}]}])
+        assert "judgment" in str(e.value)
+
+    def test_supports_must_be_a_list_of_claim_ids(self):
+        """supports drives the quote cascade. A malformed one would take down
+        the wrong claim, or none."""
+        for bad in ("c2", [1], [None]):
+            with pytest.raises(CandidateFileError) as e:
+                parse_candidates([{"id": "c1", "claims": [
+                    {"kind": "judgment", "supports": bad}]}])
+            assert "supports" in str(e.value)
+
+    def test_a_claim_that_is_not_an_object_is_refused(self):
+        with pytest.raises(CandidateFileError):
+            parse_candidates([{"id": "c1", "claims": ["not an object"]}])
+
+
+class TestTheTransportReturnsAnErrorRatherThanRaising:
+
+    def test_an_http_error_comes_back_as_its_status_and_body(self, monkeypatch):
+        """A 400 carries the vendor's explanation of what it rejected. Letting
+        it raise here would discard exactly the text the operator needs, which
+        is what made the first live run's failures unreadable."""
+        import io as _io
+        import urllib.error
+
+        def boom(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 400, "Bad Request", {},
+                _io.BytesIO(b'{"error":"max_tokens too large"}'))
+
+        # urllib is imported inside the function, so patch the module itself.
+        import urllib.request as _ureq
+        monkeypatch.setattr(_ureq, "urlopen", boom)
+        status, body = RA.urllib_transport(
+            "POST", "https://api.example.invalid/v1/x", {}, b"{}", 10.0)
+        assert status == 400
+        assert b"max_tokens" in body
+
+
+class TestTheReportDistinguishesSurvivorCounts:
+
+    def test_no_survivors_says_every_candidate_failed_a_gate(self):
+        out = render_report(_verdict_answer(
+            eliminated=[_verdict_cand("c1", eliminated=True, kind="earned")]))
+        assert "NONE SURVIVED" in out
+
+    def test_several_survivors_are_listed_each_with_its_coverage(self):
+        """Printing them identically to a single survivor is how run-003
+        reported three survivors when only one had been examined."""
+        out = render_report(_verdict_answer(
+            survivors=[_verdict_cand("c1"), _verdict_cand("c2")],
+            eliminated=[_verdict_cand("c3", eliminated=True, kind="earned")],
+            claim_coverage={"c1": (2, 2), "c2": (0, 3)}))
+        assert "2 SURVIVE" in out
+        assert "ONLY 0/3" in out
+
+    def test_each_elimination_carries_its_provenance_tag(self):
+        out = render_report(_verdict_answer(
+            survivors=[_verdict_cand("c1")],
+            eliminated=[
+                Candidate("c2", "", eliminated=True, elimination_kind="earned",
+                          elimination_reason="arithmetic recomputed to 74400"),
+                Candidate("c3", "", eliminated=True, elimination_reason="x"),
+            ]))
+        assert "removed c2 [EARNED]" in out
+        assert "removed c3 [STRUCTURAL]" in out
