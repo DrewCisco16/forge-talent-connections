@@ -138,6 +138,14 @@ class ClaimKind(str, Enum):
     CODE_BEHAVIOR = "code_behavior"
     SCHEMA = "schema"
     UNIT = "unit"
+    QUOTE_VERIFICATION = "quote_verification"
+    """"string Q appears at URL U" -- fully checkable, no model judgment.
+
+    Exists because a quote can support its answer perfectly and still not be
+    in the source. That failure is invisible to every check that reads the
+    quote against the answer, and it is the one that reverses a correct
+    conclusion while looking better-sourced than the truth.
+    """
     JUDGMENT = "judgment"          # no mechanical warrant -> always escalates
 
 
@@ -149,6 +157,15 @@ class Claim:
     warrant: str | None = None   # expression, DOI, test command, schema...
     source_pass: str | None = None
     source_seat: str | None = None
+    supports: list[str] = field(default_factory=list)
+    """Claim ids this claim is offered as evidence FOR.
+
+    Used by the quote cascade: when a quote_verification claim FAILS, the
+    claims it was offered in support of lose their stated evidentiary basis
+    and are downgraded. A claim whose supporting quote is fabricated is worse
+    off than one with no quote at all, because the quote actively
+    misrepresented the state of the evidence.
+    """
 
 
 @dataclass
@@ -158,6 +175,16 @@ class Candidate:
     claims: list[Claim] = field(default_factory=list)
     eliminated: bool = False
     elimination_reason: str | None = None
+    elimination_kind: str | None = None
+    """"earned" or "structural", set where the elimination happens.
+
+    Was inferred by substring-matching the reason prose, which broke the
+    moment a new elimination path worded itself differently: the quote cascade
+    read as STRUCTURAL and a run whose candidate died to a fabricated quote
+    was headed CONSENSUS ONLY. A quote proven absent from its source is the
+    most earned kill available, and the report said the opposite. Provenance
+    is recorded at the site now, not guessed from wording afterwards.
+    """
     confidence: float | None = None
 
 
@@ -173,6 +200,15 @@ class GateStatus(str, Enum):
     PASS = "pass"  # nosec B105
     FAIL = "fail"
     INAPPLICABLE = "inapplicable"
+    BLOCKED = "blocked"
+    """The check could not be performed. NOT a finding, and never a kill.
+
+    A firewall, a rate limit, a timeout, and a paywall are all reasons a gate
+    learned nothing. Recording any of them as FAIL would let a network outage
+    eliminate a true candidate and would enter a fabrication finding against a
+    seat that fabricated nothing. BLOCKED claims are counted separately, never
+    contribute to earned kills, and never reach the conduct ledger.
+    """
 
 
 @dataclass
@@ -1176,6 +1212,14 @@ class PassRecord:
     auto_rejected: int
     escalated: int
     eliminated_candidates: list[str] = field(default_factory=list)
+    blocked: int = 0
+    """Claims whose check could not be performed. Never a finding, never a kill.
+
+    Kept apart from escalated because they are different facts: escalated
+    means no gate applied, blocked means a gate applied and could not reach
+    its evidence. Merging them would let an outage read as "nothing to check
+    here".
+    """
 
 
 @dataclass(frozen=True)
@@ -1246,6 +1290,9 @@ class Orchestrator:
         # adjudicated once, in the pass that first saw it; later re-proposals
         # by other seats do not re-run the gates and do not overwrite this.
         self.verdicts: dict[str, ClaimVerdict] = {}
+        self.unsupported_claims: dict[str, str] = {}
+        """claim_id -> why, for claims whose supporting quote proved absent."""
+        self._proposed_index: dict[str, Claim] = {}
 
     # -- verification -------------------------------------------------------
 
@@ -1263,6 +1310,13 @@ class Orchestrator:
         if not applicable:
             return None  # no mechanical warrant -> escalate
         results = [g.check(claim) for g in applicable]
+        # BLOCKED outranks FAIL. If one gate could not perform its check at
+        # all, the conjunction is not "this claim is false" -- it is "this
+        # claim was not fully examined", and reporting the stronger verdict
+        # would let an outage read as a refutation.
+        for r in results:
+            if r.status is GateStatus.BLOCKED:
+                return r
         for r in results:
             if r.status is not GateStatus.PASS:
                 return r
@@ -1317,6 +1371,42 @@ class Orchestrator:
                 ruled.append(claim.id)
         return ruled
 
+    def apply_quote_cascade(self, candidates: list["Candidate"],
+                            p: "Pass", rec: "PassRecord") -> None:
+        """A fabricated quote takes down what it was offered to support.
+
+        A quote_verification claim ruled FAIL does not merely drop itself:
+        every claim listed in its `supports` has lost its stated evidentiary
+        basis, so it leaves the working answer and any candidate resting on it
+        is eliminated. The severity is deliberate -- a claim whose supporting
+        quote does not exist is worse off than one with no quote, because the
+        quote actively misrepresented the state of the evidence.
+
+        A BLOCKED quote cascades nothing. The check did not happen, so the
+        supported claim is exactly as well evidenced as it was before.
+        """
+        from quote_gate import cascade_unsupported
+
+        by_id = {c.id: c for cand in candidates for c in cand.claims}
+        by_id.update({c.id: c for c in self.escalation_queue})
+        by_id.update(getattr(self, "_proposed_index", {}))
+
+        unsupported = cascade_unsupported(self.verdicts, by_id)
+        if not unsupported:
+            return
+        self.unsupported_claims.update(unsupported)
+        for cand in candidates:
+            if cand.eliminated:
+                continue
+            for claim in cand.claims:
+                why = unsupported.get(claim.id)
+                if why:
+                    cand.eliminated = True
+                    cand.elimination_reason = f"{p.name}: {why}"
+                    cand.elimination_kind = "earned"
+                    rec.eliminated_candidates.append(cand.id)
+                    break
+
     def _sweep_standing_verdicts(
         self, candidates: list[Candidate], p: Pass, rec: PassRecord
     ) -> None:
@@ -1334,11 +1424,16 @@ class Orchestrator:
                 continue
             for claim in cand.claims:
                 v = self.verdicts.get(claim.id)
-                if v is not None and v.status is not GateStatus.PASS:
+                # ONLY a FAIL eliminates. A BLOCKED claim means the check did
+                # not happen -- a firewall, a rate limit, a paywall -- and
+                # letting that remove a candidate would make a network outage
+                # indistinguishable from a refutation.
+                if v is not None and v.status is GateStatus.FAIL:
                     cand.eliminated = True
                     cand.elimination_reason = (
                         f"{p.name}: {v.gate} failed -- {v.detail}"
                     )
+                    cand.elimination_kind = "earned"
                     rec.eliminated_candidates.append(cand.id)
                     break
 
@@ -1362,6 +1457,7 @@ class Orchestrator:
         rec = PassRecord(p.id, len(proposed_claims), 0, 0, 0)
 
         for claim in proposed_claims:
+            self._proposed_index[claim.id] = claim
             if claim.source_seat:
                 self.detections_by_seat.setdefault(claim.source_seat, set()).add(claim.id)
 
@@ -1385,6 +1481,12 @@ class Orchestrator:
                 rec.auto_accepted += 1
                 continue
 
+            if result.status is GateStatus.BLOCKED:
+                # Not a rejection and not an acceptance. Counted on its own so
+                # a blocked check can never be read as a finding.
+                rec.blocked += 1
+                continue
+
             rec.auto_rejected += 1
             if p.eliminative:
                 for cand in candidates:
@@ -1395,11 +1497,13 @@ class Orchestrator:
                         cand.elimination_reason = (
                             f"{p.name}: {result.gate} failed -- {result.detail}"
                         )
+                        cand.elimination_kind = "earned"
                         rec.eliminated_candidates.append(cand.id)
 
         # Candidates can also lean on claims ruled at intake or in an earlier
         # pass that no seat re-proposed here. Those are just as decided.
         if p.eliminative:
+            self.apply_quote_cascade(candidates, p, rec)
             self._sweep_standing_verdicts(candidates, p, rec)
 
         self.history.append(rec)

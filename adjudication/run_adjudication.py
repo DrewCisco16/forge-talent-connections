@@ -214,8 +214,16 @@ def parse_candidates(raw: Any) -> list[Candidate]:
                 ) from exc
             warrant = c.get("warrant")
             text = str(c.get("text", ""))
+            supports = c.get("supports") or []
+            if not isinstance(supports, list) or any(
+                    not isinstance(x, str) for x in supports):
+                raise CandidateFileError(
+                    f"candidate {cid!r} claim {j}: 'supports' must be a list of "
+                    f"claim ids"
+                )
             claims.append(
-                Claim(content_claim_id(kind, warrant, text), text, kind, warrant)
+                Claim(content_claim_id(kind, warrant, text), text, kind, warrant,
+                      supports=list(supports))
             )
         out.append(Candidate(cid, str(item.get("content", "")), claims))
     return out
@@ -535,8 +543,10 @@ def kill_provenance(answer: AdjudicationAnswer) -> dict[str, int]:
     """
     earned = structural = 0
     for c in answer.eliminated:
-        reason = c.elimination_reason or ""
-        if "failed --" in reason:
+        # Read the field, do not re-derive it from the reason text. Inferring
+        # provenance from wording is how the quote cascade got reported as
+        # consensus.
+        if getattr(c, "elimination_kind", None) == "earned":
             earned += 1
         else:
             structural += 1
@@ -634,7 +644,8 @@ def render_report(answer: AdjudicationAnswer) -> str:
             add(f"    {c.id}{_cov(answer, c.id)}")
     for c in answer.eliminated:
         reason = c.elimination_reason or ""
-        tag = "EARNED" if "failed --" in reason else "STRUCTURAL"
+        tag = ("EARNED" if getattr(c, "elimination_kind", None) == "earned"
+               else "STRUCTURAL")
         add(f"  removed {c.id} [{tag}]: {reason}")
     prov = kill_provenance(answer)
     add(f"  kills: {prov['earned']} earned, {prov['structural']} structural")
