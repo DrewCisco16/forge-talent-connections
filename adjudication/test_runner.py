@@ -29,7 +29,12 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import subprocess  # nosec B404 - argv list, shell=False, allowlisted commands only
+
+# Reason kept OFF the nosec line: bandit parses everything after "nosec" as
+# test ids and warns about each prose word. subprocess is used with an argv
+# list, shell=False, and only for commands the operator has approved by exact
+# string in approved-commands.json.
+import subprocess  # nosec B404
 
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
@@ -72,7 +77,8 @@ class ApprovedCommandRunner:
                 f"approved-commands.json yourself if you want it run."
             )
         try:
-            proc = subprocess.run(  # nosec B603 - argv list, shell=False, allowlisted
+            # argv list, shell=False, exact-string allowlist checked above.
+            proc = subprocess.run(  # nosec B603
                 shlex.split(cmd), cwd=self.cwd, timeout=self.timeout_s,
                 capture_output=True, text=True, shell=False, check=False,
             )

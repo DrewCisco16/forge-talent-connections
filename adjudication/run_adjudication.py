@@ -388,22 +388,22 @@ def run_adjudication(
     )
 
 
-def _quote_gate():
+def _quote_gate() -> Gate:
     from quote_gate import QuoteVerificationGate
     return QuoteVerificationGate()
 
 
-def _citation_field_gate():
+def _citation_field_gate() -> Gate:
     from citation_gate import CitationFieldMatchGate
     return CitationFieldMatchGate()
 
 
-def _approved_test_gate():
+def _approved_test_gate() -> Gate:
     from test_runner import ApprovedTestGate
     return ApprovedTestGate()
 
 
-_SELECTABLE_GATES = {
+_SELECTABLE_GATES: dict[str, Callable[[], Gate]] = {
     "arithmetic": ArithmeticGate,
     "schema": SchemaGate,
     "unit": UnitGate,
@@ -930,9 +930,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     chosen_gates = None
     if args.resolve_dois:
-        from adjudication_orchestrator import (CitationResolutionGate,
-                                               SourceAdmissibilityGate,
-                                               probe_resolver)
+        from adjudication_orchestrator import (
+            CitationResolutionGate,
+            SourceAdmissibilityGate,
+            probe_resolver,
+        )
         from doi_resolver import build_resolver
         resolver = build_resolver()
         # SOP 8.3: verify the resolver denies an identifier that cannot exist
@@ -949,9 +951,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Conjoined, never alone: admissibility answers "is this the right KIND
         # of source", resolution answers "does it exist". Either one by itself
         # is a fail-open.
-        chosen_gates = _default_gates() + [
-            SourceAdmissibilityGate(), CitationResolutionGate(resolver),
-        ]
+        chosen_gates = [*_default_gates(),
+                        SourceAdmissibilityGate(), CitationResolutionGate(resolver)]
     if args.gates:
         try:
             chosen_gates = gates_from_names(args.gates)

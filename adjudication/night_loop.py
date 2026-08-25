@@ -43,7 +43,6 @@ from dataclasses import dataclass, field
 
 from adjudication_orchestrator import (
     Claim,
-    GateStatus,
     Orchestrator,
     line_claim_extractor,
 )

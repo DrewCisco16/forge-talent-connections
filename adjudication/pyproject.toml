@@ -64,6 +64,30 @@ testpaths = ["test_suite.py", "test_properties.py"]
                 # fail-closed ones, and this is the operator-facing entry point
                 # where that has to be legible at the call site.
 ]
+"quote_gate.py" = [
+    "PLR0911",  # check() returns one verdict per distinct outcome -- unreachable,
+                # 404, paywall, rate limit, client-rendered stub, exact match,
+                # case-folded match, absent. Each is a different fact with a
+                # different remedy; a lookup would hide which are BLOCKED and
+                # which are findings, and that distinction is the gate's point.
+]
+"citation_gate.py" = [
+    "PLR0911",  # one return per named failure: WRONG_PAPER, AUTHOR_MISMATCH,
+                # YEAR_MISMATCH, and three BLOCKED cases. The names are what an
+                # operator acts on.
+]
+"night_loop.py" = [
+    "PLR0913", "PLR0917",  # run_night and live_night take the round's inputs
+                # one per parameter -- ask, thinkers, closer, orchestrator,
+                # output directory. Bundling them would hide that the closer is
+                # a SEPARATE argument from the thinkers, which is the whole
+                # architecture.
+]
+"seat_conduct.py" = [
+    "UP042",    # (str, Enum) matches ClaimKind and GateStatus. These values are
+                # serialised into the audit chain; StrEnum changes str() output
+                # and would silently alter records already written.
+]
 "seat_independence.py" = [
     "PLR0913", "PLR0917",  # diagnose() takes six optional data sources by design
     "SIM108",   # the chao1 f2>0 branch is clearer as if/else than as a ternary

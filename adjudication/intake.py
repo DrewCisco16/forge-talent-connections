@@ -33,7 +33,7 @@ import os
 import re
 from datetime import datetime
 
-from domains import ALL, BY_KEY, Domain
+from domains import ALL, Domain
 
 RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
 

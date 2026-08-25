@@ -463,7 +463,9 @@ class UnitGate:
     """
     name = "unit"
 
-    def _parse(self, warrant: str | None):
+    def _parse(
+        self, warrant: str | None
+    ) -> tuple[float, tuple[str, float], float, tuple[str, float]] | None:
         if not warrant:
             return None
         m = _UNIT_WARRANT.match(warrant)
@@ -1388,8 +1390,8 @@ class Orchestrator:
                 ruled.append(claim.id)
         return ruled
 
-    def apply_quote_cascade(self, candidates: list["Candidate"],
-                            p: "Pass", rec: "PassRecord") -> None:
+    def apply_quote_cascade(self, candidates: list[Candidate],
+                            p: Pass, rec: PassRecord) -> None:
         """A fabricated quote takes down what it was offered to support.
 
         A quote_verification claim ruled FAIL does not merely drop itself:

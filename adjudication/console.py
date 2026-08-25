@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+
+# Reason kept OFF the nosec line: bandit reads everything after "nosec" as
+# test ids. subprocess here runs only this repo's own scripts with an argv
+# list and shell=False; nothing a model produced ever reaches it.
+import subprocess  # nosec B404
 import sys
 from datetime import datetime
 
@@ -35,7 +39,9 @@ def sh(args: list[str]) -> int:
     resolved -- 0 for resolved, 1 for holes remaining. Piping it through tail
     silently turns every outcome into success.
     """
-    return subprocess.call(args, cwd=HERE)
+    # argv list, shell=False by default, and args are built from this repo's
+    # own paths. No model output reaches this call.
+    return subprocess.call(args, cwd=HERE)  # nosec B603 B607
 
 
 def run_dirs() -> list[str]:
@@ -188,11 +194,9 @@ def show_verdict() -> None:
     path = os.path.join(d, logs[-1])
     _p(f"\n  {logs[-1]}")
     _p("-" * 68)
-    for line in open(path, encoding="utf-8"):
-        line = line.strip()
-        if not line:
-            continue
-        e = json.loads(line)
+    with open(path, encoding="utf-8") as fh:
+        entries = [json.loads(ln) for ln in fh if ln.strip()]
+    for e in entries:
         if e.get("kind") != "pass":
             continue
         p = e["payload"]
@@ -223,11 +227,9 @@ def conduct_across_runs() -> None:
             if not (f.startswith("run-") and f.endswith(".jsonl")):
                 continue
             runs += 1
-            for line in open(os.path.join(RUNS, d, f), encoding="utf-8"):
-                line = line.strip()
-                if not line:
-                    continue
-                e = json.loads(line)
+            with open(os.path.join(RUNS, d, f), encoding="utf-8") as fh:
+                entries = [json.loads(ln) for ln in fh if ln.strip()]
+            for e in entries:
                 if e.get("kind") != "seat_conduct":
                     continue
                 for seat, rec in (e["payload"].get("seats") or {}).items():
@@ -280,7 +282,10 @@ MENU = """
 
 def main() -> int:
     while True:
-        os.system("clear")
+        # ANSI erase-display + cursor-home rather than os.system("clear"),
+        # which starts a shell and resolves 'clear' off PATH. Nothing here
+        # needs a shell, and a menu loop is a poor reason to invoke one.
+        print("\033[2J\033[H", end="")
         _p(MENU)
         c = input("  Choose: ").strip().lower()
         _p()
@@ -310,7 +315,7 @@ def main() -> int:
         elif c == "n":
             night()
         elif c == "o":
-            subprocess.call(["open", HERE])
+            subprocess.call(["/usr/bin/open", HERE])  # nosec B603
         elif c == "q":
             return 0
         else:

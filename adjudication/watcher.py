@@ -50,7 +50,7 @@ class Folders:
     runs: str
 
     @classmethod
-    def under(cls, root: str) -> "Folders":
+    def under(cls, root: str) -> Folders:
         f = cls(os.path.join(root, "inbox"), os.path.join(root, "processing"),
                 os.path.join(root, "done"), os.path.join(root, "failed"),
                 os.path.join(root, "runs"))

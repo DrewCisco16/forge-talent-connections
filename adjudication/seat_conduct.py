@@ -151,7 +151,7 @@ class ConductLedger:
         cls,
         detections_by_seat: Mapping[str, set[str]],
         verdicts: Mapping[str, object],
-        all_seat_ids: "Sequence[str] | None" = None,
+        all_seat_ids: Sequence[str] | None = None,
     ) -> ConductLedger:
         """all_seat_ids makes SILENT seats visible.
 

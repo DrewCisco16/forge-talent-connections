@@ -29,7 +29,7 @@ import re
 import unicodedata
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
@@ -47,15 +47,20 @@ candidate on the strength of a client-side rendering quirk. Too little text
 means the check did not happen.
 """
 
-_TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.S | re.I)
+_TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
 _ANYTAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
 
+# ruff RUF001 flags every entry below as an "ambiguous unicode character".
+# They are the entire point: this table exists to fold exactly those glyphs to
+# their ASCII equivalents, so a quote typed with a smart apostrophe still
+# matches a page that uses a straight one. Silencing per-line would bury the
+# reason in ten identical noqa comments.
 _PUNCT_MAP = {
-    "‘": "'", "’": "'", "‚": "'", "‛": "'",
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",  # noqa: RUF001
     "“": '"', "”": '"', "„": '"', "‟": '"',
-    "–": "-", "—": "-", "―": "-", "−": "-",
-    " ": " ", " ": " ", " ": " ", " ": " ",
+    "–": "-", "—": "-", "―": "-", "−": "-",  # noqa: RUF001
+    " ": " ", " ": " ", " ": " ", " ": " ",  # noqa: RUF001
     "​": "", "…": "...",
 }
 
@@ -89,7 +94,7 @@ class QuoteVerificationGate:
     name = "quote_verification"
 
     def __init__(self, timeout_s: float = 20.0,
-                 fetcher: "callable | None" = None,
+                 fetcher: Callable[[str], tuple[int, str]] | None = None,
                  min_text_chars: int = MIN_TEXT_CHARS):
         # fetcher is injectable so the whole gate is testable without a socket,
         # the same way HttpSeat takes its transport.

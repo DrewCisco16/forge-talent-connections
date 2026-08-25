@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Callable
+from typing import Any
 
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
@@ -84,7 +86,7 @@ def title_overlap(claimed: str, actual: str) -> float:
     return len(a & b) / len(shorter)
 
 
-def _record_year(rec: dict) -> int | None:
+def _record_year(rec: dict[str, Any]) -> int | None:
     for key in ("published-print", "published-online", "issued", "created"):
         parts = (rec.get(key) or {}).get("date-parts") or []
         if parts and parts[0] and isinstance(parts[0][0], int):
@@ -92,7 +94,7 @@ def _record_year(rec: dict) -> int | None:
     return None
 
 
-def _surnames(rec: dict) -> set[str]:
+def _surnames(rec: dict[str, Any]) -> set[str]:
     return {_fold(a.get("family", "")) for a in (rec.get("author") or [])
             if a.get("family")}
 
@@ -102,16 +104,22 @@ class CitationFieldMatchGate:
 
     name = "citation_field_match"
 
-    def __init__(self, record_fn=None, timeout_s: float = 12.0):
+    def __init__(
+        self,
+        record_fn: Callable[[str], dict[str, Any] | None] | None = None,
+        timeout_s: float = 12.0,
+    ) -> None:
         # Injectable so the gate is testable without a socket.
         if record_fn is None:
             from doi_resolver import crossref_record
             record_fn = lambda d: crossref_record(d, timeout_s)  # noqa: E731
         self.record_fn = record_fn
-        self.cache: dict[str, dict | None] = {}
+        self.cache: dict[str, dict[str, Any] | None] = {}
 
     @staticmethod
-    def parse_warrant(warrant: str | None):
+    def parse_warrant(
+        warrant: str | None,
+    ) -> tuple[str, str, int, str] | None:
         """"<doi> :: <surname> | <year> | <title>" -> parts, or None."""
         if not warrant or "::" not in warrant:
             return None
@@ -132,7 +140,7 @@ class CitationFieldMatchGate:
         return (claim.kind is ClaimKind.CITATION
                 and self.parse_warrant(claim.warrant) is not None)
 
-    def _record(self, doi: str):
+    def _record(self, doi: str) -> dict[str, Any] | None:
         if doi not in self.cache:
             try:
                 self.cache[doi] = self.record_fn(doi)

@@ -195,9 +195,9 @@ class HttpSeat:
         # a silent under-estimate, which is the one direction a spend limit
         # must never err in. Making the seat self-consistent removes the
         # dependence on every construction path remembering to pass it.
-        self.max_tokens = (profile.max_tokens
-                           if getattr(profile, "max_tokens", None)
-                           else max_tokens)
+        self.max_tokens: int = (profile.max_tokens
+                                if profile.max_tokens is not None
+                                else max_tokens)
         self.temperature = temperature
         self.timeout_s = timeout_s
         self.retry = retry or RetryPolicy()

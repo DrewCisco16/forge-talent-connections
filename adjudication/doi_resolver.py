@@ -34,6 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from typing import Any
 
 CROSSREF_API = "https://api.crossref.org/works/"
 DOI_ORG = "https://doi.org/"
@@ -160,7 +161,7 @@ class DoiResolver:
         return 200 <= status < 400
 
 
-def crossref_record(doi: str, timeout_s: float = 12.0) -> dict | None:
+def crossref_record(doi: str, timeout_s: float = 12.0) -> dict[str, Any] | None:
     """The Crossref record for a DOI, or None if it could not be retrieved.
 
     Separate from resolution because they answer different questions.

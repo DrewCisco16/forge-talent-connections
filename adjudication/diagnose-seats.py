@@ -48,18 +48,22 @@ for sid in SEATS:
         headers=headers, method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        # Endpoint comes from profiles.json, which validate_config refuses
+        # unless it is https. Reason off the nosec line by convention.
+        with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
             status, raw = resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         status, raw = exc.code, exc.read()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - fail-closed: a diagnostic that
+        # dies on the first bad seat cannot diagnose the others, which is the
+        # whole reason it exists.
         print(f"  TRANSPORT FAILURE: {type(exc).__name__}: {exc}")
         continue
 
     print(f"HTTP {status}")
     try:
         payload = json.loads(raw)
-    except Exception:
+    except Exception:  # noqa: BLE001 - unparseable is a finding to show, not raise
         print("  non-JSON response:", raw[:300])
         continue
 

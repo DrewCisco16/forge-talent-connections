@@ -35,7 +35,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-
 from adjudication_orchestrator import BudgetExceeded
 
 
@@ -218,6 +217,12 @@ class CostLedger:
         return out
 
 
+def _as_float(v: object) -> float:
+    """A price from untyped JSON. Anything unreadable is 0.0, which makes
+    the rate stale-by-absence rather than a silent wrong number."""
+    return float(v) if isinstance(v, (int, float)) else 0.0
+
+
 def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate]:
     """Build rates from a {seat_id: {input, output, verified_on}} mapping."""
     out: dict[str, Rate] = {}
@@ -225,8 +230,8 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
         if seat.startswith("_"):
             continue
         out[seat] = Rate(
-            input_per_mtok=float(cfg.get("input_per_mtok", 0.0) or 0.0),
-            output_per_mtok=float(cfg.get("output_per_mtok", 0.0) or 0.0),
+            input_per_mtok=_as_float(cfg.get("input_per_mtok")),
+            output_per_mtok=_as_float(cfg.get("output_per_mtok")),
             verified_on=(str(cfg["verified_on"]) if cfg.get("verified_on") else None),
         )
     return out
