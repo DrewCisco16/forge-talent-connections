@@ -228,6 +228,7 @@ class HttpSeat:
         sleeper: Callable[[float], None] | None = None,
         ledger: Any = None,
         est_input_tokens: int = 3000,
+        pass_id: str | None = None,
     ):
         resolved_model = model or seat.model
         if not resolved_model:
@@ -264,6 +265,11 @@ class HttpSeat:
         self.attempts_made = 0
         self.ledger = ledger
         self.est_input_tokens = est_input_tokens
+        # WITHOUT THIS A PER-STAGE CEILING IS INERT. The ledger keys stage
+        # spend by pass_id; HttpSeat passed none, so every live call recorded
+        # pass_id=None, stage spend stayed at zero, and a configured
+        # per-stage limit could never be reached however much was spent.
+        self.pass_id = pass_id
         self.last_usage: tuple[int | None, int | None] = (None, None)
 
     @property
@@ -288,15 +294,6 @@ class HttpSeat:
         }
 
     def __call__(self, prompt: str) -> str:
-        if self.ledger is not None:
-            # BEFORE the call, never after. A limit you can only detect having
-            # crossed is a report, not a limit. The estimate assumes this
-            # seat's full output cap because that is the worst case this call
-            # can produce; estimating smaller lets the last call of a run
-            # cross the ceiling it was checked against.
-            self.ledger.check_before_call(
-                self.seat_id, self.est_input_tokens, self.max_tokens
-            )
         body = json.dumps(
             self.profile.build_body(
                 self.model, prompt, self.max_tokens, self.temperature
@@ -306,6 +303,14 @@ class HttpSeat:
         last: str = "no attempt was made"
         for attempt in range(self.retry.max_attempts):
             self.attempts_made = attempt + 1
+            # BEFORE EVERY DISPATCH, not once before the loop.
+            #
+            # The check ran a single time and the retry loop then sent the
+            # request up to max_attempts times. Three requests produced one
+            # ceiling check, and a vendor bills each of them. A timed-out
+            # request produced no ledger entry at all, so a run that dispatched
+            # work and paid for it reported "no billable call was made".
+            self._precheck(prompt)
             try:
                 status, raw = self.transport(
                     "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
@@ -325,6 +330,7 @@ class HttpSeat:
                 #
                 # Fail once, immediately, and name the duration, because the
                 # duration is the entire diagnosis.
+                self._record_unmeasured("timeout or transport failure")
                 if _is_timeout(exc):
                     raise SeatError(
                         f"seat {self.seat_id}: {self.profile.name} did not "
@@ -352,6 +358,8 @@ class HttpSeat:
                 raise SeatError(f"seat {self.seat_id}: {last}") from None
 
             if status in RETRYABLE_STATUS and attempt + 1 < self.retry.max_attempts:
+                # A 429 or 503 was still a dispatch. Some vendors bill it.
+                self._record_unmeasured(f"HTTP {status}, retrying")
                 self._backoff(attempt)
                 last = f"transient HTTP {status}"
                 continue
@@ -382,7 +390,40 @@ class HttpSeat:
         except Exception:  # noqa: BLE001 - unmeasured is honest, guessing is not
             tin = tout = None
         self.last_usage = (tin, tout)
-        self.ledger.record(self.seat_id, tin, tout)
+        self.ledger.record(self.seat_id, tin, tout, pass_id=self.pass_id)
+
+    def _precheck(self, prompt: str) -> None:
+        """Refuse this dispatch if its worst case would cross a ceiling.
+
+        The bound is derived from the ACTUAL prompt rather than a flat 3,000
+        tokens, and the output side allows for reasoning tokens, which are
+        billed and are not bounded by max_tokens. Both were measured failures:
+        a 400,000-character prompt passed a check computed as 3,000 tokens,
+        and a call whose cap was 4,096 billed roughly 15,400 output tokens.
+        """
+        if self.ledger is None:
+            return
+        from cost_ledger import HIDDEN_OUTPUT_MULTIPLIER, estimate_input_tokens
+        self.ledger.check_before_call(
+            self.seat_id,
+            max(self.est_input_tokens, estimate_input_tokens(prompt)),
+            int(self.max_tokens * HIDDEN_OUTPUT_MULTIPLIER),
+            pass_id=self.pass_id,
+        )
+
+    def _record_unmeasured(self, why: str) -> None:
+        """Book a dispatch whose cost we never learned.
+
+        A failed or timed-out attempt still reached the vendor and may still be
+        billed. Recording nothing made the run total silently exclude it, and
+        unmeasured_calls -- which is what turns the report into an explicit
+        LOWER BOUND rather than a total -- never saw it either. A run that
+        dispatched three requests and timed out reported "no billable call was
+        made".
+        """
+        self.last_unmeasured_reason = why
+        if self.ledger is not None:
+            self.ledger.record(self.seat_id, None, None, pass_id=self.pass_id)
 
     def _backoff(self, attempt: int) -> None:
         if self.sleeper is None or not self.retry.backoff_seconds:

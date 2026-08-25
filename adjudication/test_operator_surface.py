@@ -296,3 +296,37 @@ class TestTheValidationHarness:
     def test_the_harness_runs_end_to_end_and_returns_an_orchestrator(self, capsys):
         orch = VH.run("demo", {"seat_1": set(VH.SEEDED), "seat_2": set(VH.SEEDED)})
         assert orch.verdicts or orch.escalation_queue
+
+
+class TestTheWatcherCeilingMustBeARealNumber:
+    """Codex H5. NaN fails EVERY comparison, so `max_cost <= 0` was False for
+    it and a NaN ceiling sailed through. Every later comparison against it is
+    also False, so no ceiling is ever reached: the operator asked for a limit,
+    saw "ceiling $nan per run" printed back, and got none.
+    """
+
+    def test_a_nonfinite_ceiling_is_refused(self, tmp_path):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(ValueError, match="spend ceiling"):
+                W.watch(str(tmp_path / "n"), bad, once=True)
+
+    def test_a_non_numeric_ceiling_is_refused(self, tmp_path):
+        for bad in ("5.00", None, [], True):
+            with pytest.raises(ValueError, match="spend ceiling"):
+                W.watch(str(tmp_path / "n"), bad, once=True)
+
+    def test_the_refusal_names_what_it_got(self, tmp_path):
+        """'A watcher needs a ceiling' when the operator supplied one reads as
+        a bug in the tool rather than a problem with their value."""
+        with pytest.raises(ValueError, match="not a finite positive number"):
+            W.watch(str(tmp_path / "n"), float("nan"), once=True)
+
+    def test_nothing_is_created_before_the_ceiling_is_validated(self, tmp_path):
+        root = tmp_path / "never"
+        with pytest.raises(ValueError):
+            W.watch(str(root), float("nan"), once=True)
+        assert not root.exists()
+
+    def test_a_real_ceiling_is_still_accepted(self, tmp_path):
+        W.watch(str(tmp_path / "ok"), 1.50, interval=0.0, once=True)
+        assert (tmp_path / "ok" / "inbox").is_dir()

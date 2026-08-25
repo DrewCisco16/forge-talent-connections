@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import ClassVar
 
 import pytest
 
@@ -891,7 +892,7 @@ class TestTheCloserSeesLensesNotVendors:
 
 class TestTheCloserCannotIntroduceContent:
 
-    TEXTS = {
+    TEXTS: ClassVar[dict[str, str]] = {
         "s1": "We should compare build against buy. Building costs more up "
               "front and needs two engineers.",
         "s2": "Buying is faster but locks us in to the vendor roadmap.",

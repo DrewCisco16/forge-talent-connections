@@ -27,6 +27,7 @@ destroyed by a run that went wrong.
 """
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import time
@@ -164,11 +165,19 @@ def process(path: str, folders: Folders, max_cost: float,
 
 def watch(root: str, max_cost: float, profiles_path: str | None = None,
           interval: float = POLL_SECONDS, once: bool = False) -> None:
-    if max_cost is None or max_cost <= 0:
+    # NaN fails EVERY comparison, so `max_cost <= 0` was False for it and a
+    # NaN ceiling sailed through. Every later comparison against it is also
+    # False, which means no ceiling is ever reached: the operator asked for a
+    # limit, saw "ceiling $nan per run" printed back, and got none.
+    if (max_cost is None or not isinstance(max_cost, (int, float))
+            or isinstance(max_cost, bool)
+            or not math.isfinite(float(max_cost)) or float(max_cost) <= 0):
         raise ValueError(
             "a watcher needs a spend ceiling. It is the one component that "
             "spends with nobody watching, and without a limit it is an "
-            "open-ended bill with a folder for an interface."
+            "open-ended bill with a folder for an interface. "
+            f"Got {max_cost!r}, which is not a finite positive number of "
+            f"dollars."
         )
     profiles_path = profiles_path or os.path.join(HERE, "profiles.json")
     folders = Folders.under(root)

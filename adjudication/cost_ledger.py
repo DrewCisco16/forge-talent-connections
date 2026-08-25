@@ -30,6 +30,7 @@ this year.
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -85,6 +86,37 @@ class CallCost:
     pass_id: str | None = None
 
 
+CHARS_PER_TOKEN = 3.0
+"""Conservative characters-per-token for a pre-call bound.
+
+Real tokenisers average nearer 4 for English prose. 3 deliberately
+OVER-estimates, because this number exists to refuse a call and an
+under-estimate is the one direction that spends money the operator forbade.
+"""
+
+HIDDEN_OUTPUT_MULTIPLIER = 5.0
+"""Worst-case ratio of billed output to the configured max_tokens cap.
+
+Measured on a live grok-4.6 call: max_tokens was 4096, and the vendor reported
+16,748 total tokens against 1,320 input -- roughly 15,400 billed as output,
+about 3.8x the cap. Reasoning tokens are generated and billed and are not
+bounded by max_tokens, so treating the cap as the worst case under-estimated
+the ceiling check by that factor. 5.0 leaves headroom above the one figure
+actually observed; it is a bound, not a prediction.
+"""
+
+
+def estimate_input_tokens(prompt: str) -> int:
+    """A deliberately high token estimate for a prompt about to be sent.
+
+    The precheck previously assumed a flat 3,000 input tokens regardless of
+    the prompt. A 400,000-character prompt was therefore checked as 3,000
+    tokens, passed a ceiling it would blow through, and booked its real cost
+    only afterwards -- by which point the money was spent.
+    """
+    return max(1, int(len(prompt or "") / CHARS_PER_TOKEN) + 1)
+
+
 @dataclass
 class CostLedger:
     """Running spend for one run, enforced against three ceilings."""
@@ -114,19 +146,52 @@ class CostLedger:
         return self._stage_spent.get(pass_id, 0.0)
 
     def day_spent(self) -> float:
+        """Today's spend from the shared state file.
+
+        An UNREADABLE file raises rather than returning 0.0. It previously
+        returned zero, which handed a fresh full day's budget to anyone whose
+        state file was corrupt -- and a corrupt file is exactly what a crashed
+        or concurrent writer leaves behind. "I cannot tell what has been spent
+        today" and "nothing has been spent today" are opposite facts, and only
+        one of them is a reason to authorise more calls.
+
+        A MISSING file is still zero: nothing has run yet, which is a state we
+        can actually establish.
+        """
         if not self.day_state_path or not os.path.exists(self.day_state_path):
             return 0.0
         try:
             with open(self.day_state_path, encoding="utf-8") as fh:
                 blob = json.load(fh)
-        except Exception:  # noqa: BLE001 - unreadable state is not spend
-            return 0.0
-        return float(blob.get(date.today().isoformat(), 0.0))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CeilingReached(
+                f"daily spend state at {self.day_state_path} is unreadable "
+                f"({type(exc).__name__}). Refusing to spend: an unreadable "
+                f"ledger is not an empty one, and treating it as empty grants "
+                f"a whole fresh day's budget on a corrupt file",
+                0.0, self.per_day or 0.0, 0.0,
+            ) from None
+        if not isinstance(blob, dict):
+            raise CeilingReached(
+                f"daily spend state at {self.day_state_path} is not an object",
+                0.0, self.per_day or 0.0, 0.0)
+        today = blob.get(date.today().isoformat(), 0.0)
+        if isinstance(today, bool) or not isinstance(today, (int, float)) \
+                or not math.isfinite(float(today)) or float(today) < 0:
+            raise CeilingReached(
+                f"daily spend state at {self.day_state_path} holds "
+                f"{today!r} for today, which is not a spend figure",
+                0.0, self.per_day or 0.0, 0.0)
+        return float(today)
 
     # -- enforcement -------------------------------------------------------
     def stale_rates(self) -> list[str]:
+        """Seats whose price cannot bound anything: unverified, expired, or
+        zero. A zero price means every call is free and the ceiling is
+        decorative, so it belongs here however recently it was 'verified'."""
         return [s for s, r in self.rates.items()
-                if r.is_stale(self.max_rate_age_days)]
+                if r.is_stale(self.max_rate_age_days)
+                or r.input_per_mtok <= 0 or r.output_per_mtok <= 0]
 
     def check_before_call(self, seat_id: str, est_input: int, est_output: int,
                           pass_id: str | None = None) -> None:
@@ -184,10 +249,18 @@ class CostLedger:
                 blob = {}
         today = date.today().isoformat()
         blob[today] = float(blob.get(today, 0.0)) + self.spent
-        tmp = self.day_state_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(blob, fh, indent=2)
-        os.replace(tmp, self.day_state_path)
+        # A UNIQUE temporary name per writer. Two processes sharing
+        # "<path>.tmp" raced: one os.replace moved the file out from under the
+        # other, which then raised FileNotFoundError, and one day's spend was
+        # lost -- silently raising the next run's available budget.
+        tmp = f"{self.day_state_path}.{os.getpid()}.{id(self)}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(blob, fh, indent=2)
+            os.replace(tmp, self.day_state_path)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
 
     # -- reporting ---------------------------------------------------------
     def render(self) -> list[str]:
@@ -217,6 +290,22 @@ class CostLedger:
         return out
 
 
+def _finite_positive(v: object) -> float | None:
+    """A usable price, or None. bool and non-finite are never usable.
+
+    A rate of 0.0 means every call is free, so no ceiling can ever be crossed
+    and the limit is decorative. Previously a malformed price became 0.0 while
+    KEEPING its verified_on date, so stale_rates() reported nothing wrong and
+    an unbounded seat looked correctly configured.
+    """
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    f = float(v)
+    if not math.isfinite(f) or f <= 0.0:
+        return None
+    return f
+
+
 def _as_float(v: object) -> float:
     """A price from untyped JSON. Anything unreadable is 0.0, which makes
     the rate stale-by-absence rather than a silent wrong number."""
@@ -242,10 +331,18 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
     for seat, cfg in raw.items():
         if seat.startswith("_"):
             continue
+        cin = _finite_positive(cfg.get("input_per_mtok"))
+        cout = _finite_positive(cfg.get("output_per_mtok"))
+        # An unusable price drops the verification date with it. Keeping the
+        # date on a zero rate was the failure: stale_rates() saw a
+        # recently-verified entry and reported nothing, while the seat it
+        # priced could never cross a ceiling.
+        usable = cin is not None and cout is not None
         out[seat] = Rate(
-            input_per_mtok=_as_float(cfg.get("input_per_mtok")),
-            output_per_mtok=_as_float(cfg.get("output_per_mtok")),
-            verified_on=(str(cfg["verified_on"]) if cfg.get("verified_on") else None),
+            input_per_mtok=cin or 0.0,
+            output_per_mtok=cout or 0.0,
+            verified_on=(str(cfg["verified_on"])
+                         if usable and cfg.get("verified_on") else None),
         )
     return out
 
@@ -273,7 +370,17 @@ def usage_from_payload(payload: Mapping[str, object],
                 if not isinstance(cur, dict) or step not in cur:
                     return None
                 cur = cur[step]
-        return int(cur) if isinstance(cur, (int, float)) else None
+        # STRICT. bool is a subclass of int, so `true` was read as 1 token.
+        # A negative count produced negative spend, and a fractional one was
+        # silently truncated. Every one of those is a vendor payload we do not
+        # understand, and a figure we do not understand must be reported as
+        # UNMEASURED -- which makes the total an explicit lower bound -- not
+        # coerced into a number that looks measured.
+        if isinstance(cur, bool) or not isinstance(cur, (int, float)):
+            return None
+        if isinstance(cur, float) and not cur.is_integer():
+            return None
+        return int(cur) if cur >= 0 else None
 
     tin, tout = walk(input_path), walk(output_path)
 
@@ -300,8 +407,15 @@ def usage_from_payload(payload: Mapping[str, object],
     # literal "usage" would silently do nothing for one of them while looking
     # like it worked.
     total = _sibling_total(payload, input_path)
-    if total is not None and tin is not None and tout is not None and total > tin + tout:
-        tout = total - tin
+    if total is not None and tin is not None and tout is not None:
+        if total < tin + tout:
+            # The vendor's own arithmetic does not close. We cannot tell which
+            # figure is wrong, so we report none of them: an unmeasured call
+            # makes the run total an explicit LOWER BOUND, which is honest,
+            # where a reconciled-from-contradictory-inputs number is not.
+            return None, None
+        if total > tin + tout:
+            tout = total - tin
     return tin, tout
 
 
