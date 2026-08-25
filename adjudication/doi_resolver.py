@@ -28,8 +28,10 @@ rules out fabrication, not misrepresentation.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -47,6 +49,44 @@ USER_AGENT = (
 """Crossref asks API users to identify themselves and gives politely-identified
 callers a faster pool. Replace the mailto with a real address you monitor if
 you run this at volume -- Crossref may throttle anonymous traffic."""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every 3xx on a model-supplied URL.
+
+    A public https endpoint that redirects to loopback, or downgrades to
+    plaintext http, is the standard way past an origin check performed only on
+    the first hop.
+    """
+
+    def redirect_request(  # noqa: PLR0913, PLR0917 - urllib's signature
+            self, req: object, fp: object, code: int, msg: str,
+            headers: object, newurl: str) -> None:
+        raise urllib.error.HTTPError(
+            getattr(req, "full_url", ""), code,
+            f"refusing a {code} redirect to {newurl!r}: a citation URL came "
+            f"from a model and every hop after the first is unchecked",
+            headers, fp,  # type: ignore[arg-type]
+        )
+
+
+def _is_public_host(host: str) -> bool:
+    """False for anything not on the public internet, and for the unresolvable."""
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:  # noqa: BLE001 - unresolvable is not public
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+    return True
 
 
 class ResolverBlocked(RuntimeError):
@@ -129,6 +169,39 @@ class DoiResolver:
         with urllib.request.urlopen(req, timeout=self.timeout_s) as r:  # nosec B310
             return r.status, r.read()
 
+    def _get_untrusted(self, url: str, method: str = "HEAD") -> tuple[int, bytes]:
+        """Fetch a URL that came from a MODEL, with redirects refused.
+
+        Crossref and doi.org are fixed constants in this file and are fetched
+        by _get. A citation URL is model-controlled, and _get was being used
+        for it too -- which followed redirects. A public https endpoint that
+        302s to http://127.0.0.1 therefore reached loopback: the origin check
+        applied to the first hop only, and every later hop was unchecked. That
+        is a server-side request forgery primitive reachable from a model's
+        warrant.
+
+        Redirects are refused rather than revalidated per hop. A citation URL
+        that redirects is weak evidence anyway, and refusing is the version
+        with no gap in it.
+        """
+        parts = urllib.parse.urlparse(url)
+        if parts.scheme != "https":
+            raise ResolverBlocked(f"refusing a non-https citation URL: {url!r}")
+        if not _is_public_host(parts.hostname or ""):
+            raise ResolverBlocked(
+                f"refusing {parts.hostname!r}: not a public address. This URL "
+                f"came from a model, and fetching a private or loopback host "
+                f"on its say-so is server-side request forgery."
+            )
+        self.calls += 1
+        req = urllib.request.Request(
+            url, method=method,
+            headers={"User-Agent": USER_AGENT, "Accept": "*/*"},
+        )
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=self.timeout_s) as r:  # nosec B310
+            return r.status, r.read(0)
+
     def _crossref(self, doi: str) -> bool:
         """Authoritative for registered DOIs. A 200 whose payload carries the
         DOI back is a confirmed record; anything else is not."""
@@ -173,15 +246,32 @@ class DoiResolver:
     def _url_head(self, url: str) -> bool:
         """A plain URL is weaker evidence than a DOI and is treated as such:
         it confirms only that something is served there today. Pass
-        allow_url_fallback=False to refuse URLs outright."""
+        allow_url_fallback=False to refuse URLs outright.
+
+        A TRANSPORT FAILURE RAISES ResolverBlocked; it does not return False.
+        Returning False here made a connection error indistinguishable from
+        "this source does not exist", and CitationResolutionGate turns False
+        into FAIL -- so an outage produced a refuted citation, a conduct
+        finding against the seat that cited it, and an EARNED elimination of
+        whatever candidate rested on it. The bare DOI paths already made this
+        distinction; the URL path did not.
+        """
         if not url.startswith("https://"):
             return False          # never confirm a plaintext source
         try:
-            status, _ = self._get(url, method="HEAD")
-        except urllib.error.HTTPError:
-            return False
-        except Exception:         # noqa: BLE001 - fail closed
-            return False
+            status, _ = self._get_untrusted(url, method="HEAD")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (404, 410):
+                return False      # authoritative: nothing is served there
+            raise ResolverBlocked(
+                f"{url} returned HTTP {exc.code}; the check did not happen"
+            ) from None
+        except Exception as exc:  # noqa: BLE001
+            raise ResolverBlocked(
+                f"could not reach {url}: {type(exc).__name__}"
+            ) from None
+        if 500 <= status < 600 or status in (401, 403, 429):
+            raise ResolverBlocked(f"{url} returned HTTP {status}")
         return 200 <= status < 400
 
 

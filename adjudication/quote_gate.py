@@ -24,7 +24,9 @@ and, through the cascade below, let an outage eliminate a true candidate.
 """
 from __future__ import annotations
 
+import codecs
 import html
+import http.client
 import ipaddress
 import re
 import socket
@@ -33,6 +35,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
+from typing import Any
 
 from adjudication_orchestrator import Claim, ClaimKind, GateResult, GateStatus
 
@@ -117,6 +120,60 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         )
 
 
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    """Dial one approved IP while validating the certificate for the hostname.
+
+    Resolving, checking the address, and then letting urllib resolve the name
+    again is a time-of-check/time-of-use gap -- a name whose DNS answer changes
+    between the two lookups passes the check and connects elsewhere. Rewriting
+    the URL to the IP closes that and breaks TLS, because the certificate is
+    then validated against the address. This does both correctly: the socket
+    goes to the checked address, and server_hostname carries the real name so
+    SNI and hostname verification see it.
+    """
+
+    def __init__(self, addr: str) -> None:
+        super().__init__()
+        self._addr = addr
+
+    def https_open(self, req: Any) -> Any:
+        addr = self._addr
+
+        class _Conn(http.client.HTTPSConnection):
+            def connect(self) -> None:
+                self.sock = socket.create_connection(
+                    (addr, self.port or 443), self.timeout)
+                # _context is HTTPSConnection's own ssl context. Typed as
+                # private, but it is the only handle on the verification
+                # settings urllib built, and rebuilding one here would silently
+                # drop the caller's CA configuration.
+                ctx = self._context  # type: ignore[attr-defined]
+                self.sock = ctx.wrap_socket(self.sock, server_hostname=self.host)
+
+        return self.do_open(_Conn, req)
+
+
+_INTERSTITIAL = (
+    "subscribe to continue", "subscription required", "create a free account",
+    "sign in to read", "log in to continue", "you have reached your",
+    "enable javascript", "verify you are human", "checking your browser",
+    "access denied", "please accept cookies", "cookie consent",
+)
+
+
+def _looks_like_an_interstitial(text: str) -> bool:
+    """A wall served with HTTP 200 instead of 401 or 403.
+
+    A soft paywall, consent gate, or bot check returns a normal status and a
+    page that is not the article. Matching the quote against THAT and calling
+    the non-match a FAIL turns a subscription into a fabrication finding, and
+    through the cascade eliminates a candidate that cited a real source
+    correctly.
+    """
+    low = (text or "").casefold()[:4000]
+    return any(marker in low for marker in _INTERSTITIAL)
+
+
 MIN_TEXT_CHARS = 400
 """Below this, treat the fetch as BLOCKED rather than as a failed match.
 
@@ -158,9 +215,33 @@ def normalize(text: str) -> str:
     return _WS.sub(" ", text).strip()
 
 
+_CHARSET = re.compile(r"charset\s*=\s*[\"']?([\w.-]+)", re.IGNORECASE)
+
+
 def extract_text(raw: bytes, content_type: str) -> str:
-    """Page bytes to matchable text. HTML is stripped; anything else is decoded."""
-    body = raw.decode("utf-8", errors="replace")
+    """Page bytes to matchable text. HTML is stripped; anything else is decoded.
+
+    THE DECLARED CHARSET IS HONOURED. Decoding everything as UTF-8 with
+    errors="replace" turned every non-ASCII character on an ISO-8859-1 page
+    into U+FFFD, so a quote containing "Cafe" with an accent could not match
+    a page that genuinely contained it -- and the gate reported FAIL, which
+    through the cascade eliminates a candidate whose quote was real and
+    correctly transcribed.
+    """
+    encoding = "utf-8"
+    m = _CHARSET.search(content_type or "")
+    if m:
+        candidate = m.group(1).strip().lower()
+        try:
+            # codecs.lookup, not a trial decode of b"": decoding empty bytes
+            # succeeds for names Python cannot actually resolve, so the probe
+            # accepted "x-not-a-charset" and the real decode then raised
+            # LookupError out of the gate.
+            codecs.lookup(candidate)
+            encoding = candidate
+        except LookupError:
+            encoding = "utf-8"
+    body = raw.decode(encoding, errors="replace")
     if "html" in content_type.lower() or body.lstrip()[:1] == "<":
         body = _TAG.sub(" ", body)
         body = _ANYTAG.sub(" ", body)
@@ -174,24 +255,43 @@ class QuoteVerificationGate:
     name = "quote_verification"
 
     def __init__(self, timeout_s: float = 20.0,
-                 fetcher: Callable[[str], tuple[int, str]] | None = None,
+                 fetcher: Callable[..., Any] | None = None,
                  min_text_chars: int = MIN_TEXT_CHARS):
         # fetcher is injectable so the whole gate is testable without a socket,
         # the same way HttpSeat takes its transport.
         self.timeout_s = timeout_s
         self.fetcher = fetcher or self._fetch
         self.min_text_chars = min_text_chars
-        self.cache: dict[str, tuple[int, str]] = {}
+        self.cache: dict[str, tuple[int, str, bool]] = {}
 
     # -- warrant shape ------------------------------------------------------
-    @staticmethod
-    def parse_warrant(warrant: str | None) -> tuple[str, str] | None:
-        """warrant is "<url> :: <quote>". Returns (url, quote) or None."""
+    MIN_QUOTE_CHARS = 12
+    """Shortest asserted quote this gate will rule on.
+
+    A quote of two or three characters matches by accident on any page of
+    ordinary length, so a PASS on one is not evidence. Below this the gate has
+    nothing to say and the claim escalates to a person, which is the honest
+    outcome -- not a PASS, and not a FAIL either.
+    """
+
+    @classmethod
+    def parse_warrant(cls, warrant: str | None) -> tuple[str, str] | None:
+        """warrant is "<url> :: <quote>". Returns (url, quote) or None.
+
+        THE QUOTE IS VALIDATED AFTER NORMALISATION, NOT BEFORE.
+        Emptiness was checked on the RAW string, and Python treats the empty
+        string as a substring of everything. A warrant whose quote was a
+        single zero-width character therefore passed the non-empty check,
+        normalised to "", and matched every page on the internet -- a PASS
+        against 500 characters of entirely unrelated text, verified.
+        """
         if not warrant or "::" not in warrant:
             return None
         url, _, quote = warrant.partition("::")
-        url, quote = url.strip(), quote.strip()
-        if not url.startswith("https://") or not quote:
+        url, quote = url.strip(), normalize(quote)
+        if not url.startswith("https://"):
+            return None
+        if len(quote) < cls.MIN_QUOTE_CHARS:
             return None
         return url, quote
 
@@ -200,7 +300,7 @@ class QuoteVerificationGate:
                 and self.parse_warrant(claim.warrant) is not None)
 
     # -- the fetch ----------------------------------------------------------
-    def _fetch(self, url: str) -> tuple[int, str]:
+    def _fetch(self, url: str) -> tuple[int, str, bool]:
         parts = urllib.parse.urlparse(url)
         host = parts.hostname or ""
         addr = _resolve_public(host)
@@ -210,36 +310,48 @@ class QuoteVerificationGate:
                 f"a model, and fetching a private or loopback host on its "
                 f"say-so is server-side request forgery."
             )
-        # Connect to the address that was checked, not to a fresh lookup of
-        # the name. Host and SNI still carry the original hostname so TLS and
-        # virtual hosting behave.
-        pinned = parts._replace(
-            netloc=f"[{addr}]:{parts.port}" if ":" in addr and parts.port
-            else (f"[{addr}]" if ":" in addr
-                  else (f"{addr}:{parts.port}" if parts.port else addr))
-        ).geturl()
+        # CONNECT TO THE APPROVED ADDRESS, VALIDATE THE ORIGINAL HOSTNAME.
+        #
+        # The previous version rewrote the URL to contain the IP and set a
+        # Host header. That closed the DNS-rebinding gap and opened a worse
+        # one: TLS then validated the certificate against the IP ADDRESS, so
+        # every ordinary https site failed with a hostname mismatch and every
+        # honest quote check came back BLOCKED. A safety control that breaks
+        # the normal path gets switched off.
+        #
+        # _PinnedHTTPSHandler dials the checked address and passes the real
+        # hostname as server_hostname, so SNI and certificate validation both
+        # see the name the operator's claim actually cited.
         req = urllib.request.Request(
-            pinned, method="GET",
+            url, method="GET",
             headers={"User-Agent": USER_AGENT,
-                     "Host": parts.netloc,
                      "Accept": "text/html,application/xhtml+xml,text/plain,*/*"},
         )
-        # https is enforced in parse_warrant; nosec on the next line because
-        # bandit reads everything after it as test ids.
-        opener = urllib.request.build_opener(_NoRedirect)
+        opener = urllib.request.build_opener(
+            _NoRedirect, _PinnedHTTPSHandler(addr))
         with opener.open(req, timeout=self.timeout_s) as r:  # nosec B310
             ctype = r.headers.get("Content-Type", "")
-            return r.status, extract_text(r.read(MAX_BYTES), ctype)
+            # READ ONE BYTE PAST THE CAP, so truncation is detectable. Reading
+            # exactly MAX_BYTES made a page that is one byte too long
+            # indistinguishable from one that fits, and a quote sitting past
+            # the cap produced a confident FAIL about a source we had not
+            # finished reading.
+            raw = r.read(MAX_BYTES + 1)
+            truncated = len(raw) > MAX_BYTES
+            return r.status, extract_text(raw[:MAX_BYTES], ctype), truncated
 
-    def _get(self, url: str) -> tuple[int, str]:
+    def _get(self, url: str) -> tuple[int, str, bool]:
+        """(status, text, truncated). Injected fetchers may return a pair."""
         if url in self.cache:
             return self.cache[url]
         try:
             got = self.fetcher(url)
+            if len(got) == 2:          # a test fetcher; nothing was truncated
+                got = (got[0], got[1], False)
         except urllib.error.HTTPError as exc:
-            got = (exc.code, "")
+            got = (exc.code, "", False)
         except Exception as exc:  # noqa: BLE001 - DNS, TLS, timeout: not a finding
-            got = (-1, f"transport: {type(exc).__name__}")
+            got = (-1, f"transport: {type(exc).__name__}", False)
         self.cache[url] = got
         return got
 
@@ -250,7 +362,7 @@ class QuoteVerificationGate:
             return GateResult(self.name, GateStatus.INAPPLICABLE,
                               "warrant is not '<https url> :: <quote>'")
         url, quote = parsed
-        status, text = self._get(url)
+        status, text, truncated = self._get(url)
 
         if status == -1:
             return GateResult(self.name, GateStatus.BLOCKED,
@@ -266,6 +378,25 @@ class QuoteVerificationGate:
         if status < 200 or status >= 300:
             return GateResult(self.name, GateStatus.BLOCKED,
                               f"HTTP {status} at {url}")
+        if _looks_like_an_interstitial(text):
+            # A subscription wall, a consent gate, or a bot check served with
+            # HTTP 200. The page we were given is not the page cited, so a
+            # non-match says nothing about the quote.
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"{url} served an access interstitial rather than the article; "
+                f"the check did not happen",
+            )
+        if truncated:
+            # We stopped reading at the byte cap. The quote may sit just past
+            # it, so a non-match here is a fact about our read limit, not about
+            # the source.
+            return GateResult(
+                self.name, GateStatus.BLOCKED,
+                f"{url} is larger than the {MAX_BYTES:,}-byte read cap; the "
+                f"quote may lie beyond what was fetched",
+            ) if normalize(quote) not in text else GateResult(
+                self.name, GateStatus.PASS, f"quote present at {url}")
         if len(text) < self.min_text_chars:
             return GateResult(
                 self.name, GateStatus.BLOCKED,

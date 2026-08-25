@@ -54,6 +54,7 @@ from adjudication_orchestrator import (
     Claim,
     ClaimKind,
     Gate,
+    GateStatus,
     MissingSeatCredential,
     Orchestrator,
     Pass,
@@ -304,6 +305,28 @@ def collect_holes(
             f"{', '.join(c.id for c in survivors)}",
             "no tie is broken here by design; supply claims that distinguish "
             "them, or accept the set as the honest result",
+        ))
+
+    # BLOCKED CLAIMS ARE UNFINISHED WORK AND WERE NOT COUNTED AS ANY.
+    #
+    # A blocked check did not happen. It is not a pass, not a failure, and not
+    # an escalation, so it appeared in no hole and in no stop condition -- a
+    # run whose only claim was BLOCKED reported resolved=True and printed no
+    # outstanding work. The whole reason BLOCKED exists as its own state is
+    # that the check is still owed; leaving it out of the holes list is the
+    # same as pretending it was performed.
+    blocked = [cid for cid, v in orch.verdicts.items()
+               if v.status is GateStatus.BLOCKED]
+    if blocked:
+        gates = sorted({orch.verdicts[c].gate or "?" for c in blocked})
+        holes.append(Hole(
+            "checks that could not run",
+            f"{len(blocked)} claim(s) were BLOCKED -- a paywall, a timeout, a "
+            f"rate limit, or an unreachable service (gate(s): "
+            f"{', '.join(gates)}). These are neither verified nor refuted, and "
+            f"the run is not complete while any remain",
+            "restore access and re-run those checks, or adjudicate them by "
+            "hand; do not read a blocked check as a finding either way",
         ))
 
     queued = len(orch.escalation_queue)

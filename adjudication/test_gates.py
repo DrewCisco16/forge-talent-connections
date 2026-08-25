@@ -511,7 +511,29 @@ class TestTheQuoteWarrant:
 
     def test_the_warrant_is_url_then_quote(self):
         assert QG.QuoteVerificationGate.parse_warrant(
-            "https://e.test/p :: some words") == ("https://e.test/p", "some words")
+            "https://e.test/p :: some words worth checking") == (
+                "https://e.test/p", "some words worth checking")
+
+    def test_a_quote_that_normalises_to_nothing_is_refused(self):
+        """Codex H11. Emptiness was checked on the RAW string, and Python
+        treats "" as a substring of everything. A warrant whose quote was one
+        zero-width character passed the non-empty check, normalised to "", and
+        matched every page on the internet -- a PASS against 500 characters of
+        entirely unrelated text."""
+        assert QG.QuoteVerificationGate.parse_warrant(
+            "https://e.test/p :: \u200b") is None
+
+    def test_a_zero_width_quote_no_longer_matches_an_unrelated_page(self):
+        g = _gate(text="entirely unrelated prose. " * 40)
+        r = g.check(_qclaim("https://e.test/p", "\u200b"))
+        assert r.status is not GateStatus.PASS
+
+    def test_a_quote_too_short_to_be_evidence_is_refused(self):
+        """A two-character quote matches by accident on any ordinary page, so
+        a PASS on one is not evidence. The claim escalates instead -- not a
+        PASS, and not a FAIL either."""
+        assert QG.QuoteVerificationGate.parse_warrant(
+            "https://e.test/p :: ok") is None
 
     def test_a_plaintext_url_is_refused(self):
         """A quote fetched over http can be rewritten in transit by anything
@@ -526,9 +548,11 @@ class TestTheQuoteWarrant:
 
     def test_the_gate_only_applies_to_quote_claims(self):
         g = _gate()
-        assert g.applies_to(_qclaim("https://e.test/p", "quick brown")) is True
-        assert g.applies_to(Claim(id="", kind=ClaimKind.ARITHMETIC, text="x",
-                                  warrant="https://e.test/p :: q")) is False
+        assert g.applies_to(
+            _qclaim("https://e.test/p", "quick brown fox jumps")) is True
+        assert g.applies_to(Claim(
+            id="", kind=ClaimKind.ARITHMETIC, text="x",
+            warrant="https://e.test/p :: quick brown fox jumps")) is False
 
 
 class TestTheQuoteIsEitherThereOrItIsNot:
@@ -574,20 +598,20 @@ class TestAnUnreadablePageIsBlockedNotFailed:
 
     def test_a_transport_failure_is_blocked(self):
         r = _gate(raises=ConnectionError("dns")).check(
-            _qclaim("https://e.test/p", "anything"))
+            _qclaim("https://e.test/p", "a quotation long enough to rule on"))
         assert r.status is GateStatus.BLOCKED
 
     def test_a_paywall_or_rate_limit_is_blocked(self):
         """Recorded as FAILED, a paywall masquerades as a fabrication and,
         through the cascade, eliminates a true candidate."""
         for code in (401, 403, 429, 500, 503):
-            r = _gate(status=code).check(_qclaim("https://e.test/p", "x"))
+            r = _gate(status=code).check(_qclaim("https://e.test/p", "a quotation long enough to rule on"))
             assert r.status is GateStatus.BLOCKED, code
 
     def test_a_404_is_a_finding_not_a_blockage(self):
         """The cited source is not there at all. That is a statement about the
         citation, not about the network."""
-        r = _gate(status=404).check(_qclaim("https://e.test/p", "x"))
+        r = _gate(status=404).check(_qclaim("https://e.test/p", "a quotation long enough to rule on"))
         assert r.status is GateStatus.FAIL
         assert "SOURCE_NOT_RETRIEVABLE" in r.detail
 
@@ -595,7 +619,7 @@ class TestAnUnreadablePageIsBlockedNotFailed:
         """A page that renders its text with JavaScript yields a near-empty
         document. Matching against that produces a false FAILED, and through
         the cascade eliminates a candidate on a client-side rendering quirk."""
-        r = _gate(text="loading...").check(_qclaim("https://e.test/p", "x"))
+        r = _gate(text="loading...").check(_qclaim("https://e.test/p", "a quotation long enough to rule on"))
         assert r.status is GateStatus.BLOCKED
         assert "renders client-side" in r.detail
 
@@ -606,8 +630,8 @@ class TestAnUnreadablePageIsBlockedNotFailed:
             calls["n"] += 1
             return 200, QG.normalize(PAGE)
         g = QG.QuoteVerificationGate(fetcher=counting)
-        g.check(_qclaim("https://e.test/p", "quick brown"))
-        g.check(_qclaim("https://e.test/p", "lazy dog"))
+        g.check(_qclaim("https://e.test/p", "quick brown fox jumps"))
+        g.check(_qclaim("https://e.test/p", "over the lazy dog"))
         assert calls["n"] == 1
 
 
@@ -777,20 +801,72 @@ class TestTheResolverEntryPoints:
 
     def test_a_url_is_only_confirmed_over_https(self):
         r = DR.DoiResolver()
-        r._get = lambda url, method="GET": (200, b"")
+        # Patch the UNTRUSTED fetcher: a citation URL is model-supplied and
+        # goes through _get_untrusted, which refuses redirects and private
+        # addresses. _get is only for the two fixed constants in this module.
+        r._get_untrusted = lambda url, method="HEAD": (200, b"")
         assert r._url_head("https://example.test/p") is True
         assert r._url_head("http://example.test/p") is False
+
+    def test_a_model_supplied_url_cannot_reach_a_private_address(self):
+        """Codex H10. _get followed redirects, so a public https endpoint that
+        302s to http://127.0.0.1 reached loopback: the origin check applied to
+        the first hop only. That is an SSRF primitive reachable from a
+        model's warrant."""
+        r = DR.DoiResolver()
+        for host in ("localhost", "127.0.0.1", "169.254.169.254"):
+            with pytest.raises(DR.ResolverBlocked, match="not a public"):
+                r._get_untrusted(f"https://{host}/paper")
+
+    def test_a_model_supplied_url_must_be_https(self):
+        r = DR.DoiResolver()
+        with pytest.raises(DR.ResolverBlocked, match="non-https"):
+            r._get_untrusted("http://example.com/paper")
+
+    def test_a_redirect_on_a_citation_url_is_refused(self):
+        """Refused rather than revalidated per hop: a citation URL that
+        redirects is weak evidence anyway, and refusing has no gap in it."""
+        import inspect
+        assert "_NoRedirect" in inspect.getsource(DR.DoiResolver._get_untrusted)
+
+    def test_a_url_outage_is_blocked_not_reported_as_absent(self):
+        """Codex H9. Returning False made a connection error indistinguishable
+        from 'this source does not exist', and CitationResolutionGate turns
+        False into FAIL -- so an outage produced a refuted citation, a conduct
+        finding against the seat, and an EARNED elimination."""
+        r = DR.DoiResolver()
+
+        def dead(url, method="HEAD"):
+            raise ConnectionError("no route to host")
+        r._get_untrusted = dead
+        with pytest.raises(DR.ResolverBlocked):
+            r._url_head("https://example.test/p")
+
+    def test_a_server_error_on_a_url_is_blocked(self):
+        r = DR.DoiResolver()
+        r._get_untrusted = lambda url, method="HEAD": (503, b"")
+        with pytest.raises(DR.ResolverBlocked):
+            r._url_head("https://example.test/p")
+
+    def test_a_404_on_a_url_is_authoritative_absence(self):
+        """The one case that IS a finding: nothing is served there."""
+        r = DR.DoiResolver()
+
+        def gone(url, method="HEAD"):
+            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+        r._get_untrusted = gone
+        assert r._url_head("https://example.test/p") is False
 
     def test_url_fallback_can_be_refused_outright(self):
         """A plain URL is weaker evidence than a DOI, and some work should not
         accept it at all."""
         r = DR.DoiResolver(allow_url_fallback=False)
-        r._get = lambda url, method="GET": (200, b"")
+        r._get_untrusted = lambda url, method="HEAD": (200, b"")
         assert r("https://example.test/paper") is False
 
     def test_a_url_resolves_when_the_fallback_is_allowed(self):
         r = DR.DoiResolver(allow_url_fallback=True)
-        r._get = lambda url, method="GET": (200, b"")
+        r._get_untrusted = lambda url, method="HEAD": (200, b"")
         assert r("https://example.test/paper") is True
 
     def test_a_repeated_lookup_does_not_hit_the_network_twice(self):
@@ -920,3 +996,84 @@ class TestAnApprovedCommandCannotReachTheCredentials:
         r = g.check(Claim(id="", kind=ClaimKind.CODE_BEHAVIOR, text="t",
                           warrant="python3 leaky.py"))
         assert "1" in r.detail
+
+
+class TestAnIncompleteReadIsNotAFinding:
+    """Codex M1 / H12. A non-match only means something if we actually read
+    the page the claim cited. Each case below returned FAIL before fixing, and
+    a FAIL cascades: it strips the claims the quote supported and makes the
+    candidate resting on them eligible for an EARNED elimination."""
+
+    QUOTE = "quarterly revenue tripled in the fourth quarter"
+
+    def _check(self, text=None, raw=None, ctype="text/html",
+               truncated=False, status=200):
+        def fetch(_u):
+            body = (QG.extract_text(raw, ctype) if raw is not None
+                    else QG.normalize(text or ""))
+            return (status, body, truncated)
+        g = QG.QuoteVerificationGate(fetcher=fetch)
+        return g.check(Claim(id="", kind=ClaimKind.QUOTE_VERIFICATION,
+                             text="revenue tripled",
+                             warrant=f"https://e.test/p :: {self.QUOTE}"))
+
+    def test_a_soft_paywall_served_with_http_200_is_blocked(self):
+        """A subscription wall returns a normal status and a page that is not
+        the article. Calling that non-match a FAIL turns a subscription into a
+        fabrication finding."""
+        r = self._check(text="Subscribe to continue reading this article. " * 30)
+        assert r.status is GateStatus.BLOCKED
+        assert "interstitial" in r.detail
+
+    def test_a_bot_check_is_blocked(self):
+        r = self._check(text="Checking your browser before you continue. " * 30)
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_consent_gate_is_blocked(self):
+        r = self._check(text="Please accept cookies to view this content. " * 30)
+        assert r.status is GateStatus.BLOCKED
+
+    def test_a_truncated_read_cannot_produce_a_confident_failure(self):
+        """The quote may sit just past the byte cap, so a non-match is a fact
+        about our read limit and not about the source."""
+        r = self._check(text="unrelated filler. " * 60, truncated=True)
+        assert r.status is GateStatus.BLOCKED
+        assert "read cap" in r.detail
+
+    def test_a_truncated_read_that_still_matches_passes(self):
+        """Finding the quote is conclusive however much was left unread."""
+        r = self._check(text=f"lead-in text. {self.QUOTE}. more text. " * 20,
+                        truncated=True)
+        assert r.status is GateStatus.PASS
+
+    def test_a_non_utf8_page_is_decoded_by_its_declared_charset(self):
+        """Decoding everything as UTF-8 turned every accented character on an
+        ISO-8859-1 page into U+FFFD, so a correctly transcribed quote could
+        not match a page that genuinely contained it."""
+        raw = ("Café: " + self.QUOTE + ". ").encode("iso-8859-1") * 20
+        r = self._check(raw=raw, ctype="text/html; charset=ISO-8859-1")
+        assert r.status is GateStatus.PASS
+
+    def test_an_unknown_charset_falls_back_rather_than_raising(self):
+        raw = (self.QUOTE + ". ").encode("utf-8") * 20
+        r = self._check(raw=raw, ctype="text/html; charset=x-not-a-charset")
+        assert r.status is GateStatus.PASS
+
+    def test_a_genuine_absence_is_still_a_finding(self):
+        """The whole point of the gate. If every awkward case became BLOCKED
+        it would never catch anything."""
+        r = self._check(text="entirely unrelated prose about botany. " * 40)
+        assert r.status is GateStatus.FAIL
+
+    def test_tls_validates_the_hostname_not_the_pinned_address(self):
+        """Codex H12. Rewriting the URL to the IP closed the DNS-rebinding gap
+        and broke TLS: certificates were validated against the ADDRESS, so
+        every ordinary https site failed with a hostname mismatch and every
+        honest quote check came back BLOCKED. A safety control that breaks the
+        normal path gets switched off."""
+        import inspect
+        src = inspect.getsource(QG._PinnedHTTPSHandler)
+        assert "server_hostname=self.host" in src
+        fetch = inspect.getsource(QG.QuoteVerificationGate._fetch)
+        assert "_PinnedHTTPSHandler(addr)" in fetch
+        assert "pinned" not in fetch.split("_PinnedHTTPSHandler")[0][-400:]

@@ -1462,10 +1462,27 @@ class ClaimVerdict:
 
     @property
     def verified_true(self) -> bool | None:
-        """True/False for a gated claim, None when nothing adjudicated it."""
-        if self.status is None:
-            return None
-        return self.status is GateStatus.PASS
+        """True, False, or None -- and None is a THIRD answer, not a default.
+
+        PASS      -> True    the check ran and the claim held
+        FAIL      -> False   the check ran and refuted it
+        anything else -> None
+
+        BLOCKED AND INAPPLICABLE ARE NOT False. They were, and that turned
+        "the check could not run" into ground truth that the claim is untrue.
+        Downstream this was consumed as a resolved fact: a run whose only claim
+        was BLOCKED reported resolved=True with that claim recorded false, so
+        a paywall or a timeout became a finding and the run declared itself
+        complete on the strength of a check that never happened.
+
+        This is the same tri-state the rest of the system runs on, at the one
+        place it was silently collapsed back into a boolean.
+        """
+        if self.status is GateStatus.PASS:
+            return True
+        if self.status is GateStatus.FAIL:
+            return False
+        return None
 
 
 class Orchestrator:
