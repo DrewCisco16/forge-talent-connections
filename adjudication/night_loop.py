@@ -60,6 +60,7 @@ from option_set import (
     render_pool,
     render_record,
     render_working,
+    silent_seats,
     unexamined,
 )
 from predicate import adjudicate, parse_challenges
@@ -726,6 +727,8 @@ class RoundResult:
     """
     challenges: int = 0
     challenges_ruled: int = 0
+    silent_seats: list[str] = field(default_factory=list)
+    """Seats that answered but declared no option. A permanent hole."""
     """Surviving options no claim was ever attached to.
 
     They survived because nothing tested them, which is a completely different
@@ -942,6 +945,15 @@ def run_night(
                 emit(f"  {exc}")
                 pool = []
             emit(f"  {len(pool)} distinct option(s) proposed by the seats")
+            # WHICH SEATS SAID NOTHING USABLE, BY NAME. Later rounds only
+            # remove, so an answer no seat put up now can never be chosen.
+            # A seat that answered and declared no option is a permanent hole
+            # in the candidate set, and the run has to name it rather than
+            # quietly proceeding with four seats' worth of answers.
+            res.silent_seats = silent_seats()
+            if res.silent_seats:
+                emit(f"  {len(res.silent_seats)} seat(s) declared no option: "
+                     f"{', '.join(res.silent_seats)}")
 
         # THE CHALLENGES, RULED ON BEFORE THE CLOSER IS ASKED ANYTHING.
         #
@@ -1107,6 +1119,20 @@ def run_night(
                 options = []
             attach_claims(options, claims)
             res.options_created = len(options)
+            if not options:
+                # STOP. Later rounds only ELIMINATE, so with nothing to
+                # eliminate from they cannot reach an answer however many
+                # times they run. This carried on and made all thirty calls
+                # across five rounds against an empty set, then reported that
+                # nothing could be adjudicated -- an hour and the whole
+                # budget spent to establish what was already known here.
+                res.options_unparsed = True
+                emit("  round one produced no option set. Stopping: later "
+                     "rounds only remove, so there is nothing for them to do "
+                     "and no answer they could reach.")
+                results.append(res)
+                _write_status(out_dir, results)
+                break
         else:
             attach_claims(options, claims)
         # Elimination already ran, before the closer. What is left here is
@@ -1174,9 +1200,20 @@ def run_night(
     emit(f"conduct: {conduct.total_findings()} claim(s) ruled false across "
          f"{len(conduct.seats)} seat(s) -- conduct.md")
 
-    if merged is not None:
+    # THE PACKET IS WRITTEN ON EVERY PATH THAT RAN AT ALL.
+    #
+    # It was written only when a merge had succeeded, so the runs that most
+    # need explaining produced nothing to explain them: a round one that
+    # yielded no options, or a closer that failed, left the operator with a
+    # run directory and no account of what happened or what it cost.
+    if results:
         write_verifier_packet(
-            out_dir, ask, merged, orch,
+            out_dir, ask,
+            merged if merged is not None else
+            "(no merged text -- the run stopped before any round produced "
+            "one. The rounds that did run are recorded above and in "
+            "status.md.)",
+            orch,
             [r.n for r in results if r.closer_contaminated],
             results,
         )

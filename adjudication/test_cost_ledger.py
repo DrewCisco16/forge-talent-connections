@@ -582,7 +582,11 @@ class TestPassIdReachesTheLedgerFromTheRealPath:
             name="v", endpoint="https://api.example.invalid/v1",
             auth_header="authorization", auth_template="Bearer {key}",
             build_body=lambda m, p, mt, t: {"model": m},
-            extract_text=lambda p: "a\nCLAIM | arithmetic | 2 + 2 = 4 | it is 4",
+            # Declares an OPTION: round one exists to create the candidate
+            # set, and a round one that creates none stops the run before
+            # round two, so there would be no second round to attribute.
+            extract_text=lambda p: ("OPTION | an answer worth considering\n"
+                                    "CLAIM | arithmetic | 2 + 2 = 4 | it is 4"),
             usage_input_path=["usage", "prompt_tokens"],
             usage_output_path=["usage", "completion_tokens"])
         seats = {f"seat_{i}": SA.HttpSeat(

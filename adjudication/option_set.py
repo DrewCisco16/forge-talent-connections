@@ -160,6 +160,21 @@ class Option:
     that moment. See predicate.py for why elimination rests on these and not
     on sentences.
     """
+    merged_into: str | None = None
+    """Set when the closer said this is the same answer as another entry.
+
+    IT STAYS IN THE SET. Absorbed options used to be dropped outright, so a
+    model's judgment that two answers were "the same" silently removed one of
+    them from consideration -- and the record showed two options created when
+    three had been proposed, with no trace of the third. Whether two wordings
+    are one answer is exactly the kind of semantic call this design refuses to
+    let a model make about membership.
+
+    So a merge now GROUPS rather than removes. The absorbed wording is still a
+    candidate, still carries its own commitments, and can still be refuted or
+    survive on its own; it is presented under its keeper so the seats are not
+    re-reading the same answer five ways.
+    """
     eliminated_in_round: int | None = None
     elimination_reason: str | None = None
 
@@ -352,7 +367,15 @@ def render_working(options: Sequence[Option]) -> str:
     lines = ["## Options still standing", ""]
     if not alive:
         lines.append("(none -- every option had a declared claim refuted)")
-    for i, opt in enumerate(alive, 1):
+    grouped: dict[str, list[Option]] = {}
+    for opt in alive:
+        if opt.merged_into:
+            grouped.setdefault(opt.merged_into, []).append(opt)
+    i = 0
+    for opt in alive:
+        if opt.merged_into:
+            continue                      # shown under its keeper, below
+        i += 1
         lines.append(f"{i}. [{opt.id}] {opt.text}")
         # THE COMMITMENTS ARE SHOWN WITH THEIR IDS because challenging one is
         # the only way anything is removed. An option with none listed cannot
@@ -362,6 +385,13 @@ def render_working(options: Sequence[Option]) -> str:
             lines.append(f"      {pred.render()}")
         if not opt.predicates:
             lines.append("      (declared no checkable commitment)")
+        # SAME ANSWER, ANOTHER SEAT'S WORDS. Listed rather than dropped: each
+        # is still a candidate in its own right, with its own commitments,
+        # and can be refuted or survive on its own.
+        for other in grouped.get(opt.id, []):
+            lines.append(f"   -- also proposed as [{other.id}] {other.text}")
+            for pred in other.predicates:
+                lines.append(f"      {pred.render()}")
     lines += [
         "",
         "To remove an option, refute a commitment it made, by id:",
@@ -454,13 +484,57 @@ def parse_proposals(thinker_texts: Mapping[str, str]) -> list[Option]:
     """
     pool: list[Option] = []
     seen: set[str] = set()
-    for _seat, text in sorted(thinker_texts.items()):
-        for opt in _parse_list(text):
+    silent: list[str] = []
+    for seat, text in sorted(thinker_texts.items()):
+        try:
+            mine = _parse_list(text)
+        except TooManyOptions:
+            # ONE SEAT'S FLOOD IS NOT THE PANEL'S FAILURE. This propagated,
+            # and the round replaced the ENTIRE pool with an empty list -- so
+            # a single seat emitting thirty-one lines discarded the answers
+            # the other four proposed, and later rounds only remove, so they
+            # were gone for good.
+            silent.append(seat)
+            continue
+        if not mine:
+            # A seat that answered and declared nothing. Recorded by name:
+            # later rounds only eliminate, so an answer missing now is
+            # missing permanently, and the one thing worse than losing it is
+            # not knowing it was lost.
+            silent.append(seat)
+        for opt in mine:
             if opt.id in seen:
                 continue
             seen.add(opt.id)
             pool.append(opt)
+    # THE CEILING IS ON THE POOL, NOT ON ONE REPLY. It was applied per seat,
+    # so five seats at the limit produced a hundred and fifty options -- a set
+    # no later round could work through, arrived at without any single reply
+    # tripping the guard.
+    if len(pool) > MAX_OPTIONS:
+        raise TooManyOptions(
+            f"the panel proposed {len(pool)} distinct options, over the "
+            f"{MAX_OPTIONS} a later round can work through. Truncating would "
+            f"drop answers by the order they happened to be written in, so "
+            f"the round is recorded as producing no usable option set "
+            f"instead.")
+    _SILENT_SEATS[:] = silent
     return pool
+
+
+_SILENT_SEATS: list[str] = []
+"""Seats whose reply yielded no usable option, from the last pool built.
+
+Read by the caller straight after parse_proposals. Kept beside the parser
+rather than returned in a tuple so the many existing callers keep working;
+the fact matters because an answer nobody proposed in round one can never be
+chosen, and silence here is permanent.
+"""
+
+
+def silent_seats() -> list[str]:
+    """Which seats contributed no option to the last pool built."""
+    return list(_SILENT_SEATS)
 
 
 def apply_merges(pool: Sequence[Option], closer_text: str) -> list[Option]:
@@ -498,7 +572,12 @@ def apply_merges(pool: Sequence[Option], closer_text: str) -> list[Option]:
         for other in unique:
             if other != keeper:
                 absorbed[other] = keeper
-    return [o for o in pool if o.id not in absorbed]
+    # EVERY OPTION STAYS. The grouping is recorded on the members; nothing is
+    # dropped, because a model deciding two answers are the same is a model
+    # deciding what the candidates are.
+    for oid, keeper_id in absorbed.items():
+        by_id[oid].merged_into = _resolve(keeper_id, absorbed)
+    return list(pool)
 
 
 def _resolve(option_id_: str, absorbed: Mapping[str, str]) -> str:

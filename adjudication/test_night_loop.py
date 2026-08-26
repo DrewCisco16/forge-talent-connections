@@ -59,7 +59,14 @@ def _fake_clock():
     return now
 
 
-def _panel(n: int = 5, reply: str = "an answer\n\nCLAIM | arithmetic | 2 + 2 = 4 | it adds up"):
+# A seat's default reply DECLARES an option. Round one exists to create the
+# candidate set, and a round one that creates none now stops the run rather
+# than paying for four more rounds that can only remove from an empty set.
+_REPLY = ("OPTION | an answer worth considering\n"
+          "\nCLAIM | arithmetic | 2 + 2 = 4 | it adds up")
+
+
+def _panel(n: int = 5, reply: str = _REPLY):
     return {f"seat_{i}": _seat(reply) for i in range(1, n + 1)}
 
 
@@ -1728,10 +1735,21 @@ class TestTheOptionSetComesFromTheSeats:
             "s2": "OPTION | Build the thing ourselves over two quarters\n"})
         assert len(pool) == 3
         merged = OS.apply_merges(pool, f"MERGE | {pool[0].id} | {pool[2].id}")
-        assert len(merged) == 2
-        # The surviving wording is a SEAT's, chosen by pool order rather than
-        # by the closer.
+        # CHANGED. A merge used to DROP the absorbed entry, so a model saying
+        # two answers were "the same" removed one from consideration and the
+        # record showed two options where three had been proposed. Whether two
+        # wordings are one answer is a semantic call, and this design does not
+        # let a model make those about membership.
+        assert len(merged) == 3
+        assert merged[2].merged_into == pool[0].id
+        # The keeper is chosen by POOL ORDER, by this code, so the wording
+        # that leads is a seat's own rather than the closer's pick.
+        assert merged[0].merged_into is None
         assert merged[0].text == "Build it in house over two quarters"
+        # The absorbed wording is presented under its keeper, not hidden.
+        working = OS.render_working(merged)
+        assert "also proposed as" in working
+        assert "Build the thing ourselves over two quarters" in working
 
     def test_a_merge_naming_an_unknown_id_changes_nothing(self):
         pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
@@ -1752,8 +1770,15 @@ class TestTheOptionSetComesFromTheSeats:
         merged = OS.apply_merges(
             pool, f"MERGE | {pool[1].id} | {pool[2].id}\n"
                   f"MERGE | {pool[0].id} | {pool[1].id}")
-        assert len(merged) == 1
-        assert merged[0].id == pool[0].id
+        # Every wording is retained; the chain lands them all on one keeper.
+        assert len(merged) == 3
+        assert merged[0].merged_into is None
+        assert merged[1].merged_into == pool[0].id
+        assert merged[2].merged_into == pool[0].id
+        # One heading in the working text, with the other two beneath it.
+        working = OS.render_working(merged)
+        assert working.count("1. [") == 1
+        assert working.count("also proposed as") == 2
 
     def test_every_seats_proposals_reach_the_pool(self):
         pool = OS.parse_proposals({
