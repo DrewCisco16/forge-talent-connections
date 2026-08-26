@@ -1109,3 +1109,43 @@ class TestThePerSeatOutputBound:
         seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), prof,
                            _ok(), ledger=led, max_tokens=1000)
         assert seat._multiplier() == 2.0
+
+
+class TestAnOverrunStopsTheNextCallNotThisOne:
+    """The docstring said an overrun "halts the run". It refuses the next
+    DISPATCH, and an overrun on the final call has no next dispatch to refuse
+    -- so the run returns normally, having spent the money.
+
+    That is the honest limit of the control: it bounds how far a mispriced
+    call can carry a run forward, and it cannot un-spend the call that
+    revealed the problem. Saying otherwise reads as a guarantee nothing keeps.
+    """
+
+    def _ledger(self):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return CL.CostLedger(rates={"seat_1": rate}, per_run=1000.0)
+
+    def test_the_overrun_is_recorded(self):
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        assert led.overruns, "an overrun that is not recorded is invisible"
+
+    def test_the_next_call_is_refused(self):
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        # CeilingOverrun, which IS a CeilingReached, naming the ratio: the
+        # estimate this ceiling relies on has been shown not to hold here.
+        with pytest.raises(CL.CeilingOverrun):
+            led.check_before_call("seat_1", 10, 10)
+
+    def test_an_overrun_on_the_last_call_does_not_undo_it(self):
+        """Nothing follows it, so nothing is refused, and the money is spent.
+        The ledger still carries the fact."""
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        assert led.spent > 0.01
+        assert len(led.overruns) == 1

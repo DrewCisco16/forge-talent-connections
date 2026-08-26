@@ -105,9 +105,16 @@ class Rate:
 
     This is still a BOUND, not a prediction, and it is still a guess where no
     measurement exists. What makes tightening it safe is the reconciliation
-    below: a call that bills more than it was authorised for halts the run, so
-    an optimistic multiplier is caught on its first use rather than at the end
-    of the bill."""
+    below: a call that bills more than it was authorised for stops the NEXT
+    dispatch, so an optimistic multiplier is caught on its first use rather
+    than at the end of the bill.
+
+    IT STOPS THE NEXT CALL, WHICH IS NOT THE SAME AS HALTING THE RUN. An
+    overrun on the last call of a run has no next call to refuse, so it is
+    recorded and the run returns normally. That is the honest limit of this
+    control: it bounds how far a mispriced call can carry the run forward, and
+    it cannot un-spend the call that revealed the problem. The overrun is in
+    the ledger either way, and the run total is the figure to read."""
 
     def tier_for(self, input_tokens: int) -> tuple[float, float]:
         """The prices that apply at this input size."""
