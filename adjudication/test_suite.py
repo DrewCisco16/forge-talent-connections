@@ -403,13 +403,18 @@ CALIB = Pass("pc", "Calibration", "x", False)
 
 
 class TestOrchestratorRouting:
-    def test_gate_pass_is_auto_accepted(self):
+    def test_a_self_checking_claim_is_auto_accepted(self):
+        """CHANGED. The text used to only need to MENTION the computed value,
+        which is how "The launch is 4 and safe to proceed" reached PASS -- and
+        so did its negation, on the same warrant.
+
+        A claim reaches PASS when its TEXT is an assertion the gate can rule
+        on directly. Then there is no leap from evidence to sentence to get
+        wrong, and no rule about words deciding it: the evaluator does, and
+        the evaluator has no opinion about launches."""
         o = _orch()
-        # The text must MENTION the number the gate verifies. A claim whose
-        # prose never refers to the computed value is not established by that
-        # computation -- see TestAWarrantMustBearOnTheClaim.
         rec = o.run_pass(ELIM, [], [
-            Claim("c1", "the total is 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
+            Claim("c1", "2 + 2 = 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
         assert (rec.auto_accepted, rec.auto_rejected, rec.escalated) == (1, 0, 0)
 
     def test_a_refuted_commitment_eliminates_the_candidate_that_made_it(self):
@@ -1145,14 +1150,14 @@ class TestSequentialBlindedRun:
         claim is adjudicated once, but BOTH seats are recorded as having
         caught it. Seat-scoped ids would make every claim a singleton and
         inflate the Chao1 estimate of what nobody caught."""
-        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | the total is 47")
+        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | 12 + 35 = 47")
         runner = AO.BlindedSeatRunner({"s1": both, "s2": both})
         o = Orchestrator([ArithmeticGate()])
         rec = o.run_sequential("art", [], runner, passes=[AO.DEFAULT_PASSES[0]])[0].record
         assert rec.proposed == 2          # two seats proposed it
         assert rec.auto_accepted == 1     # the gate ran once
         cid = AO.content_claim_id(ClaimKind.ARITHMETIC, "12 + 35 = 47",
-                                  "the total is 47")
+                                  "12 + 35 = 47")
         assert o.detections_by_seat["s1"] == {cid}
         assert o.detections_by_seat["s2"] == {cid}
         # one error, caught twice -> a doubleton, not two singletons
@@ -1446,7 +1451,7 @@ class TestConjunctiveRouting:
                          [Claim("c", "t", ClaimKind.CITATION, "10.1038/real")])
         assert rec.auto_accepted == 0
         assert rec.warrant_only == 1
-        assert "PROPOSITION NOT ESTABLISHED" in o.verdicts["c"].detail
+        assert "WARRANT HELD, PROPOSITION OPEN" in o.verdicts["c"].detail
 
     def test_admissible_but_not_resolving_is_rejected(self):
         o = self._orch(False)
@@ -2027,10 +2032,11 @@ class TestAuditIntegratedWithARun:
     def test_pass_entries_carry_gate_outcomes_and_divergence(self):
         log = AuditLog("run-e2e")
         runner = AO.BlindedSeatRunner({
-            # The claim text names the value, so the verified arithmetic
-            # actually bears on the proposition. Text like "ok" does not, and
-            # now escalates rather than being accepted.
-            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | the total is 4"),
+            # The claim text is itself the assertion, so the gate rules on it
+            # directly. Prose beside a warrant is WARRANT HELD instead: naming
+            # the value is not enough, because "the launch is 4 and safe to
+            # proceed" names it too, and so does its negation.
+            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | 2 + 2 = 4"),
             "s2": _seat("CLAIM | arithmetic | 2+2 = 5 | the total is 5"),
         })
         o = Orchestrator([ArithmeticGate()])
@@ -4952,7 +4958,7 @@ class TestUnverifiedIsNotWrong:
                           content=_commit("RIGHT", "12 units at 50", 600,
                                           "12 * 50"),
                           claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
-                                        text="12 units at 50 is 600",
+                                        text="12 * 50 = 600",
                                         warrant="12 * 50 = 600")])
         wrong = Candidate(id="WRONG",
                           content=_commit("WRONG", "12 units at 50", 700,
@@ -5037,10 +5043,11 @@ class TestAClaimAlwaysHasAnIdentity:
 
     def test_every_distinct_claim_is_adjudicated(self):
         """The regression itself: three distinct claims, three verdicts."""
-        # The text names the computed value, so the warrant bears on the
-        # claim. Without that these escalate, correctly.
+        # Each text is itself a checkable assertion, so each is ruled on
+        # directly. Prose would be WARRANT HELD instead -- still adjudicated,
+        # still one verdict each, which is what this test is about.
         claims = [Claim(id="", kind=ClaimKind.ARITHMETIC,
-                        text=f"the total is {i + 1}",
+                        text=f"{i} + 1 = {i + 1}",
                         warrant=f"{i} + 1 = {i + 1}") for i in range(3)]
         orch = Orchestrator([ArithmeticGate()])
         rec = orch.run_pass(
@@ -5058,139 +5065,6 @@ class TestAClaimAlwaysHasAnIdentity:
             Orchestrator([ArithmeticGate()]).run_pass(
                 type("P", (), {"id": "p", "name": "n", "eliminative": False})(),
                 [], [c])
-
-
-class TestAWarrantMustBearOnTheClaim:
-    """Codex C5. A GATE CHECKS A WARRANT; IT DOES NOT CHECK THE PROPOSITION.
-
-    Reproduced before fixing, with ArithmeticGate and the true warrant
-    "2 + 2 = 4":
-
-        "The launch is SAFE to proceed"           -> PASS
-        "The launch is UNSAFE and must be aborted" -> PASS
-
-    Two contradictory propositions, both marked verified on one true equation,
-    both printed in the deliverable under a [PASS] marker. An earlier fix made
-    their claim IDs distinct, which stopped them SHARING a verdict and left
-    untouched the part that matters: a model can attach any true warrant to
-    any false assertion and have it certified. That defeats the whole tool
-    while every indicator reads green.
-
-    Unsupported claims ESCALATE. They are not accepted and not eliminated --
-    an unestablished claim could still be true.
-    """
-
-    def _run(self, *claims):
-        o = Orchestrator([ArithmeticGate()])
-        rec = o.run_pass(
-            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
-            [], list(claims))
-        return o, rec
-
-    def test_a_true_equation_cannot_certify_an_unrelated_sentence(self):
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
-        o, rec = self._run(c)
-        assert rec.auto_accepted == 0
-        assert rec.warrant_only == 1
-        assert "DOES NOT BEAR ON THE CLAIM" in o.verdicts[c.id].detail
-
-    def test_opposite_propositions_are_not_both_verified(self):
-        """The reproduction that made this undeniable."""
-        safe = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                     text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
-        unsafe = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                       text="The launch is UNSAFE and must be aborted",
-                       warrant="2 + 2 = 4")
-        _, rec = self._run(safe, unsafe)
-        assert rec.auto_accepted == 0
-
-    def test_an_unsupported_claim_escalates_rather_than_being_eliminated(self):
-        """Fail closed on the conclusion, open on the candidate. Eliminating
-        here would kill a claim that might be perfectly true."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="This shortcut is safe to take", warrant="1 + 1 = 2")
-        cand = Candidate("A", "the shortcut is fine", [c])
-        o = Orchestrator([ArithmeticGate()])
-        rec = o.run_pass(
-            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
-            [cand], [c])
-        assert cand.eliminated is False
-        assert rec.escalated == 1
-
-    def test_a_claim_that_names_its_own_result_is_still_accepted(self):
-        """The rule must not break honest claims, or it would be switched off."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="12 units at 50 each is 600 in total",
-                  warrant="12 * 50 = 600")
-        _, rec = self._run(c)
-        assert rec.auto_accepted == 1
-
-    def test_formatting_of_the_number_does_not_break_the_match(self):
-        """1,200 and 1200 are the same number to a reader and must be to this."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="the total comes to 1,200 units", warrant="600 * 2 = 1200")
-        _, rec = self._run(c)
-        assert rec.auto_accepted == 1
-
-    def test_the_verdict_records_that_the_warrant_itself_checked_out(self):
-        """The arithmetic WAS verified. Discarding that would lose real work
-        and invite someone to re-verify it by hand."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="the sky is green", warrant="2 + 2 = 4")
-        o, _ = self._run(c)
-        assert "the warrant itself checked out" in o.verdicts[c.id].detail
-
-    def test_a_citation_never_establishes_the_proposition(self):
-        """A resolving DOI rules out a fabricated reference. It says nothing
-        about whether the work supports the claim -- misrepresenting a real
-        paper is invisible to every mechanical check."""
-        c = Claim(id="", kind=ClaimKind.CITATION, text="vaccines cause autism",
-                  warrant="10.1038/s41586-020-2649-2")
-        assert "PROPOSITION NOT ESTABLISHED" in AO.warrant_supports(c)
-
-    def test_a_passing_command_does_not_establish_unrelated_prose(self):
-        """Two OPPOSITE claims carrying the same passing command both passed."""
-        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
-                  text="the deployment is production ready",
-                  warrant="pytest tests/test_parser.py -q")
-        assert "DOES NOT BEAR ON THE CLAIM" in AO.warrant_supports(c)
-
-    def test_a_command_the_claim_is_actually_about_is_supported(self):
-        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
-                  text="the parser tests pass",
-                  warrant="pytest tests/test_parser.py -q")
-        assert AO.warrant_supports(c) is None
-
-    def test_a_found_quote_never_establishes_the_proposition(self):
-        """CORRECTED. These two tests asserted that shared content words make
-        a quote support a claim, and that a lack of them makes it not. Both
-        encoded lexical overlap as entailment, which it is not: a page reading
-        "revenue tripled" shares every content word with "revenue did not
-        triple". Finding the quote rules out a fabricated quote and settles
-        nothing else."""
-        def why(text):
-            return AO.warrant_supports(Claim(
-                id="", kind=ClaimKind.QUOTE_VERIFICATION, text=text,
-                warrant="https://e.test/p :: quarterly revenue tripled"))
-
-        # Neither is accepted, and each says the accurate thing about itself.
-        assert "PROPOSITION NOT ESTABLISHED" in why(
-            "revenue tripled in the fourth quarter")
-        assert "NOT A RESTATEMENT" in why(
-            "revenue did not triple in the fourth quarter")
-
-    def test_warrant_only_is_counted_apart_from_ordinary_escalation(self):
-        """Different findings. An ordinary escalation had no mechanical
-        warrant; these had one that PASSED and simply is not about the claim.
-        Many of these means seats are attaching true evidence to unrelated
-        assertions, which is the specific failure mode this system exists to stop."""
-        _, rec = self._run(
-            Claim(id="", kind=ClaimKind.ARITHMETIC, text="unrelated prose",
-                  warrant="2 + 2 = 4"),
-            Claim(id="", kind=ClaimKind.JUDGMENT, text="a matter of taste"))
-        assert rec.escalated == 2
-        assert rec.warrant_only == 1
 
 
 class TestAQuoteCannotEliminateACandidateItDoesNotBelongTo:
@@ -5285,74 +5159,6 @@ class TestTheEscalationQueueRoundTrips:
     def test_a_wholly_wrong_shape_is_named(self):
         with pytest.raises(RA.AdjudicationFileError, match="export-queue"):
             RA.parse_adjudications("not a queue at all")
-
-
-class TestLexicalOverlapNeverAccepts:
-    """Codex S1-1, the critical finding. Token overlap is not entailment.
-
-    Both of these were accepted on the warrant "2 + 2 = 4", because both
-    contain the token 4:
-
-        "The launch is SAFE to proceed, code 4"
-        "The launch is NOT SAFE to proceed, code 4"
-
-    An equation establishes neither. The check confirmed that 2 + 2 is 4 and
-    said nothing whatever about a launch.
-    """
-
-    def _accepts(self, kind, text, warrant):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text", [
-        "The launch is SAFE to proceed, code 4",
-        "The launch is NOT SAFE to proceed, code 4",
-    ])
-    def test_opposite_propositions_sharing_a_token_are_both_refused(self, text):
-        assert not self._accepts(ClaimKind.ARITHMETIC, text, "2 + 2 = 4")
-
-    def test_a_restatement_of_the_arithmetic_is_still_accepted(self):
-        """The rule must not cost genuine arithmetic, or it gets switched off."""
-        assert self._accepts(ClaimKind.ARITHMETIC,
-                             "12 units at 50 each is 600 in total",
-                             "12 * 50 = 600")
-
-    def test_a_negation_anywhere_prevents_acceptance(self):
-        """No token comparison can tell which way a negated claim points."""
-        assert not self._accepts(ClaimKind.ARITHMETIC,
-                                 "the total is not 600", "12 * 50 = 600")
-
-    def test_schema_validity_establishes_no_proposition(self):
-        """Structure is a fact about shape and carries no information about
-        an assertion made alongside it."""
-        assert not self._accepts(ClaimKind.SCHEMA,
-                                 "The launch is SAFE to proceed", '{"a": 1}')
-
-    def test_a_citation_establishes_no_proposition(self):
-        assert not self._accepts(ClaimKind.CITATION, "vaccines cause autism",
-                                 "10.1038/s41586-020-2649-2")
-
-    def test_a_found_quote_establishes_no_proposition(self):
-        """A page reading "revenue tripled" shares every content word with
-        "revenue did not triple"."""
-        assert not self._accepts(
-            ClaimKind.QUOTE_VERIFICATION, "revenue tripled last quarter",
-            "https://e.test/p :: quarterly revenue tripled")
-
-    def test_the_intake_path_applies_the_same_rule(self):
-        """gate_candidate_claims recorded the gate status directly, so a
-        candidate whose claim carried a valid warrant beside unrelated prose
-        was marked PASS at intake and never reconsidered -- the one place a
-        candidate's own assertions are ruled on, applying a weaker rule than
-        the one seats are held to."""
-        c = Candidate("A", "the launch may proceed", [Claim(
-            id="", kind=ClaimKind.ARITHMETIC,
-            text="The launch is SAFE to proceed, code 4", warrant="2 + 2 = 4")])
-        o = Orchestrator([ArithmeticGate()])
-        ruled = o.gate_candidate_claims([c])
-        assert ruled == [], "intake accepted it without a proposition check"
-        assert len(o.escalation_queue) == 1
-        assert o.verdicts[c.claims[0].id].status is None
 
 
 class TestArithmeticIsExactAndBounded:
@@ -5468,156 +5274,6 @@ class TestArithmeticIsExactAndBoundedRoundTwo:
         assert time.time() - t0 < 2.0
 
 
-class TestAWarrantMustBearOnTheClaimRoundTwo:
-    """Re-check finding #1. Number-matching accepted claims the arithmetic did
-    not establish."""
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text", [
-        "the total is under 4",
-        "the total is about 4",
-        "the total is approximately 4",
-        "the total is at most 4",
-    ])
-    def test_a_qualifier_changes_the_proposition(self, text):
-        """"the total is 4" restates a warrant computing 4. "under 4" and
-        "about 4" are different claims the arithmetic settles neither of, and
-        all three mention the number."""
-        assert not self._accepts(text, "2 + 2 = 4")
-
-    def test_a_unit_the_warrant_does_not_measure_is_refused(self):
-        """"5 km = 5000 m" is a true conversion and establishes nothing about
-        5000 dollars."""
-        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
-                                 ClaimKind.UNIT)
-        assert not self._accepts("the price is 4 dollars", "2 + 2 = 4")
-
-    def test_a_unit_the_warrant_does_measure_is_allowed(self):
-        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
-                             ClaimKind.UNIT)
-
-    def test_integers_beyond_binary64_do_not_match_each_other(self):
-        """_numbers normalised through float, so a claim reading
-        9007199254740992 matched a warrant computing 9007199254740993."""
-        assert not self._accepts("the total is 9007199254740992",
-                                 "9007199254740993 = 9007199254740993")
-
-    def test_a_plain_restatement_is_still_accepted(self):
-        for text, warrant in (("the total is 4", "2 + 2 = 4"),
-                              ("12 units at 50 each is 600 in total",
-                               "12 * 50 = 600")):
-            assert self._accepts(text, warrant), text
-
-
-class TestAQuantityClaimIsUsableAndStillSafe:
-    """The rule that decides whether this tool answers or just escalates.
-
-    An earlier version required a quantity claim's whole sentence to contain
-    nothing outside a fixed vocabulary. It was safe and useless: a five-round
-    dry run with three genuine cost claims eliminated NOTHING, because "the
-    vendor licence is 47000 per year in total" mentions a vendor and a licence.
-    A tool that cannot rule on an ordinary cost claim produces a reading list
-    rather than an answer, which is the other way to be worthless.
-
-    The rule is now POSITIONAL. Everything before the linking verb NAMES the
-    quantity and may say anything; everything after it is the assertion and
-    must be the computed value plus quantity words.
-    """
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("the vendor licence is 47000 per year in total", "12 * 4000 = 47000"),
-        ("the vendor licence is 47000 dollars per year",
-         "12 * 4000 dollars = 47000 dollars"),
-        ("two engineers for two quarters is 180000 in total",
-         "2 * 90000 = 180000"),
-        ("renting for six months is 18000 in total", "6 * 3000 = 18000"),
-        ("12 units at 50 each is 600 in total", "12 * 50 = 600"),
-        ("the total is 4", "2 + 2 = 4"),
-    ])
-    def test_an_ordinary_cost_claim_is_usable(self, text, warrant):
-        assert self._accepts(text, warrant), text
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("Launch immediately.", "2 + 2 = 5"),
-        ("the parser is secure", "2 + 2 = 4"),
-        ("the total is under 4", "2 + 2 = 4"),
-        ("the total is about 4", "2 + 2 = 4"),
-        ("the price is 4 dollars", "2 + 2 = 4"),
-    ])
-    def test_the_number_must_be_what_the_claim_asserts(self, text, warrant):
-        """"The launch is SAFE to proceed, code 4" carries 4, but what it
-        ASSERTS after the verb is being safe -- and arithmetic settles nothing
-        about that."""
-        assert not self._accepts(text, warrant), text
-
-    def test_a_dimension_the_warrant_does_not_measure_is_refused(self):
-        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
-                                 ClaimKind.UNIT)
-
-    def test_the_same_dimension_is_allowed(self):
-        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
-                             ClaimKind.UNIT)
-
-    def test_a_rate_period_is_labelling_not_a_dimension(self):
-        """"per year" names what the quantity is PER, the same labelling job
-        the words before the verb do. Rejecting it made every ordinary rate
-        unusable while the number asserted was exactly the one computed."""
-        assert self._accepts("the licence is 47000 dollars per year",
-                             "12 * 4000 dollars = 47000 dollars")
-
-
-class TestQuantityClaimsFromARealPanel:
-    """Every claim below is verbatim from a live five-vendor canary, and every
-    one of them was REJECTED before this. The panel had done good work: it
-    proposed options, computed costs, and wrote them as restatements of the
-    arithmetic. My rule threw all of it away -- 26 claims, 22 escalated, zero
-    ruled. That is the reading list the reviewer warned about, and it cost
-    real money to discover."""
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("At six API calls per round, a five-round run uses 30 API calls",
-         "5 * 6 API calls = 30 API calls"),
-        ("At six API calls per round, stopping after a round-one null avoids "
-         "24 API calls", "4 * 6 API calls = 24 API calls"),
-        ("AlwaysFive costs 30 API calls per item at six calls per round",
-         "5 * 6 API calls = 30 API calls"),
-        ("MinTwoThenZeroStop costs 12 API calls per item if round two also "
-         "removes nothing", "2 * 6 API calls = 12 API calls"),
-        ("the total comes to 1,200 units", "600 * 2 = 1200"),
-        ("2 + 2 = 4", "2 + 2 = 4"),
-    ])
-    def test_a_real_panels_quantity_claim_is_usable(self, text, warrant):
-        assert self._accepts(text, warrant), text
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("Launch immediately.", "2 + 2 = 5"),
-        ("the parser is secure", "2 + 2 = 4"),
-        ("Running absolute exhaustion costs approximately 30 API calls",
-         "5 * 6 API calls = 30 API calls"),
-    ])
-    def test_the_attacks_are_still_blocked(self, text, warrant):
-        """What separates "30 API calls per item at six calls per round" from
-        "SAFE to proceed, code 4" is WHERE the number sits. In a restatement
-        the value is what the predicate is about, so it leads; in the other
-        the predicate is about being safe and the number trails as an aside."""
-        assert not self._accepts(text, warrant), text
-
-
 class TestUnitsInAnArithmeticWarrant:
     """The contract tells seats to put units in the warrant so the currency or
     the thing counted is checked rather than assumed. A live canary then wrote
@@ -5658,3 +5314,98 @@ class TestUnitsInAnArithmeticWarrant:
     def test_ordinary_arithmetic_is_untouched(self):
         for warrant in ("2 + 2 = 4", "2 ** 10 = 1024", "12 * 50 = 600"):
             assert self._check(warrant).status is GateStatus.PASS, warrant
+
+
+# ===========================================================================
+# A WARRANT IS EVIDENCE. IT IS NOT THE SENTENCE IT WAS OFFERED FOR.
+# ===========================================================================
+
+class TestProseNeverReachesPass:
+    """This replaces five classes that tested a lexical warrant-to-proposition
+    rule. The rule is deleted, so testing it harder was not the answer.
+
+    It read a claim's sentence and decided whether the attached warrant
+    established it. Every version was defeated by a sentence it had not
+    anticipated, and the decisive pair was accepted in BOTH directions:
+
+        warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"
+        warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"
+
+    One sum cannot establish a proposition and its negation. Each repair
+    looked like closing a gap; the rule itself was the defect, because a
+    sentence can always assert more than its warrant covers.
+
+    A gate now reports what it established -- WARRANT_HELD -- and nothing
+    more. The adversarial cases those classes collected are kept here, because
+    they are still exactly the sentences a lexical rule would wave through.
+    """
+
+    def _verdict(self, text, warrant, kind=ClaimKind.ARITHMETIC):
+        o = _orch()
+        claim = Claim(id="", kind=kind, text=text, warrant=warrant)
+        rec = o.run_pass(ELIM, [], [claim])
+        return o.verdicts[claim.id], rec
+
+    # -- the pair that decided it ------------------------------------------
+
+    def test_a_proposition_and_its_negation_are_treated_identically(self):
+        a, _ = self._verdict("The launch is 4 and safe to proceed", "2 + 2 = 4")
+        b, _ = self._verdict("The launch is 4 and unsafe to proceed", "2 + 2 = 4")
+        assert a.status is GateStatus.WARRANT_HELD
+        assert b.status is GateStatus.WARRANT_HELD
+        assert a.verified_true is None and b.verified_true is None
+
+    def test_neither_is_counted_as_accepted(self):
+        _, rec = self._verdict("The launch is 4 and safe to proceed", "2 + 2 = 4")
+        assert rec.auto_accepted == 0
+        assert rec.warrant_only == 1
+
+    # -- the sentences a lexical rule waved through ------------------------
+
+    ADVERSARIAL = (
+        "The launch is 4 and safe to proceed",
+        "The launch is 4 and unsafe to proceed",
+        "the total is 4, so we should proceed immediately",
+        "the total is 4 and the vendor is trustworthy",
+        "4 people will be harmed",
+        "the answer is 4 and the deadline is achievable",
+        "under 4",
+        "about 4",
+        "at most 4 and therefore acceptable",
+        "the total is 4 dollars per user per month",
+    )
+
+    @pytest.mark.parametrize("text", ADVERSARIAL)
+    def test_no_sentence_is_established_by_a_bare_sum(self, text):
+        v, rec = self._verdict(text, "2 + 2 = 4")
+        assert v.status is GateStatus.WARRANT_HELD, text
+        assert rec.auto_accepted == 0, text
+
+    def test_the_warrant_itself_is_still_reported_as_holding(self):
+        """The evidence checked out, and that is worth recording. What is
+        refused is the leap from the evidence to the sentence."""
+        v, _ = self._verdict("the total is 4", "2 + 2 = 4")
+        assert v.status is GateStatus.WARRANT_HELD
+        assert "WARRANT HELD, PROPOSITION OPEN" in v.detail
+
+    # -- refutation is unaffected ------------------------------------------
+
+    def test_a_false_warrant_still_fails(self):
+        """Nothing here softens refutation. False arithmetic is false whatever
+        sentence stands beside it."""
+        v, rec = self._verdict("the total is 5", "2 + 2 = 5")
+        assert v.status is GateStatus.FAIL
+        assert v.verified_true is False
+        assert rec.auto_rejected == 1
+
+    def test_a_blocked_check_is_still_blocked(self):
+        v, rec = self._verdict("the root is 2", "sqrt(4) = 2")
+        assert v.status is GateStatus.BLOCKED
+        assert rec.blocked == 1
+
+    def test_warrant_held_is_not_a_finding_against_the_seat(self):
+        """A seat whose evidence held has not been caught doing anything. If
+        this counted as a detection, every honest arithmetic claim would
+        become a mark against its author."""
+        v, _ = self._verdict("the total is 4", "2 + 2 = 4")
+        assert v.verified_true is not False

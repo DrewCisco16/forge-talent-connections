@@ -47,6 +47,7 @@ from typing import Any
 from adjudication_orchestrator import (
     BudgetExceeded,
     Claim,
+    GateStatus,
     Orchestrator,
     line_claim_extractor,
 )
@@ -791,6 +792,20 @@ def _check_summary(orch: Orchestrator, claims: Sequence[Claim]) -> str:
     lines: list[str] = []
     for c in claims:
         v = orch.verdicts.get(c.id)
+        if v is not None and v.status is GateStatus.WARRANT_HELD:
+            # SPELLED OUT, NOT ABBREVIATED TO A STATUS WORD. This used to
+            # render as [PASS], and the same [PASS] appeared for "the launch
+            # is 4 and safe to proceed" and for its negation. The closer reads
+            # this block and treats it as what the gates established, so the
+            # line has to say what was established and what was not.
+            lines.append(
+                f"  WARRANT HELD, PROPOSITION OPEN\n"
+                f"             {c.text}\n"
+                f"             The {v.gate} check ran and held. That confirms "
+                f"the EVIDENCE. Whether the evidence establishes the sentence "
+                f"above is open, and no gate here can settle it.\n"
+                f"             {v.detail}")
+            continue
         if v is None or v.status is None:
             # TWO DIFFERENT THINGS SHARE status None, and printing both as
             # "no gate applied" loses the more useful one.
@@ -1618,9 +1633,17 @@ class RunVerdict:
     """
 
     adjudication: str          # NONE | PARTIAL | COMPLETE
-    confidence: str            # UNMEASURED | LOW | MEASURED
+    confidence: str            # UNMEASURED | LOW | MEDIUM | HIGH
     reasons: list[str]
     caveats: list[str]
+    survivors_examined: bool = False
+    """Whether every surviving answer had all its commitments settled.
+
+    Separate from `adjudication`, which says whether the machinery removed
+    anything. A run can remove four options and leave a fifth that nothing
+    ever computed, and that fifth is not an adjudicated answer -- it is the
+    last one standing.
+    """
 
     @property
     def headline(self) -> str:
@@ -1640,9 +1663,25 @@ class RunVerdict:
 
         Unmeasured independence means nobody knows whether these seats fail
         together. An answer they agreed on, in that state, is not established.
+
+        IT ASKED FOR THE LITERAL STRING "MEASURED", WHICH NO RUN PRODUCES.
+        The unmeasured path reports UNMEASURED and the measured path reports
+        the ceiling the correlation supports -- LOW, MEDIUM or HIGH. So the
+        test could never be satisfied. It failed closed, which is why it went
+        unnoticed, but a control that cannot pass is not a control.
+
+        AND IT IS NOT A CLAIM THAT THE ANSWER IS CORRECT. Measured
+        independence gives a CEILING on corroboration -- it says the seats are
+        not clones, not that what they left standing is true. What this
+        reports is narrower and it is worth being exact about: the mechanical
+        process ran to completion, removed something, left one answer, settled
+        every commitment that answer made, and nothing was flagged against it.
+        A reader may act on that the way they would act on a passing test
+        suite, which is to say: it is evidence, and it is not proof.
         """
-        return (self.adjudication != "NONE"
-                and self.confidence == "MEASURED"
+        return (self.adjudication == "COMPLETE"
+                and bool(self.survivors_examined)
+                and self.confidence in MEASURED_AND_SUFFICIENT
                 and not self.caveats)
 
 
@@ -1832,7 +1871,8 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
             f"frameworks the remaining rounds apply were never brought to "
             f"bear.")
 
-    return RunVerdict(adjudication, confidence, reasons, caveats)
+    return RunVerdict(adjudication, confidence, reasons, caveats,
+                      survivors_examined=bool(alive) and not unexamined_now)
 
 
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
@@ -1910,6 +1950,14 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
     for cid, v in orch.verdicts.items():
         if v.status is None:
             continue          # escalated; it belongs under "still open", below
+        if v.status is GateStatus.WARRANT_HELD:
+            # It has a gate verdict but it is NOT a ruling on the claim, and
+            # this section is what a reader takes as rulings. It appears in
+            # full under "Evidence verified, proposition open" below. Listing
+            # it here as well -- which it was, as [WARRANT_HELD] beside real
+            # PASS and FAIL lines -- invites reading it as a third grade of
+            # settled rather than as not settled.
+            continue
         # The claim TEXT, not only the gate's message. "[PASS] 2 + 2 = 4
         # recomputed" tells a verifier that some arithmetic held without
         # saying what it was offered to support, which is the only thing they

@@ -689,9 +689,12 @@ class TestRepeatedFailuresStayVisible:
         import adjudication_orchestrator as AO
 
         orch = _orch()
-        # Text names the value, so the warrant bears on the claim.
+        # The text is itself the assertion, so the gate rules on it directly
+        # and the claim is accepted. Prose would be WARRANT HELD, which counts
+        # under warrant_only rather than auto_accepted -- this test is about
+        # the REPEAT counting, so it uses the case that reaches a ruling.
         claim = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
-                         text="the total is 4", warrant="2 + 2 = 4")
+                         text="2 + 2 = 4", warrant="2 + 2 = 4")
         p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
         first = orch.run_pass(p, [], [claim])
         second = orch.run_pass(p, [], [claim])
@@ -1901,8 +1904,12 @@ class TestWarrantVerifiedIsNotTheSameAsUnchecked:
             ClaimKind.CITATION,
             "10.1/x :: Harris ;; 2020 ;; Array programming with NumPy",
             [CitationFieldMatchGate(record_fn=lambda _d: rec)])
-        assert "WARRANT OK" in text
+        # The status word changed: a verified warrant beside prose is
+        # WARRANT HELD, PROPOSITION OPEN, and the line says both halves rather
+        # than abbreviating to a word a reader could take for a ruling.
+        assert "WARRANT HELD, PROPOSITION OPEN" in text
         assert "ran and held" in text
+        assert "confirms the EVIDENCE" in text
 
     def test_a_claim_with_no_gate_still_reports_as_escalated(self):
         text = self._summary(ClaimKind.JUDGMENT, None, [ArithmeticGate()])
