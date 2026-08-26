@@ -22,6 +22,7 @@ from typing import ClassVar
 
 import pytest
 
+import cost_ledger as CL
 import night_loop as NL
 import seat_independence as SI
 from adjudication_orchestrator import (
@@ -2061,11 +2062,36 @@ class TestEveryEntryPointPlansItsCaps:
         # no run directory was created for a run that never started.
         assert not os.path.exists(out)
 
-    def test_an_explicit_caps_argument_still_wins(self, tmp_path):
-        """The canary sizes its own caps for a two-round smoke test."""
-        import inspect
-        src = inspect.getsource(NL.live_night)
-        assert "if caps is None and ledger is not None:" in src
+    def test_an_explicit_caps_argument_skips_planning(self, tmp_path):
+        """The canary sizes its own caps for a short smoke test, so passing
+        them must bypass the plan rather than be overruled by it.
+
+        CHECKED BY BEHAVIOUR, NOT BY READING THE SOURCE. This asserted that a
+        particular line of code was spelled a particular way: it would have
+        broken on a harmless rename and passed on a rewrite that dropped the
+        condition entirely, which is the opposite of what a test is for.
+
+        A ceiling far too small to plan five rounds is used, so the planning
+        path would refuse. With caps supplied it gets past planning and fails
+        later, on the panel -- which is proof enough that planning was not
+        what stopped it."""
+        import json
+
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "rates.json"), encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=0.01)
+        profiles = self._profiles(tmp_path)
+
+        with pytest.raises(NL.RunTooExpensive):
+            NL.live_night("ask", profiles, str(tmp_path / "a"), ledger=led)
+
+        with pytest.raises(Exception) as caught:
+            NL.live_night("ask", profiles, str(tmp_path / "b"), ledger=led,
+                          caps={f"seat_{i}": 2048 for i in range(1, 6)})
+        # Anything BUT the planning refusal: with caps supplied the plan is
+        # never consulted, so the run gets as far as building the panel.
+        assert not isinstance(caught.value, NL.RunTooExpensive)
 
 
 class TestWhetherWeLookedIsSeparateFromWhatWeFound:

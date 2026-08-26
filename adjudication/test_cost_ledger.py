@@ -559,10 +559,35 @@ class TestAFailedDispatchConsumesBudget:
 class TestPassIdReachesTheLedgerFromTheRealPath:
 
     def test_a_seat_can_be_told_which_pass_it_is_in(self):
+        # UNMETERED, not None. A seat with no ledger spends with no limit of
+        # any kind, and that used to be what you got by not mentioning cost.
+        # This test is about pass ids, so it opts out explicitly.
         seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
-                           _ok(), ledger=None)
+                           _ok(), ledger=SA.UNMETERED)
         seat.set_pass("r3")
         assert seat.pass_id == "r3"
+
+    def test_a_seat_built_without_a_ledger_is_refused(self):
+        """It was the DEFAULT, so any caller that simply did not think about
+        cost got an unmetered seat and no warning."""
+        with pytest.raises(SA.SeatError, match="no cost ledger"):
+            SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                        _ok(), ledger=None)
+
+    def test_omitting_the_argument_entirely_is_also_refused(self):
+        """The one that mattered. Passing None at least means someone thought
+        about cost and got it wrong; omitting the argument means nobody
+        thought about it at all, and that was the DEFAULT -- so an unmetered
+        seat was what a caller got for not mentioning the subject."""
+        with pytest.raises(SA.SeatError, match="not mentioning cost"):
+            SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                        _ok())
+
+    def test_an_explicit_opt_out_is_honoured(self):
+        """Offline fakes and demos spend nothing and say so."""
+        seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                           _ok(), ledger=SA.UNMETERED)
+        assert seat.ledger is None
 
     def test_a_full_round_attributes_every_call_to_that_round(self, tmp_path):
         """pass_id was added as a constructor argument, tested through a seat

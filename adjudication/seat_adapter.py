@@ -244,6 +244,43 @@ class RetryPolicy:
             raise ValueError("max_attempts must be at least 1")
 
 
+class _Required:
+    """The absence of a choice about cost, which is not a choice.
+
+    Distinct from UNMETERED so that omitting the argument and asking for an
+    unmetered seat are different acts. Omitting it is refused.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<no ledger given>"
+
+
+_REQUIRED = _Required()
+
+
+class _Unmetered:
+    """Explicit opt-out from cost control, for tests and offline fakes."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNMETERED"
+
+
+UNMETERED = _Unmetered()
+"""Say this to run a seat with no spend ceiling, and mean it.
+
+`ledger=None` used to be the DEFAULT, so a caller that never thought about
+cost got an unmetered seat in silence. This is a distinct value that has to be
+written down: it appears in the call, and it can be searched for.
+
+It is normalised to None on the way in, so nothing downstream has to know
+about it -- the seat runs unmetered, which is what was asked for.
+"""
+
+
 class HttpSeat:
     """
     One seat. Call it with a prompt, get text back, or get SeatError.
@@ -266,7 +303,7 @@ class HttpSeat:
         timeout_s: float = 600.0,
         retry: RetryPolicy | None = None,
         sleeper: Callable[[float], None] | None = None,
-        ledger: Any = None,
+        ledger: Any = _REQUIRED,
         est_input_tokens: int = 3000,
         pass_id: str | None = None,
     ):
@@ -284,6 +321,22 @@ class HttpSeat:
             )
         if not seat.credential():
             raise SeatError(f"seat {seat.seat_id}: no credential resolved")
+
+        if ledger is _REQUIRED or ledger is None:
+            # A SEAT WITH NO LEDGER SPENDS WITH NO CEILING AT ALL. It was the
+            # default, so any caller that simply did not think about cost got
+            # an unmetered seat and no warning. The console, the CLI and the
+            # watcher all supply one; nothing else should get to skip it by
+            # omission.
+            #
+            # Opting out is still possible and now has to be deliberate:
+            # pass ledger=UNMETERED and mean it.
+            raise SeatError(
+                f"seat {seat.seat_id}: no cost ledger. A seat without one "
+                f"spends with no limit of any kind, and that was what you got "
+                f"by not mentioning cost. Pass a CostLedger, or pass "
+                f"ledger=UNMETERED to say you meant that."
+            )
 
         self.seat = seat
         self.profile = profile
@@ -303,7 +356,11 @@ class HttpSeat:
         self.retry = retry or RetryPolicy()
         self.sleeper = sleeper
         self.attempts_made = 0
-        self.ledger = ledger
+        # Normalised to None once stored, so every guard downstream stays as
+        # it was. The sentinel's whole job is at the CALL SITE: to make an
+        # unmetered seat something a caller wrote down rather than something
+        # they got by not mentioning cost.
+        self.ledger = None if ledger is UNMETERED else ledger
         self.est_input_tokens = est_input_tokens
         # WITHOUT THIS A PER-STAGE CEILING IS INERT. The ledger keys stage
         # spend by pass_id; HttpSeat passed none, so every live call recorded

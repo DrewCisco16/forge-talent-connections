@@ -1038,6 +1038,22 @@ def run_night(
         res.options_removed = [o.id for o in removed]
         if removed:
             emit(f"  removed {len(removed)} option(s) on refuted commitments")
+        # RECORDED HERE, BEFORE THE CLOSER IS ASKED ANYTHING.
+        #
+        # The bookkeeping sat after the merge, so a closer that raised took
+        # the whole round's record with it: an option had been removed, the
+        # ruling that removed it was in hand, and the round reported no option
+        # state at all -- the packet then fell back to an earlier round and
+        # listed the removed option as still standing.
+        #
+        # None of this needs the closer. Round one is the exception: its
+        # options do not exist yet, and it records below once they do.
+        if options:
+            res.options_alive = [o.id for o in options if o.alive]
+            res.options_unexamined = [
+                o.id for o in unexamined(options, rulings)]
+            res.rulings = dict(rulings)
+            res.options_observed = True
 
         summary = _check_summary(orch, claims)
 
