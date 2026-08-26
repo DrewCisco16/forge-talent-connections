@@ -939,10 +939,32 @@ def _demo_seats() -> dict[str, Callable[[str], str]]:
 
 
 def _demo_candidate(cid: str, text: str, warrant: str) -> Candidate:
-    """A candidate standing on one arithmetic claim."""
+    """A candidate standing on one arithmetic commitment.
+
+    IT DECLARES THE NUMBER, and offers the computation for it. Carrying a
+    claim that some gate refutes is no longer enough to be removed -- that
+    rule removed a candidate for any failed claim it held, including a false
+    sum about something else entirely. A candidate goes when a commitment it
+    made itself comes out otherwise.
+    """
+    from predicate import Predicate, PredicateError, _quantity
+
     claim = Claim(content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
                   text, ClaimKind.ARITHMETIC, warrant)
-    return Candidate(cid, text, [claim])
+    content = text
+    if warrant and "=" in warrant:
+        expr, claimed = warrant.rsplit("=", 1)
+        try:
+            value, unit = _quantity(claimed)
+            pred = Predicate(option_id=cid, subject=text, relation="=",
+                             value=value, unit=unit)
+        except PredicateError:
+            pred = None
+        if pred is not None:
+            content = (f"{text}\n"
+                       f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                       f"CHALLENGE | {pred.id} | {expr.strip()}")
+    return Candidate(cid, content, [claim])
 
 
 def main(argv: Sequence[str] | None = None) -> int:

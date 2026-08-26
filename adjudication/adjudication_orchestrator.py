@@ -212,6 +212,12 @@ class Candidate:
     id: str
     content: str
     claims: list[Claim] = field(default_factory=list)
+    predicates: list[object] = field(default_factory=list)
+    """The typed commitments this candidate made, and the ONLY way it can go.
+
+    Parsed from its OWN content, so a candidate can only ever be removed by
+    something it said about itself. See predicate.py.
+    """
     eliminated: bool = False
     elimination_reason: str | None = None
     elimination_kind: str | None = None
@@ -2139,8 +2145,16 @@ class Orchestrator:
 
         Returns the ids of claims newly adjudicated here.
         """
+        from predicate import parse_predicates
+
         ruled: list[str] = []
         for cand in candidates:
+            # A CANDIDATE'S COMMITMENTS COME FROM ITS OWN CONTENT, read once,
+            # here, before anything can be ruled on. That is what makes them
+            # candidate-owned: nothing added later can attach a dependency to
+            # a candidate that a rival wants removed.
+            if not cand.predicates:
+                cand.predicates = list(parse_predicates(cand.id, cand.content))
             for claim in cand.claims:
                 if claim.id in self.verdicts or claim.id in self._seen_claims:
                     continue
@@ -2231,32 +2245,65 @@ class Orchestrator:
     def _sweep_standing_verdicts(
         self, candidates: list[Candidate], p: Pass, rec: PassRecord
     ) -> None:
-        """Remove any candidate leaning on a claim already ruled FAIL.
+        """Remove any candidate whose OWN DECLARED COMMITMENT is refuted.
 
-        run_pass eliminates on claims proposed IN THAT PASS. That leaves two
-        gaps, both of which let a false candidate through: a claim ruled at
-        intake and never re-proposed by a seat, and a claim ruled in an earlier
-        pass whose candidate was not checked against it. Claim ids are
-        content-addressed, so a standing FAIL is a fact about the claim itself
-        and applies to every candidate carrying it, whenever it was ruled.
+        THE SAME RULE THE FIVE-ROUND ENGINE USES, from predicate.py, so the
+        two cannot answer the same question differently.
+
+        This used to remove a candidate leaning on any claim ruled FAIL, with
+        no test that the refuted warrant bore on the claim's proposition --
+        the weaker of two rules, and the one that decided whenever it ran. A
+        candidate could be deleted by a false sum about something else
+        entirely.
+
+        A candidate that declared no commitment is never removed here. It
+        survives and is reported as untested, which is the intended direction
+        of failure: a false acceptance leaves a wrong answer among the
+        candidates and says so, a false removal deletes the right one and
+        makes whatever remains look earned.
         """
+        from predicate import (
+            adjudicate,
+            parse_challenges,
+            parse_predicates,
+            refuted_commitment,
+        )
+
+        # PARSED HERE AS WELL AS AT INTAKE. gate_candidate_claims is not the
+        # only way into a pass -- run_pass is called directly by the night
+        # engine and by callers that never staged candidates -- and a
+        # candidate whose commitments were never read cannot be removed by
+        # them, which reads as "nothing was refuted" rather than "nothing was
+        # looked at". Parsing is idempotent and content-addressed.
+        for cand in candidates:
+            if not cand.predicates:
+                cand.predicates = list(parse_predicates(cand.id, cand.content))
+
+        standing = [pr for cand in candidates if not cand.eliminated
+                    for pr in cand.predicates]
+        if not standing:
+            return
+        challenges: list[tuple[str, str]] = []
+        for cand in candidates:
+            challenges.extend(parse_challenges(cand.content))
+            for claim in cand.claims:
+                challenges.extend(parse_challenges(claim.warrant or ""))
+        rulings = adjudicate(standing, challenges)  # type: ignore[arg-type]
+        if not rulings:
+            return
         for cand in candidates:
             if cand.eliminated:
                 continue
-            for claim in cand.claims:
-                v = self.verdicts.get(claim.id)
-                # ONLY a FAIL eliminates. A BLOCKED claim means the check did
-                # not happen -- a firewall, a rate limit, a paywall -- and
-                # letting that remove a candidate would make a network outage
-                # indistinguishable from a refutation.
-                if v is not None and v.status is GateStatus.FAIL:
-                    cand.eliminated = True
-                    cand.elimination_reason = (
-                        f"{p.name}: {v.gate} failed -- {v.detail}"
-                    )
-                    cand.elimination_kind = "earned"
-                    rec.eliminated_candidates.append(cand.id)
-                    break
+            ruling = refuted_commitment(cand, rulings)
+            if ruling is None:
+                continue
+            cand.eliminated = True
+            cand.elimination_reason = (
+                f"{p.name}: a commitment this candidate declared was "
+                f"mechanically refuted -- {ruling.detail}"
+            )
+            cand.elimination_kind = "earned"
+            rec.eliminated_candidates.append(cand.id)
 
     def claim_coverage(self, cand: Candidate) -> tuple[int, int]:
         """How many of a candidate's own claims actually reached a gate.
@@ -2369,17 +2416,19 @@ class Orchestrator:
                 continue
 
             rec.auto_rejected += 1
-            if p.eliminative:
-                for cand in candidates:
-                    if cand.eliminated:
-                        continue
-                    if any(c.id == claim.id for c in cand.claims):
-                        cand.eliminated = True
-                        cand.elimination_reason = (
-                            f"{p.name}: {result.gate} failed -- {result.detail}"
-                        )
-                        cand.elimination_kind = "earned"
-                        rec.eliminated_candidates.append(cand.id)
+            # A REFUTED CLAIM NO LONGER REMOVES THE CANDIDATE CARRYING IT.
+            #
+            # This removed a candidate for ANY failed claim it held, with no
+            # test that the refuted warrant bore on what the claim said. A
+            # false sum about anything at all was enough. The five-round
+            # engine had a binding test and this one did not, so two paths
+            # answered the same question differently and the weaker one
+            # decided whenever it ran.
+            #
+            # Removal now goes through the single rule in predicate.py, below,
+            # and needs a typed commitment the candidate declared itself. The
+            # refutation is still recorded and still reported; it simply
+            # cannot delete an answer on its own say-so.
 
         # Candidates can also lean on claims ruled at intake or in an earlier
         # pass that no seat re-proposed here. Those are just as decided.

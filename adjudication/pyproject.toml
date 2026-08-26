@@ -101,6 +101,16 @@ python_files = ["test_*.py"]
                 # different remedy; a lookup would hide which are BLOCKED and
                 # which are findings, and that distinction is the gate's point.
 ]
+"predicate.py" = [
+    "PLR0911",  # rule() returns one Ruling per distinct outcome -- no
+                # expression, an equation where an expression was asked for,
+                # a unit mismatch, unparseable, unbounded, unevaluable, and
+                # the comparison itself. Each names a different reason the
+                # arithmetic did not settle the commitment, and an operator
+                # acts on which one it was. Folding them into one exit would
+                # hide whether a check was REFUTED or merely BLOCKED, and
+                # that distinction is the whole point of the type.
+]
 "citation_gate.py" = [
     "PLR0911",  # one return per named failure: WRONG_PAPER, AUTHOR_MISMATCH,
                 # YEAR_MISMATCH, and three BLOCKED cases. The names are what an

@@ -28,6 +28,7 @@ import pytest
 import adjudication_orchestrator as AO
 import audit_log as AL
 import cost_ledger as CL
+import predicate as P
 import seat_adapter as SA
 import seat_independence as SI
 from adjudication_orchestrator import (
@@ -411,13 +412,32 @@ class TestOrchestratorRouting:
             Claim("c1", "the total is 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
         assert (rec.auto_accepted, rec.auto_rejected, rec.escalated) == (1, 0, 0)
 
-    def test_gate_fail_eliminates_the_carrying_candidate(self):
+    def test_a_refuted_commitment_eliminates_the_candidate_that_made_it(self):
+        o = _orch()
+        claim = Claim("c1", "t", ClaimKind.ARITHMETIC, "2+2 = 5")
+        cand = Candidate("A", _commit("A", "the total", 5, "2 + 2"), [claim])
+        o.run_pass(ELIM, [cand], [claim])
+        assert cand.eliminated is True
+        assert "committed" in cand.elimination_reason
+
+    def test_carrying_a_refuted_claim_is_not_enough_to_be_eliminated(self):
+        """CORRECTED. This removed a candidate for ANY failed claim it held,
+        with no test that the refuted warrant bore on what the claim said, so
+        a false sum about anything at all deleted it.
+
+        The five-round engine required the claim to declare its target; this
+        one did not. Two rules for the same question, and the weaker decided
+        whenever it ran. Both now go through one function, and it needs a
+        typed commitment the candidate declared itself.
+
+        The refutation is still recorded and still reported. It simply cannot
+        delete an answer on its own say-so."""
         o = _orch()
         claim = Claim("c1", "t", ClaimKind.ARITHMETIC, "2+2 = 5")
         cand = Candidate("A", "answer", [claim])
-        o.run_pass(ELIM, [cand], [claim])
-        assert cand.eliminated is True
-        assert "arithmetic" in cand.elimination_reason
+        rec = o.run_pass(ELIM, [cand], [claim])
+        assert rec.auto_rejected == 1        # still refuted, still counted
+        assert cand.eliminated is False      # and it removes nothing
 
     def test_judgment_claim_escalates_and_is_never_accepted(self):
         o = _orch()
@@ -449,14 +469,25 @@ class TestOrchestratorRouting:
         assert o.detections_by_seat["s1"] == {"c1"}
         assert o.detections_by_seat["s2"] == {"c2"}
 
-    def test_unaffected_candidate_survives(self):
+    def test_a_refutation_touches_only_the_candidate_that_committed(self):
         o = _orch()
         bad = Claim("bad", "t", ClaimKind.ARITHMETIC, "1+1 = 3")
-        a = Candidate("A", "a", [bad])
-        b = Candidate("B", "b", [])
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [bad])
+        b = Candidate("B", _commit("B", "the sum", 2, "1 + 1"), [])
         o.run_pass(ELIM, [a, b], [bad])
         assert a.eliminated and not b.eliminated
         assert [c.id for c in o.survivors([a, b])] == ["B"]
+
+    def test_the_same_commitment_on_two_candidates_is_two_commitments(self):
+        """A commitment id derives from the candidate it binds to. Ids
+        computed from content alone gave one id to the same assertion aimed at
+        two candidates, so a single refutation removed both."""
+        o = _orch()
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [])
+        b = Candidate("B", _commit("B", "the sum", 3, "9 + 9"), [])
+        o.run_pass(ELIM, [a, b], [])
+        assert a.eliminated and b.eliminated
+        assert a.predicates[0].id != b.predicates[0].id
 
 
 # ===================================================== 7. CONVERGENCE
@@ -504,7 +535,8 @@ class TestDecayAndStopping:
         cannot establish decay, so the run has not converged."""
         o = _orch()
         bad = Claim("b", "t", ClaimKind.ARITHMETIC, "1+1 = 3")
-        a, b = Candidate("A", "a", [bad]), Candidate("B", "b", [])
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [bad])
+        b = Candidate("B", "b", [])
         o.run_pass(ELIM, [a, b], [bad])
         s = o.should_stop([a, b])
         assert s["surviving_candidates"] == 1      # the elimination still happened
@@ -524,7 +556,12 @@ class TestEndToEnd:
     def test_full_run_matches_documented_demo_behaviour(self):
         o = Orchestrator([ArithmeticGate(),
                           CitationResolutionGate(lambda i: i.startswith("10.1038"))])
-        cands = [Candidate("A", "A"), Candidate("B", "B"), Candidate("C", "C")]
+        # B and C DECLARE what they stand on, which is the only thing that
+        # can remove them. A carries nothing quantitative and is never
+        # eliminated by this machinery -- it survives as untested.
+        cands = [Candidate("A", "A"),
+                 Candidate("B", _commit("B", "the total", 50, "12 + 35")),
+                 Candidate("C", "C")]
         p1 = [Claim("c1", "", ClaimKind.ARITHMETIC, "12 + 35 = 47", source_seat="s1"),
               Claim("c2", "", ClaimKind.ARITHMETIC, "12 + 35 = 50", source_seat="s2"),
               Claim("c3", "", ClaimKind.JUDGMENT, None, source_seat="s1")]
@@ -536,10 +573,20 @@ class TestEndToEnd:
         r1 = o.run_pass(AO.DEFAULT_PASSES[0], cands, p1)
         r2 = o.run_pass(AO.DEFAULT_PASSES[1], cands, p2)
 
-        assert r1.eliminated_candidates == ["B"]
-        assert r2.eliminated_candidates == ["C"]
-        assert len(o.survivors(cands)) == 1
-        assert o.survivors(cands)[0].id == "A"
+        assert r1.eliminated_candidates == ["B"]   # 12 + 35 is 47, not 50
+        # CHANGED. C carries a fabricated citation and is NO LONGER removed
+        # for it. A refuted citation refutes the EVIDENCE, not the answer --
+        # the same non-sequitur as removing an option because a sum attached
+        # to it came out wrong. It is recorded, counted, and reported as an
+        # unresolved dependency on the survivor.
+        assert r2.eliminated_candidates == []
+        assert r2.auto_rejected == 1
+        assert o.verdicts["c5"].status is AO.GateStatus.FAIL
+        # Two survive now, not one: A, which committed to nothing and was
+        # never tested, and C, whose fabricated citation is a finding against
+        # its evidence rather than a refutation of its answer. Neither has
+        # been shown right, and the report has to say which is which.
+        assert [c.id for c in o.survivors(cands)] == ["A", "C"]
         # one judgment claim remains unresolved -> must warn against committing
         assert o.should_stop(cands)["WARNING"] is not None
 
@@ -1412,9 +1459,24 @@ class TestConjunctiveRouting:
         o = self._orch(True)
         claim = Claim("c", "t", ClaimKind.CITATION, "https://medium.com/@x/post")
         cand = Candidate("A", "answer", [claim])
-        o.run_pass(AO.DEFAULT_PASSES[0], [cand], [claim])
-        assert cand.eliminated is True
-        assert "inadmissible" in cand.elimination_reason
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [cand], [claim])
+        # The source is rejected, and that is recorded.
+        assert rec.auto_rejected == 1
+        # CHANGED, AND THIS IS A REAL NARROWING. An inadmissible source used
+        # to delete the candidate carrying it. Removal now needs a typed
+        # commitment the candidate declared, so a bad source is reported and
+        # escalated rather than deciding the answer by itself.
+        #
+        # The trade is deliberate. The rule that removed on any failed claim
+        # also removed on a false sum about something else entirely, and a
+        # false removal deletes the right answer while making whatever
+        # remains look earned. An unremoved candidate carrying a refuted
+        # claim is visible in the report; a deleted right answer is not.
+        assert cand.eliminated is False
+        # The finding itself is unchanged: the source resolved and is still
+        # not admissible evidence.
+        verdict = o.verdicts[claim.id]
+        assert "inadmissible" in verdict.detail.lower()
 
     def test_a_claim_with_no_applicable_gate_still_escalates(self):
         o = self._orch(True)
@@ -3233,10 +3295,53 @@ _R_FALSE = "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"
 _R_JUDGE = "CLAIM | judgment |  | the framing is one-sided"
 
 
+def _commit(cid, subject, value, expr, unit=""):
+    """Candidate content declaring one typed commitment, with its arithmetic.
+
+    Removal needs a commitment the candidate declared itself; a refuted claim
+    it merely carries no longer deletes it. So a candidate that stands on a
+    number says which number, and offers the computation.
+    """
+    from fractions import Fraction
+
+    pred = P.Predicate(option_id=cid, subject=subject, relation="=",
+                       value=Fraction(value), unit=unit)
+    tail = f" {unit}" if unit else ""
+    return (f"{subject}\n"
+            f"PREDICATE | {subject} | = | {value}{tail}\n"
+            f"CHALLENGE | {pred.id} | {expr}{tail}")
+
+
 def _cand(cid, text, warrant):
+    """A candidate standing on a number, declared as a typed commitment.
+
+    A refuted claim no longer removes the candidate carrying it: that rule
+    removed a candidate for ANY failed claim, with no test that the refuted
+    warrant bore on what the claim said, so a false sum about anything at all
+    was enough. Removal now needs a commitment the candidate DECLARED, and a
+    computation that comes out otherwise.
+
+    So a candidate here says what number it stands on, and offers its own
+    arithmetic for it. If that arithmetic computes to something else, the
+    candidate has refuted itself -- which is what "standing on false
+    arithmetic" always meant.
+    """
     claim = Claim(AO.content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
                   text, ClaimKind.ARITHMETIC, warrant)
-    return Candidate(cid, text, [claim])
+    content = text
+    if warrant and "=" in warrant:
+        expr, claimed = warrant.rsplit("=", 1)
+        try:
+            pred = P.Predicate(option_id=cid, subject=text, relation="=",
+                               value=P._quantity(claimed)[0],
+                               unit=P._quantity(claimed)[1])
+        except P.PredicateError:
+            pred = None
+        if pred is not None:
+            content = (f"{text}\n"
+                       f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                       f"CHALLENGE | {pred.id} | {expr.strip()}")
+    return Candidate(cid, content, [claim])
 
 
 def _seats(*texts):
@@ -3310,7 +3415,10 @@ class TestTheAnswerIsWhatSurvives:
                                   _seats(_R_TRUE, f"{_R_TRUE}\n{_R_FALSE}"))
         assert [c.id for c in answer.survivors] == ["c_true"]
         assert [c.id for c in answer.eliminated] == ["c_false"]
-        assert "recomputed 4" in answer.eliminated[0].elimination_reason
+        # The reason names the computed value AND the value the candidate
+        # committed to, because an operator reading it needs to see the gap.
+        reason = answer.eliminated[0].elimination_reason
+        assert "2 + 2 = 4" in reason and "equals 5" in reason
 
     def test_elimination_happens_on_the_pass_that_first_sees_the_claim(self):
         cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
@@ -3962,7 +4070,9 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         # refutes c_true, so it survives by elimination.
         assert "SURVIVOR: c_true" in out
         assert "removed c_false" in out
-        assert "recomputed 4" in out
+        # The printed reason names the computed value and the value the
+        # candidate committed to, so an operator sees the gap itself.
+        assert "2 + 2 = 4" in out and "equals 5" in out
         # Four seats scripted IDENTICALLY are a monoculture, and the run says
         # so on every pass rather than reading the agreement as confirmation.
         assert out.count("[collapse warning]") == 5
@@ -4810,11 +4920,15 @@ class TestUnverifiedIsNotWrong:
     def _run(self):
         from citation_gate import CitationFieldMatchGate
 
-        right = Candidate(id="RIGHT", content="rests on arithmetic that holds",
+        right = Candidate(id="RIGHT",
+                          content=_commit("RIGHT", "12 units at 50", 600,
+                                          "12 * 50"),
                           claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
                                         text="12 units at 50 is 600",
                                         warrant="12 * 50 = 600")])
-        wrong = Candidate(id="WRONG", content="rests on arithmetic that fails",
+        wrong = Candidate(id="WRONG",
+                          content=_commit("WRONG", "12 units at 50", 700,
+                                          "12 * 50"),
                           claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
                                         text="12 units at 50 is 700",
                                         warrant="12 * 50 = 700")])
@@ -4853,7 +4967,8 @@ class TestUnverifiedIsNotWrong:
 
     def test_the_elimination_names_what_was_wrong(self):
         _, by_id = self._run()
-        assert "recomputed 600" in by_id["WRONG"].elimination_reason
+        reason = by_id["WRONG"].elimination_reason
+        assert "600" in reason and "700" in reason
 
 
 class TestAClaimAlwaysHasAnIdentity:

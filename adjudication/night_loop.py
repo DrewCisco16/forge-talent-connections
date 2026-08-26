@@ -62,6 +62,7 @@ from option_set import (
     render_working,
     unexamined,
 )
+from predicate import adjudicate, parse_challenges
 from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
@@ -181,6 +182,27 @@ A NUMBERED LIST OF YOUR PREMISES IS NOT A LIST OF ANSWERS. Four of five seats
 once wrote their proposals as headings and their setup as a numbered list, and
 the setup is what got adjudicated. State the answers here and there is nothing
 to guess.
+
+## What makes an answer checkable
+
+Under each OPTION line, state what it rests on QUANTITATIVELY, one per line:
+
+    OPTION | stop at the first round that eliminates nothing
+    PREDICATE | API calls a five-round run costs | = | 30 api calls
+    PREDICATE | rounds this skips in the worst case | <= | 4 rounds
+
+    PREDICATE | <what quantity> | <one of = != < <= > >=> | <value and unit>
+
+THIS IS THE ONLY WAY AN ANSWER CAN LATER BE RULED OUT. A later round can
+refute one of these by computing the number and finding it came out
+otherwise. It cannot attack your reasoning, and it cannot attach a new
+commitment to your option -- so if you leave this out, your answer can never
+be eliminated, and it can never be verified either. It survives to the end
+marked as untested, which is not the same as surviving scrutiny.
+
+State the number that actually decides it. If the honest answer is that
+nothing quantitative decides it, write no PREDICATE line rather than a
+decorative one; a commitment you do not mean is worse than none.
 
 """
 
@@ -693,6 +715,17 @@ class RoundResult:
     options_removed: list[str] = field(default_factory=list)
     options_alive: list[str] = field(default_factory=list)
     options_unexamined: list[str] = field(default_factory=list)
+    options_observed: bool = False
+    """Whether option state was actually READ this round.
+
+    An empty survivor list is falsey, so a round that removed the last
+    standing options was indistinguishable from a round that never looked.
+    The packet kept the previous round's list and reported "2 remain" after
+    both had been eliminated. Whether we looked and what we found are two
+    different facts and are now stored as two.
+    """
+    challenges: int = 0
+    challenges_ruled: int = 0
     """Surviving options no claim was ever attached to.
 
     They survived because nothing tested them, which is a completely different
@@ -910,6 +943,32 @@ def run_night(
                 pool = []
             emit(f"  {len(pool)} distinct option(s) proposed by the seats")
 
+        # THE CHALLENGES, RULED ON BEFORE THE CLOSER IS ASKED ANYTHING.
+        #
+        # Elimination used to run AFTER the merge, so a closer that raised
+        # took the whole round's removals down with it: a commitment had been
+        # mechanically refuted, its FAIL was in the record, and the option it
+        # refuted was still standing in the next round's prompt. Nothing about
+        # ruling on a challenge needs the closer -- the commitments were fixed
+        # when the options were proposed and the arithmetic is the seats'.
+        #
+        # Round one has nothing standing to challenge yet; it is the round
+        # that creates the commitments.
+        standing = [pr for o in options if o.alive for pr in o.predicates]
+        challenges: list[tuple[str, str]] = []
+        for raw in texts.values():
+            challenges.extend(parse_challenges(raw))
+        rulings = adjudicate(standing, challenges)
+        res.challenges = len(challenges)
+        res.challenges_ruled = len(rulings)
+        if challenges:
+            emit(f"  {len(challenges)} challenge(s), {len(rulings)} naming a "
+                 f"commitment that exists")
+        removed = eliminate(options, rulings, r.n)
+        res.options_removed = [o.id for o in removed]
+        if removed:
+            emit(f"  removed {len(removed)} option(s) on refuted commitments")
+
         summary = _check_summary(orch, claims)
 
         # Measured, not assumed. When it cannot be measured the closer is told
@@ -1050,14 +1109,11 @@ def run_night(
             res.options_created = len(options)
         else:
             attach_claims(options, claims)
-        removed = eliminate(options, orch.verdicts, r.n,
-                            {c.id: c for c in claims})
-        res.options_removed = [o.id for o in removed]
+        # Elimination already ran, before the closer. What is left here is
+        # recording the state it produced.
         res.options_alive = [o.id for o in options if o.alive]
-        res.options_unexamined = [o.id for o in unexamined(options,
-                                                            orch.verdicts)]
-        if removed:
-            emit(f"  removed {len(removed)} option(s) on refuted claims")
+        res.options_unexamined = [o.id for o in unexamined(options, rulings)]
+        res.options_observed = True
 
         if options:
             # The closer's text is COMMENTARY on the survivor list, not the
@@ -1628,10 +1684,30 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
     # -- caveats: things that make either figure untrustworthy -------------
     if unexamined_now:
         caveats.append(
-            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED. No "
-            f"claim was ever attached to them, so they survived because "
-            f"nothing examined them -- which on the page looks identical to "
-            f"surviving scrutiny.")
+            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED. "
+            f"They declared no commitment this code could compute, or none "
+            f"was ruled on, so they survived because nothing examined them -- "
+            f"which on the page looks identical to surviving scrutiny.")
+    # A REFUTED CLAIM NO LONGER REMOVES AN OPTION, so it has to be visible.
+    #
+    # Removal needs a typed commitment the option declared itself, because
+    # the rule that removed on any refuted claim also removed on claims the
+    # warrant said nothing about. That is the safer direction, but it means a
+    # seat can assert something demonstrably false about a surviving answer
+    # and nothing in the tally would show it: the option is not eliminated
+    # and not unexamined, and the failure count is a global number that names
+    # no option. Silence there is exactly the fail-open this design exists to
+    # avoid.
+    refuted_total = sum(r.failed for r in results)
+    if refuted_total and not any(r.options_removed for r in results):
+        caveats.append(
+            f"{refuted_total} CLAIM(S) WERE MECHANICALLY REFUTED AND REMOVED "
+            f"NOTHING. A claim is refuted on its warrant; removing the answer "
+            f"it was written beside needs the answer to have declared that "
+            f"number itself, and none of these did. Read them before treating "
+            f"any survivor as sound -- a false statement made about an answer "
+            f"is not the same as a false answer, and it is not nothing "
+            f"either.")
     if claims and escalated / claims > MAX_ESCALATION_FRACTION:
         caveats.append(
             f"MOST OF IT IS UNCHECKED. {escalated} of {claims} distinct "

@@ -33,7 +33,16 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from adjudication_orchestrator import Claim, warrant_supports
+from adjudication_orchestrator import Claim
+from predicate import (
+    Predicate,
+    Ruling,
+    parse_predicates,
+    refuted_commitment,
+)
+
+_FENCE = re.compile(r"^\s*(?:```|~~~)")
+"""A code fence. What is inside one is an example, not a proposal."""
 
 _OPTION_LINE = re.compile(r"^\s*OPTION\s*\|\s*(.+?)\s*$", re.IGNORECASE)
 """How a seat marks an answer, matching the CLAIM convention it already uses.
@@ -138,7 +147,19 @@ class Option:
     id: str
     text: str
     claims: list[str] = field(default_factory=list)
-    """Ids of the claims this option rests on."""
+    """Ids of claims MENTIONING this option. Reported, never load-bearing.
+
+    These come from prose, and prose is exactly what could not be trusted to
+    say what a warrant established. They are kept so the record shows what was
+    argued about an option; they no longer remove it.
+    """
+    predicates: list[Predicate] = field(default_factory=list)
+    """The typed commitments this option made, and the ONLY way it can go.
+
+    Declared by the seat that proposed it, in the same reply, and fixed from
+    that moment. See predicate.py for why elimination rests on these and not
+    on sentences.
+    """
     eliminated_in_round: int | None = None
     elimination_reason: str | None = None
 
@@ -153,69 +174,86 @@ def _parse_list(text: str) -> list[Option]:
 
 
 def parse_options(text: str) -> list[Option]:
-    """Read a numbered or bulleted list into options.
+    """Read one seat's reply into the answers it declared.
 
     Round one is the only round that may create options, so this runs once.
-    Anything that is not a list item is prose about the list and is ignored --
-    a heading, a preamble, or the closer explaining what it did.
+    Anything that is not declared as an answer is reasoning about the answers
+    and is ignored.
+
+    BOTH DECLARED FORMS COUNT. An explicit OPTION line used to win OUTRIGHT,
+    so a reply carrying one OPTION line and a "### Option 2:" heading kept
+    only the first and dropped the second with no caveat anywhere. Later
+    rounds only remove, so an answer missing from round one can never come
+    back -- the omission is permanent and invisible. Reading both forms can at
+    worst carry an option twice, and a duplicate is examined and reported
+    while a dropped answer is simply gone.
+
+    FENCED BLOCKS ARE NOT PROPOSALS. The contract shows seats an example
+    OPTION line, and a seat quoting that example back inside a code fence had
+    "This is merely an example" adjudicated as a candidate answer.
     """
     out: list[Option] = []
     seen: set[str] = set()
-
-    # An explicit OPTION marker wins outright. Only when a seat used none do
-    # we fall back to reading numbered lines, so a seat that ignored the
-    # convention still contributes rather than silently counting for nothing.
-    explicit = [m.group(1).strip()
-                for m in (_OPTION_LINE.match(ln)
-                          for ln in (text or "").splitlines()) if m]
-    if explicit:
-        for body in explicit:
-            if len(body) < MIN_OPTION_CHARS:
-                continue
-            oid = option_id(body)
-            if oid in seen:
-                continue
-            seen.add(oid)
-            out.append(Option(id=oid, text=body))
-        if len(out) > MAX_OPTIONS:
-            raise TooManyOptions(
-                f"a seat proposed {len(out)} options, over the {MAX_OPTIONS} "
-                f"a later round can work through.")
-        return out
-
+    blocks: list[tuple[str, list[str]]] = []
+    current: list[str] | None = None
     in_options = True
+    fenced = False
+
     for line in (text or "").splitlines():
-        if _SECTION_HEADING.match(line):
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        m = _OPTION_LINE.match(line)
+        if m is None and _SECTION_HEADING.match(line):
             # Everything after an OPEN or KILLED heading is commentary about
             # the round, not a further answer to consider.
             in_options = False
+            current = None
             continue
-        m = _DECLARED_OPTION.match(line)
+        if m is None:
+            m = _DECLARED_OPTION.match(line)
+            if m is not None and not in_options:
+                # An option heading under OPEN or KILLED names that section's
+                # subject; it is not a fresh answer being put forward.
+                continue
         if m is None:
             if line.strip().startswith("#"):
                 in_options = True      # a new heading; options may resume
-            continue
-        if not in_options:
-            # An option heading under OPEN or KILLED is that section's
-            # subject, not a fresh answer being put forward.
+                current = None
+            elif current is not None:
+                current.append(line)
             continue
         body = m.group(1).strip()
         if len(body) < MIN_OPTION_CHARS:
+            current = None
             continue
+        current = []
+        blocks.append((body, current))
+
+    for body, own_lines in blocks:
         oid = option_id(body)
         if oid in seen:
             continue
         seen.add(oid)
-        out.append(Option(id=oid, text=body))
+        opt = Option(id=oid, text=body)
+        # THE COMMITMENTS BIND BY POSITION, INSIDE THE PROPOSING SEAT'S OWN
+        # REPLY. That is what makes them candidate-owned: an option can only
+        # ever be removed by something the seat said about it while putting
+        # it forward, never by an edge a later round invented.
+        opt.predicates = list(
+            parse_predicates(oid, "\n".join(own_lines)))
+        out.append(opt)
+
     if len(out) > MAX_OPTIONS:
         raise TooManyOptions(
-            f"round one produced {len(out)} options, over the {MAX_OPTIONS} a "
+            f"one reply proposed {len(out)} options, over the {MAX_OPTIONS} a "
             f"later round can work through. Truncating would drop answers by "
-            f"the order they happened to be written in; the round is recorded "
-            f"as producing no usable option set instead."
+            f"the order they happened to be written in, so the reply is "
+            f"recorded as producing no usable option set instead."
         )
     return out
-
 
 def attach_claims(options: Sequence[Option],
                   claims: Sequence[Claim]) -> None:
@@ -245,63 +283,55 @@ def attach_claims(options: Sequence[Option],
 
 
 def eliminate(options: Sequence[Option],
-              verdicts: Mapping[str, object],
+              rulings: Mapping[str, Ruling],
               round_n: int,
-              claims_by_id: Mapping[str, Claim] | None = None) -> list[Option]:
-    """Remove options whose declared dependencies were refuted ON THE POINT.
+              claims_by_id: Mapping[str, object] | None = None) -> list[Option]:
+    """THE ONE FUNCTION THAT REMOVES A CANDIDATE. Both engines call it.
 
-    THREE CONDITIONS, ALL REQUIRED:
+    An option goes when a TYPED COMMITMENT IT DECLARED ITSELF is refuted. That
+    is the whole rule, and every part of it is structural:
 
-      1. the claim DECLARED that it is about this option;
-      2. its standing verdict is FAIL;
-      3. the refuted warrant actually BEARS ON the claim's proposition.
+      * the commitment is a quantity, a relation and a value, so ruling on it
+        is a comparison rather than a reading;
+      * the option declared it when it was proposed, so no later seat can
+        attach a fresh dependency to a candidate it wants gone;
+      * a FAIL means the arithmetic came out other than the option said.
 
-    The third was missing, and its absence was the worst defect this tool has
-    had. warrant_supports() ran only after a gate PASSed, so the acceptance
-    side was bound to the proposition and the ELIMINATION side was not. An
-    unrelated false equation therefore destroyed an option outright:
+    WHAT THIS REPLACED, AND WHY NOTHING LEXICAL CAME BACK. Removal used to
+    need a claim to declare its target, hold a standing FAIL, and pass a rule
+    that read the claim's sentence to decide whether the warrant established
+    it. That last test was lexical, and every lexical version of it fell to a
+    sentence it had not anticipated -- most plainly this pair, where one
+    warrant supported a proposition AND its negation:
 
-        1. Launch immediately.
-        2. Abort immediately.
-        CLAIM | arithmetic | 2 + 2 = 5 | Launch immediately.
+        warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"
+        warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"
 
-    "2 + 2 = 5" is false. It says nothing whatever about launching. The run
-    removed "Launch immediately", kept "Abort immediately", and reported
-    MECHANICAL ADJUDICATION: COMPLETE with no caveats -- a confident wrong
-    answer to a launch-or-abort question, produced by machinery that had
-    checked arithmetic and nothing else.
+    Both were ruled supported. A refuted variant then removed an option the
+    arithmetic said nothing about, and the run reported MECHANICAL
+    ADJUDICATION: COMPLETE. Patching the rule would have closed those two
+    strings; it would not have closed the property, because the property is
+    that a sentence can always carry more than its warrant covers.
 
-    Removing on an unrelated warrant is strictly worse than accepting on one.
-    A false acceptance leaves a wrong answer among the candidates; a false
-    removal deletes the right one and makes the survivor look earned.
+    So sentences no longer remove anything. `claims_by_id` is accepted and
+    unused, kept so the legacy caller can hand over what it has without
+    pretending those claims are load-bearing.
 
-    BLOCKED and ESCALATED remove nothing: a check that did not happen and a
+    BLOCKED and ESCALATED remove nothing. A check that could not run and a
     claim nobody ruled on are not refutations.
     """
     removed: list[Option] = []
     for opt in options:
         if not opt.alive:
             continue
-        for cid in opt.claims:
-            verdict = verdicts.get(cid)
-            if getattr(getattr(verdict, "status", None), "value", None) != "fail":
-                continue
-            claim = (claims_by_id or {}).get(cid)
-            if claim is None:
-                continue
-            unbound = warrant_supports(claim)
-            if unbound is not None:
-                # Refuted, but not on this proposition. The claim stays
-                # refuted in the record; the option stands.
-                continue
-            opt.eliminated_in_round = round_n
-            opt.elimination_reason = (
-                f"round {round_n}: a claim it declared it rests on was "
-                f"mechanically refuted ({claim.text}) -- "
-                f"{getattr(verdict, 'detail', '')}"
-            )
-            removed.append(opt)
-            break
+        ruling = refuted_commitment(opt, rulings)
+        if ruling is None:
+            continue
+        opt.eliminated_in_round = round_n
+        opt.elimination_reason = (
+            f"round {round_n}: a commitment this option declared when it was "
+            f"proposed was mechanically refuted. {ruling.detail}")
+        removed.append(opt)
     return removed
 
 
@@ -324,12 +354,32 @@ def render_working(options: Sequence[Option]) -> str:
         lines.append("(none -- every option had a declared claim refuted)")
     for i, opt in enumerate(alive, 1):
         lines.append(f"{i}. [{opt.id}] {opt.text}")
+        # THE COMMITMENTS ARE SHOWN WITH THEIR IDS because challenging one is
+        # the only way anything is removed. An option with none listed cannot
+        # be eliminated by this machinery at all, and saying so plainly is
+        # better than letting a seat spend the round attacking it in prose.
+        for pred in opt.predicates:
+            lines.append(f"      {pred.render()}")
+        if not opt.predicates:
+            lines.append("      (declared no checkable commitment)")
     lines += [
         "",
-        "Cite an option by its bracketed id when a claim bears on it:",
-        "    CLAIM | <kind> | <warrant> | <option id> | <the claim>",
-        "A claim that names no option is still checked and still reported, but",
-        "cannot remove anything -- nobody said what it was about.",
+        "To remove an option, refute a commitment it made, by id:",
+        "    CHALLENGE | <commitment id> | <an arithmetic expression>",
+        "",
+        "The expression is evaluated and compared with the value the option",
+        "committed to. Supply an EXPRESSION, not an equation: the commitment",
+        "already states the relation and the value.",
+        "",
+        "You cannot attach a new commitment to someone else's option. They",
+        "were fixed when the options were proposed, and a seat that could add",
+        "one now could remove any option it liked by aiming a false sum at",
+        "it. An option resting on something nobody can compute is not removed",
+        "here; it survives and is reported as untested.",
+        "",
+        "CLAIM lines are still checked and still reported. They no longer",
+        "remove anything, because a sentence can always carry more than its",
+        "warrant covers.",
     ]
     return "\n".join(lines)
 
