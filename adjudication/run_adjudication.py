@@ -860,6 +860,24 @@ def render_report(answer: AdjudicationAnswer) -> str:
         add(f"  {len(answer.survivors)} SURVIVE -- not narrowed to one:")
         for c in answer.survivors:
             add(f"    {c.id}{_cov(answer, c.id)}")
+    # EVIDENCE THAT WAS TAKEN AWAY FROM A SURVIVOR.
+    #
+    # A fabricated quote leaves the claims it was offered for standing on
+    # nothing. That no longer deletes the candidate -- refuting a quote
+    # refutes the evidence, not the answer -- so the finding has to appear
+    # here or it disappears entirely, which is worse than the removal it
+    # replaced. It was collected and never printed at all.
+    shaky = [c for c in answer.survivors if getattr(c, "unsupported_basis", None)]
+    if shaky:
+        add("")
+        add("  EVIDENCE WITHDRAWN FROM SURVIVING ANSWERS")
+        add("  A quote these rest on was proven absent from the source it was")
+        add("  attributed to. The answer is not thereby wrong, and it is no")
+        add("  longer standing on what it said it stood on.")
+        for c in shaky:
+            add(f"    {c.id}")
+            for note in c.unsupported_basis:
+                add(f"      {note}")
     for c in answer.eliminated:
         reason = c.elimination_reason or ""
         tag = ("EARNED" if c.elimination_kind == "earned"

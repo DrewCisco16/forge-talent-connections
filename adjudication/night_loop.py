@@ -1445,7 +1445,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     if caps is None and ledger is not None:
         from cost_ledger import plan_run
         plan = plan_run(ledger, configured_caps(profiles_path),
-                        rounds=len(ROUNDS))
+                        rounds=len(ROUNDS), ask_chars=len(ask or ""))
         if on_event is not None:
             on_event(f"plan: {plan.calls} calls, worst case "
                      f"${plan.worst_case:.2f}")

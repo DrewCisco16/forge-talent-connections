@@ -1149,3 +1149,51 @@ class TestAnOverrunStopsTheNextCallNotThisOne:
                    estimated_dollars=0.01, authorised=0.01)
         assert led.spent > 0.01
         assert len(led.overruns) == 1
+
+
+class TestTheEstimateCountsEveryReplyAndTheAsk:
+    """Two ways the figure came out low, both of them systematic."""
+
+    @property
+    def CAPS(self):
+        return {f"seat_{i}": 4096 for i in range(1, 6)}
+
+    def _rates(self):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return dict.fromkeys(self.CAPS, rate)
+
+    def _plan(self, **kw):
+        led = CL.CostLedger(rates=self._rates(), per_run=10_000.0)
+        return CL.plan_run(led, self.CAPS, rounds=1, **kw)
+
+    def test_the_merging_seat_is_charged_for_its_own_reply_too(self):
+        """It thinks first, blind, with the other four, and is then given all
+        five replies -- its own among them. Summing only the other four was
+        short by one thinker's whole output on every merge of every round."""
+        # Output priced at zero and no thinker input, so the whole estimate
+        # IS the merge's input and can be checked against it directly.
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates=dict.fromkeys(self.CAPS, rate),
+                            per_run=10_000.0)
+        plan = CL.plan_run(led, self.CAPS, rounds=1, est_input=0)
+        all_five = CL.CLOSER_INPUT_OVERHEAD + sum(plan.caps.values())
+        four = CL.CLOSER_INPUT_OVERHEAD + sum(
+            c for s, c in plan.caps.items() if s != "seat_5")
+        assert all_five > four
+        assert plan.estimate == pytest.approx(all_five / 1e6, rel=1e-9)
+
+    def test_a_large_ask_raises_the_estimate(self):
+        """Planning used a constant thinker input, so a 300,000-character
+        question passed the plan and was then refused by the real pre-dispatch
+        check -- after the plan had told the operator it would fit."""
+        small = self._plan(ask_chars=0).estimate
+        large = self._plan(ask_chars=300_000).estimate
+        assert large > small
+
+    def test_a_ceiling_that_only_a_short_ask_fits_refuses_the_long_one(self):
+        led = CL.CostLedger(rates=self._rates(), per_run=0.20)
+        short = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=0)
+        long = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=1_000_000)
+        assert long.estimate > short.estimate

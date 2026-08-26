@@ -212,6 +212,13 @@ class Candidate:
     id: str
     content: str
     claims: list[Claim] = field(default_factory=list)
+    unsupported_basis: list[str] = field(default_factory=list)
+    """Findings that took away this candidate's stated evidence.
+
+    A fabricated quote leaves the claims it was offered for standing on
+    nothing. That is worth knowing and it is not a refutation of the answer,
+    so it is recorded here rather than deleting the candidate.
+    """
     predicates: list[object] = field(default_factory=list)
     """The typed commitments this candidate made, and the ONLY way it can go.
 
@@ -2123,11 +2130,24 @@ class Orchestrator:
                 if edge and not _edge_is_own(claim.id, unsupported, own):
                     continue
                 if edge:
+                    # RECORDED, NOT REMOVED, AND THIS IS A CHANGE.
+                    #
+                    # A fabricated quote is a serious finding and it stays a
+                    # finding: the claim loses its stated basis, the conduct
+                    # ledger records it against the seat, and the packet
+                    # carries it. What it does not do is delete the answer.
+                    #
+                    # Refuting a quote refutes the EVIDENCE. Whether the
+                    # answer it was offered for is wrong is a separate
+                    # question, and this path was answering it by assumption
+                    # -- the same non-sequitur as removing an option because
+                    # a sum attached to it came out wrong.
+                    #
+                    # It also bypassed the one function that removes
+                    # candidates, so this engine could delete an answer by a
+                    # rule the other engine did not have.
                     _quote_id, why = edge
-                    cand.eliminated = True
-                    cand.elimination_reason = f"{p.name}: {why}"
-                    cand.elimination_kind = "earned"
-                    rec.eliminated_candidates.append(cand.id)
+                    cand.unsupported_basis.append(f"{p.name}: {why}")
                     break
 
     def _sweep_standing_verdicts(

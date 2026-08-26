@@ -825,7 +825,8 @@ paid for everything and produced no answer.
 
 
 def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
-             est_input: int = THINKER_INPUT_TOKENS) -> RunPlan:
+             est_input: int = THINKER_INPUT_TOKENS,
+             ask_chars: int = 0) -> RunPlan:
     """Size the run to the ceiling, rather than refusing when it does not fit.
 
     THE CEILING SHOULD DRIVE THE CAPS, NOT THE OTHER WAY ROUND. With the
@@ -845,11 +846,21 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
     per_round = len(caps) + 1                       # thinkers plus one merge
     calls = per_round * rounds
     closer = _closer_seats(caps)
+    # THE ASK IS IN EVERY PROMPT, AND IT IS NOT A FIXED SIZE. Planning used a
+    # constant thinker input, so a 300,000-character question passed the plan
+    # and was then refused by the real pre-dispatch check -- after the plan
+    # had told the operator the run would fit.
+    est_input += int(ask_chars / CHARS_PER_TOKEN)
 
     def closer_input(cap_for: Mapping[str, int]) -> int:
-        """What the merging seat actually reads: every reply, in full."""
-        return CLOSER_INPUT_OVERHEAD + sum(
-            c for s, c in cap_for.items() if s not in closer)
+        """What the merging seat actually reads: EVERY reply, in full.
+
+        Including its own. The merging seat thinks first, blind, with the
+        other four, and is then given all five replies -- its own among them.
+        This summed only the other four, so the estimate was short by one
+        thinker's whole output on every merge call of every round.
+        """
+        return CLOSER_INPUT_OVERHEAD + sum(cap_for.values())
 
     def worst(cap_for: Mapping[str, int]) -> float:
         total = 0.0
@@ -925,7 +936,8 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
         f"every reply already cut to the smallest size that still works. "
         f"Below {MIN_USEFUL_CAP:,} tokens a reasoning model spends its whole "
         f"budget thinking and returns nothing, and the merging seat -- which "
-        f"reads every other seat's reply in full -- needs {MIN_CLOSER_CAP:,} "
+        f"reads every seat's reply in full, its own included -- needs "
+        f"{MIN_CLOSER_CAP:,} "
         f"or it produces no answer at all. A smaller ceiling buys a failed "
         f"run, not a shorter one. Raise it to ${needed:.2f}, or run fewer "
         f"rounds")

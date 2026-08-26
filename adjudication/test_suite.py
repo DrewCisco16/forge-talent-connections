@@ -5097,9 +5097,27 @@ class TestAQuoteCannotEliminateACandidateItDoesNotBelongTo:
             [A, B], [a_claim, a_quote, b_claim])
         return A, B
 
-    def test_the_candidate_that_offered_the_bad_quote_is_eliminated(self):
+    def test_the_candidate_that_offered_the_bad_quote_loses_its_basis(self):
+        """CHANGED. The fabricated quote used to delete the candidate that
+        offered it. It refutes the EVIDENCE; whether the answer is wrong is a
+        separate question this was answering by assumption -- the same
+        non-sequitur as removing an option because a sum attached to it came
+        out wrong.
+
+        It also bypassed the one function that removes candidates, so this
+        engine could delete an answer by a rule the other engine did not have.
+
+        The finding is not softened: the claim loses its stated basis, it is
+        recorded on the candidate, and the conduct ledger records the
+        fabrication against the seat."""
         A, _ = self._run()
-        assert A.eliminated is True
+        assert A.eliminated is False
+        assert A.unsupported_basis, "the finding must survive on the record"
+
+    def test_the_fabrication_is_still_a_finding(self):
+        A, _ = self._run()
+        assert any("quote" in note.lower() or "support" in note.lower()
+                   for note in A.unsupported_basis)
 
     def test_the_unrelated_candidate_survives(self):
         """The load-bearing assertion. B did nothing wrong."""
