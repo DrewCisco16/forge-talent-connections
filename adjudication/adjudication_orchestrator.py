@@ -950,6 +950,33 @@ class ArithmeticGate:
             f"claimed {expected}, recomputed {actual}")
 
 
+def _citation_identifier(warrant: str | None) -> str | None:
+    """The identifier out of a citation warrant, in either accepted shape.
+
+    A citation may be written bare -- "10.1038/x" or a URL -- or in the fuller
+    form the claim contract asks for, which appends the author, year and title
+    so a second gate can check the identifier resolves to THAT paper:
+
+        10.1038/s41586-020-2649-2 :: Harris ;; 2020 ;; Array programming
+
+    Returns None when neither shape is present. Parsing it in one place is
+    what stops two gates from disagreeing about what a citation looks like.
+    """
+    if not warrant:
+        return None
+    ident = warrant.strip()
+    if "::" in ident:
+        ident = ident.partition("::")[0].strip()
+    if not ident:
+        return None
+    if _DOI_PATTERN.match(ident) or ident.startswith("http"):
+        return ident
+    return None
+
+
+_DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$")
+
+
 class CitationResolutionGate:
     """
     Confirms a cited identifier actually resolves. Magesh et al. (2025, JELS
@@ -960,7 +987,6 @@ class CitationResolutionGate:
     a confirmed record. A resolver that returns True by default defeats the gate.
     """
     name = "citation_resolution"
-    _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 
     def __init__(self, resolver_fn: Callable[[str], bool]):
         self.resolver_fn = resolver_fn
@@ -973,8 +999,17 @@ class CitationResolutionGate:
         if not warrant:
             return GateResult(self.name, GateStatus.FAIL,
                               "no warrant supplied")
-        ident = warrant.strip()
-        if not (self._DOI.match(ident) or ident.startswith("http")):
+        # ONE CITATION FORMAT, READ THE SAME WAY BY BOTH GATES.
+        #
+        # The claim contract asks for "<doi> :: <surname> ;; <year> ;; <title>"
+        # so the field-matching gate can check the DOI resolves to the paper
+        # the seat named. This gate read the WHOLE string as a bare
+        # identifier, so a correctly formatted citation came back FAIL
+        # "malformed identifier" -- a valid source called fabricated, its
+        # resolver never invoked, by the gate that exists to confirm sources
+        # exist. The two gates were rejecting each other's required format.
+        ident = _citation_identifier(warrant)
+        if ident is None:
             return GateResult(self.name, GateStatus.FAIL, "malformed identifier")
         try:
             ok = self.resolver_fn(ident)
