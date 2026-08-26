@@ -42,6 +42,7 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from adjudication_orchestrator import (
@@ -187,24 +188,36 @@ to guess.
 
 ## What makes an answer checkable
 
-Under each OPTION line, state what it rests on QUANTITATIVELY, one per line:
+Under each OPTION line, state what it rests on QUANTITATIVELY -- the figure,
+how it is computed, and the numbers you are putting in:
 
     OPTION | stop at the first round that eliminates nothing
     PREDICATE | API calls a five-round run costs | = | 30 api calls
-    PREDICATE | rounds this skips in the worst case | <= | 4 rounds
+    FORMULA | rounds * per_round
+    INPUT | rounds = 5
+    INPUT | per_round = 6
 
     PREDICATE | <what quantity> | <one of = != < <= > >=> | <value and unit>
+    FORMULA   | <an expression in named variables>
+    INPUT     | <name> = <number and unit>
 
-THIS IS THE ONLY WAY AN ANSWER CAN LATER BE RULED OUT. A later round can
-refute one of these by computing the number and finding it came out
-otherwise. It cannot attack your reasoning, and it cannot attach a new
-commitment to your option -- so if you leave this out, your answer can never
-be eliminated, and it can never be verified either. It survives to the end
-marked as untested, which is not the same as surviving scrutiny.
+ALL FOUR PARTS, OR IT CANNOT BE CHECKED. The figure alone cannot be
+recomputed, so it can never be verified and it can never be ruled out; it
+survives to the end marked untested, which is not the same as surviving
+scrutiny.
 
-State the number that actually decides it. If the honest answer is that
-nothing quantitative decides it, write no PREDICATE line rather than a
-decorative one; a commitment you do not mean is worse than none.
+WHAT THIS EXPOSES YOU TO. Your option is removed if YOUR formula with YOUR
+inputs does not produce YOUR figure. Nobody else's arithmetic can remove it.
+Another seat may say one of your inputs is wrong, and that is recorded for a
+person to settle -- it does not remove anything, because their number has no
+more standing than yours until somebody establishes it.
+
+So the risk of writing this down is exactly that your own numbers have to add
+up. Check them before you commit to them.
+
+State the figure that actually decides the answer. If nothing quantitative
+decides it, write no PREDICATE line rather than a decorative one: a commitment
+you do not mean is worse than none, and this one is checked.
 
 """
 
@@ -219,27 +232,35 @@ nothing after them:
 <kind> is one of: arithmetic, citation, code_behavior, schema, unit,
 quote_verification, judgment
 
-## Saying which option a claim is about
+## Disputing an option you are shown
 
-From round two on you are shown the surviving options, each with a bracketed
-id. If a claim bears on one of them, copy that id in front of the claim text,
-exactly as it appears in the list above:
+From round two on you are shown the surviving options, each with the
+commitments it made, each with a bracketed id. A commitment names a quantity,
+how it is computed, and the numbers put into that computation.
 
-    CLAIM | arithmetic | 12 * 50 = 600 | <paste an id from the list> | the build option totals 600
+If you think one of those numbers is wrong, say which and what it should be:
 
-COPY A REAL ID. Do not write the placeholder above and do not invent one that
-looks like an id -- an id that is not in the list names no option, so the claim
-cannot remove anything and the work of making it is wasted.
+    CHALLENGE | <paste a commitment id from the list> | per_round = 9
 
-THIS IS THE ONLY WAY A CLAIM CAN REMOVE AN OPTION. Nothing infers the link
-from wording. Describing an option does not connect a claim to it, and a claim
-that borrowed an option's words while asserting the OPPOSITE used to remove
-that very option. A claim with no id is still checked and still reported; it
-simply cannot eliminate anything, because nobody said what it was about.
+You may change the INPUTS and nothing else. You cannot supply the formula and
+you cannot create a commitment. That is deliberate: a seat that could write
+the computation could remove any answer it disliked by attaching arithmetic of
+its own choosing to it, and "2 + 3" attached to a commitment about annual
+accidents removed an option it had nothing to do with.
 
-An option is removed only when a claim declared it is about that option, the
-claim was mechanically refuted, and the refuting warrant actually bears on
-what the claim says.
+A CHALLENGE DOES NOT REMOVE THE OPTION, and it is not meant to. It records
+that two seats put different numbers into the same formula and get different
+answers. Neither figure has been independently established, so a person
+settles it. Yours is not preferred for being later.
+
+WHAT DOES REMOVE AN OPTION is its own arithmetic failing: the formula it
+declared, with the inputs it declared, not producing the figure it committed
+to. That needs nothing from you.
+
+CLAIM lines are still read, still checked, and still reported. They do not
+remove anything. A sentence can always assert more than its warrant covers,
+and no rule for reading sentences caught that reliably -- one verified sum was
+accepting a proposition AND its negation.
 
 <warrant> is the mechanically checkable evidence:
     arithmetic          an expression and its result, as "3 * 4 = 12".
@@ -991,7 +1012,7 @@ def run_night(
         # Round one has nothing standing to challenge yet; it is the round
         # that creates the commitments.
         standing = [pr for o in options if o.alive for pr in o.predicates]
-        challenges: list[tuple[str, str]] = []
+        challenges: list[tuple[str, Mapping[str, Fraction]]] = []
         for raw in texts.values():
             challenges.extend(parse_challenges(raw))
         rulings = adjudicate(standing, challenges)
@@ -1143,6 +1164,22 @@ def run_night(
                 options = []
             attach_claims(options, claims)
             res.options_created = len(options)
+            # SELF-CHECK THE MOMENT THE OPTIONS EXIST. Round one creates them
+            # after the merge, so the elimination pass earlier in this round
+            # had nothing to look at -- and an option whose own arithmetic
+            # does not add up would have survived the round that proposed it,
+            # then gone into every later prompt as a live candidate.
+            #
+            # Nothing here needs another seat: it is the option's own formula
+            # with the option's own inputs.
+            first_rulings = adjudicate(
+                [pr for o in options for pr in o.predicates], [])
+            rulings = {**first_rulings, **rulings}
+            gone = eliminate(options, first_rulings, r.n)
+            if gone:
+                res.options_removed = [o.id for o in gone]
+                emit(f"  removed {len(gone)} option(s) whose own arithmetic "
+                     f"does not add up")
             if not options:
                 # STOP. Later rounds only ELIMINATE, so with nothing to
                 # eliminate from they cannot reach an answer however many

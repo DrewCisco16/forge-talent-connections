@@ -947,23 +947,14 @@ def _demo_candidate(cid: str, text: str, warrant: str) -> Candidate:
     sum about something else entirely. A candidate goes when a commitment it
     made itself comes out otherwise.
     """
-    from predicate import Predicate, PredicateError, _quantity
-
     claim = Claim(content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
                   text, ClaimKind.ARITHMETIC, warrant)
     content = text
     if warrant and "=" in warrant:
         expr, claimed = warrant.rsplit("=", 1)
-        try:
-            value, unit = _quantity(claimed)
-            pred = Predicate(option_id=cid, subject=text, relation="=",
-                             value=value, unit=unit)
-        except PredicateError:
-            pred = None
-        if pred is not None:
-            content = (f"{text}\n"
-                       f"PREDICATE | {text} | = | {claimed.strip()}\n"
-                       f"CHALLENGE | {pred.id} | {expr.strip()}")
+        content = (f"{text}\n"
+                   f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                   f"FORMULA | {expr.strip()}")
     return Candidate(cid, content, [claim])
 
 

@@ -28,7 +28,6 @@ import pytest
 import adjudication_orchestrator as AO
 import audit_log as AL
 import cost_ledger as CL
-import predicate as P
 import seat_adapter as SA
 import seat_independence as SI
 from adjudication_orchestrator import (
@@ -3308,14 +3307,14 @@ def _commit(cid, subject, value, expr, unit=""):
     it merely carries no longer deletes it. So a candidate that stands on a
     number says which number, and offers the computation.
     """
-    from fractions import Fraction
 
-    pred = P.Predicate(option_id=cid, subject=subject, relation="=",
-                       value=Fraction(value), unit=unit)
     tail = f" {unit}" if unit else ""
+    # The candidate declares the figure AND how it computed it. A challenger
+    # can no longer supply the computation: that let a later seat remove any
+    # answer by attaching arithmetic of its choosing.
     return (f"{subject}\n"
             f"PREDICATE | {subject} | = | {value}{tail}\n"
-            f"CHALLENGE | {pred.id} | {expr}{tail}")
+            f"FORMULA | {expr}")
 
 
 def _cand(cid, text, warrant):
@@ -3337,16 +3336,9 @@ def _cand(cid, text, warrant):
     content = text
     if warrant and "=" in warrant:
         expr, claimed = warrant.rsplit("=", 1)
-        try:
-            pred = P.Predicate(option_id=cid, subject=text, relation="=",
-                               value=P._quantity(claimed)[0],
-                               unit=P._quantity(claimed)[1])
-        except P.PredicateError:
-            pred = None
-        if pred is not None:
-            content = (f"{text}\n"
-                       f"PREDICATE | {text} | = | {claimed.strip()}\n"
-                       f"CHALLENGE | {pred.id} | {expr.strip()}")
+        content = (f"{text}\n"
+                   f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                   f"FORMULA | {expr.strip()}")
     return Candidate(cid, content, [claim])
 
 
@@ -3423,8 +3415,12 @@ class TestTheAnswerIsWhatSurvives:
         assert [c.id for c in answer.eliminated] == ["c_false"]
         # The reason names the computed value AND the value the candidate
         # committed to, because an operator reading it needs to see the gap.
+        # The reason names the candidate's own formula, what it computes to,
+        # and the figure it committed to -- an operator reading it needs to
+        # see the gap, and needs to see that both halves are the candidate's.
         reason = answer.eliminated[0].elimination_reason
-        assert "2 + 2 = 4" in reason and "equals 5" in reason
+        assert "own formula 2 + 2" in reason
+        assert "gives 4" in reason and "equals 5" in reason
 
     def test_elimination_happens_on_the_pass_that_first_sees_the_claim(self):
         cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
@@ -4076,9 +4072,11 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         # refutes c_true, so it survives by elimination.
         assert "SURVIVOR: c_true" in out
         assert "removed c_false" in out
-        # The printed reason names the computed value and the value the
-        # candidate committed to, so an operator sees the gap itself.
-        assert "2 + 2 = 4" in out and "equals 5" in out
+        # The printed reason names the candidate's OWN formula, what it
+        # computes to, and the figure it committed to, so an operator sees the
+        # gap and sees that both halves belong to the candidate.
+        assert "own formula 2 + 2" in out
+        assert "gives 4" in out and "equals 5" in out
         # Four seats scripted IDENTICALLY are a monoculture, and the run says
         # so on every pass rather than reading the agreement as confirmation.
         assert out.count("[collapse warning]") == 5

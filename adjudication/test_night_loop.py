@@ -1344,21 +1344,35 @@ class TestCodeOwnsTheSurvivorSet:
         subject="write-down on the remaining stock", relation="=",
         value=Fraction(4), unit="").id
 
+    # LIQUIDATE'S OWN ARITHMETIC DOES NOT ADD UP: it says the write-down is
+    # 4 and computes it as 2 + 3. HOLD's does. Nothing another seat writes can
+    # change either fact, which is the point.
     PROPOSALS = (
         "OPTION | Liquidate inventory immediately.\n"
         "PREDICATE | write-down on the remaining stock | = | 4\n"
+        "FORMULA | 2 + 3\n"
         "OPTION | Hold inventory and reprice next quarter.\n"
-        "PREDICATE | quarters of carrying cost | = | 2\n")
+        "PREDICATE | quarters of carrying cost | = | 2\n"
+        "FORMULA | 1 + 1\n")
 
-    def _run(self, tmp_path, later_line="", rounds=1):
+    SOUND = (
+        "OPTION | Liquidate inventory immediately.\n"
+        "PREDICATE | write-down on the remaining stock | = | 4\n"
+        "FORMULA | 2 + 2\n"
+        "OPTION | Hold inventory and reprice next quarter.\n"
+        "PREDICATE | quarters of carrying cost | = | 2\n"
+        "FORMULA | 1 + 1\n")
+
+    def _run(self, tmp_path, later_line="", rounds=1, proposals=None):
         state = {"n": 0}
+        first = proposals if proposals is not None else self.PROPOSALS
 
         def seat(_p):
             # Round one proposes the options and the commitments they rest
-            # on. Later rounds may only challenge what already exists.
+            # on. Later rounds may only dispute the inputs of what exists.
             state["n"] += 1
             if state["n"] <= 5:
-                return self.PROPOSALS
+                return first
             return later_line
 
         def closer(_p):
@@ -1370,21 +1384,43 @@ class TestCodeOwnsTheSurvivorSet:
                             closer, _orch(), str(tmp_path),
                             rounds=NL.ROUNDS[:rounds])
 
-    def _refutation(self):
-        """Arithmetic that comes out other than the option committed to.
+    def _dispute(self):
+        """Another seat putting a different number into the same formula.
 
-        The option said the write-down equals 4. This says 2 + 3, which is 5.
-        Nothing here is a sentence, so there is no proposition riding along
-        beside the number.
+        A REAL FINDING AND NOT A REFUTATION. Neither seat's figure has been
+        independently established, and preferring the later one would let any
+        seat delete any answer by asserting a different number with more
+        confidence.
         """
-        return f"CHALLENGE | {self.PRED_LIQUIDATE} | 2 + 3\n"
+        return f"CHALLENGE | {self.PRED_LIQUIDATE} | a = 9\n"
 
-    def test_a_refuted_commitment_removes_the_option_that_made_it(
-            self, tmp_path):
-        res = self._run(tmp_path, self._refutation(), rounds=2)
+    def test_an_options_own_arithmetic_removes_it(self, tmp_path):
+        """It said the write-down is 4 and computed it as 2 + 3. Its own
+        formula, its own inputs, its own figure -- and they disagree."""
+        res = self._run(tmp_path, rounds=1)
         assert res[0].options_created == 2
-        assert res[1].options_removed == [self.OPT_LIQUIDATE]
-        assert self.OPT_HOLD in res[1].options_alive
+        assert res[0].options_removed == [self.OPT_LIQUIDATE]
+        assert self.OPT_HOLD in res[0].options_alive
+
+    def test_a_dispute_over_inputs_removes_nothing(self, tmp_path):
+        """THE DEFECT THIS REPLACED. A challenge supplied the whole
+        expression, so a later seat could write anything:
+
+            PREDICATE | annual launch accidents | = | 4 accidents
+            CHALLENGE | <that id> | 2 + 3
+
+        "2 + 3" was evaluated, read as 5 accidents, and removed the option.
+        Nothing connects 2 + 3 to annual launch accidents, and no rule about
+        expressions could connect them -- the same defect as the prose rule in
+        different clothes, a later model choosing the reasoning that condemns
+        an answer it did not write.
+
+        A challenge now changes the INPUTS to the option's own formula, and
+        records a disagreement for a person to settle."""
+        res = self._run(tmp_path, self._dispute(), rounds=2,
+                        proposals=self.SOUND)
+        assert res[1].options_removed == []
+        assert len(res[1].options_alive) == 2
 
     def test_an_unrelated_false_warrant_removes_nothing(self, tmp_path):
         """The decisive re-check failure. "2 + 2 = 5" is false and says
@@ -1398,7 +1434,7 @@ class TestCodeOwnsTheSurvivorSet:
         res = self._run(
             tmp_path,
             f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_LIQUIDATE} | "
-            f"Liquidate inventory immediately.\n")
+            f"Liquidate inventory immediately.\n", proposals=self.SOUND)
         assert res[0].options_removed == []
         assert len(res[0].options_alive) == 2
 
@@ -1406,17 +1442,27 @@ class TestCodeOwnsTheSurvivorSet:
         """Nobody said what it was about."""
         res = self._run(
             tmp_path,
-            "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5\n")
+            "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5\n",
+            proposals=self.SOUND)
         assert res[0].options_removed == []
 
-    def test_a_challenge_removes_only_the_option_that_made_the_commitment(
-            self, tmp_path):
-        hold = P.Predicate(option_id=self.OPT_HOLD,
-                           subject="quarters of carrying cost", relation="=",
-                           value=Fraction(2), unit="").id
-        res = self._run(tmp_path, f"CHALLENGE | {hold} | 1 + 2\n", rounds=2)
-        assert res[1].options_removed == [self.OPT_HOLD]
-        assert self.OPT_LIQUIDATE in res[1].options_alive
+    def test_a_self_check_touches_only_the_option_that_committed(self,
+                                                                 tmp_path):
+        """Liquidate's arithmetic fails; Hold's holds. One goes."""
+        res = self._run(tmp_path, rounds=1)
+        assert res[0].options_removed == [self.OPT_LIQUIDATE]
+        assert self.OPT_HOLD in res[0].options_alive
+
+    def test_no_seat_can_supply_the_formula(self, tmp_path):
+        """A FORMULA line in a later round creates nothing, and a challenge
+        carrying an expression instead of inputs binds nothing."""
+        res = self._run(
+            tmp_path,
+            f"FORMULA | 99 * 99\n"
+            f"CHALLENGE | {self.PRED_LIQUIDATE} | 2 + 3\n",
+            rounds=2, proposals=self.SOUND)
+        assert res[1].options_removed == []
+        assert len(res[1].options_alive) == 2
 
     def test_the_same_commitment_aimed_elsewhere_is_a_different_id(self):
         """Claim ids were computed from kind, warrant and text alone, so one
@@ -1434,8 +1480,8 @@ class TestCodeOwnsTheSurvivorSet:
         any option in any round, so a false sum aimed at a candidate it wanted
         gone removed it. A challenge names a commitment that ALREADY EXISTS;
         naming one that does not exist refutes nothing."""
-        res = self._run(tmp_path, "CHALLENGE | pred_deadbeef0000 | 2 + 3\n",
-                        rounds=2)
+        res = self._run(tmp_path, "CHALLENGE | pred_deadbeef0000 | a = 3\n",
+                        rounds=2, proposals=self.SOUND)
         assert res[1].options_removed == []
         assert len(res[1].options_alive) == 2
 
@@ -1445,7 +1491,9 @@ class TestCodeOwnsTheSurvivorSet:
             tmp_path,
             f"OPTION | Something entirely new\n"
             f"PREDICATE | invented commitment | = | 1\n"
-            f"CHALLENGE | {self.PRED_LIQUIDATE} | 2 + 2\n", rounds=2)
+            f"FORMULA | 1 + 1\n"
+            f"CHALLENGE | {self.PRED_LIQUIDATE} | a = 2\n", rounds=2,
+            proposals=self.SOUND)
         assert res[1].options_created == 0
         assert len(res[1].options_alive) == 2
         assert res[1].options_removed == []
@@ -1461,14 +1509,18 @@ class TestCodeOwnsTheSurvivorSet:
         arithmetic said nothing about. A ruling is now a comparison between a
         computed value and a declared one; there is no text field in it for a
         second proposition to ride in on."""
-        pred = P.Predicate(option_id="opt_launch", subject="readiness code",
-                           relation="=", value=Fraction(4), unit="")
-        for tail in ("", " and safe to proceed", " and unsafe to proceed"):
-            assert P.rule(pred, "2 + 2" + tail).status == "blocked" or \
-                   P.rule(pred, "2 + 2").status == "pass"
-        # The number decides it, and only the number.
-        assert P.rule(pred, "2 + 2").status == "pass"
-        assert P.rule(pred, "2 + 3").status == "fail"
+        def commit(formula):
+            return P.Predicate(option_id="opt_launch",
+                               subject="readiness code", relation="=",
+                               value=Fraction(4), unit="", formula=formula)
+
+        # The option's own arithmetic decides it, and nothing else. There is
+        # no text field in the comparison at all.
+        assert P.self_check(commit("2 + 2")).status == "pass"
+        assert P.self_check(commit("2 + 3")).status == "fail"
+        # And a sentence is not an expression, so it settles nothing.
+        for prose in ("safe to proceed", "unsafe to proceed"):
+            assert P.self_check(commit(prose)).status == "blocked"
 
     def test_a_negation_borrowing_an_options_words_does_not_attach(self):
         """"Do not liquidate inventory immediately" CONTAINS "liquidate
@@ -1487,14 +1539,14 @@ class TestCodeOwnsTheSurvivorSet:
         so a refuted proposition appeared three times in every seat's
         round-two prompt. Removing an option and then printing it to everyone
         is not removing it."""
-        res = self._run(tmp_path, self._refutation(), rounds=2)
-        assert "Liquidate inventory immediately" not in res[1].merged
-        assert "Liquidate inventory immediately" in res[1].record_text
+        res = self._run(tmp_path, rounds=1)
+        assert "Liquidate inventory immediately" not in res[0].merged
+        assert "Liquidate inventory immediately" in res[0].record_text
 
     def test_the_removal_is_kept_in_the_record(self, tmp_path):
-        res = self._run(tmp_path, self._refutation(), rounds=2)
-        assert "Removed" in res[1].record_text
-        assert "mechanically refuted" in res[1].record_text
+        res = self._run(tmp_path, rounds=1)
+        assert "Removed" in res[0].record_text
+        assert "mechanically refuted" in res[0].record_text
 
     def test_options_keep_their_identity_across_rounds(self):
         a = OS.parse_options("OPTION | Build it in house over two quarters\n"
@@ -1507,43 +1559,62 @@ class TestCodeOwnsTheSurvivorSet:
         """A blocked check did not happen. BLOCKED is not FAILED, and an
         option removed for being hard to check is an answer deleted for a
         property of the checker rather than of the answer."""
-        pred = P.Predicate(option_id="opt_aaaaaa", subject="cost",
-                           relation="=", value=Fraction(4), unit="")
-        for expr in ("2 + 2", "sqrt(4)", "2 ** 999", "not an expression"):
+        def commit(formula):
+            return P.Predicate(option_id="opt_aaaaaa", subject="cost",
+                               relation="=", value=Fraction(4), unit="",
+                               formula=formula)
+
+        # Its own formula holds, cannot be evaluated, or was never declared.
+        # None of these is a refutation.
+        for formula in ("2 + 2", "sqrt(4)", "2 ** 999", "not an expression",
+                        ""):
+            pred = commit(formula)
             opt = OS.Option(id="opt_aaaaaa", text="an option",
                             predicates=[pred])
-            rulings = P.adjudicate([pred], [(pred.id, expr)])
-            assert OS.eliminate([opt], rulings, 1) == [], expr
+            assert OS.eliminate([opt], P.adjudicate([pred], []), 1) == [], \
+                formula
+
+        # A dispute over the inputs is a finding, and still not a refutation.
+        pred = commit("a + b")
+        pred = P.replace(pred, inputs=(("a", Fraction(2)), ("b", Fraction(2))))
         opt = OS.Option(id="opt_aaaaaa", text="an option", predicates=[pred])
-        rulings = P.adjudicate([pred], [(pred.id, "2 + 3")])
-        assert OS.eliminate([opt], rulings, 1) == [opt]
+        rulings = P.adjudicate([pred], [(pred.id, {"a": Fraction(9)})])
+        assert OS.eliminate([opt], rulings, 1) == []
+        assert rulings[pred.id].disputes
+
+        # Its own arithmetic failing IS a refutation.
+        pred = commit("2 + 3")
+        opt = OS.Option(id="opt_aaaaaa", text="an option", predicates=[pred])
+        assert OS.eliminate([opt], P.adjudicate([pred], []), 1) == [opt]
 
     def test_an_escalated_claim_never_removes_an_option(self):
         opt = OS.Option(id="o1", text="an option", claims=["c1"])
         assert OS.eliminate([opt], {"c1": None}, 1) == []
 
-    def _opt_with(self, *values):
-        """An option carrying one commitment per value given."""
+    def _opt_with(self, *commitments):
+        """An option carrying one commitment per (value, formula) given."""
         opt = OS.Option(id="o1", text="an option")
         opt.predicates = [
             P.Predicate(option_id="o1", subject=f"quantity {i}", relation="=",
-                        value=Fraction(v), unit="")
-            for i, v in enumerate(values)]
+                        value=Fraction(v), unit="", formula=f)
+            for i, (v, f) in enumerate(commitments)]
         return opt
 
     def test_a_blocked_only_survivor_is_not_examined(self):
         """An option whose sole dependency was BLOCKED counted as examined,
         and a sole survivor resting on one blocked `sqrt(4) = 2` was presented
         under "the answer that survived"."""
-        opt = self._opt_with(4)
-        rulings = P.adjudicate(opt.predicates, [(opt.predicates[0].id, "sqrt(4)")])
+        opt = self._opt_with((4, "sqrt(4)"))
+        rulings = P.adjudicate(opt.predicates, [])
         assert rulings[opt.predicates[0].id].status == "blocked"
         assert OS.unexamined([opt], rulings) == [opt]
 
-    def test_a_commitment_nobody_challenged_is_not_examined(self):
-        """No seat computed it, so it has not been shown right or wrong."""
-        opt = self._opt_with(4)
-        assert OS.unexamined([opt], {}) == [opt]
+    def test_a_commitment_with_no_formula_is_not_examined(self):
+        """Nothing can be recomputed, so nothing was."""
+        opt = self._opt_with((4, ""))
+        rulings = P.adjudicate(opt.predicates, [])
+        assert rulings[opt.predicates[0].id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
     def test_an_option_with_no_commitment_is_not_examined(self):
         """Nothing about it could be computed, so nothing about it was."""
@@ -1551,8 +1622,8 @@ class TestCodeOwnsTheSurvivorSet:
         assert OS.unexamined([opt], {}) == [opt]
 
     def test_a_fully_ruled_survivor_is_examined(self):
-        opt = self._opt_with(4)
-        rulings = P.adjudicate(opt.predicates, [(opt.predicates[0].id, "2 + 2")])
+        opt = self._opt_with((4, "2 + 2"))
+        rulings = P.adjudicate(opt.predicates, [])
         assert rulings[opt.predicates[0].id].status == "pass"
         assert OS.unexamined([opt], rulings) == []
 
@@ -1564,10 +1635,9 @@ class TestCodeOwnsTheSurvivorSet:
         Half-checked is not checked. The unresolved half is exactly where the
         answer might fail, and a PASS beside it produces the appearance of
         scrutiny rather than the fact."""
-        opt = self._opt_with(4, 9)
+        opt = self._opt_with((4, "2 + 2"), (9, "sqrt(81)"))
         good, bad = opt.predicates
-        rulings = P.adjudicate(opt.predicates,
-                               [(good.id, "2 + 2"), (bad.id, "sqrt(81)")])
+        rulings = P.adjudicate(opt.predicates, [])
         assert rulings[good.id].status == "pass"
         assert rulings[bad.id].status == "blocked"
         assert OS.unexamined([opt], rulings) == [opt]

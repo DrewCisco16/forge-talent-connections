@@ -2155,7 +2155,7 @@ class Orchestrator:
                     for pr in cand.predicates]
         if not standing:
             return
-        challenges: list[tuple[str, str]] = []
+        challenges: list[tuple[str, Mapping[str, Fraction]]] = []
         for cand in candidates:
             challenges.extend(parse_challenges(cand.content))
             for claim in cand.claims:

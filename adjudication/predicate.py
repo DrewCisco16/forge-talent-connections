@@ -51,7 +51,7 @@ import ast
 import hashlib
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from adjudication_orchestrator import (
@@ -93,6 +93,14 @@ _PREDICATE_LINE = re.compile(
 _CHALLENGE_LINE = re.compile(
     r"^\s*CHALLENGE\s*\|(?P<pid>[^|]*)\|(?P<expr>.*)$", re.IGNORECASE)
 
+_FORMULA_LINE = re.compile(r"^\s*FORMULA\s*\|(?P<expr>.*)$", re.IGNORECASE)
+
+_INPUT_LINE = re.compile(
+    r"^\s*INPUT\s*\|\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<val>.*)$",
+    re.IGNORECASE)
+
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
 
 class PredicateError(ValueError):
     """A predicate line that cannot be read as a typed commitment."""
@@ -112,6 +120,25 @@ class Predicate:
     value: Fraction
     unit: str
     id: str = ""
+    formula: str = ""
+    """How the option says its quantity is computed, in named variables.
+
+    THE FORMULA BELONGS TO THE OPTION, FIXED WHEN IT WAS PROPOSED. A challenge
+    used to supply the whole expression, so a later seat could write anything:
+
+        PREDICATE | annual launch accidents | = | 4 accidents
+        CHALLENGE | <that id> | 2 + 3
+
+    "2 + 3" was evaluated, read as 5 accidents, and removed the option.
+    Nothing whatever connects 2 + 3 to annual launch accidents. That is the
+    same defect as the prose rule wearing different clothes -- a later model
+    choosing the reasoning that condemns an answer it did not write.
+
+    With the formula fixed here, a challenger can dispute the NUMBERS GOING
+    IN and nothing else.
+    """
+    inputs: tuple[tuple[str, Fraction], ...] = ()
+    """The option's OWN values for the formula's variables."""
 
     def __post_init__(self) -> None:
         if self.relation not in _CANON:
@@ -180,10 +207,29 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
     """
     out: list[Predicate] = []
     seen: set[str] = set()
-    for line in (block or "").splitlines():
+    lines = (block or "").splitlines()
+    for i, line in enumerate(lines):
         m = _PREDICATE_LINE.match(line)
         if m is None:
             continue
+        # The FORMULA and INPUT lines belonging to this commitment are the
+        # ones between it and the next PREDICATE line.
+        formula = ""
+        inputs: list[tuple[str, Fraction]] = []
+        for follow in lines[i + 1:]:
+            if _PREDICATE_LINE.match(follow):
+                break
+            fm = _FORMULA_LINE.match(follow)
+            if fm is not None and not formula:
+                formula = fm.group("expr").strip()
+                continue
+            im = _INPUT_LINE.match(follow)
+            if im is not None:
+                try:
+                    inputs.append((im.group("name").strip(),
+                                   _quantity(im.group("val"))[0]))
+                except PredicateError:
+                    continue
         rel = m.group("rel").strip()
         if rel not in _CANON:
             continue
@@ -194,7 +240,8 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
         try:
             pred = Predicate(option_id=option_id,
                              subject=m.group("subject").strip(),
-                             relation=rel, value=value, unit=unit)
+                             relation=rel, value=value, unit=unit,
+                             formula=formula, inputs=tuple(inputs))
         except PredicateError:
             continue
         if pred.id in seen:
@@ -208,61 +255,75 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
 
 @dataclass(frozen=True)
 class Ruling:
-    """What a gate found. `status` is one of pass, fail, blocked."""
+    """What was found. `status` is pass, fail, blocked, or disputed."""
 
     predicate_id: str
     status: str
     detail: str
+    disputes: tuple[str, ...] = ()
+    """Objections raised against this commitment, whatever the verdict.
+
+    A dispute does not change the verdict, so it used to vanish whenever the
+    self-check settled the commitment -- and "another seat says one of these
+    inputs is wrong" is exactly what a person reading the record needs, most
+    of all when the arithmetic otherwise looks clean.
+    """
 
     @property
     def refutes(self) -> bool:
-        """Only an outright FAIL refutes.
+        """Only a FAIL on the option's OWN formula and inputs refutes.
 
-        BLOCKED is a check that could not run. It is not a refutation, and
-        treating it as one would remove options for being hard to check.
+        BLOCKED is a check that could not run -- no formula, a variable with
+        no value, arithmetic that would not evaluate. Removing an option for
+        that would delete answers for being hard to check.
+
+        DISPUTED is a later seat offering different inputs to the same
+        formula. It is a real finding and it is not a refutation: neither set
+        of inputs has been independently established, and preferring the later
+        one would let any seat delete any answer by asserting a different
+        figure. It needs a person, and it says so.
         """
         return self.status == "fail"
 
 
-def rule(pred: Predicate, expression: str) -> Ruling:
-    """Rule on a predicate by evaluating an expression and comparing.
+def _evaluate(formula: str, bindings: Mapping[str, Fraction]) -> Fraction:
+    """The option's own formula, with a set of values for its variables.
 
-    The verdict is a function of the expression's value, the predicate's
-    relation, its value and its unit. No text is read, so no sentence can
-    smuggle a second proposition past the comparison.
+    Raises PredicateError rather than returning a number it cannot stand
+    behind. A formula naming a variable nobody supplied has not been computed,
+    and substituting a default would be inventing the missing figure.
     """
-    expr, unit = _split_unit((expression or "").replace(",", "").strip())
-    expr = expr.strip()
+    expr = (formula or "").strip()
     if not expr:
-        return Ruling(pred.id, "blocked", "no expression was supplied")
-    if "=" in expr or "<" in expr or ">" in expr:
-        return Ruling(
-            pred.id, "blocked",
-            "a challenge supplies an EXPRESSION, not an equation: the "
-            "predicate already states the relation and the value, and a "
-            "challenge that restated them could assert its own conclusion")
-    if pred.unit and unit and pred.unit != unit:
-        return Ruling(
-            pred.id, "blocked",
-            f"UNIT MISMATCH: the commitment is in {pred.unit!r} and this "
-            f"arithmetic is in {unit!r}. Adding metres to seconds is not a "
-            f"refutation, and guessing which was meant is worse than saying "
-            f"so")
+        raise PredicateError("no formula was declared")
+    names = set(_NAME.findall(expr))
+    missing = sorted(names - set(bindings))
+    if missing:
+        raise PredicateError(
+            f"no value was given for {', '.join(missing)}")
     try:
         tree = ast.parse(expr, mode="eval")
-    except SyntaxError:
-        return Ruling(pred.id, "blocked",
-                      f"{expression.strip()!r} is not an expression this "
-                      f"can evaluate")
+    except SyntaxError as exc:
+        raise PredicateError(f"{expr!r} is not an expression") from exc
     refusal = _reject_unbounded(tree)
     if refusal is not None:
-        return Ruling(pred.id, "blocked", refusal)
+        raise PredicateError(refusal)
+    substituted = expr
+    for name in sorted(names, key=len, reverse=True):
+        substituted = re.sub(rf"\b{re.escape(name)}\b",
+                             f"({bindings[name]})", substituted)
     try:
-        got = _bounded(_safe_eval(tree.body, expr))
-    except Exception as exc:  # noqa: BLE001 - reported, never raised onward
-        return Ruling(pred.id, "blocked",
-                      f"could not evaluate {expression.strip()!r}: {exc}")
-    ok = {
+        tree = ast.parse(substituted, mode="eval")
+        return _bounded(_safe_eval(tree.body, substituted))
+    except PredicateError:
+        raise
+    except Exception as exc:
+        raise PredicateError(f"could not evaluate {expr!r}: {exc}") from exc
+
+
+def _holds(pred: Predicate, got: Fraction) -> bool:
+    """Whether a computed value satisfies the relation the option declared."""
+    return {
         "=": got == pred.value,
         "!=": got != pred.value,
         "<": got < pred.value,
@@ -270,34 +331,154 @@ def rule(pred: Predicate, expression: str) -> Ruling:
         ">": got > pred.value,
         ">=": got >= pred.value,
     }[pred.relation]
-    unit_txt = f" {pred.unit}" if pred.unit else ""
+
+
+def self_check(pred: Predicate) -> Ruling:
+    """Rule the option's OWN formula against its OWN declared value.
+
+    THIS IS THE ONLY THING THAT REMOVES AN OPTION NOW.
+
+    A challenge used to supply the expression, so a later seat could remove
+    any option by attaching arithmetic of its choosing -- "2 + 3" against a
+    commitment about launch accidents. Nothing connected the two, and no rule
+    about expressions could connect them, for the same reason no rule about
+    sentences could: the relationship is a matter of meaning.
+
+    What CAN be settled mechanically is whether an option's own numbers add up
+    to its own stated figure. That needs nothing from anyone else. An option
+    saying a five-round run costs 30 API calls, computed as rounds * per_round
+    with rounds=5 and per_round=7, has refuted itself: 35 is not 30. It is
+    the seat's own formula, the seat's own inputs, and the seat's own claim.
+
+    An option with no formula cannot be self-checked and is never removed. It
+    survives and is reported as untested, which is the honest description.
+    """
+    if not pred.formula:
+        return Ruling(pred.id, "blocked",
+                      "no formula was declared, so there is nothing to "
+                      "recompute; this commitment cannot be settled here")
+    try:
+        got = _evaluate(pred.formula, dict(pred.inputs))
+    except PredicateError as exc:
+        return Ruling(pred.id, "blocked", str(exc))
+    unit = f" {pred.unit}" if pred.unit else ""
+    shown = ", ".join(f"{n}={_show(v)}" for n, v in pred.inputs)
     said = (f"{pred.subject.strip()} {RELATIONS[pred.relation]} "
-            f"{_show(pred.value)}{unit_txt}")
-    if ok:
+            f"{_show(pred.value)}{unit}")
+    if _holds(pred, got):
         return Ruling(pred.id, "pass",
-                      f"{expr} = {_show(got)}{unit_txt}, and the option "
+                      f"the option's own formula {pred.formula} with its own "
+                      f"inputs ({shown}) gives {_show(got)}{unit}, and it "
                       f"committed that {said}")
     return Ruling(pred.id, "fail",
-                  f"{expr} = {_show(got)}{unit_txt}, but the option committed "
-                  f"that {said}")
+                  f"the option's own formula {pred.formula} with its own "
+                  f"inputs ({shown}) gives {_show(got)}{unit}, but it "
+                  f"committed that {said}")
 
 
-def parse_challenges(text: str) -> list[tuple[str, str]]:
-    """CHALLENGE lines as (predicate id, expression) pairs.
+def dispute(pred: Predicate, bindings: Mapping[str, Fraction]) -> Ruling:
+    """A later seat's alternative INPUTS to the option's own formula.
 
-    A challenge names a commitment that ALREADY EXISTS. It cannot create one,
-    which is what stops a late round from attaching a fresh false sum to an
-    option it wants gone.
+    RECORDED, NEVER A REMOVAL. A challenger's numbers have no more standing
+    than the proposer's -- neither has been independently established, and
+    preferring the later one would let any seat delete any answer by asserting
+    a different figure with more confidence.
+
+    So this produces a DISPUTE: two parties, one formula, different inputs,
+    different results, and a human to settle which inputs are right. That is a
+    real finding and it goes in the record. It is not a refutation.
     """
-    out: list[tuple[str, str]] = []
+    # THE OPTION'S OWN INPUTS, WITH THE DISPUTED ONES REPLACED. A challenger
+    # objecting to one figure should not have to restate the rest, and
+    # requiring it would mean every dispute silently re-specified the whole
+    # computation -- which is the door this closed in the first place.
+    merged = dict(pred.inputs)
+    merged.update(bindings)
+    try:
+        got = _evaluate(pred.formula, merged)
+    except PredicateError as exc:
+        return Ruling(pred.id, "blocked", str(exc))
+    unit = f" {pred.unit}" if pred.unit else ""
+    shown = ", ".join(f"{n}={_show(v)}" for n, v in sorted(bindings.items()))
+    verb = "still holds" if _holds(pred, got) else "would not hold"
+    return Ruling(
+        pred.id, "disputed",
+        f"another seat puts {shown} into the same formula {pred.formula}, "
+        f"giving {_show(got)}{unit}, on which this commitment {verb}. "
+        f"NOBODY HAS ESTABLISHED WHICH INPUTS ARE RIGHT, so this removes "
+        f"nothing and needs a person.")
+
+def parse_challenges(text: str) -> list[tuple[str, dict[str, Fraction]]]:
+    """CHALLENGE lines as (predicate id, alternative inputs).
+
+    A challenge names a commitment that ALREADY EXISTS and supplies values for
+    the variables in ITS formula. It cannot supply the formula, and it cannot
+    create a commitment -- both of which let a later seat write the reasoning
+    that condemns an answer it did not propose.
+
+        CHALLENGE | pred_abc123 | incidents = 3, per_year = 2
+
+    A binding that cannot be read is dropped. A challenge left with no
+    readable binding names no dispute and is discarded.
+    """
+    out: list[tuple[str, dict[str, Fraction]]] = []
     for line in (text or "").splitlines():
         m = _CHALLENGE_LINE.match(line)
         if m is None:
             continue
         pid = m.group("pid").strip()
-        expr = m.group("expr").strip()
-        if pid and expr:
-            out.append((pid, expr))
+        if not pid:
+            continue
+        bindings: dict[str, Fraction] = {}
+        for part in m.group("expr").split(","):
+            name, sep, raw = part.partition("=")
+            if not sep or not _NAME.fullmatch(name.strip()):
+                continue
+            try:
+                bindings[name.strip()] = _quantity(raw)[0]
+            except PredicateError:
+                continue
+        if bindings:
+            out.append((pid, bindings))
+    return out
+
+
+def adjudicate(predicates: Sequence[Predicate],
+               challenges: Sequence[tuple[str, Mapping[str, Fraction]]],
+               ) -> dict[str, Ruling]:
+    """Every commitment ruled on, keyed by predicate id.
+
+    SELF-CHECK FIRST, AND IT IS WHAT DECIDES. Each commitment is recomputed
+    from the option's own formula and the option's own inputs. That needs
+    nothing from any other seat and cannot be steered by one.
+
+    A challenge is then recorded against it as a DISPUTE. Disputes never
+    overwrite a self-check verdict -- they are a second opinion about the
+    inputs, and a second opinion is not a refutation. A dispute is kept only
+    where the self-check could not settle the commitment at all, so the record
+    still shows that somebody objected.
+
+    A challenge naming an id that does not exist is discarded: it names no
+    commitment, so it can dispute nothing.
+    """
+    by_id = {p.id: p for p in predicates}
+    out: dict[str, Ruling] = {p.id: self_check(p) for p in predicates}
+    for pid, bindings in challenges:
+        pred = by_id.get(pid)
+        if pred is None:
+            continue
+        found = dispute(pred, bindings)
+        prior = out.get(pid)
+        if prior is None or prior.status == "blocked":
+            out[pid] = replace(found,
+                               disputes=(*(prior.disputes if prior else ()),
+                                         found.detail))
+        else:
+            # The self-check settled it. The objection still goes on the
+            # record: an operator needs to see that somebody disputed the
+            # inputs even when the option's own arithmetic came out clean.
+            out[pid] = replace(prior,
+                               disputes=(*prior.disputes, found.detail))
     return out
 
 
@@ -305,19 +486,18 @@ def refuted_commitment(item: object,
                        rulings: Mapping[str, Ruling]) -> Ruling | None:
     """THE ONE RULE THAT REMOVES A CANDIDATE. Every engine calls this.
 
-    It answers a single question: did something this candidate committed to,
-    when it was proposed, come out other than it said?
+    It answers a single question: do this candidate's own numbers, put into
+    this candidate's own formula, fail to produce the figure it committed to?
 
     There were two elimination paths and they did not agree. The five-round
     engine required a claim to declare its target and pass a rule that read
     the claim's sentence; the legacy engine removed a candidate for ANY failed
-    claim it carried, with no binding test at all -- so a false sum about
-    anything at all removed it. Two rules meant two answers to the same
-    question, and the weaker one decided whenever it ran.
+    claim it carried, with no binding test at all. Two rules meant two answers
+    to the same question, and the weaker one decided whenever it ran.
 
-    Returns the refuting ruling, or None. BLOCKED and unruled return None:
-    a check that could not run is not a refutation, and removing an option
-    for being hard to check deletes answers for a property of the checker.
+    Returns the refuting ruling, or None. BLOCKED, DISPUTED and unruled all
+    return None -- a check that could not run, an objection nobody has
+    settled, and a commitment nobody examined are not refutations.
     """
     for pred in getattr(item, "predicates", ()) or ():
         pid = getattr(pred, "id", None)
@@ -327,28 +507,3 @@ def refuted_commitment(item: object,
         if ruling is not None and ruling.refutes:
             return ruling
     return None
-
-
-def adjudicate(predicates: Sequence[Predicate],
-               challenges: Sequence[tuple[str, str]]) -> dict[str, Ruling]:
-    """Every challenge ruled on, keyed by predicate id.
-
-    A challenge naming an id that does not exist is DISCARDED. It names no
-    commitment, so it can refute nothing, and a run that treated an unknown id
-    as meaningful would let a seat remove an option by guessing at ids.
-
-    When several challenges name the same predicate, a FAIL stands: one
-    correct refutation is a refutation whether or not other seats also got
-    the arithmetic right. Ties between blocked and pass keep the pass.
-    """
-    by_id = {p.id: p for p in predicates}
-    out: dict[str, Ruling] = {}
-    for pid, expr in challenges:
-        pred = by_id.get(pid)
-        if pred is None:
-            continue
-        found = rule(pred, expr)
-        prior = out.get(pid)
-        if prior is None or (prior.status != "fail" and found.status == "fail") or (prior.status == "blocked" and found.status == "pass"):
-            out[pid] = found
-    return out
