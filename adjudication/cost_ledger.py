@@ -29,10 +29,12 @@ this year.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -189,21 +191,39 @@ under-estimate is the one direction that spends money the operator forbade.
 
 
 
-class CeilingOverrun(BudgetExceeded):
+class CeilingOverrun(CeilingReached):
     """A completed call cost more than it was authorised for.
+
+    A CeilingReached, because every caller that stops cleanly on cost catches
+    that one. It was a sibling, so the CLI, the console and the watcher --
+    which all catch CeilingReached and write a partial-run record -- missed it
+    entirely: an overrun fell to the generic handler and was written out as a
+    stack trace in the failures folder, which reads like a defect in the panel
+    rather than the spend control doing its job.
 
     THE PRE-CALL CHECK IS AN ESTIMATE, AND AN ESTIMATE IS NOT A GUARANTEE.
     It cannot be one: no provider publishes a contractual maximum for the
     complete serialised request plus all billable output, reasoning tokens
-    included. A reviewer put it exactly right -- if such a bound is
-    unavailable, this code cannot honestly offer a hard pre-dispatch ceiling.
+    included. If such a bound is unavailable, this code cannot honestly offer
+    a hard pre-dispatch ceiling.
 
     So it offers what it CAN guarantee instead. Every completed call is
     reconciled against what it was authorised for, and a call that cost more
-    stops the run. The operator is not promised the limit will never be
-    crossed. They are promised it will not be crossed twice without them being
-    told, which is a claim this code can actually keep.
+    stops the NEXT dispatch. The operator is not promised the limit will never
+    be crossed. They are promised it will not be crossed twice without them
+    being told -- and that an overrun on the very last call, which has no next
+    dispatch to refuse, is still recorded and still reported.
     """
+
+    def __init__(self, message: str):
+        # Straight to the base exception: the parent refuses a call BEFORE it
+        # is made and can say what that call would have added. This reports
+        # something that has already happened, and there is no next call to
+        # describe.
+        super(CeilingReached, self).__init__(message)
+        self.which, self.spent, self.limit, self.would_add = (
+            "overrun", 0.0, 0.0, 0.0)
+
 
 
 def estimate_request_tokens(body: bytes) -> int:
@@ -429,33 +449,95 @@ class CostLedger:
             self.overruns.append(
                 f"{seat_id}: authorised ${authorised:.4f}, billed "
                 f"${dollars:.4f} ({dollars / max(authorised, 1e-9):.1f}x)")
+        # THE TOLERANCE IS ABOUT THE ESTIMATE, NOT ABOUT THE CEILING.
+        #
+        # It exists because a vendor's token accounting differs slightly from
+        # ours, so a call billing a few percent over what was authorised is
+        # not evidence the estimator is broken. Applied to the run ceiling it
+        # meant something else entirely: a final call taking the run to
+        # $1.0490 under a $1.00 limit finished with nothing recorded, because
+        # the per-call figure was inside tolerance.
+        #
+        # A crossed ceiling is a crossed ceiling. Nobody granted a few percent
+        # of headroom on the number the operator actually set.
+        if self.per_run is not None and self.spent > self.per_run:
+            over = f"the run has spent ${self.spent:.4f} against a " \
+                   f"${self.per_run:.2f} ceiling"
+            if over not in self.overruns:
+                self.overruns.append(over)
         charge = dollars if dollars is not None else cc.estimated_dollars
         if pass_id is not None and charge:
             self._stage_spent[pass_id] = \
                 self._stage_spent.get(pass_id, 0.0) + charge
         return cc
 
+    @contextmanager
+    def _day_lock(self) -> Iterator[None]:
+        """Hold an exclusive lock over the shared daily file.
+
+        THE READ AND THE WRITE HAVE TO BE ONE OPERATION. Two watchers sharing
+        a day file each read the same figure, each added their own spend, and
+        the second write replaced the first -- so one process's whole run
+        vanished from the daily total and the next run was handed a budget
+        that had already been spent.
+
+        The lock is on a sidecar rather than the state file itself, because
+        the state file is replaced by rename and a lock held on the old inode
+        protects nothing once the rename lands.
+        """
+        # Not an assert: asserts vanish under -O, and this one guards the
+        # path the whole lock is taken on.
+        if not self.day_state_path:
+            raise ValueError("no daily state path to lock")
+        lock_path = f"{self.day_state_path}.lock"
+        os.makedirs(os.path.dirname(os.path.abspath(lock_path)) or ".",
+                    exist_ok=True)
+        fh = open(lock_path, "a+", encoding="utf-8")  # noqa: SIM115
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            finally:
+                fh.close()
+
     def persist_day(self) -> None:
         if not self.day_state_path:
             return
+        with self._day_lock():
+            self._persist_day_locked()
+
+    def _persist_day_locked(self) -> None:
+        path = self.day_state_path
+        if not path:
+            raise ValueError("no daily state path to write")
         blob: dict[str, float] = {}
-        if os.path.exists(self.day_state_path):
+        if os.path.exists(path):
             try:
-                with open(self.day_state_path, encoding="utf-8") as fh:
+                with open(path, encoding="utf-8") as fh:
                     blob = json.load(fh)
             except Exception:  # noqa: BLE001
                 blob = {}
         today = date.today().isoformat()
-        blob[today] = float(blob.get(today, 0.0)) + self.spent
+        # COMMITTED, NOT SPENT. `spent` counts only calls the vendor gave us a
+        # usage block for. A call that came back unmeasured keeps its full
+        # authorisation inside the run -- correctly -- and then persisted as
+        # ZERO, so a $0.40 reservation left the day file believing nothing had
+        # been spent and handed the next run that budget again.
+        #
+        # The same figure the in-run ceilings are tested against is the figure
+        # the shared file has to carry.
+        blob[today] = float(blob.get(today, 0.0)) + self.committed
         # A UNIQUE temporary name per writer. Two processes sharing
         # "<path>.tmp" raced: one os.replace moved the file out from under the
         # other, which then raised FileNotFoundError, and one day's spend was
         # lost -- silently raising the next run's available budget.
-        tmp = f"{self.day_state_path}.{os.getpid()}.{id(self)}.tmp"
+        tmp = f"{path}.{os.getpid()}.{id(self)}.tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(blob, fh, indent=2)
-            os.replace(tmp, self.day_state_path)
+            os.replace(tmp, path)
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
@@ -897,6 +979,23 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
         return out
 
     ceiling = ledger.per_run or float("inf")
+
+    # A SEAT WITH NO PRICE MAKES THE WHOLE ESTIMATE MEANINGLESS.
+    #
+    # worst() skipped seats it could not price, so a panel missing one seat's
+    # rate was costed as though that seat were free -- the plan reported a
+    # fit, four transports dispatched, and the fifth was refused at the
+    # pre-call check. Four calls paid for, no answer, and a plan that had said
+    # it would work.
+    unpriced = sorted(s for s in caps if ledger.rates.get(s) is None)
+    if unpriced:
+        return RunPlan(
+            calls, float("inf"), dict(caps), ceiling, False,
+            f"no price is configured for {', '.join(unpriced)}, so this run "
+            f"cannot be costed at all. Skipping those seats would estimate "
+            f"them at zero and report a fit that the pre-call check then "
+            f"refuses partway through, having already paid for the rest. Add "
+            f"their rates to rates.json from the vendor's own pricing page.")
 
     # THE FLOOR APPLIES EVEN WHEN THE CONFIGURED PANEL ALREADY FITS. This
     # returned before enforcing it, so a configured 4,096-token merging seat

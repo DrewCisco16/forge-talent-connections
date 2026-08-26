@@ -65,7 +65,7 @@ from option_set import (
     silent_seats,
     unexamined,
 )
-from predicate import adjudicate, parse_challenges
+from predicate import Ruling, adjudicate, parse_challenges
 from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
@@ -758,6 +758,8 @@ class RoundResult:
     """
     challenges: int = 0
     challenges_ruled: int = 0
+    rulings: dict[str, Ruling] = field(default_factory=dict)
+    """What every commitment was ruled, with the arithmetic behind it."""
     silent_seats: list[str] = field(default_factory=list)
     """Seats that answered but declared no option. A permanent hole."""
     """Surviving options no claim was ever attached to.
@@ -900,6 +902,9 @@ def run_night(
     # THE SURVIVOR SET, OWNED BY CODE. Round one fills it from the closer's
     # list; every round after that only removes from it, on gate verdicts.
     options: list[Option] = []
+    # Every commitment ruled on so far, carried between rounds. A check that
+    # happened in round two is still a check in round five.
+    settled: dict[str, Ruling] = {}
 
     # Fixed for the whole run. A persona that moved between rounds would make
     # measured rho meaningless: the correlation would be between shuffled
@@ -1015,7 +1020,15 @@ def run_night(
         challenges: list[tuple[str, Mapping[str, Fraction]]] = []
         for raw in texts.values():
             challenges.extend(parse_challenges(raw))
-        rulings = adjudicate(standing, challenges)
+        # ACCUMULATED ACROSS ROUNDS, NOT RECOMPUTED FROM SCRATCH.
+        #
+        # A commitment settled in round two was forgotten by round three, so
+        # an option whose two commitments were each ruled -- in different
+        # rounds -- never counted as examined, and the run reported it as
+        # untested to the end. Whether something was checked does not stop
+        # being true because a later round did not check it again.
+        rulings = {**settled, **adjudicate(standing, challenges)}
+        settled.update(rulings)
         res.challenges = len(challenges)
         res.challenges_ruled = len(rulings)
         if challenges:
@@ -1174,7 +1187,8 @@ def run_night(
             # with the option's own inputs.
             first_rulings = adjudicate(
                 [pr for o in options for pr in o.predicates], [])
-            rulings = {**first_rulings, **rulings}
+            rulings = {**rulings, **first_rulings}
+            settled.update(rulings)
             gone = eliminate(options, first_rulings, r.n)
             if gone:
                 res.options_removed = [o.id for o in gone]
@@ -1200,6 +1214,7 @@ def run_night(
         # recording the state it produced.
         res.options_alive = [o.id for o in options if o.alive]
         res.options_unexamined = [o.id for o in unexamined(options, rulings)]
+        res.rulings = dict(rulings)
         res.options_observed = True
 
         if options:
@@ -1520,6 +1535,16 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "options_removed": r.options_removed,
          "options_alive": r.options_alive,
          "options_unexamined": r.options_unexamined,
+         # THE RULINGS THEMSELVES, not only the counts. status.md carried
+         # how many commitments were ruled and never what any of them said,
+         # so a run could not be audited after the fact: an operator reading
+         # it could see that something was blocked without ever learning
+         # what, or which figure a dispute was about.
+         "rulings": [
+             {"predicate": k, "status": v.status, "detail": v.detail,
+              "disputes": list(v.disputes)}
+             for k, v in sorted(r.rulings.items())],
+         "silent_seats": r.silent_seats,
          "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
@@ -1859,8 +1884,16 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
     # and not unexamined, and the failure count is a global number that names
     # no option. Silence there is exactly the fail-open this design exists to
     # avoid.
-    refuted_total = sum(r.failed for r in results)
-    if refuted_total and not any(r.options_removed for r in results):
+    # COUNTED PER ROUND, NOT SUPPRESSED BY ANY REMOVAL ANYWHERE.
+    #
+    # The test was "were claims refuted AND was nothing removed in the whole
+    # run", so one legitimate removal in round one silenced this for every
+    # refuted claim in every later round. A claim that was proven false and
+    # took nothing with it is exactly what a reader needs to see, and one
+    # unrelated removal is no reason to stop saying so.
+    refuted_total = sum(r.failed for r in results
+                        if not r.options_removed)
+    if refuted_total:
         caveats.append(
             f"{refuted_total} CLAIM(S) WERE MECHANICALLY REFUTED AND REMOVED "
             f"NOTHING. A claim is refuted on its warrant; removing the answer "

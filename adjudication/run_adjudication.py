@@ -992,9 +992,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                          "gates need a resolver and a test runner and are not "
                          "selectable here -- see CONNECTING.md")
     ap.add_argument("--max-cost", type=float, metavar="USD",
-                    help="hard per-run spend ceiling. The run aborts mid-run "
-                         "and writes a partial result rather than crossing it. "
-                         "Checked BEFORE each call.")
+                    help="per-run spend ceiling. NOT A HARD LIMIT, and "
+                         "calling it one would be a promise nothing keeps: no "
+                         "vendor publishes a guaranteed maximum for a request "
+                         "plus all its billable output, so each call is "
+                         "checked against an ESTIMATE before it is made and "
+                         "reconciled against the bill afterwards. A call that "
+                         "costs more than it was authorised for stops the "
+                         "next one. The limit can be crossed; it cannot be "
+                         "crossed twice without you being told.")
     ap.add_argument("--max-cost-per-stage", type=float, metavar="USD")
     ap.add_argument("--max-cost-per-day", type=float, metavar="USD")
     ap.add_argument("--resolve-dois", action="store_true",

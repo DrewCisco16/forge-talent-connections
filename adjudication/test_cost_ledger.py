@@ -1197,3 +1197,92 @@ class TestTheEstimateCountsEveryReplyAndTheAsk:
         short = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=0)
         long = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=1_000_000)
         assert long.estimate > short.estimate
+
+
+class TestTheDailyLedgerSurvivesConcurrentWriters:
+    """The watcher is the one component that spends unattended, and two of
+    them can share a day file. The read-modify-write was not atomic: both
+    processes read the same figure, both added their own spend, and the second
+    write replaced the first -- so one run vanished from the daily total and
+    the next was handed a budget that had already been spent.
+
+    REAL PROCESSES, NOT THREADS. flock is held per process, so a threaded
+    version would exercise none of the locking and pass whether or not it
+    existed.
+    """
+
+    WRITER = """
+import sys
+sys.path.insert(0, {here!r})
+import cost_ledger as CL
+rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+               verified_on="2026-08-25")
+led = CL.CostLedger(rates={{"s": rate}}, day_state_path=sys.argv[1])
+led.record("s", 1_000_000, 0)        # exactly $1.00
+led.persist_day()
+"""
+
+    def _spawn(self, tmp_path, n):
+        import subprocess
+        import sys
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        script = tmp_path / "writer.py"
+        script.write_text(self.WRITER.format(here=here))
+        state = str(tmp_path / "day.json")
+        procs = [subprocess.Popen([sys.executable, str(script), state])
+                 for _ in range(n)]
+        for proc in procs:
+            assert proc.wait(timeout=60) == 0
+        return state
+
+    def _total(self, state):
+        import json
+        with open(state, encoding="utf-8") as fh:
+            return sum(json.load(fh).values())
+
+    def test_no_writer_is_lost(self, tmp_path):
+        state = self._spawn(tmp_path, 8)
+        assert self._total(state) == pytest.approx(8.0, rel=1e-9)
+
+    def test_the_file_is_still_readable_afterwards(self, tmp_path):
+        """A torn write is worse than a lost one: day_spent refuses to run on
+        an unreadable ledger, so a corrupt file stops every later run."""
+        state = self._spawn(tmp_path, 8)
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates={"s": rate}, per_day=100.0,
+                            day_state_path=state)
+        assert led.day_spent() == pytest.approx(8.0, rel=1e-9)
+
+
+class TestAnUnmeasuredCallIsNotAFreeCall:
+    """`spent` counts only calls the vendor gave a usage block for. A call
+    that came back unmeasured keeps its full authorisation inside the run --
+    correctly -- and then persisted to the shared day file as ZERO. So a $0.40
+    reservation left that file believing nothing had been spent, and the next
+    run was handed the same budget again.
+    """
+
+    def _ledger(self, path):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return CL.CostLedger(rates={"s": rate}, per_day=100.0,
+                             day_state_path=str(path))
+
+    def test_an_unmeasured_call_reaches_the_day_file(self, tmp_path):
+        led = self._ledger(tmp_path / "day.json")
+        led.record("s", None, None, estimated_dollars=0.40)
+        assert led.spent == 0.0            # nothing measurable came back
+        assert led.committed == pytest.approx(0.40)
+        led.persist_day()
+        assert self._ledger(tmp_path / "day.json").day_spent() == \
+            pytest.approx(0.40)
+
+    def test_a_measured_call_is_unchanged(self, tmp_path):
+        led = self._ledger(tmp_path / "day.json")
+        led.record("s", 1_000_000, 0, estimated_dollars=99.0)
+        led.persist_day()
+        # The MEASURED figure, not the estimate it was authorised against.
+        assert self._ledger(tmp_path / "day.json").day_spent() == \
+            pytest.approx(1.0)
