@@ -1,59 +1,37 @@
 # Re-check request — my own project, before I authorise a paid run
 
-This is my code. I am asking you to check my work before I spend real money
-on it, because I am the only person reviewing it and I would rather find a
-problem now than in the results.
+Your last verdict was **NO-GO for a decision-grade five-round paid run at
+`3701fc1`**, and every finding in it reproduced. Two of them were things I had
+told the user were fixed. I have rebuilt the part you said was structurally
+wrong rather than patching it again.
 
-You have reviewed this twice. Both times you found real defects and both times
-I reproduced them. Your last verdict was **NO-GO for the five-round paid run —
-fix structural proposition binding first.** I believe that is now fixed, along
-with a set of failures that only appeared once I paid for live runs and read
-what the models actually wrote back.
-
-**Please do not take my word for any of it.** Re-derive the behaviour yourself
-from the code and the offline test suite.
-
-## What the tool is
-
-Five language models from five different vendors answer one hard question
-independently, without seeing each other. Each is asked to state its claims in
-a fixed line format with the evidence attached. Code then checks the evidence
-mechanically — arithmetic is evaluated, citations are resolved, quotes are
-matched against sources. A claim that is mechanically refuted eliminates the
-answer it was declared to be about. This repeats over five analytical rounds,
-and whatever survives is reported alongside an explicit statement of what was
-never checked.
-
-The design commitment is that **it fails closed on the conclusion and never on
-the candidate.** A demonstrably wrong answer is eliminated. An answer nobody
-could check survives and is listed as open rather than accepted. Only a
-verified answer is presented as verified.
+**Please do not take my word for any of it.** Re-derive the behaviour from the
+code and the offline suite, and assume I have introduced new defects — I
+changed elimination, option parsing, merging, cost planning, usage accounting
+and two gates in one pass.
 
 ## What you do not need
 
-No credential, no network access, and no live API call. Everything here can be
-established by reading the code and running the offline suite.
+No credential, no network access, no live API call. The suite is hermetic and
+builds its own fixtures.
 
 `.env` and `profiles.json` hold my live settings. **Please do not open, print,
-or transmit either one.** Nothing in this review requires them; the suite is
-hermetic and builds its own fixtures.
+or transmit either one.** Nothing here requires them.
 
 ## Current state
 
-- 1138 tests passing, 81% coverage
-- `ruff check .`, `mypy`, and `bandit -c pyproject.toml -r .` all clean
-- Head commit `3701fc1` on branch `claude/adjudication-test-suite-w27c3h`
+- 1166 tests passing, 82% coverage
+- `ruff check .`, `mypy`, `bandit -c pyproject.toml -r .` clean
+- Head `cbf498c` on branch `claude/adjudication-test-suite-w27c3h`
 
 ```
-3701fc1  the option set was the seats' premises, not their answers
-420e13e  Size the run to the ceiling instead of refusing when it does not fit
-1c1fc83  What a paid canary found that no dry run could
-1b35d52  The over-correction you warned about: quantity claims usable again
-d70dc0c  Re-check #11: the night path checks citations
-a970b3c  Re-check #3: the option set comes from the seats, not the closer
+cbf498c  an overrun stops the next call, which is not halting the run
+e964d7f  the two citation gates rejected each other's format
+22bb909  an empty survivor list is falsey, and that decided a run
+d5b979e  the cost figure was an estimate calling itself a worst case
+2f17057  a merge groups answers; it does not delete them
+b66723b  elimination rests on typed commitments, not on sentences
 ```
-
-## How to run it
 
 ```
 cd adjudication
@@ -61,98 +39,132 @@ uv venv && uv pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
 ```
 
-## What changed since your last review
+## 1. Structural proposition binding
 
-I am describing what I intended and what I observed. **Whether the code does
-this is the question I am asking you** — please establish it independently
-rather than confirming my account.
+You reproduced this, and it is the finding everything else waited on:
 
-### 1. The option set was the seats' premises, not their answers
+    warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"     PASS
+    warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"   PASS
 
-I replayed the last paid run's five real transcripts through the parser
-offline. Round one produced ten "options". Eight were one seat's numbered
-premise list — "The panel consists of five AI seats", "Each round costs
-approximately six API calls across five vendors". The three answers that seat
-actually proposed, written as `### Option 1: Static-State Termination`
-headings, were not among them.
+I agree with your reading. Two contradictory propositions cannot both follow
+from one warrant, so the rule was the wrong kind of rule, and my previous fix
+closed those two strings rather than the property.
 
-The panel would have spent five rounds and real money adjudicating its own
-setup while the real candidates were never on the table, and nothing in the
-output would have said so.
+**Sentences no longer remove anything.** An option declares a quantity, a
+relation and a value when it is proposed. A later round removes it only by
+computing that quantity and finding it came out otherwise. There is no text
+field in the comparison.
 
-My reading is that telling a premise from a proposal is a question of what the
-writer meant, and no amount of layout carries it. So the seat now has to say
-which it is. Bare numbering no longer declares an option. A heading that names
-itself one does — four of five seats wrote exactly that unprompted, in four
-different house styles. The fifth wrote bold numbered lines with no such word
-and now contributes nothing, on the reasoning that an empty option set is
-recoverable and a wrong one is not.
+This follows the five points you set out. Whether the code actually does what
+I describe is what I am asking you to establish:
 
-### 2. No seat ever wrote the line the parser was built around
+1. Options carry typed, candidate-owned commitments, parsed from the
+   proposing seat's own reply and bound by position to its OPTION line.
+2. A later round may `CHALLENGE` an existing commitment by id. A challenge
+   naming an id that does not exist is discarded, and a `PREDICATE` line in a
+   later round creates nothing.
+3. The gate evaluates an expression and compares. It never reads prose.
+4. One function decides removal, and it needs a pre-existing declared
+   commitment to have been refuted.
+5. Both engines call it. The legacy path removed a candidate for **any**
+   failed claim it carried, with no binding test at all — the weaker of two
+   rules for one question, and the one that decided whenever it ran.
 
-Every seat obeyed the `CLAIM |` convention faithfully. Not one wrote an
-`OPTION |` line. Options were requested in a mid-prompt section, while the
-required-output block said "write your analysis normally, then end with claim
-lines". The seats followed the output contract, which is what an output
-contract is for.
+Commitment ids include the option they bind to, which closes the collision you
+found where one claim aimed at two options removed both.
 
-The option line now lives in that same contract, and only in rounds that
-invent options.
+**This narrows what can eliminate, and I want you to judge whether I narrowed
+it too far.** A fabricated citation no longer removes the candidate carrying
+it; it is recorded, counted, and reported. My reasoning is that refuting a
+citation refutes the evidence rather than the answer, which is the same
+non-sequitur in a different costume — but it is a real capability loss and I
+would rather you challenge it than not. A refuted claim that removes nothing
+is now named in the caveats, because an option that is neither eliminated nor
+unexamined would otherwise carry a demonstrably false statement with nothing
+in the tally to show it.
 
-### 3. Caps were planned in one caller and not in the others
+## 2. Silently omitted options
 
-Reply-size caps are sized to the operator's spending ceiling. Only the canary
-script did that, and it does not go through the shared entry point — so the
-console and the folder watcher, the two ways a real run is actually started,
-ran with whatever the profile file happened to say. That is a $25.51 worst
-case for five rounds, which the ceiling would then stop mid-run, after paying
-for the rounds already completed.
+All of your parser reproductions are addressed, except that I chose **refusal
+over reprompt**: a round one that yields no options stops the run rather than
+asking again. Measured, that is 6 model calls instead of 30.
 
-Planning moved inside the shared entry point, before the panel is built, so a
-run that cannot fit its ceiling is turned away without reading a credential.
+Both declared forms are now read — an explicit line used to win outright and
+drop a valid heading. Fenced examples are excluded. One seat flooding no
+longer empties the whole pool. The ceiling bounds the pool rather than each
+reply, which is where 5 × 30 = 150 came from. Seats that declared nothing are
+named in the record.
 
-### 4. The merging seat needs more room than a thinker
+## 3. Merging
 
-It reads every other seat's reply plus the option list plus the check results,
-and on a reasoning model the thinking counts against the same cap. Scaling
-every seat by one uniform factor starved it: at 7,190 tokens it was cut off
-before writing a single character, the merge failed, and a paid run ended
-after round one. It completed at 16,384. It now has a floor of its own.
+A merge now groups. The absorbed wording stays a candidate, keeps its own
+commitments, and is shown under its keeper. You were right that this was a
+model's semantic judgment changing membership.
 
-A five-round run now fits a **$7.00** worst case, down from $25.51.
+## 4. Cost
 
-### 5. A cost refusal is not a crash
+You were right that `$7.00 worst case` was neither. Two compounding errors:
 
-A run refused for cost used to reach the watcher's generic handler and be
-written out as a stack trace in the failures folder. Nothing had failed and
-nothing had been spent — the ceiling simply could not fund the run. It is now
-recorded as a refusal that names the figure that would resolve it.
+The planner priced every call at a flat 4,000 input tokens. The merging seat
+quotes every reply in full, so its prompt is linear in the thinker caps —
+measured at 29,511 tokens for a 4,096-token cap, 49,991 for 8,192, 90,951 for
+16,384. It was undercounted by more than seven times.
 
-## What I observed offline afterwards
+And the merging seat's floor was 8,192 with a docstring calling it measured.
+It was not. The failure was at 7,190 and the success at 16,384; 8,192 sat in
+the untested gap.
 
-Replaying the same five real transcripts: 13 options, no premises. A declared,
-mechanically refuted claim in round two removes exactly the option it names,
-leaving 12. The run reports `MECHANICAL ADJUDICATION: PARTIAL` and
-`CORROBORATION CONFIDENCE: UNMEASURED`.
+**Honest numbers for five rounds with this panel: $12.27 at the floor, $16.39
+as configured.** The field is called `estimate`, because nothing here can
+bound what a provider bills.
 
-**Please check whether that last part is honest.** The tool is supposed to
-report error correlation between seats as unmeasured, because I do not believe
-it is measurable from open-ended generation — a seat that never raised a claim
-has not been shown right or wrong about it, and that is missing data rather
-than agreement. If you think that reasoning is wrong, or that the code
-overclaims anywhere else, I would rather hear it now.
+Also fixed: the floor was skipped when the configured panel already fitted;
+scaling could raise a cap **above** what the operator configured while
+reporting caps had been reduced; and planning now runs before `.env` is read,
+which is what its comment already claimed.
+
+## 5, 6, 7
+
+A vendor total that is present and unreadable no longer reads as absent — the
+call is unmeasured and the authorisation stands. "Halts the run" is corrected
+to what it does: refuses the next dispatch, with nothing to refuse on the last
+call.
+
+Elimination runs before the closer, so a closer that raises no longer strands
+a refuted option. Whether a round observed the option set is recorded apart
+from what it found. An option is examined only when **every** commitment is
+settled. Eliminating every option no longer reports completion in the same
+words as narrowing to one survivor.
+
+Both citation gates read one format through one parser.
+
+`trustworthy` required confidence to equal `"MEASURED"`, which no run can
+produce. It now requires a measurement that cleared the low bar, and I would
+like you to check that reasoning too: I take measured-but-LOW to be
+insufficient, because Low is what a high correlation earns.
+
+## What I have not established
+
+The transcripts from my last paid run predate this contract, so replaying them
+gives 13 options and **zero commitments** — nothing eliminable. Whether live
+seats will actually emit `PREDICATE` and `CHALLENGE` lines is unverified. The
+contract asks for them in the required-output block, which is the block seats
+demonstrably obey for `CLAIM`, but that is an inference and not a measurement.
+If they do not comply, the run reports that nothing was adjudicated rather
+than producing a wrong answer — which is the direction I want it to fail in,
+but it would mean the tool does not yet work.
 
 ## What I am asking
 
 Confirm or refute that the code is built the way I have described, and tell me
-whether anything here would mislead someone reading the tool's output.
+whether anything here would mislead someone reading the output.
 
-I am specifically **not** giving you a checklist, because a checklist only
-finds what I already thought of. If something is wrong that I have not
-mentioned, that is the most useful thing you could tell me.
+I am not giving you a checklist, because a checklist only finds what I already
+thought of. If something is wrong that I have not mentioned, that is the most
+useful thing you could tell me — particularly anywhere I have traded a real
+capability for safety without saying so.
 
-Where you find a defect, please state what breaks and under what input, so I
-can reproduce it before changing anything.
+Where you find a defect, state what breaks and under what input so I can
+reproduce it before changing anything.
 
-If your conclusion is that this is not ready for a paid run, say so plainly.
-That is a useful answer and I will act on it.
+If this still is not ready for a paid run, say so plainly. I will act on it.
