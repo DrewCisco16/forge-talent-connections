@@ -946,16 +946,59 @@ class TestTheCeilingDrivesTheCaps:
         assert plan.caps == self.CAPS
 
     def test_a_modest_ceiling_shrinks_the_caps_rather_than_refusing(self):
-        plan = self._plan(8.00)
+        plan = self._plan(16.00)
         assert plan.fits
-        assert max(plan.caps.values()) < max(self.CAPS.values())
-        assert plan.worst_case <= 8.00
+        assert max(plan.caps.values()) <= max(self.CAPS.values())
+        assert plan.estimate <= 16.00
 
     def test_a_short_run_fits_a_small_ceiling(self):
         """The exact case that refused on the first call."""
-        plan = self._plan(3.00, rounds=2)
+        plan = self._plan(6.00, rounds=2)
         assert plan.fits
-        assert plan.worst_case <= 3.00
+        assert plan.estimate <= 6.00
+
+    def test_the_estimate_counts_what_the_merging_seat_actually_reads(self):
+        """The planner priced EVERY call at a flat 4,000 input tokens. The
+        merging seat quotes every thinker's reply in full, so at a 4,096-token
+        thinker cap its prompt measures about 29,500 tokens -- more than seven
+        times what was charged for it.
+
+        A plan reporting a $6.96 fit against a $7.00 ceiling repriced to
+        $7.41, and replaying the calls in order refused the thirtieth, the
+        final merge, after $6.79 was already authorised: everything paid for
+        and no answer."""
+        led = CL.CostLedger(rates=self._rates(), per_run=1000.00)
+        real = CL.plan_run(led, self.CAPS, rounds=1)
+        understated = CL.plan_run(led, self.CAPS, rounds=1, est_input=4000)
+        # The old flat figure is cheaper than the truth, and the gap is the
+        # thinker replies the merging seat reads.
+        assert real.estimate > understated.estimate
+        # Raising only the THINKER caps raises the merge's input too, because
+        # it quotes them in full.
+        wider = dict(self.CAPS)
+        wider["seat_2"] = wider["seat_2"] * 4
+        assert CL.plan_run(led, wider, rounds=1).estimate > real.estimate
+
+    def test_a_plan_never_lengthens_a_reply_the_operator_configured(self):
+        """Scaling multiplied the merging seat by its headroom factor, so
+        under a larger ceiling it came out ABOVE its configured cap -- 16,384
+        raised to 17,611 -- while the plan reported caps had been reduced."""
+        for ceiling in (16.00, 30.00, 100.00):
+            plan = self._plan(ceiling)
+            if plan.fits:
+                for seat, cap in plan.caps.items():
+                    assert cap <= self.CAPS[seat], (seat, ceiling)
+
+    def test_the_merging_seat_gets_its_floor_even_when_the_panel_fits(self):
+        """The fit path returned before the floor was applied, so a
+        configured 4,096-token merging seat stayed there -- below the size at
+        which it has ever been seen to produce anything -- purely because the
+        total happened to be affordable."""
+        caps = dict(self.CAPS, seat_5=4096)
+        led = CL.CostLedger(rates=self._rates(), per_run=1000.00)
+        plan = CL.plan_run(led, caps, rounds=5)
+        assert plan.fits
+        assert plan.caps["seat_5"] >= CL.MIN_CLOSER_CAP
 
     def test_five_rounds_at_three_dollars_is_refused_with_the_real_number(self):
         """CORRECTED once the merging seat got a measured floor. A $3 ceiling
@@ -964,7 +1007,7 @@ class TestTheCeilingDrivesTheCaps:
         would be starved. The refusal names what it actually needs."""
         plan = self._plan(3.00, rounds=5)
         assert not plan.fits
-        assert plan.worst_case > 3.00
+        assert plan.estimate > 3.00
         assert "or run fewer rounds" in plan.note
 
     def test_the_merging_seat_gets_more_room_than_a_thinker(self):

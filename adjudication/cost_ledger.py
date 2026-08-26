@@ -642,7 +642,23 @@ def usage_from_payload(payload: Mapping[str, object],
     # literal "usage" would silently do nothing for one of them while looking
     # like it worked.
     total = _sibling_total(payload, input_path)
-    if total is not None and tin is not None and tout is not None:
+    if total is INVALID_TOTAL:
+        # THE VENDOR REPORTED A TOTAL AND IT IS NOT A NUMBER.
+        #
+        # This was indistinguishable from reporting no total at all, so a
+        # payload carrying "total_tokens": "10000" was reconciled from the
+        # input and output fields alone, the reservation was released, and the
+        # call was recorded as measured. Five such calls booked $0.0055 where
+        # the declared totals priced to $0.50.
+        #
+        # An absent total means the vendor folds its reasoning tokens into the
+        # output figure, which is safe to reconcile from. A total that is
+        # present and unreadable means the field this ledger relies on to
+        # catch invisible billable output cannot be read -- so the call is
+        # UNMEASURED, the full authorisation stands, and the run total is an
+        # explicit lower bound.
+        return None, None
+    if isinstance(total, int) and tin is not None and tout is not None:
         if total < tin + tout:
             # The vendor's own arithmetic does not close. We cannot tell which
             # figure is wrong, so we report none of them: an unmeasured call
@@ -659,8 +675,26 @@ TOTAL_FIELD_NAMES = ("total_tokens", "totalTokenCount", "total_token_count")
 input-token field. Not a vendor list -- a list of spellings of one idea."""
 
 
+class _InvalidTotal:
+    """A total the vendor reported that this code cannot read.
+
+    Distinct from None, which means no total was reported at all. The two used
+    to be one value, and conflating them turned an unreadable figure into a
+    silently cheaper call.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "INVALID_TOTAL"
+
+
+INVALID_TOTAL = _InvalidTotal()
+
+
 def _sibling_total(payload: Mapping[str, object],
-                   input_path: Sequence[object] | None) -> int | None:
+                   input_path: Sequence[object] | None
+                   ) -> int | _InvalidTotal | None:
     """The all-in token count sitting alongside the input-token count.
 
     Returns None when the vendor reports no total. None means "not reported",
@@ -682,9 +716,14 @@ def _sibling_total(payload: Mapping[str, object],
     if not isinstance(cur, dict):
         return None
     for name in TOTAL_FIELD_NAMES:
+        if name not in cur:
+            continue
         v = cur.get(name)
-        if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return int(v)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return INVALID_TOTAL          # present, and not a number
+        if v < 0 or (isinstance(v, float) and not v.is_integer()):
+            return INVALID_TOTAL
+        return int(v)
     return None
 
 
@@ -696,15 +735,23 @@ results, and on a reasoning model the thinking is charged against the same
 cap. Given a thinker's share it produced nothing at all.
 """
 
-MIN_CLOSER_CAP = 8192
-"""Smallest cap the merging seat can actually work in.
+MIN_CLOSER_CAP = 16_384
+"""Smallest cap the merging seat is KNOWN to work in.
 
-MEASURED, NOT GUESSED. At 7,190 tokens it was cut off before writing a single
-character and the merge failed, ending a paid run after one round. At 16,384
-it used about 19,900 tokens across two calls and completed. A run whose
-ceiling cannot fund a working merge is a run that cannot produce an answer,
-and selling it a smaller cap instead of saying so wastes the whole budget
-rather than part of it.
+WHAT WAS ACTUALLY MEASURED: it failed at 7,190 -- cut off before writing a
+single character, the merge lost, a paid run ended after one round -- and it
+completed at 16,384. Nothing was ever observed in between.
+
+This was set to 8,192 and the docstring called it measured. It was not: it
+sat in the untested gap, chosen because it looked like a reasonable halfway
+point. A floor exists precisely to keep the merge out of the region where it
+produces nothing, so picking an unobserved value for it defeats the purpose,
+and the failure it guards against costs the entire run rather than part of
+it. The floor is the smallest size that has been seen to work.
+
+Lowering it needs evidence: a merge that completes at the smaller size, on
+this panel, with a full option list. Until then the cost of being wrong is
+one-sided -- too high buys a shorter reply, too low buys nothing at all.
 """
 
 MIN_USEFUL_CAP = 2048
@@ -719,30 +766,70 @@ nothing and still bills for it.
 
 @dataclass
 class RunPlan:
-    """What a run will cost before any of it is spent."""
+    """What a run is estimated to cost, before any of it is spent."""
 
     calls: int
-    worst_case: float
+    estimate: float
     caps: dict[str, int]
     ceiling: float
     fits: bool
     note: str
 
+    @property
+    def worst_case(self) -> float:
+        """DEPRECATED NAME, kept so existing callers keep reading.
+
+        It was never a worst case. Input length is bounded by what the code
+        sends, but nothing here bounds what a provider BILLS -- a vendor that
+        counts tokens differently, or charges for a retry this code treats as
+        free, puts the true figure above any number computed here. Calling an
+        estimate a worst case invites treating it as a guarantee, and the
+        guarantee that can actually be kept is the reconciliation-and-halt in
+        record(), not this.
+        """
+        return self.estimate
+
+
+THINKER_INPUT_TOKENS = 6_200
+"""Measured: a maximal round-two thinker prompt, at the option ceiling.
+
+Built with MAX_OPTIONS options each carrying MAX_PREDICATES_PER_OPTION
+commitments and rendered with their ids: 18,486 characters, about 6,162
+tokens. Round one is smaller (about 2,680), so this is the binding case.
+"""
+
+CLOSER_INPUT_OVERHEAD = 9_100
+"""Measured: the closer's prompt MINUS the thinker replies it carries.
+
+The closer prompt is linear in the thinker caps, because it quotes every
+reply in full. Measured at three cap sizes with a maximal option list:
+
+    thinker cap  4,096 -> 29,511 tokens
+    thinker cap  8,192 -> 49,991 tokens
+    thinker cap 16,384 -> 90,951 tokens
+
+which is 5 x cap + 9,031 in every case. THE PLANNER USED A FLAT 4,000 TOKENS
+OF INPUT FOR EVERY CALL, so it under-counted the closer by more than seven
+times. Repricing a plan that reported a $6.96 fit against a $7.00 ceiling
+gave $7.41, and simulating the calls in order refused the thirtieth -- the
+final merge -- after $6.79 had already been authorised. The run would have
+paid for everything and produced no answer.
+"""
+
 
 def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
-             est_input: int = 4000) -> RunPlan:
+             est_input: int = THINKER_INPUT_TOKENS) -> RunPlan:
     """Size the run to the ceiling, rather than refusing when it does not fit.
 
     THE CEILING SHOULD DRIVE THE CAPS, NOT THE OTHER WAY ROUND. With the
-    configured caps a five-round run's worst case was $25.51, so an operator
-    setting a sensible $3 limit got a refusal on the first call -- or, worse,
-    a run that stopped twenty minutes in with four rounds unpaid for and no
-    answer.
+    configured caps a five-round run came to $25.51, so an operator setting a
+    sensible $3 limit got a refusal on the first call -- or, worse, a run that
+    stopped twenty minutes in with four rounds unpaid for and no answer.
 
-    This computes the worst case for the panel as configured, and if it does
-    not fit, the largest uniform cap that does. The operator is then choosing
-    between a shorter reply and no run at all, which is a real choice, instead
-    of discovering the limit halfway through.
+    THE FIGURE IS AN ESTIMATE, NOT A BOUND. It counts what this code will
+    send and what it has asked the provider to return. It cannot bound what a
+    provider bills. The enforceable promise is reconciliation after each call
+    and a halt on overrun, not this number.
 
     It reports rather than imposing. Nothing here changes a cap on its own:
     the caller decides, because a smaller cap means shorter answers and that
@@ -750,8 +837,12 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
     """
     per_round = len(caps) + 1                       # thinkers plus one merge
     calls = per_round * rounds
-
     closer = _closer_seats(caps)
+
+    def closer_input(cap_for: Mapping[str, int]) -> int:
+        """What the merging seat actually reads: every reply, in full."""
+        return CLOSER_INPUT_OVERHEAD + sum(
+            c for s, c in cap_for.items() if s not in closer)
 
     def worst(cap_for: Mapping[str, int]) -> float:
         total = 0.0
@@ -759,49 +850,67 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
             rate = ledger.rates.get(seat_id)
             if rate is None:
                 continue
-            n = rounds * (2 if seat_id in closer else 1)
-            total += n * rate.cost(est_input,
-                                   int(cap * rate.output_multiplier))
+            out = int(cap * rate.output_multiplier)
+            # EVERY SEAT THINKS ONCE A ROUND, and the merging seat is then
+            # called a SECOND time with a much larger prompt. Both calls used
+            # to be priced with the same small input figure.
+            total += rounds * rate.cost(est_input, out)
+            if seat_id in closer:
+                total += rounds * rate.cost(closer_input(cap_for), out)
         return total
 
-    as_configured = worst(caps)
+    def with_floor(cap_for: Mapping[str, int]) -> dict[str, int]:
+        """The merging seat's floor, and no cap above what was configured.
+
+        Scaling multiplied the closer by CLOSER_HEADROOM, so under a larger
+        ceiling it could come out ABOVE its configured cap -- 16,384 raised to
+        17,611 -- while the plan reported that caps had been reduced. A plan
+        may shorten a reply to fit a ceiling; it has no business lengthening
+        one the operator configured.
+        """
+        # ORDER MATTERS. Clamp to what was configured FIRST, then raise the
+        # merging seat to its floor -- clamping afterwards put it straight
+        # back under the floor whenever the operator had configured a small
+        # merging cap, which is precisely the case the floor exists for.
+        out = {s: min(c, caps[s]) if s in caps else c
+               for s, c in cap_for.items()}
+        for seat_id in closer:
+            out[seat_id] = max(out.get(seat_id, 0), MIN_CLOSER_CAP)
+        return out
+
     ceiling = ledger.per_run or float("inf")
+
+    # THE FLOOR APPLIES EVEN WHEN THE CONFIGURED PANEL ALREADY FITS. This
+    # returned before enforcing it, so a configured 4,096-token merging seat
+    # stayed at 4,096 -- below the size at which it has been observed to
+    # produce anything -- purely because the total happened to be affordable.
+    configured = with_floor(caps)
+    as_configured = worst(configured)
     if as_configured <= ceiling:
-        return RunPlan(calls, as_configured, dict(caps), ceiling, True,
-                       "the panel as configured fits inside the ceiling")
+        note = "the panel as configured fits inside the ceiling"
+        if configured != dict(caps):
+            note = ("the panel fits, with the merging seat raised to its "
+                    f"{MIN_CLOSER_CAP:,}-token floor")
+        return RunPlan(calls, as_configured, configured, ceiling, True, note)
 
     # Scale every cap by the same factor, so no seat is starved relative to
     # another, then converge: one division lands exactly on the ceiling, where
-    # float error and the MIN_USEFUL_CAP floor can push the result a fraction
-    # over and reject a plan that fits.
-    # THE MERGING SEAT NEEDS MORE ROOM THAN A THINKER, NOT THE SAME.
-    #
-    # It reads every thinker's reply plus the option list plus the check
-    # results -- about five times a thinker's input -- and it is a reasoning
-    # model, so the thinking counts against the same cap. Scaling every seat
-    # by one factor starved it: at a 7,190-token cap it was cut off before
-    # writing a single character, the merge failed, and the run ended after
-    # round one having paid for it.
+    # float error and the floors can push the result a fraction over and
+    # reject a plan that fits.
     factor = ceiling / as_configured if as_configured else 1.0
     for _ in range(60):
-        scaled = {s: max(MIN_USEFUL_CAP,
-                         int(c * factor * (CLOSER_HEADROOM if s in closer
-                                           else 1.0)))
-                  for s, c in caps.items()}
-        # The merge has a hard floor: below it the seat produces nothing and
-        # the run ends having paid for everything up to that point.
-        for seat_id in closer:
-            scaled[seat_id] = max(scaled[seat_id], MIN_CLOSER_CAP)
+        scaled = with_floor({s: max(MIN_USEFUL_CAP, int(c * factor))
+                             for s, c in caps.items()})
         scaled_worst = worst(scaled)
         if scaled_worst <= ceiling:
             return RunPlan(
                 calls, scaled_worst, scaled, ceiling, True,
                 f"caps reduced to fit ${ceiling:.2f}; replies will be shorter")
-        if all(c <= MIN_USEFUL_CAP for c in scaled.values()):
+        if all(c <= MIN_USEFUL_CAP or s in closer
+               for s, c in scaled.items()):
             break                       # already at the floor; cannot shrink
         factor *= 0.9
-    floor = {s: (MIN_CLOSER_CAP if s in closer else MIN_USEFUL_CAP)
-             for s in caps}
+    floor = with_floor(dict.fromkeys(caps, MIN_USEFUL_CAP))
     needed = worst(floor)
     return RunPlan(
         calls, needed, floor, ceiling, False,
@@ -809,10 +918,10 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
         f"every reply already cut to the smallest size that still works. "
         f"Below {MIN_USEFUL_CAP:,} tokens a reasoning model spends its whole "
         f"budget thinking and returns nothing, and the merging seat -- which "
-        f"reads every other seat's reply -- needs {MIN_CLOSER_CAP:,} or it "
-        f"produces no answer at all. A smaller ceiling buys a failed run, not "
-        f"a shorter one. Raise it to ${needed:.2f}, or run fewer rounds")
-
+        f"reads every other seat's reply in full -- needs {MIN_CLOSER_CAP:,} "
+        f"or it produces no answer at all. A smaller ceiling buys a failed "
+        f"run, not a shorter one. Raise it to ${needed:.2f}, or run fewer "
+        f"rounds")
 
 def _closer_seats(caps: Mapping[str, int]) -> set[str]:
     """The seat that also merges, which therefore gets called twice a round."""

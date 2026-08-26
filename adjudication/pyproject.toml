@@ -101,6 +101,13 @@ python_files = ["test_*.py"]
                 # different remedy; a lookup would hide which are BLOCKED and
                 # which are findings, and that distinction is the gate's point.
 ]
+"cost_ledger.py" = [
+    "PLR0911",  # _sibling_total returns one value per distinct state of the
+                # vendor's total field: unreachable path, wrong container,
+                # absent, present-but-unreadable, and the figure itself.
+                # Absent and unreadable USED to be one value, and conflating
+                # them released a reservation on a call nobody could measure.
+]
 "predicate.py" = [
     "PLR0911",  # rule() returns one Ruling per distinct outcome -- no
                 # expression, an equation where an expression was asked for,

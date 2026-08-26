@@ -1363,14 +1363,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     order already protects.
     """
     from adjudication_orchestrator import Orchestrator
-
-    # LOAD .env HERE, not in a caller that may not do it. Only the CLI's
-    # main() called load_env_file, so the console and the watcher -- the two
-    # ways this is actually started -- reached this point with no models and
-    # no credentials in the environment at all. Idempotent, and override=False
-    # means a real shell export still wins over a possibly-stale file.
     from run_adjudication import live_seats, load_env_file, night_gates
-    load_env_file()
 
     # REPLY CAPS SIZED TO THE OPERATOR'S CEILING, PLANNED HERE RATHER THAN IN
     # EACH CALLER. Only the canary planned, and it does not come through this
@@ -1398,6 +1391,20 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
         if not plan.fits:
             raise RunTooExpensive(plan.note)
         caps = plan.caps
+
+    # LOAD .env ONLY ONCE THE RUN IS AFFORDABLE, and here rather than in a
+    # caller that may not do it. Only the CLI's main() called this, so the
+    # console and the watcher -- the two ways a run is actually started --
+    # reached this point with no models and no credentials in the environment
+    # at all. Idempotent, and override=False means a real shell export still
+    # wins over a possibly-stale file.
+    #
+    # AFTER the plan: the comment above claimed a run nobody can afford is
+    # refused without reading a key, and it was not -- the file was read
+    # first. Planning needs the configured caps and the prices and nothing
+    # else, so there is no reason to touch credentials before knowing whether
+    # the run can happen at all.
+    load_env_file()
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)
     seats = live_seats(profiles_path, ledger=ledger)

@@ -4777,8 +4777,36 @@ class TestReasoningTokenAccounting:
         assert tout >= 0
 
     def test_bool_is_not_a_token_count(self):
+        """CORRECTED. A bool total was skipped and the call reconciled from
+        the input and output fields as if no total had been reported -- so it
+        was recorded as MEASURED and its reservation released.
+
+        Absent and unreadable are different facts. Absent means the vendor
+        folds reasoning tokens into the output figure, which is safe to
+        reconcile from. Unreadable means the one field that catches invisible
+        billable output cannot be read, so the call is unmeasured and the full
+        authorisation stands."""
         payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
                              "total_tokens": True}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_a_string_total_leaves_the_call_unmeasured(self):
+        """Executed by the reviewer: five calls declaring 10,000 all-in
+        tokens each booked $0.0055 in total, where the declared figures
+        priced to $0.50."""
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 100,
+                             "total_tokens": "10000"}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_a_negative_total_leaves_the_call_unmeasured(self):
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                             "total_tokens": -1}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_no_total_at_all_still_reconciles_normally(self):
+        """The safe case, and the common one: Anthropic reports no total
+        because its output figure already includes the thinking."""
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5}}
         assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (10, 5)
 
 
