@@ -428,33 +428,42 @@ def render_record(options: Sequence[Option]) -> str:
 
 def unexamined(options: Sequence[Option],
                verdicts: Mapping[str, object] | None = None) -> list[Option]:
-    """Surviving options that nothing actually RULED ON.
+    """Surviving options whose commitments were not ALL actually ruled on.
 
     An option survives because nothing removed it. That is a completely
     different fact from surviving scrutiny, and on the page the two look
     identical -- so the difference has to be reported.
 
-    A NON-EMPTY CLAIM LIST IS NOT EXAMINATION. This returned only options with
-    no attached claims at all, so an option whose sole dependency was BLOCKED
-    (a check that could not run) or ESCALATED (nobody ruled on it) counted as
-    examined. A sole survivor resting on one blocked `sqrt(4) = 2` was
-    presented under "the answer that survived".
+    EVERY COMMITMENT HAS TO BE RULED, NOT MERELY ONE OF THEM. This asked
+    whether ANY dependency reached a verdict, so an option resting on one
+    computed figure and one BLOCKED check counted as examined and carried no
+    warning. Half-checked is not checked: the unresolved half is exactly where
+    the answer might fail, and a single PASS beside it produces the appearance
+    of scrutiny rather than the fact.
 
-    Examined means at least one declared dependency reached a real verdict --
-    PASS or FAIL. Anything else leaves the option untested.
+    A CHECK THAT DID NOT RUN IS NOT A RESULT. BLOCKED means a gate could not
+    reach an answer -- an outage, a paywall, a rate limit -- and an option
+    whose sole dependency was a blocked `sqrt(4) = 2` was once presented under
+    "the answer that survived".
+
+    An option that declared no commitment at all is likewise untested: nothing
+    about it could be computed, so nothing about it was.
     """
     if verdicts is None:
-        return [o for o in options if o.alive and not o.claims]
+        return [o for o in options if o.alive and not o.predicates]
     out: list[Option] = []
     for opt in options:
         if not opt.alive:
             continue
-        ruled = any(
-            getattr(getattr(verdicts.get(cid), "status", None), "value", None)
+        if not opt.predicates:
+            out.append(opt)          # nothing to rule on; nothing was ruled
+            continue
+        settled = all(
+            getattr(verdicts.get(getattr(pred, "id", "")), "status", None)
             in ("pass", "fail")
-            for cid in opt.claims
+            for pred in opt.predicates
         )
-        if not ruled:
+        if not settled:
             out.append(opt)
     return out
 

@@ -569,10 +569,19 @@ def confidence_clause(n_seats: int, rho: float | None) -> str:
             "Use Low, Medium, or High. Never a percentage: a percentage "
             "implies a dataset, an outcome variable, and a base rate, and this "
             "panel has none of the three -- it has models that agreed.\n\n"
-            "Error correlation across the seats has NOT been measured yet, so "
-            "the ceiling this round is LOW. Unmeasured independence is not "
-            "high independence. Agreement between seats that have not been "
-            "shown to fail differently is not corroboration.\n"
+            "Error correlation across the seats is NOT MEASURED. Say exactly "
+            "that if you say anything about corroboration -- the word is "
+            "UNMEASURED, and it is the word the run's own verdict uses.\n\n"
+            "DO NOT WRITE THAT CORROBORATION IS LOW. Low is what a "
+            "measurement earns when it finds the seats correlated. Nobody "
+            "measured, so reporting Low would describe a finding that does "
+            "not exist, and it would disagree with the verdict printed above "
+            "your text -- leaving a reader unable to tell whether these seats "
+            "were checked and found dependent or never checked at all.\n\n"
+            "The ceiling on any confidence you claim FOR AN ANSWER is still "
+            "Low, for the same reason: agreement between seats that have not "
+            "been shown to fail differently is not corroboration, and "
+            "unmeasured independence is not high independence.\n"
         )
     ceiling = confidence_ceiling(n_seats, rho)
     n_eff = effective_seats(n_seats, rho)
@@ -1585,6 +1594,15 @@ part a reader will act on.
 """
 
 
+MEASURED_AND_SUFFICIENT = frozenset({"MEDIUM", "HIGH"})
+"""Confidence values that reflect a measurement AND clear the low bar.
+
+UNMEASURED means nobody looked. LOW means somebody looked and found the seats
+correlated enough that their agreement carries little more than one seat's.
+Neither supports presenting a result as established.
+"""
+
+
 @dataclass
 class RunVerdict:
     """What the run established, as TWO facts rather than one label.
@@ -1662,14 +1680,21 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
     # remain" made a run with two live options report COMPLETE. Completion is
     # a fact about the option set, so it has to be read from the last result
     # that observed one.
-    alive: list[str] = []
-    for r in results:
-        if r.options_alive or r.options_created:
-            alive = r.options_alive
+    # WHETHER WE LOOKED IS RECORDED SEPARATELY FROM WHAT WE FOUND.
+    #
+    # The test was `if r.options_alive or r.options_created`, and an empty
+    # survivor list is falsey -- so a round that removed the LAST standing
+    # options was indistinguishable from a round that never reached the
+    # bookkeeping at all. The packet kept the previous round's list and
+    # reported "2 remain" after both had been eliminated, which is the
+    # opposite of what happened.
+    observed = [r for r in results if r.options_observed]
+    alive: list[str] = observed[-1].options_alive if observed else []
     created = sum(r.options_created for r in results)
     claims = sum(r.passed + r.failed + r.escalated + r.blocked for r in results)
     escalated = sum(r.escalated for r in results)
-    unexamined_now = results[-1].options_unexamined
+    # From the last round that actually observed the set, for the same reason.
+    unexamined_now = observed[-1].options_unexamined if observed else []
 
     # -- mechanical adjudication ------------------------------------------
     if any(r.options_unparsed for r in results):
@@ -1687,7 +1712,23 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
             f"rests on. The text below is what the panel agreed on, not what "
             f"survived being attacked."
         )
-    elif len(alive) <= 1:
+    elif not alive:
+        # EVERY ANSWER WAS REFUTED. This fell into the branch below and
+        # reported "1 remain" style completion, because the test was
+        # `len(alive) <= 1` and zero satisfies it -- so a run that eliminated
+        # everything read as a run that had settled on something.
+        #
+        # It is a real and useful outcome: the panel proposed answers and
+        # mechanically refuted all of them. But there is nothing to act on,
+        # and the one thing the report must not do is imply there is.
+        adjudication = "COMPLETE"
+        reasons.append(
+            f"EVERY OPTION WAS REMOVED. All {created} answer(s) the panel "
+            f"proposed had a commitment they declared mechanically refuted, "
+            f"so NOTHING SURVIVED. That is a finding about the answers that "
+            f"were proposed, not an answer: the right one may simply never "
+            f"have been put forward, and later rounds only remove.")
+    elif len(alive) == 1:
         adjudication = "COMPLETE"
         reasons.append(
             f"{removed} option(s) were removed by mechanical refutation and "

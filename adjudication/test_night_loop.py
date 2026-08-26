@@ -445,8 +445,18 @@ class TestConfidenceCeiling:
         defaulted to High would stamp certainty on exactly the runs where
         independence is unknown."""
         c = NL.confidence_clause(5, None)
-        assert "LOW" in c
-        assert "Unmeasured independence is not high independence" in c
+        assert "Low" in c
+        assert "unmeasured independence is not high independence" in c.lower()
+
+    def test_the_closer_is_told_to_call_it_unmeasured_not_low(self):
+        """The packet reported UNMEASURED while the closer was told the
+        ceiling was LOW. Those are different facts wearing one word: Low is
+        what a measurement earns when it finds the seats correlated, and a
+        reader seeing both could not tell whether independence had been
+        checked and found poor or never checked at all."""
+        c = NL.confidence_clause(5, None)
+        assert "UNMEASURED" in c
+        assert "DO NOT WRITE THAT CORROBORATION IS LOW" in c
 
     def test_correlated_seats_cap_lower_than_independent_ones(self):
         assert SI.confidence_ceiling(5, 0.0) == "High"
@@ -803,6 +813,9 @@ def _round(n=1, claims=10, failed=0, escalated=0, rho=0.1,  # noqa: PLR0913, PLR
     r.options_removed = [f"opt_{n}_{i}" for i in range(removed)]
     r.options_alive = (list(alive) if alive is not None
                        else [f"opt_alive_{i}" for i in range(max(0, created - removed))])
+    # This round reached the option bookkeeping. An empty survivor list is
+    # falsey, so whether we LOOKED is recorded apart from what we found.
+    r.options_observed = True
     r.merged = "a merged answer"
     for k, v in kw.items():
         setattr(r, k, v)
@@ -1506,26 +1519,55 @@ class TestCodeOwnsTheSurvivorSet:
         opt = OS.Option(id="o1", text="an option", claims=["c1"])
         assert OS.eliminate([opt], {"c1": None}, 1) == []
 
+    def _opt_with(self, *values):
+        """An option carrying one commitment per value given."""
+        opt = OS.Option(id="o1", text="an option")
+        opt.predicates = [
+            P.Predicate(option_id="o1", subject=f"quantity {i}", relation="=",
+                        value=Fraction(v), unit="")
+            for i, v in enumerate(values)]
+        return opt
+
     def test_a_blocked_only_survivor_is_not_examined(self):
         """An option whose sole dependency was BLOCKED counted as examined,
         and a sole survivor resting on one blocked `sqrt(4) = 2` was presented
         under "the answer that survived"."""
-        import adjudication_orchestrator as AO
+        opt = self._opt_with(4)
+        rulings = P.adjudicate(opt.predicates, [(opt.predicates[0].id, "sqrt(4)")])
+        assert rulings[opt.predicates[0].id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        blocked = type("V", (), {"status": AO.GateStatus.BLOCKED, "detail": "d"})()
-        assert OS.unexamined([opt], {"c1": blocked}) == [opt]
+    def test_a_commitment_nobody_challenged_is_not_examined(self):
+        """No seat computed it, so it has not been shown right or wrong."""
+        opt = self._opt_with(4)
+        assert OS.unexamined([opt], {}) == [opt]
 
-    def test_an_escalated_only_survivor_is_not_examined(self):
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        assert OS.unexamined([opt], {"c1": None}) == [opt]
+    def test_an_option_with_no_commitment_is_not_examined(self):
+        """Nothing about it could be computed, so nothing about it was."""
+        opt = OS.Option(id="o1", text="an option")
+        assert OS.unexamined([opt], {}) == [opt]
 
-    def test_a_ruled_survivor_is_examined(self):
-        import adjudication_orchestrator as AO
+    def test_a_fully_ruled_survivor_is_examined(self):
+        opt = self._opt_with(4)
+        rulings = P.adjudicate(opt.predicates, [(opt.predicates[0].id, "2 + 2")])
+        assert rulings[opt.predicates[0].id].status == "pass"
+        assert OS.unexamined([opt], rulings) == []
 
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        passed = type("V", (), {"status": AO.GateStatus.PASS, "detail": "d"})()
-        assert OS.unexamined([opt], {"c1": passed}) == []
+    def test_one_settled_commitment_does_not_cover_an_unsettled_one(self):
+        """CORRECTED. This asked whether ANY dependency reached a verdict, so
+        an option resting on one computed figure and one BLOCKED check counted
+        as examined and carried no warning at all.
+
+        Half-checked is not checked. The unresolved half is exactly where the
+        answer might fail, and a PASS beside it produces the appearance of
+        scrutiny rather than the fact."""
+        opt = self._opt_with(4, 9)
+        good, bad = opt.predicates
+        rulings = P.adjudicate(opt.predicates,
+                               [(good.id, "2 + 2"), (bad.id, "sqrt(81)")])
+        assert rulings[good.id].status == "pass"
+        assert rulings[bad.id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
     def test_an_open_list_is_not_parsed_as_options(self):
         """The closer is required to end with an OPEN list naming what the
@@ -1677,6 +1719,7 @@ class TestAFailedRoundDoesNotOverstateCompletion:
         r1.options_created = 3
         r1.options_removed = ["opt_a"]
         r1.options_alive = ["opt_b", "opt_c"]
+        r1.options_observed = True
         r1.rho = None
         r1.merged = "x"
         r1.thinkers_ok = [f"seat_{i}" for i in range(1, 6)]
@@ -1946,3 +1989,63 @@ class TestEveryEntryPointPlansItsCaps:
         import inspect
         src = inspect.getsource(NL.live_night)
         assert "if caps is None and ledger is not None:" in src
+
+
+class TestWhetherWeLookedIsSeparateFromWhatWeFound:
+    """An empty survivor list is falsey.
+
+    The test for "did this round observe the option set" was
+    `r.options_alive or r.options_created`, so a round that removed the LAST
+    standing options was indistinguishable from one that never reached the
+    bookkeeping at all. The verdict fell back to an earlier round's list and
+    reported "2 remain" after both had been eliminated -- the opposite of what
+    happened, printed with the confidence of a count.
+    """
+
+    def _round(self, n, alive, observed, created=0, removed=()):
+        r = NL.RoundResult(n, f"round {n}")
+        r.thinkers_ok = [f"seat_{i}" for i in range(1, 6)]
+        r.options_created = created
+        r.options_removed = list(removed)
+        r.options_alive = list(alive)
+        r.options_observed = observed
+        r.merged = "x"
+        return r
+
+    def test_removing_the_last_option_is_not_read_as_not_looking(self):
+        rounds = [self._round(1, ["opt_a", "opt_b"], True, created=2),
+                  self._round(2, [], True, removed=["opt_a", "opt_b"])]
+        run = NL.assess(rounds)
+        assert "2 remain" not in " ".join(run.reasons + run.caveats)
+
+    def test_a_round_that_never_looked_falls_back_to_one_that_did(self):
+        """A closer that raises takes its round out before the bookkeeping,
+        and that round genuinely knows nothing."""
+        rounds = [self._round(1, ["opt_a", "opt_b"], True, created=2,
+                              removed=["opt_c"]),
+                  self._round(2, [], False)]
+        run = NL.assess(rounds)
+        assert run.adjudication == "PARTIAL"
+        assert "2 remain" in " ".join(run.reasons)
+
+    def test_the_two_cases_say_different_things(self):
+        """Which is the point: they used to produce the same account."""
+        looked = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                        removed=["opt_b"]),
+                            self._round(2, [], True, removed=["opt_a"])])
+        did_not = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                         removed=["opt_b"]),
+                             self._round(2, [], False)])
+        assert "EVERY OPTION WAS REMOVED" in " ".join(looked.reasons)
+        assert "EVERY OPTION WAS REMOVED" not in " ".join(did_not.reasons)
+        assert "1 remain" in " ".join(did_not.reasons)
+
+    def test_eliminating_everything_does_not_read_as_settling_on_one(self):
+        """`len(alive) <= 1` is satisfied by zero, so a run that refuted every
+        answer reported completion in the same words as one that had narrowed
+        to a single survivor. There is nothing to act on, and the report must
+        not imply there is."""
+        run = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                     removed=["opt_b"]),
+                         self._round(2, [], True, removed=["opt_a"])])
+        assert "NOTHING SURVIVED" in " ".join(run.reasons)
