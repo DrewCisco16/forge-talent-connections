@@ -2126,3 +2126,168 @@ class TestWhetherWeLookedIsSeparateFromWhatWeFound:
                                      removed=["opt_b"]),
                          self._round(2, [], True, removed=["opt_a"])])
         assert "NOTHING SURVIVED" in " ".join(run.reasons)
+
+
+class TestTwoSeatsProposingOneAnswerAreTwoAdvocates:
+    """Identical wording collapsed to whichever seat sorted first, and the
+    other seat's reasoning vanished with it. So if the surviving seat's
+    arithmetic was wrong the answer was removed -- and renaming the seats
+    changed whether it survived.
+    """
+
+    GOOD = ("OPTION | Run all five rounds every time\n"
+            "PREDICATE | cost | = | 30 api calls\nFORMULA | 5 * 6\n")
+    BAD = ("OPTION | Run all five rounds every time\n"
+           "PREDICATE | cost | = | 30 api calls\nFORMULA | 5 * 7\n")
+
+    def _run(self, a, b):
+        pool = OS.parse_proposals({"seat_a": a, "seat_b": b})
+        rulings = P.adjudicate([pr for o in pool for pr in o.predicates], [])
+        return pool, rulings, OS.eliminate(pool, rulings, 1)
+
+    def test_both_proposers_are_recorded(self):
+        pool, _, _ = self._run(self.GOOD, self.BAD)
+        assert pool[0].proposers == ["seat_a", "seat_b"]
+
+    def test_both_rationales_are_kept(self):
+        pool, _, _ = self._run(self.GOOD, self.BAD)
+        pred = pool[0].predicates[0]
+        assert len(pred.alternates) == 1
+
+    def test_one_advocates_bad_arithmetic_does_not_refute_the_answer(self):
+        _, rulings, removed = self._run(self.GOOD, self.BAD)
+        assert removed == []
+        assert next(iter(rulings.values())).status == "pass"
+
+    def test_the_result_does_not_depend_on_seat_order(self):
+        """The decisive property. Reversing the seats used to reverse the
+        outcome, which means the seat names were deciding the answer."""
+        first = self._run(self.GOOD, self.BAD)[2]
+        second = self._run(self.BAD, self.GOOD)[2]
+        assert first == second == []
+
+    def test_an_answer_with_no_sound_route_is_still_removed(self):
+        """Retaining every advocate does not mean retaining every answer."""
+        _, _, removed = self._run(self.BAD, self.BAD.replace("5 * 7", "5 * 8"))
+        assert [o.text for o in removed] == ["Run all five rounds every time"]
+
+
+class TestAMergedOptionSurvivesItsKeeper:
+    """Absorbed members were always shown under their keeper, so when the
+    keeper was refuted and the member was not, the member appeared NOWHERE --
+    not in the next round's prompt, not in the packet. The run reported one
+    option remaining and COMPLETE while the option it was reporting had been
+    silently dropped from the conversation.
+
+    Grouping is a presentation convenience. It cannot decide what is on the
+    table.
+    """
+
+    def _pair(self):
+        a = OS.Option(id="opt_aaaaaa", text="Build the thing in house")
+        b = OS.Option(id="opt_bbbbbb", text="Build it ourselves internally")
+        b.merged_into = a.id
+        return a, b
+
+    def test_while_the_keeper_lives_the_member_is_shown_under_it(self):
+        a, b = self._pair()
+        working = OS.render_working([a, b])
+        assert "also proposed as" in working
+        assert working.count("1. [") == 1
+
+    def test_when_the_keeper_dies_the_member_stands_on_its_own(self):
+        a, b = self._pair()
+        a.eliminated_in_round, a.elimination_reason = 1, "its arithmetic failed"
+        working = OS.render_working([a, b])
+        assert "opt_bbbbbb" in working
+        assert "Build it ourselves internally" in working
+
+    def test_the_survivor_is_never_absent_from_the_prompt(self):
+        a, b = self._pair()
+        a.eliminated_in_round = 1
+        assert [o.id for o in OS.unexamined([a, b], {})] == ["opt_bbbbbb"]
+
+
+class TestACommitmentIsIdentifiedByWhatItIsAbout:
+    def test_two_quantities_sharing_a_value_are_two_commitments(self):
+        """"fatalities = 0 people" and "cost = 0 people" on one option
+        produced a single id, so ruling on either silently ruled on both --
+        and an option could be removed for the arithmetic of a quantity
+        nobody had checked."""
+        a = P.Predicate(option_id="o", subject="fatalities", relation="=",
+                        value=Fraction(0), unit="people")
+        b = P.Predicate(option_id="o", subject="cost", relation="=",
+                        value=Fraction(0), unit="people")
+        assert a.id != b.id
+
+    def test_the_same_quantity_written_differently_is_one_commitment(self):
+        a = P.Predicate(option_id="o", subject="Total  Cost", relation="=",
+                        value=Fraction(4), unit="")
+        b = P.Predicate(option_id="o", subject="total cost", relation="=",
+                        value=Fraction(4), unit="")
+        assert a.id == b.id
+
+
+class TestNothingIsLostWithoutSayingSo:
+    """Every one of these dropped something on the floor in silence, and a
+    silently incomplete option set or half-checked option is indistinguishable
+    from a complete one on the page.
+    """
+
+    def test_a_short_answer_is_still_an_answer(self):
+        """The floor was 12 characters and "Do nothing." is eleven. So were
+        "Wait." and "Ship it." -- short answers to exactly the kind of
+        question this tool is for, discarded without a word. Later rounds only
+        remove, so they were gone for good."""
+        got = OS.parse_options("OPTION | Do nothing.\nOPTION | Wait.\n")
+        assert [o.text for o in got] == ["Do nothing.", "Wait."]
+
+    QUANTITIES = (
+        ("$12.27", Fraction(1227, 100), "dollars"),
+        ("95%", Fraction(95), "percent"),
+        ("2.5 hours/day", Fraction(5, 2), "hours/day"),
+        ("1e3 dollars", Fraction(1000), "dollars"),
+        ("1,200 dollars", Fraction(1200), "dollars"),
+        ("$1,200", Fraction(1200), "dollars"),
+    )
+
+    @pytest.mark.parametrize("written,value,unit", QUANTITIES)
+    def test_a_figure_a_seat_would_actually_write_parses(self, written, value,
+                                                         unit):
+        """Each of these produced NO commitment, so the option carrying it
+        could never be checked and never removed -- a hole, not a refusal."""
+        assert P._quantity(written) == (value, unit)
+
+    def test_a_fenced_example_is_not_an_objection(self):
+        """The contract shows seats a sample CHALLENGE line. A seat quoting it
+        back had the sample executed as a real objection."""
+        assert P.parse_challenges("```\nCHALLENGE | pred_x | a = 1\n```") == []
+
+    def test_an_indented_example_is_not_an_objection(self):
+        """Which is how the contract itself prints it."""
+        assert P.parse_challenges("    CHALLENGE | pred_x | a = 1") == []
+
+    def test_a_real_challenge_still_lands(self):
+        assert P.parse_challenges("CHALLENGE | pred_x | a = 1") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_too_many_commitments_is_refused_not_truncated(self):
+        """The fifth and later were dropped silently, so an option could be
+        checked against four figures while appearing to rest on six -- and
+        which four depended on the order they were written in."""
+        block = "".join(f"PREDICATE | q{i} | = | {i}\nFORMULA | {i}\n"
+                        for i in range(6))
+        with pytest.raises(P.TooManyCommitments):
+            P.parse_predicates("o", block)
+
+    def test_an_over_declared_option_survives_untested(self, tmp_path):
+        """Fail closed on the OPTION, not on the round. It carries no
+        commitment, is reported untested, and does not take the other seats'
+        answers down with it."""
+        block = "OPTION | An answer that over-declares\n" + "".join(
+            f"PREDICATE | q{i} | = | {i}\nFORMULA | {i}\n" for i in range(6))
+        got = OS.parse_options(block)
+        assert len(got) == 1
+        assert got[0].predicates == []
+        assert got[0].parse_note is not None
+        assert OS.unexamined(got, {}) == got

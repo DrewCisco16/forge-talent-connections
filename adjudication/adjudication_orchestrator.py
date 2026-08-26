@@ -591,7 +591,17 @@ def _agrees_to_written_precision(actual: Fraction, claimed: str) -> bool:
         return False
 
 
-_UNIT_AFTER_NUMBER = re.compile(r"(?<=[\d)])\s*([A-Za-z][A-Za-z ]*)")
+_UNIT_AFTER_NUMBER = re.compile(
+    r"(?<=[\d)])\s*(?!e[-+]?\d)([A-Za-z][A-Za-z ]*(?:/[A-Za-z]+)?)")
+"""A unit label following a number.
+
+Allows a rate written with a slash -- "2.5 hours/day" -- which seats write
+constantly and which used to leave the value unparseable, so the commitment
+carrying it silently did not exist.
+
+The exponent guard keeps scientific notation intact: "1e3 dollars" was read
+as 1 in units of "e", and the exponent vanished into the unit label.
+"""
 
 
 def _split_unit(side: str) -> tuple[str, str]:
@@ -2022,7 +2032,13 @@ class Orchestrator:
             # candidate-owned: nothing added later can attach a dependency to
             # a candidate that a rival wants removed.
             if not cand.predicates:
-                cand.predicates = list(parse_predicates(cand.id, cand.content))
+                try:
+                    cand.predicates = list(
+                        parse_predicates(cand.id, cand.content))
+                except Exception:  # noqa: BLE001 - see option_set: an option
+                    # that over-declared carries nothing and is reported
+                    # untested; it does not take the run down.
+                    cand.predicates = []
             for claim in cand.claims:
                 if claim.id in self.verdicts or claim.id in self._seen_claims:
                     continue
@@ -2149,7 +2165,13 @@ class Orchestrator:
         # looked at". Parsing is idempotent and content-addressed.
         for cand in candidates:
             if not cand.predicates:
-                cand.predicates = list(parse_predicates(cand.id, cand.content))
+                try:
+                    cand.predicates = list(
+                        parse_predicates(cand.id, cand.content))
+                except Exception:  # noqa: BLE001 - see option_set: an option
+                    # that over-declared carries nothing and is reported
+                    # untested; it does not take the run down.
+                    cand.predicates = []
 
         standing = [pr for cand in candidates if not cand.eliminated
                     for pr in cand.predicates]

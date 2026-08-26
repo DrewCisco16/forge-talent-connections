@@ -106,6 +106,17 @@ class PredicateError(ValueError):
     """A predicate line that cannot be read as a typed commitment."""
 
 
+class TooManyCommitments(ValueError):
+    """One option declared more figures than it may be held to."""
+
+
+_FENCE = re.compile(r"^\s*(?:```|~~~)")
+
+_INDENTED_EXAMPLE = re.compile(r"^(?: {4,}|\t)")
+"""A line indented as a code block. The contract prints its own examples this
+way, and a seat echoing the contract had them executed."""
+
+
 @dataclass(frozen=True)
 class Predicate:
     """One quantitative commitment an option makes.
@@ -139,6 +150,18 @@ class Predicate:
     """
     inputs: tuple[tuple[str, Fraction], ...] = ()
     """The option's OWN values for the formula's variables."""
+    alternates: tuple[tuple[str, tuple[tuple[str, Fraction], ...]], ...] = ()
+    """Further (formula, inputs) pairs OTHER SEATS gave for this same figure.
+
+    Two seats proposing the same answer are two advocates for it, and they may
+    reach the figure differently. Identical wording used to collapse to
+    whichever seat sorted first, and the other seat's reasoning vanished --
+    so if the surviving seat's arithmetic was wrong the answer was removed,
+    and renaming the seats changed whether it survived.
+
+    One advocate's bad arithmetic does not refute the answer. It refutes that
+    advocate. The commitment stands if ANY declared route to it holds.
+    """
 
     def __post_init__(self) -> None:
         if self.relation not in _CANON:
@@ -149,7 +172,8 @@ class Predicate:
         object.__setattr__(self, "unit", (self.unit or "").strip().casefold())
         if not self.id:
             object.__setattr__(self, "id", predicate_id(
-                self.option_id, self.relation, self.value, self.unit))
+                self.option_id, self.subject, self.relation, self.value,
+                self.unit))
 
     def render(self) -> str:
         """How it appears to a seat being invited to challenge it."""
@@ -158,7 +182,7 @@ class Predicate:
                 f"{RELATIONS[self.relation]} {_show(self.value)}{unit}")
 
 
-def predicate_id(option_id: str, relation: str, value: Fraction,
+def predicate_id(option_id: str, subject: str, relation: str, value: Fraction,
                  unit: str) -> str:
     """A content id that INCLUDES THE OPTION IT BINDS TO.
 
@@ -167,7 +191,13 @@ def predicate_id(option_id: str, relation: str, value: Fraction,
     verdict then keyed both, and one false claim removed two unrelated
     candidates. Whatever a commitment is ABOUT is part of what it is.
     """
-    material = f"{option_id}{relation}{value}{unit}"
+    # THE SUBJECT IS PART OF THE IDENTITY. Without it "fatalities = 0 people"
+    # and "cost = 0 people" on the same option produced one id, so ruling on
+    # either silently ruled on both -- and an option could be removed for the
+    # arithmetic of a quantity nobody had checked.
+    material = "\x00".join(
+        (option_id, " ".join(subject.casefold().split()), relation,
+         str(value), unit))
     return "pred_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:12]
 
 
@@ -178,8 +208,21 @@ def _quantity(text: str) -> tuple[Fraction, str]:
     through the same bounded arithmetic path as a warrant so a value written
     as "2**64" cannot be used to make the parser do work.
     """
-    expr, unit = _split_unit((text or "").replace(",", "").strip())
+    raw = (text or "").replace(",", "").strip()
+    # FORMS SEATS ACTUALLY WRITE. Every one of these produced no commitment at
+    # all, which meant the option carrying it could never be checked and never
+    # be removed -- a silent hole rather than a refusal.
+    prefix_unit = ""
+    for sym, name in (("$", "dollars"), ("\u00a3", "pounds"),
+                      ("\u20ac", "euros")):
+        if raw.startswith(sym):
+            raw, prefix_unit = raw[len(sym):].strip(), name
+            break
+    if raw.endswith("%"):
+        raw, prefix_unit = raw[:-1].strip(), prefix_unit or "percent"
+    expr, unit = _split_unit(raw)
     expr = expr.strip()
+    unit = unit or prefix_unit
     if not expr:
         raise PredicateError("no value given")
     try:
@@ -208,7 +251,13 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
     out: list[Predicate] = []
     seen: set[str] = set()
     lines = (block or "").splitlines()
+    fenced = False
     for i, line in enumerate(lines):
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced or _INDENTED_EXAMPLE.match(line):
+            continue
         m = _PREDICATE_LINE.match(line)
         if m is None:
             continue
@@ -248,8 +297,16 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
             continue
         seen.add(pred.id)
         out.append(pred)
-        if len(out) >= MAX_PREDICATES_PER_OPTION:
-            break
+    if len(out) > MAX_PREDICATES_PER_OPTION:
+        # REFUSED, NOT TRUNCATED. The fifth and later commitments were dropped
+        # in silence, so an option could be checked against four figures while
+        # appearing to rest on six -- and which four depended on the order
+        # they happened to be written in.
+        raise TooManyCommitments(
+            f"this option declared {len(out)} commitments, over the "
+            f"{MAX_PREDICATES_PER_OPTION} it may carry. Keeping the first "
+            f"{MAX_PREDICATES_PER_OPTION} would decide by writing order which "
+            f"figures the answer is held to, so none is taken.")
     return out
 
 
@@ -353,27 +410,43 @@ def self_check(pred: Predicate) -> Ruling:
     An option with no formula cannot be self-checked and is never removed. It
     survives and is reported as untested, which is the honest description.
     """
-    if not pred.formula:
+    routes = [(pred.formula, pred.inputs), *pred.alternates]
+    routes = [(f, i) for f, i in routes if (f or "").strip()]
+    if not routes:
         return Ruling(pred.id, "blocked",
                       "no formula was declared, so there is nothing to "
                       "recompute; this commitment cannot be settled here")
-    try:
-        got = _evaluate(pred.formula, dict(pred.inputs))
-    except PredicateError as exc:
-        return Ruling(pred.id, "blocked", str(exc))
     unit = f" {pred.unit}" if pred.unit else ""
-    shown = ", ".join(f"{n}={_show(v)}" for n, v in pred.inputs)
     said = (f"{pred.subject.strip()} {RELATIONS[pred.relation]} "
             f"{_show(pred.value)}{unit}")
-    if _holds(pred, got):
-        return Ruling(pred.id, "pass",
-                      f"the option's own formula {pred.formula} with its own "
-                      f"inputs ({shown}) gives {_show(got)}{unit}, and it "
-                      f"committed that {said}")
+    failures: list[str] = []
+    blocked: list[str] = []
+    for formula, inputs in routes:
+        shown = ", ".join(f"{n}={_show(v)}" for n, v in inputs)
+        try:
+            got = _evaluate(formula, dict(inputs))
+        except PredicateError as exc:
+            blocked.append(f"{formula}: {exc}")
+            continue
+        if _holds(pred, got):
+            # ANY declared route holding settles it. Two seats proposing one
+            # answer are two advocates for it, and one advocate's arithmetic
+            # being wrong refutes the advocate, not the answer.
+            return Ruling(pred.id, "pass",
+                          f"the option's own formula {formula} with its own "
+                          f"inputs ({shown}) gives {_show(got)}{unit}, and it "
+                          f"committed that {said}")
+        failures.append(f"the option's own formula {formula} with its own "
+                        f"inputs ({shown}) gives {_show(got)}{unit}")
+    if not failures:
+        return Ruling(pred.id, "blocked",
+                      f"no declared route to this figure could be evaluated: "
+                      f"{'; '.join(blocked)}")
+    unevaluated = (f" ({len(blocked)} further route(s) could not be "
+                   f"evaluated)" if blocked else "")
     return Ruling(pred.id, "fail",
-                  f"the option's own formula {pred.formula} with its own "
-                  f"inputs ({shown}) gives {_show(got)}{unit}, but it "
-                  f"committed that {said}")
+                  f"{'; '.join(failures)}, but it committed that "
+                  f"{said}{unevaluated}")
 
 
 def dispute(pred: Predicate, bindings: Mapping[str, Fraction]) -> Ruling:
@@ -422,7 +495,17 @@ def parse_challenges(text: str) -> list[tuple[str, dict[str, Fraction]]]:
     readable binding names no dispute and is discarded.
     """
     out: list[tuple[str, dict[str, Fraction]]] = []
+    fenced = False
     for line in (text or "").splitlines():
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced or _INDENTED_EXAMPLE.match(line):
+            # WHAT IS INSIDE A FENCE IS AN EXAMPLE. The contract shows seats a
+            # sample CHALLENGE line, and a seat quoting it back -- in a fence
+            # or indented as a code block, which is how the contract itself
+            # prints it -- had that sample executed as a real objection.
+            continue
         m = _CHALLENGE_LINE.match(line)
         if m is None:
             continue

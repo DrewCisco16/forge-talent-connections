@@ -31,12 +31,13 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from adjudication_orchestrator import Claim
 from predicate import (
     Predicate,
     Ruling,
+    TooManyCommitments,
     parse_predicates,
     refuted_commitment,
 )
@@ -126,7 +127,18 @@ a seat emitting a hundred lines, not a limit on how many answers a panel may
 consider.
 """
 
-MIN_OPTION_CHARS = 12
+MIN_OPTION_CHARS = 3
+"""Shortest text that can be an answer.
+
+IT WAS 12, AND "Do nothing." IS ELEVEN. So were "Wait." and "Ship it." --
+short answers to exactly the kind of question this tool is for, discarded
+without a word, and later rounds only remove, so they were gone for good.
+
+The floor was set when a bullet fallback was producing fragments and needed
+something to filter them. That fallback is gone: an answer now has to be
+DECLARED, and a seat that declares "Wait." meant it. Length was never the
+thing that distinguished a fragment from an answer -- being declared is.
+"""
 
 
 def option_id(text: str) -> str:
@@ -160,6 +172,16 @@ class Option:
     that moment. See predicate.py for why elimination rests on these and not
     on sentences.
     """
+    proposers: list[str] = field(default_factory=list)
+    """Every seat that put this answer forward, in pool order.
+
+    Two seats proposing the same answer are two advocates for it. Recording
+    only the first lost the second's reasoning entirely.
+    """
+    parse_note: str | None = None
+    """Why this option carries no commitment, when that was not the seat's
+    intent. Recorded so a silently uncheckable answer is not mistaken for one
+    that simply had nothing quantitative to say."""
     merged_into: str | None = None
     """Set when the closer said this is the same answer as another entry.
 
@@ -257,8 +279,16 @@ def parse_options(text: str) -> list[Option]:
         # REPLY. That is what makes them candidate-owned: an option can only
         # ever be removed by something the seat said about it while putting
         # it forward, never by an edge a later round invented.
-        opt.predicates = list(
-            parse_predicates(oid, "\n".join(own_lines)))
+        try:
+            opt.predicates = list(
+                parse_predicates(oid, "\n".join(own_lines)))
+        except TooManyCommitments as exc:
+            # FAIL CLOSED ON THE OPTION, NOT ON THE ROUND. An option that
+            # declared too many figures carries none of them: it survives and
+            # is reported as untested, which is the honest description. It
+            # does not take the other seats' answers down with it.
+            opt.predicates = []
+            opt.parse_note = str(exc)
         out.append(opt)
 
     if len(out) > MAX_OPTIONS:
@@ -367,13 +397,24 @@ def render_working(options: Sequence[Option]) -> str:
     lines = ["## Options still standing", ""]
     if not alive:
         lines.append("(none -- every option had a declared claim refuted)")
+    # AN ABSORBED OPTION WHOSE KEEPER IS GONE STANDS ON ITS OWN.
+    #
+    # Absorbed members were always shown under their keeper, so when the
+    # keeper was refuted and the member was not, the member appeared nowhere:
+    # not in the next round's prompt, not in the packet. The run reported one
+    # option remaining and MECHANICAL ADJUDICATION: COMPLETE while the option
+    # it was reporting had been silently dropped from the conversation.
+    #
+    # Grouping is a presentation convenience. It cannot be allowed to decide
+    # what is on the table.
+    living = {o.id for o in alive}
     grouped: dict[str, list[Option]] = {}
     for opt in alive:
-        if opt.merged_into:
+        if opt.merged_into and opt.merged_into in living:
             grouped.setdefault(opt.merged_into, []).append(opt)
     i = 0
     for opt in alive:
-        if opt.merged_into:
+        if opt.merged_into and opt.merged_into in living:
             continue                      # shown under its keeper, below
         i += 1
         lines.append(f"{i}. [{opt.id}] {opt.text}")
@@ -394,22 +435,28 @@ def render_working(options: Sequence[Option]) -> str:
                 lines.append(f"      {pred.render()}")
     lines += [
         "",
-        "To remove an option, refute a commitment it made, by id:",
-        "    CHALLENGE | <commitment id> | <an arithmetic expression>",
+        "Each commitment shows its figure, the formula that produces it, and",
+        "the numbers put into that formula. If you think one of those NUMBERS",
+        "is wrong, say which and what it should be:",
         "",
-        "The expression is evaluated and compared with the value the option",
-        "committed to. Supply an EXPRESSION, not an equation: the commitment",
-        "already states the relation and the value.",
+        "    CHALLENGE | <commitment id> | per_round = 9",
         "",
-        "You cannot attach a new commitment to someone else's option. They",
-        "were fixed when the options were proposed, and a seat that could add",
-        "one now could remove any option it liked by aiming a false sum at",
-        "it. An option resting on something nobody can compute is not removed",
-        "here; it survives and is reported as untested.",
+        "You may change the inputs and nothing else. You cannot supply the",
+        "formula and you cannot create a commitment: a seat that could write",
+        "the computation could remove any answer it disliked by attaching",
+        "arithmetic of its own choosing to it.",
         "",
-        "CLAIM lines are still checked and still reported. They no longer",
-        "remove anything, because a sentence can always carry more than its",
-        "warrant covers.",
+        "A CHALLENGE DOES NOT REMOVE THE OPTION. It records that two seats put",
+        "different numbers into the same formula and get different answers.",
+        "Neither figure has been independently established, so a person",
+        "settles it -- yours is not preferred for being later.",
+        "",
+        "WHAT REMOVES AN OPTION is its own arithmetic failing: the formula it",
+        "declared, with the inputs it declared, not producing the figure it",
+        "committed to. That needs nothing from you.",
+        "",
+        "CLAIM lines are still read, checked and reported. They remove",
+        "nothing: a sentence can always assert more than its warrant covers.",
     ]
     return "\n".join(lines)
 
@@ -472,6 +519,36 @@ _MERGE = re.compile(r"^\s*MERGE\s*\|(.+)$", re.IGNORECASE)
 _OPT_ID = re.compile(r"opt_[0-9a-f]{6,}", re.IGNORECASE)
 
 
+def _absorb(pool: list[Option], other: Option, seat: str) -> None:
+    """Fold a second proposal of the same answer into the one already held.
+
+    A commitment both seats made, by the same route, is one commitment. A
+    commitment only the second seat made is added. The same figure reached a
+    different way becomes an ALTERNATE route to it, and the figure then stands
+    if any declared route holds -- because one advocate's arithmetic being
+    wrong refutes that advocate, not the answer they were arguing for.
+    """
+    keeper = next(o for o in pool if o.id == other.id)
+    if seat not in keeper.proposers:
+        keeper.proposers.append(seat)
+    by_id = {pr.id: pr for pr in keeper.predicates}
+    for pred in other.predicates:
+        held = by_id.get(pred.id)
+        if held is None:
+            keeper.predicates.append(pred)
+            by_id[pred.id] = pred
+            continue
+        route = (pred.formula, pred.inputs)
+        if not (pred.formula or "").strip():
+            continue
+        existing = {(held.formula, held.inputs), *held.alternates}
+        if route in existing:
+            continue
+        merged = replace(held, alternates=(*held.alternates, route))
+        keeper.predicates[keeper.predicates.index(held)] = merged
+        by_id[merged.id] = merged
+
+
 def parse_proposals(thinker_texts: Mapping[str, str]) -> list[Option]:
     """The option pool, built from what the THINKERS actually proposed.
 
@@ -513,8 +590,15 @@ def parse_proposals(thinker_texts: Mapping[str, str]) -> list[Option]:
             silent.append(seat)
         for opt in mine:
             if opt.id in seen:
+                # SAME ANSWER, ANOTHER ADVOCATE. The later seat used to be
+                # dropped whole, taking its reasoning with it -- so whichever
+                # seat sorted first decided how the answer was justified, and
+                # renaming the seats changed whether it survived. Its
+                # commitments are merged in instead.
+                _absorb(pool, opt, seat)
                 continue
             seen.add(opt.id)
+            opt.proposers = [seat]
             pool.append(opt)
     # THE CEILING IS ON THE POOL, NOT ON ONE REPLY. It was applied per seat,
     # so five seats at the limit produced a hundred and fifty options -- a set
