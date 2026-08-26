@@ -1311,3 +1311,55 @@ class TestAnUnmeasuredCallIsNotAFreeCall:
         # The MEASURED figure, not the estimate it was authorised against.
         assert self._ledger(tmp_path / "day.json").day_spent() == \
             pytest.approx(1.0)
+
+
+class TestTwoProcessesCannotBothSpendTheSameBudget:
+    """Reading the day file and then dispatching left a window. Two watchers
+    sharing a $1/day limit each read $0.00, each authorised $0.75, and both
+    calls went out -- neither process doing anything wrong on its own, and the
+    limit exceeded by half again.
+
+    The estimate is claimed in the shared file BEFORE the call, so the second
+    process reads the first's claim rather than a figure about to be stale.
+    """
+
+    CLAIMANT = """
+import sys
+sys.path.insert(0, {here!r})
+import cost_ledger as CL
+rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+               verified_on="2026-08-25")
+led = CL.CostLedger(rates={{"s": rate}}, per_day=1.00,
+                    day_state_path=sys.argv[1])
+try:
+    # 750,000 input tokens at $1/Mtok = $0.75.
+    led.check_before_call("s", 750_000, 0)
+except CL.CeilingReached:
+    sys.exit(3)          # correctly refused
+sys.exit(0)              # authorised
+"""
+
+    def _race(self, tmp_path, n=2):
+        import subprocess
+        import sys
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        script = tmp_path / "claimant.py"
+        script.write_text(self.CLAIMANT.format(here=here))
+        state = str(tmp_path / "day.json")
+        procs = [subprocess.Popen([sys.executable, str(script), state])
+                 for _ in range(n)]
+        return [p.wait(timeout=60) for p in procs]
+
+    def test_only_one_of_two_is_authorised(self, tmp_path):
+        codes = self._race(tmp_path)
+        assert sorted(codes) == [0, 3], (
+            "both processes authorised $0.75 against a $1.00 daily limit")
+
+    def test_the_claim_is_visible_to_a_later_reader(self, tmp_path):
+        self._race(tmp_path, n=1)
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates={"s": rate}, per_day=1.00,
+                            day_state_path=str(tmp_path / "day.json"))
+        assert led.day_spent() == pytest.approx(0.75)

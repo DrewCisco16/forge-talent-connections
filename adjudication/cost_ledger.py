@@ -294,6 +294,13 @@ class CostLedger:
     estimate that was wrong once is wrong for every call of the same shape."""
     halt_on_overrun: bool = True
     _stage_spent: dict[str, float] = field(default_factory=dict)
+    _day_reserved: float = 0.0
+    """How much of today's shared budget this run has already claimed.
+
+    Written to the day file before each dispatch, so a second process reads a
+    figure that includes this run's outstanding calls rather than one that is
+    about to be stale.
+    """
 
     # -- totals ------------------------------------------------------------
     @property
@@ -425,9 +432,38 @@ class CostLedger:
                 raise CeilingReached(f"per-stage ({pass_id})", s,
                                      self.per_stage, would_add)
         if self.per_day is not None:
+            # CHECKED AND RESERVED IN ONE LOCKED OPERATION.
+            #
+            # Reading the day file and then dispatching left a window: two
+            # watchers sharing a $1/day limit each read $0.00, each authorised
+            # $0.75, and both calls went out. Neither process did anything
+            # wrong on its own, and the limit was exceeded by half again.
+            #
+            # The reservation is written to the shared file BEFORE the call,
+            # so the second process reads the first's claim on the budget
+            # rather than a figure that is about to be stale. persist_day then
+            # writes only the difference between what this run actually
+            # committed and what it has already reserved.
+            self._reserve_day(would_add)
+
+    def _reserve_day(self, would_add: float) -> None:
+        """Claim `would_add` of today's budget, or refuse."""
+        if self.per_day is None:
+            return
+        if not self.day_state_path:
+            # Nothing shared to race over: this process is the only claimant.
             d = self.day_spent() + self.committed
             if d + would_add > self.per_day:
                 raise CeilingReached("per-day", d, self.per_day, would_add)
+            return
+        with self._day_lock():
+            on_disk = self._day_total_locked()
+            mine = max(0.0, self.committed - self._day_reserved)
+            if on_disk + mine + would_add > self.per_day:
+                raise CeilingReached("per-day", on_disk + mine, self.per_day,
+                                     would_add)
+            self._write_day_locked(on_disk + mine + would_add)
+            self._day_reserved += mine + would_add
 
     def record(self, seat_id: str, input_tokens: int | None,  # noqa: PLR0913, PLR0917
                output_tokens: int | None, pass_id: str | None = None,
@@ -508,6 +544,49 @@ class CostLedger:
         with self._day_lock():
             self._persist_day_locked()
 
+    def _day_total_locked(self) -> float:
+        """Today's figure from the shared file. Caller holds the lock."""
+        path = self.day_state_path
+        if not path or not os.path.exists(path):
+            return 0.0
+        try:
+            with open(path, encoding="utf-8") as fh:
+                blob = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CeilingReached(
+                f"daily spend state at {path} is unreadable "
+                f"({type(exc).__name__}). Refusing to spend: an unreadable "
+                f"ledger is not an empty one",
+                0.0, self.per_day or 0.0, 0.0,
+            ) from None
+        if not isinstance(blob, dict):
+            return 0.0
+        return float(blob.get(date.today().isoformat(), 0.0) or 0.0)
+
+    def _write_day_locked(self, total: float) -> None:
+        """Set today's figure. Caller holds the lock."""
+        path = self.day_state_path
+        if not path:
+            raise ValueError("no daily state path to write")
+        blob: dict[str, float] = {}
+        if os.path.exists(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    blob = json.load(fh)
+            except Exception:  # noqa: BLE001
+                blob = {}
+        if not isinstance(blob, dict):
+            blob = {}
+        blob[date.today().isoformat()] = float(total)
+        tmp = f"{path}.{os.getpid()}.{id(self)}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(blob, fh, indent=2)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
     def _persist_day_locked(self) -> None:
         path = self.day_state_path
         if not path:
@@ -528,7 +607,12 @@ class CostLedger:
         #
         # The same figure the in-run ceilings are tested against is the figure
         # the shared file has to carry.
-        blob[today] = float(blob.get(today, 0.0)) + self.committed
+        # ONLY WHAT HAS NOT ALREADY BEEN RESERVED. Every dispatch claims its
+        # estimate in this file before the call, so adding the run's whole
+        # committed figure again at the end would double-count it.
+        blob[today] = float(blob.get(today, 0.0)) + max(
+            0.0, self.committed - self._day_reserved)
+        self._day_reserved = max(self._day_reserved, self.committed)
         # A UNIQUE temporary name per writer. Two processes sharing
         # "<path>.tmp" raced: one os.replace moved the file out from under the
         # other, which then raised FileNotFoundError, and one day's spend was
