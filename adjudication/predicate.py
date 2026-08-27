@@ -365,6 +365,19 @@ def _evaluate(formula: str, bindings: Mapping[str, Fraction]) -> Fraction:
     expr = (formula or "").strip()
     if not expr:
         raise PredicateError("no formula was declared")
+    # SEATS WRITE THE FORMULA AS AN ASSIGNMENT, and four of five did on the
+    # live panel: "total_calls = rounds * calls_per_round". Reading the whole
+    # line as an expression made the quantity's own name an unbound variable,
+    # so five of six otherwise sound commitments came back BLOCKED -- an
+    # option that could not be checked, and therefore could never be removed
+    # or verified, entirely because of where it put an equals sign.
+    #
+    # The left side is the name of the thing being computed, which `subject`
+    # already carries. Only the right side is arithmetic.
+    if expr.count("=") == 1 and not re.search(r"[<>!=]=|=[<>]", expr):
+        left, _, right = expr.partition("=")
+        if _NAME.fullmatch(left.strip()) and right.strip():
+            expr = right.strip()
     names = set(_NAME.findall(expr))
     missing = sorted(names - set(bindings))
     if missing:

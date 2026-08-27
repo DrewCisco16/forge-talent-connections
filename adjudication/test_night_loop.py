@@ -2317,3 +2317,88 @@ class TestNothingIsLostWithoutSayingSo:
         assert got[0].predicates == []
         assert got[0].parse_note is not None
         assert OS.unexamined(got, {}) == got
+
+
+class TestWhatTheLivePanelActuallyWrote:
+    """Both of these were found by paying five vendors $0.61 to answer one
+    round, and neither could have been found any other way: they are facts
+    about how real models write, not about how this code behaves.
+    """
+
+    def test_one_answer_written_twice_is_one_answer(self):
+        """A seat heads each answer AND restates it as an OPTION line -- a
+        heading for the reader, a machine line for the parser. Reading both
+        forms turned its four answers into eight.
+
+        The twins are not harmless. Commitments follow the OPTION line, so the
+        heading-derived copy carries none, cannot be checked, cannot be
+        removed, and survives to the end reported as untested. The panel would
+        have spent five rounds adjudicating phantoms."""
+        text = (
+            "### Option 1 - Keep the fixed five-round schedule, and log "
+            "per-round elimination counts\n"
+            "Some reasoning about it.\n"
+            "OPTION | keep the fixed five-round schedule and log per-round "
+            "eliminations\n"
+            "PREDICATE | total API calls | = | 30 api calls\n"
+            "FORMULA | rounds * calls_per_round\n"
+            "INPUT | rounds = 5\nINPUT | calls_per_round = 6\n"
+            "### Option 2 - Stop at the first round that eliminates nothing\n"
+            "OPTION | stop at the first round that eliminates nothing\n"
+            "PREDICATE | API calls if it stops at round one | = | 6 api calls\n"
+            "FORMULA | rounds * calls_per_round\n"
+            "INPUT | rounds = 1\nINPUT | calls_per_round = 6\n")
+        got = OS.parse_options(text)
+        assert len(got) == 2, [o.text for o in got]
+        assert all(o.predicates for o in got), "a twin would carry none"
+
+    def test_a_heading_with_no_option_line_still_counts(self):
+        """The other live style, and the reason both forms are read at all."""
+        text = ("### Option 1: stop at the first null round\n"
+                "PREDICATE | calls saved | = | 24 api calls\n"
+                "FORMULA | 4 * 6\n")
+        got = OS.parse_options(text)
+        assert [o.text for o in got] == ["stop at the first null round"]
+        assert len(got[0].predicates) == 1
+
+    ASSIGNMENTS = (
+        ("total_calls = rounds * calls_per_round",
+         (("rounds", 5), ("calls_per_round", 6)), 30),
+        ("saved_calls = full_run_calls - early_stop_calls",
+         (("full_run_calls", 30), ("early_stop_calls", 18)), 12),
+        ("rounds * calls_per_round",
+         (("rounds", 5), ("calls_per_round", 6)), 30),
+    )
+
+    @pytest.mark.parametrize("formula,inputs,expected", ASSIGNMENTS)
+    def test_a_formula_written_as_an_assignment_is_evaluated(
+            self, formula, inputs, expected):
+        """Four of five seats wrote "total_calls = rounds * calls_per_round".
+        Reading the whole line as an expression made the quantity's own name an
+        unbound variable, so five of six otherwise sound commitments came back
+        BLOCKED -- an option that could never be checked, removed or verified,
+        entirely because of where it put an equals sign."""
+        pred = P.Predicate(
+            option_id="o", subject="total API calls", relation="=",
+            value=Fraction(expected), unit="", formula=formula,
+            inputs=tuple((n, Fraction(v)) for n, v in inputs))
+        assert P.self_check(pred).status == "pass"
+
+    def test_a_comparison_is_not_mistaken_for_an_assignment(self):
+        """Only a bare name on the left is a name being defined."""
+        pred = P.Predicate(option_id="o", subject="q", relation="=",
+                           value=Fraction(1), unit="", formula="a >= b",
+                           inputs=(("a", Fraction(2)), ("b", Fraction(1))))
+        assert P.self_check(pred).status == "blocked"
+
+    def test_a_missing_input_is_still_blocked(self):
+        """The one live commitment that stays blocked, correctly: it named
+        cost_per_call and never gave it a value."""
+        pred = P.Predicate(
+            option_id="o", subject="threshold probability", relation="=",
+            value=Fraction(1), unit="",
+            formula="threshold = next_round_calls * cost_per_call",
+            inputs=(("next_round_calls", Fraction(6)),))
+        ruling = P.self_check(pred)
+        assert ruling.status == "blocked"
+        assert "cost_per_call" in ruling.detail

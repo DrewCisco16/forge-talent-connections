@@ -47,19 +47,30 @@ ASK = (
     "options and what would decide between them."
 )
 
-CEILING = 1.50
+CEILING = float(os.environ.get("PROBE_CEILING", "2.50"))
 """A hard bound on this probe. It calls five seats once each and nothing else.
 
-The estimate below is a 5x-conservative worst case; the three canaries that
-did more work than this each billed between $0.31 and $0.75.
+RAISED FROM $1.50 AFTER THE FIRST RUN. One seat billed 1.6x what it was
+authorised, the overrun halt fired correctly, and three seats were never
+called -- so two thirds of the measurement was lost to a ceiling set for a
+cheaper answer than the vendors actually give.
 """
 
-CAP = 2048
-"""Enough for two or three options with their commitments, and no more.
+CAP = int(os.environ.get("PROBE_CAP", "4096"))
+"""Output cap per seat.
 
-A round-one proposal is a short list. The cap is the single largest lever on
-what this costs, and nothing here needs a long answer.
+RAISED FROM 2048 AFTER THE FIRST RUN, AND THIS IS A FINDING. At 2,048 tokens
+seat_1 returned ZERO characters: it is a reasoning model, the thinking counts
+against the cap, and it spent the whole budget before writing anything.
+
+MIN_USEFUL_CAP in cost_ledger.py is 2048 and calls itself the smallest cap
+worth sending to a reasoning model. That is now measured to be false for at
+least one seat on this panel.
 """
+
+ONLY = [s for s in os.environ.get("PROBE_SEATS", "").split(",") if s]
+"""Seats to call, empty for all. Set PROBE_SEATS to avoid paying twice for a
+seat already measured."""
 
 WANTED = ("OPTION", "PREDICATE", "FORMULA", "INPUT", "CLAIM")
 
@@ -96,9 +107,11 @@ def main() -> int:
         for i, seat_id in enumerate(sorted(seats))
     }
 
+    wanted = [s for s in sorted(seats) if not ONLY or s in ONLY]
+    print(f"  calling: {', '.join(wanted)}")
     replies: dict[str, str] = {}
     failures: dict[str, str] = {}
-    for seat_id in sorted(seats):
+    for seat_id in wanted:
         t0 = time.time()
         try:
             replies[seat_id] = seats[seat_id](prompts[seat_id])

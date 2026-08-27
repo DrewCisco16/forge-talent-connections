@@ -9,12 +9,13 @@ finds that out for a few cents.
 import os
 import sys
 import time
+from collections.abc import Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from adjudication_orchestrator import Orchestrator
 from cost_ledger import CostLedger, rates_from_config
-from night_loop import ROUNDS, run_night
+from night_loop import ROUNDS, RoundResult, run_night
 from run_adjudication import live_seats, load_env_file, night_gates
 
 ASK = (
@@ -82,7 +83,8 @@ def main() -> int:
     return 0 if results else 1
 
 
-def _report_compliance(out_dir: str, results) -> None:
+def _report_compliance(out_dir: str,
+                       results: "Sequence[RoundResult]") -> None:
     """Did the seats write what the contract asked for? Per seat, by name.
 
     THE ONE THING NO OFFLINE TEST CAN ESTABLISH. The whole design now rests on

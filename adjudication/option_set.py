@@ -231,7 +231,7 @@ def parse_options(text: str) -> list[Option]:
     """
     out: list[Option] = []
     seen: set[str] = set()
-    blocks: list[tuple[str, list[str]]] = []
+    blocks: list[tuple[str, list[str], bool]] = []
     current: list[str] | None = None
     in_options = True
     fenced = False
@@ -243,6 +243,7 @@ def parse_options(text: str) -> list[Option]:
         if fenced:
             continue
         m = _OPTION_LINE.match(line)
+        explicit = m is not None
         if m is None and _SECTION_HEADING.match(line):
             # Everything after an OPEN or KILLED heading is commentary about
             # the round, not a further answer to consider.
@@ -266,10 +267,27 @@ def parse_options(text: str) -> list[Option]:
         if len(body) < MIN_OPTION_CHARS:
             current = None
             continue
+        # ONE ANSWER, WRITTEN TWICE, IS STILL ONE ANSWER.
+        #
+        # Measured on the live panel: a seat heads each answer "### Option 3
+        # -- floor of three rounds, then stop..." AND restates it as an
+        # "OPTION | floor of three rounds, then stop..." line underneath. It
+        # is being helpful -- a heading for the reader, a machine line for the
+        # parser -- and reading both forms turned four answers into eight.
+        #
+        # The twins are not harmless. The commitments follow the OPTION line,
+        # so the heading-derived copy carries none, cannot be checked, cannot
+        # be removed, and survives to the end reported as untested. The panel
+        # would have spent five rounds adjudicating phantoms.
+        #
+        # Positional, not lexical: an explicit line inside a heading's own
+        # block is that heading restated, whatever words it uses.
+        if explicit and blocks and blocks[-1][2] and blocks[-1][1] is current:
+            blocks.pop()
         current = []
-        blocks.append((body, current))
+        blocks.append((body, current, not explicit))
 
-    for body, own_lines in blocks:
+    for body, own_lines, _from_heading in blocks:
         oid = option_id(body)
         if oid in seen:
             continue
