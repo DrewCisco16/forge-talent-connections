@@ -1,0 +1,148 @@
+import "package:flutter/material.dart";
+
+import "../theme/forge_theme.dart";
+import "../theme/tokens.dart";
+
+part "social_action.g.dart";
+
+/// Social action surfaces, and the only place the vibe gradient is painted.
+///
+/// The design tokens reserve the vibe gradient for social actions — vouch,
+/// streak, share, and the viewer's own story ring — and bar it from forms and
+/// governance banners. That rule is enforced structurally here: the gradient is
+/// generated into `social_action.g.dart` as a library-private constant, so no
+/// other file in the package can reference it. Adding a new social action means
+/// adding it to this library; anything else cannot reach the gradient at all.
+
+/// A social action button: vouch, share, or streak.
+class VibeButton extends StatelessWidget {
+  const VibeButton({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.fullWidth = false,
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool fullWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onPressed != null;
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
+          child: Ink(
+            width: fullWidth ? double.infinity : null,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: _kVibeGradient),
+              borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
+                children: <Widget>[
+                  if (icon != null) ...<Widget>[
+                    Icon(icon, size: 15, color: Colors.white),
+                    const SizedBox(width: 7),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.body,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A pitch-story avatar ring.
+///
+/// The viewer's own ring uses the vibe gradient; everyone else's is gold, as
+/// specified for the social feed.
+class StoryRing extends StatelessWidget {
+  const StoryRing({
+    required this.label,
+    required this.image,
+    this.isSelf = false,
+    this.size = 62,
+    super.key,
+  });
+
+  final String label;
+
+  /// Avatar artwork. Null renders the ring around an empty surface, which is
+  /// what a story with no loaded image should look like.
+  final ImageProvider<Object>? image;
+
+  /// Whether this ring belongs to the viewer, which selects the vibe gradient.
+  final bool isSelf;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    const double ringWidth = 3;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: isSelf ? _kVibeGradient : forge.goldGradient,
+            ),
+          ),
+          padding: const EdgeInsets.all(ringWidth),
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: forge.surface,
+              image: image == null
+                  ? null
+                  : DecorationImage(image: image!, fit: BoxFit.cover),
+              border: Border.all(color: ForgeColors.navyDeep, width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: size + 8,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              color: forge.textSub,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

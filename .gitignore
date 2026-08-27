@@ -17,3 +17,8 @@ config/secrets*.json
 .DS_Store
 .idea/
 .vscode/
+
+# Design handoff package: kept local as build input, never committed.
+# SCREENS_SPEC.md contains engine names barred from this repo by the build rules,
+# and design_tokens.json / figma_node_map.md carry the Figma file key and URL.
+design_handoff/
