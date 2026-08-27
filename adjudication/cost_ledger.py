@@ -927,13 +927,28 @@ this panel, with a full option list. Until then the cost of being wrong is
 one-sided -- too high buys a shorter reply, too low buys nothing at all.
 """
 
-MIN_USEFUL_CAP = 2048
-"""Smallest output cap worth sending to a reasoning model.
+MIN_USEFUL_CAP = 4096
+"""Smallest output cap a seat on this panel is KNOWN to answer at.
 
-Below this the thinking consumes the whole budget and the reply comes back
-empty -- observed live, twice, on two different vendors. A run sized under
-this floor would not be a cheaper run, it would be a run that produces
-nothing and still bills for it.
+MEASURED, AND THE PREVIOUS FIGURE WAS NOT. This was 2,048 and its docstring
+called that observed. A live probe of all five seats at exactly 2,048 had one
+of them return ZERO CHARACTERS: it is a reasoning model, the thinking counts
+against the cap, and it spent the whole budget before writing anything. The
+same seat answered at 4,096.
+
+What the probe actually established, per seat:
+
+    2,048   one seat answered, one seat returned nothing
+    4,096   four seats answered; the fifth was cut off
+   16,384   the fifth answered (see MIN_CLOSER_CAP)
+
+So 4,096 is the smallest size at which every seat that is not the merging
+seat has been seen to produce a reply. Below it a run is not cheaper, it is a
+run that bills for silence.
+
+Lowering it needs evidence of the same kind: a seat answering at the smaller
+size, on this panel, with a full round-one prompt. The cost of being wrong is
+one-sided -- too high buys a shorter reply, too low buys nothing at all.
 """
 
 

@@ -25,7 +25,7 @@ ASK = (
     "options and what would decide between them."
 )
 
-CEILING = 3.00
+CEILING = float(__import__("os").environ.get("CANARY_CEILING", "3.50"))
 ROUNDS_TO_RUN = 1
 """ONE ROUND, BECAUSE ONE ROUND ANSWERS THE QUESTION.
 
