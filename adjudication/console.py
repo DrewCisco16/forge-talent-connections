@@ -253,7 +253,7 @@ def night() -> None:
             if not s.startswith("_") and isinstance(_seats[s], dict)}
     plan = plan_run(led, caps)
     _p(f"  5 rounds x 5 blind seats + 5 merges = {plan.calls} calls.")
-    _p(f"  ceiling ${cap}   worst case ${plan.worst_case:.2f}")
+    _p(f"  ceiling ${cap}   estimated ${plan.estimate:.2f}")
     if not plan.fits:
         _p("")
         _p(f"  THIS CEILING IS TOO LOW: {plan.note}")

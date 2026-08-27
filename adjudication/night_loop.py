@@ -1478,8 +1478,8 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
         plan = plan_run(ledger, configured_caps(profiles_path),
                         rounds=len(ROUNDS), ask_chars=len(ask or ""))
         if on_event is not None:
-            on_event(f"plan: {plan.calls} calls, worst case "
-                     f"${plan.worst_case:.2f}")
+            on_event(f"plan: {plan.calls} calls, estimated "
+                     f"${plan.estimate:.2f}")
         if not plan.fits:
             raise RunTooExpensive(plan.note)
         caps = plan.caps

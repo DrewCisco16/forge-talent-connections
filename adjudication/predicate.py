@@ -16,26 +16,38 @@ option that had nothing to do with the sum. Two contradictory propositions
 cannot both be supported by the same warrant; a rule that says they are is not
 a strict rule with a gap, it is the wrong kind of rule.
 
-The repair is to stop reading prose. A predicate is a QUANTITY, a RELATION and
-a VALUE. A gate evaluates an expression and compares the result. There is no
-text field in that comparison, so there is nothing for "and safe to proceed"
-to ride in on. `subject` exists only so a human can read the record, and
-nothing in this module ever parses it.
+The repair is to stop reading prose. A commitment is a QUANTITY, a RELATION, a
+VALUE, the FORMULA that produces it, and the INPUTS to that formula. Ruling on
+it is arithmetic, not reading. There is no text field in the comparison, so
+there is nothing for "and safe to proceed" to ride in on. `subject` exists
+only so a human can read the record, and nothing here ever parses it.
+
+AND THE FIRST VERSION OF THIS WAS NOT ENOUGH. It let a later round supply the
+whole expression:
+
+    PREDICATE | annual launch accidents | = | 4 accidents
+    CHALLENGE | <that id> | 2 + 3
+
+"2 + 3" was evaluated, read as 5 accidents, and removed the option. Nothing
+connects 2 + 3 to annual launch accidents -- the same defect as the prose
+rule in different clothes, a later model choosing the reasoning that condemns
+an answer it did not write. The formula had to move to the option too.
 
 THREE PROPERTIES, ENFORCED STRUCTURALLY RATHER THAN BY WORDING:
 
-1. CANDIDATE-OWNED. A predicate is declared by the seat that proposed the
-   option, in the same reply, bound by position to the OPTION line above it.
-   An option can only ever be removed by a commitment it made itself.
+1. CANDIDATE-OWNED. The figure, the formula and the inputs are all declared by
+   the seat that proposed the option, in the same reply, bound by position to
+   the OPTION line above them.
 
-2. PRE-EXISTING. Predicates are fixed when the options are created. A later
-   round can CHALLENGE one by id, supplying its own arithmetic, but it cannot
-   mint a new dependency. A seat that could invent an edge in round four could
-   remove any option it liked by attaching a false sum to it.
+2. PRE-EXISTING. They are fixed the moment the options are created. A later
+   round may CHALLENGE the INPUTS by id and nothing else -- it cannot supply a
+   formula and cannot mint a commitment.
 
-3. LOAD-BEARING. Refuting the commitment refutes the option, because the seat
-   said so when it proposed it -- not because code inferred a connection from
-   overlapping words.
+3. SELF-REFUTING, OR NOT REFUTED AT ALL. What removes an option is its own
+   formula with its own inputs failing to produce its own figure. A challenge
+   records that two seats disagree about a number; it never removes anything,
+   because neither seat's figure has been independently established and
+   preferring the later one lets any seat delete any answer.
 
 WHAT THIS DELIBERATELY GIVES UP. Only quantitative commitments can eliminate.
 An option resting on a judgment nobody can compute is never removed by this

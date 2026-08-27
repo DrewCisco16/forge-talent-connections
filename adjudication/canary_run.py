@@ -50,7 +50,7 @@ def main() -> int:
             for s in sorted(raw)
             if not s.startswith("_") and isinstance(raw[s], dict)}
     plan = plan_run(ledger, caps, rounds=ROUNDS_TO_RUN)
-    print(f"  plan: {plan.calls} calls, worst case ${plan.worst_case:.2f}, "
+    print(f"  plan: {plan.calls} calls, estimated ${plan.estimate:.2f}, "
           f"fits={plan.fits}")
     print(f"        {plan.note}")
     if not plan.fits:
