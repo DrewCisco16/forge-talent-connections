@@ -25,7 +25,15 @@ ASK = (
 )
 
 CEILING = 3.00
-ROUNDS_TO_RUN = 2
+ROUNDS_TO_RUN = 1
+"""ONE ROUND, BECAUSE ONE ROUND ANSWERS THE QUESTION.
+
+Round one is where seats propose answers and declare what decides them. If
+they will not write a PREDICATE, a FORMULA and its INPUTS there, no later
+round can do anything -- later rounds only remove, and removal is now entirely
+a matter of recomputing what an option committed to. A second round would cost
+more and tell us nothing we did not already know after the first.
+"""
 
 def main() -> int:
     import json
@@ -70,7 +78,70 @@ def main() -> int:
                         on_event=lambda m: print(f"  {m}", flush=True))
     print(f"\n  wall clock: {time.time() - t0:.0f}s")
     print("\n".join(ledger.render()))
+    _report_compliance(out, results)
     return 0 if results else 1
+
+
+def _report_compliance(out_dir: str, results) -> None:
+    """Did the seats write what the contract asked for? Per seat, by name.
+
+    THE ONE THING NO OFFLINE TEST CAN ESTABLISH. The whole design now rests on
+    seats declaring a figure, the formula that produces it, and the numbers
+    going in. That contract sits in the block seats demonstrably obey for
+    CLAIM lines, which is an inference from one observation rather than a
+    measurement. This is the measurement.
+    """
+    import glob
+    import re
+
+    print("\n" + "=" * 68)
+    print("CONTRACT COMPLIANCE -- what each seat actually wrote")
+    print("=" * 68)
+    counts = {}
+    for path in sorted(glob.glob(os.path.join(out_dir, "round-1",
+                                              "thinker-*.md"))):
+        seat = os.path.basename(path)[len("thinker-"):-len(".md")]
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        counts[seat] = {
+            kind: len(re.findall(rf"(?mi)^\s*{kind}\s*\|", text))
+            for kind in ("OPTION", "PREDICATE", "FORMULA", "INPUT", "CLAIM")
+        }
+        counts[seat]["chars"] = len(text)
+    if not counts:
+        print("  no thinker replies were written at all.")
+        return
+    print(f"  {'seat':10} {'OPTION':>7} {'PREDICATE':>10} {'FORMULA':>8} "
+          f"{'INPUT':>6} {'CLAIM':>6}   chars")
+    for seat, c in sorted(counts.items()):
+        print(f"  {seat:10} {c['OPTION']:>7} {c['PREDICATE']:>10} "
+              f"{c['FORMULA']:>8} {c['INPUT']:>6} {c['CLAIM']:>6} "
+              f"  {c['chars']:>6}")
+
+    declaring = sum(1 for c in counts.values()
+                    if c["OPTION"] and c["PREDICATE"] and c["FORMULA"])
+    print(f"\n  seats that declared a checkable commitment: "
+          f"{declaring}/{len(counts)}")
+    if results:
+        r = results[0]
+        print(f"  options parsed: {r.options_created}   "
+              f"removed: {len(r.options_removed)}   "
+              f"untested: {len(r.options_unexamined)}")
+        if r.silent_seats:
+            print(f"  seats that declared no option: "
+                  f"{', '.join(r.silent_seats)}")
+    print()
+    if declaring == 0:
+        print("  VERDICT: the contract is not being followed. Text prompting")
+        print("  is not enough, and the next move is the vendors' own")
+        print("  structured-output modes rather than more prompt wording.")
+    elif declaring < len(counts):
+        print("  VERDICT: partial. Some seats comply and some do not, which")
+        print("  is the worst case for a text contract -- the panel silently")
+        print("  runs short. Structured output would make it uniform.")
+    else:
+        print("  VERDICT: every seat followed the contract. The design holds")
+        print("  as written; structured output becomes an optimisation.")
 
 
 if __name__ == "__main__":
