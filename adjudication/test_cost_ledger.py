@@ -1363,3 +1363,57 @@ sys.exit(0)              # authorised
         led = CL.CostLedger(rates={"s": rate}, per_day=1.00,
                             day_state_path=str(tmp_path / "day.json"))
         assert led.day_spent() == pytest.approx(0.75)
+
+
+class TestTheSuiteNeverSpendsTheOperatorsBudget:
+    """Running the tests wrote to the real .spend-by-day.json beside the code.
+
+    A CLI test passing --max-cost built a ledger on the DEFAULT day-state path
+    and persisted to it, so every test run added fake spend to the operator's
+    actual daily total -- which had reached $121 of money nobody spent. With a
+    daily ceiling configured that refuses a real run for a budget that was
+    never consumed.
+    """
+
+    def test_a_ledger_can_be_pointed_somewhere_else(self, tmp_path):
+        import run_adjudication as RA
+
+        path = tmp_path / "elsewhere.json"
+        led = RA.build_ledger(1.0, None, 1.0, day_state_path=str(path))
+        assert led is not None
+        assert led.day_state_path == str(path)
+
+    def test_the_default_is_still_the_shared_file(self):
+        import run_adjudication as RA
+
+        led = RA.build_ledger(1.0, None, 1.0)
+        assert led is not None
+        assert led.day_state_path == RA.DAY_STATE_FILE
+
+    def test_no_test_writes_to_the_shared_file(self):
+        """The property itself, checked by CI rather than by remembering.
+
+        Any future test that runs the CLI with a ceiling and forgets
+        --day-state fails here rather than quietly charging the operator.
+        """
+        import subprocess
+        import sys
+
+        import run_adjudication as RA
+
+        def snapshot(path):
+            if not os.path.exists(path):
+                return None
+            with open(path, "rb") as fh:
+                return fh.read()
+
+        shared = RA.DAY_STATE_FILE
+        before = snapshot(shared)
+        here = os.path.dirname(os.path.abspath(__file__))
+        subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             os.path.join(here, "test_suite.py")],
+            cwd=here, capture_output=True, timeout=900, check=False)
+        after = snapshot(shared)
+        assert after == before, (
+            "the test suite changed the operator's real daily spend ledger")

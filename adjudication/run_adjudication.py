@@ -638,7 +638,8 @@ DAY_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 def build_ledger(per_run: float | None, per_stage: float | None,
                  per_day: float | None,
-                 rates_path: str | None = None) -> CostLedger | None:
+                 rates_path: str | None = None,
+                 day_state_path: str | None = None) -> CostLedger | None:
     """A ledger, or None when no ceiling was asked for.
 
     Returns None rather than an unenforcing ledger when every ceiling is
@@ -680,7 +681,7 @@ def build_ledger(per_run: float | None, per_stage: float | None,
         raw = json.load(fh)
     return CostLedger(rates=rates_from_config(raw), per_run=per_run,
                       per_stage=per_stage, per_day=per_day,
-                      day_state_path=DAY_STATE_FILE)
+                      day_state_path=day_state_path or DAY_STATE_FILE)
 
 
 def live_seats(
@@ -1003,6 +1004,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                          "crossed twice without you being told.")
     ap.add_argument("--max-cost-per-stage", type=float, metavar="USD")
     ap.add_argument("--max-cost-per-day", type=float, metavar="USD")
+    ap.add_argument("--day-state", metavar="PATH",
+                    help="where the shared daily spend total is kept. "
+                         "Defaults to .spend-by-day.json beside this file. "
+                         "Point it elsewhere to keep a run out of the "
+                         "operator's real daily total -- a test or a "
+                         "rehearsal should not consume a real budget.")
     ap.add_argument("--resolve-dois", action="store_true",
                     help="switch on the citation gates: every cited DOI must "
                          "actually resolve. Uses Crossref and doi.org, which "
@@ -1090,7 +1097,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         ledger = build_ledger(args.max_cost, args.max_cost_per_stage,
-                              args.max_cost_per_day)
+                              args.max_cost_per_day,
+                              day_state_path=args.day_state)
     except ValueError as exc:
         print(f"cost ceiling: {exc}", file=sys.stderr)
         return 2
