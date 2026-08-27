@@ -1629,6 +1629,30 @@ Not two: at two words the check starts flagging the closer naming a hole
 """
 
 
+_CLOSERS_OWN_LINE = re.compile(
+    r"^\s*(?:#{1,6}\s|MERGE\s*\||CLAIM\s*\||OPEN\b|KILLED\b)",
+    re.IGNORECASE)
+"""Lines that are the closer's PROTOCOL, carrying no assertion of their own.
+
+Its MERGE lines name option ids this code minted after the seats answered, so
+no seat could ever have written them: they are unsupported by construction,
+and flagging them says nothing at all.
+
+DELIBERATELY SHORT. A list marker or an evidence label is decoration on a
+sentence, not a substitute for one, and skipping those lines outright would
+have made the marker a way to smuggle an invention past the check -- my own
+regression caught exactly that: "- Recommendation: acquire the Zurich
+subsidiary" went unflagged. Those prefixes are stripped instead, and what
+follows is read like any other sentence.
+"""
+
+_DECORATION = re.compile(
+    r"^\s*(?:[-*\u2022]\s+|\d+[.)]\s+|"
+    r"\[(?:Fact|Inference|Assumption|Unknown)\]\s*)+",
+    re.IGNORECASE)
+"""Markers that dress a sentence. Stripped, never a reason to skip it."""
+
+
 def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str]:
     """Sentences in the merge whose content appears in no seat's answer.
 
@@ -1663,6 +1687,20 @@ def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str
     out: list[str] = []
     for raw in _SENTENCE.findall(merged or ""):
         sentence = raw.strip()
+        sentence = _DECORATION.sub("", sentence).strip()
+        if _CLOSERS_OWN_LINE.match(sentence):
+            # THE CLOSER'S REQUIRED OUTPUT IS NOT AN INVENTION.
+            #
+            # Measured on a live round: the merge was flagged CONTAMINATED
+            # with 16 sentences "no seat proposed", and the first three were
+            # its own MERGE lines -- the exact format it is asked for, made of
+            # option ids no seat could have written because this code minted
+            # them after the seats had answered.
+            #
+            # A warning that fires on every correct run is worse than no
+            # warning. The operator learns to skip it, and the sentence it
+            # exists to catch goes past with the rest.
+            continue
         words = [w for w in _CONTENT.findall(sentence.casefold())
                  if w not in _CONNECTIVE]
         if len(words) < MIN_WORDS_WHEN_WHOLLY_UNSUPPORTED:

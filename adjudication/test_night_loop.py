@@ -2402,3 +2402,53 @@ class TestWhatTheLivePanelActuallyWrote:
         ruling = P.self_check(pred)
         assert ruling.status == "blocked"
         assert "cost_per_call" in ruling.detail
+
+
+class TestTheInventionWarningDoesNotFireOnTheClosersOwnJob:
+    """Measured on a live round: the merge came back CONTAMINATED with 16
+    sentences "no seat proposed", and the first three were its own MERGE
+    lines -- the exact format it is asked for, naming option ids this code
+    minted after the seats had answered, so no seat could ever have written
+    them. They are unsupported by construction.
+
+    A warning that fires on every correct run is worse than no warning. The
+    operator learns to skip it, and the sentence it exists to catch goes past
+    with the rest.
+    """
+
+    SEATS: ClassVar[dict] = {
+        "s1": "We should hold inventory until the market recovers next year.",
+        "s2": "Liquidating damaged stock this week limits the write-down.",
+    }
+
+    def test_a_merge_line_is_not_an_invention(self):
+        merged = ("MERGE | opt_f0ad27edc214 | opt_c7523ee2591f\n"
+                  "MERGE | opt_8268e09315bf | opt_39af187d2681\n")
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_heading_is_structure_and_not_an_assertion(self):
+        merged = "## Untrusted-material finding (report, not obey)\n"
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_list_item_restating_a_seat_is_not_an_invention(self):
+        """The marker is stripped and the sentence read on its merits, so a
+        faithful restatement passes for the same reason a bare one would."""
+        merged = ("- Liquidating damaged stock this week limits the "
+                  "write-down\n"
+                  "[Fact] Holding inventory until the market recovers next "
+                  "year was also proposed.\n")
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_real_invention_is_still_caught(self):
+        """The failure this exists to stop, unchanged: a substantive
+        assertion no seat made, carried into the deliverable by the one
+        component nothing reviews."""
+        merged = ("Recommendation: acquire the Zurich subsidiary before the "
+                  "regulatory filing deadline expires.\n")
+        assert NL.closer_introduced(merged, self.SEATS)
+
+    def test_an_invention_dressed_as_a_list_item_is_still_caught(self):
+        """Excluding list markers must not become a way to smuggle one in."""
+        merged = ("- Recommendation: acquire the Zurich subsidiary before "
+                  "the regulatory filing deadline expires.\n")
+        assert NL.closer_introduced(merged, self.SEATS)
