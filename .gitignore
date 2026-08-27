@@ -1,0 +1,19 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# Secrets and config: never commit. Config is supplied via --dart-define.
+.env
+.env.*
+*.env
+env/
+config/secrets*.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
