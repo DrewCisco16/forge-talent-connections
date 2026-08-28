@@ -4,8 +4,14 @@
 # have the open-internet access the development container does not.
 name: Fetch official service flags
 
+# Runs on pushes to the development branch because workflow_dispatch is only
+# reachable for workflows on the default branch, which stays untouched for
+# review. Once the six files exist the job exits without doing anything, and
+# the commit it makes uses GITHUB_TOKEN, which never retriggers workflows.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - claude/forge-talent-flutter-build-r1coud
 
 permissions:
   contents: write
@@ -19,6 +25,10 @@ jobs:
       - name: Download public-domain flag renditions
         run: |
           set -euo pipefail
+          if ls assets/flags/*.png >/dev/null 2>&1; then
+            echo "Flag artwork already present; nothing to do."
+            exit 0
+          fi
           mkdir -p assets/flags
           fetch () {
             local id="$1" name="$2"
@@ -34,9 +44,6 @@ jobs:
           fetch uscg "Flag_of_the_United_States_Coast_Guard.svg"
           fetch ussf "Flag_of_the_United_States_Space_Force.svg"
           ls -la assets/flags/
-
-      - name: Commit the artwork to this branch
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add assets/flags/*.png
