@@ -46,8 +46,9 @@
       transition: opacity 260ms ease-out;
       font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    /* The logo never moves; the fire waves behind it — clipped to the
-       mark's own box so the burn never spills past the design. */
+    /* The logo never moves; a small, subtle burn rides its crown (the mark's
+       tip sits at ~44% of the width) — clipped to the mark's own box so the
+       fire never spills past the design. */
     .mark { position: relative; width: 120px; overflow: hidden; }
     .mark img {
       display: block; position: relative; z-index: 1;
@@ -56,28 +57,28 @@
     }
     .mark .pyre, .mark .pyre2 {
       content: ""; position: absolute; z-index: 0;
-      left: 50%; bottom: 4px; width: 96px; height: 100px;
+      left: 44%; bottom: calc(100% - 46px); width: 34px; height: 34px;
       transform-origin: 50% 100%;
       background: radial-gradient(ellipse 50% 65% at 50% 90%,
-        rgba(242, 199, 89, 0.55), rgba(199, 153, 41, 0.25) 55%,
+        rgba(242, 199, 89, 0.50), rgba(199, 153, 41, 0.22) 55%,
         rgba(199, 153, 41, 0) 75%);
-      filter: blur(10px);
+      filter: blur(6px);
       animation: forge-wave 2.2s ease-in-out infinite;
     }
     .mark .pyre2 {
-      width: 70px; height: 118px; filter: blur(7px);
+      width: 24px; height: 40px; filter: blur(4px);
       animation: forge-wave2 1.7s ease-in-out infinite;
     }
     @keyframes forge-wave {
-      0%   { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .85; }
-      30%  { transform: translateX(-54%) skewX(-4deg) scaleY(1.14); opacity: 1;   }
-      60%  { transform: translateX(-46%) skewX(3deg)  scaleY(0.94); opacity: .8;  }
-      100% { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .85; }
+      0%   { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .55; }
+      30%  { transform: translateX(-54%) skewX(-4deg) scaleY(1.12); opacity: .7;  }
+      60%  { transform: translateX(-46%) skewX(3deg)  scaleY(0.94); opacity: .5;  }
+      100% { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .55; }
     }
     @keyframes forge-wave2 {
-      0%   { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .7; }
-      45%  { transform: translateX(-53%) skewX(-3deg) scaleY(1.18); opacity: .95; }
-      100% { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .7; }
+      0%   { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .45; }
+      45%  { transform: translateX(-53%) skewX(-3deg) scaleY(1.14); opacity: .65; }
+      100% { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .45; }
     }
     @media (prefers-reduced-motion: reduce) {
       .mark .pyre, .mark .pyre2 { animation: none; }

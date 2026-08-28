@@ -4,13 +4,14 @@ import "package:flutter/material.dart";
 
 import "../theme/forge_theme.dart";
 
-/// The burning flame: the original mark, with fire waving behind it.
+/// The burning flame: the original mark, with a subtle burn at its crown.
 ///
 /// The logo itself is never transformed — no pulsing, no scaling. The burn is
-/// a bed of flame tongues drawn behind the mark, each waving on its own phase
-/// and frequency so they lick upward organically rather than throbbing in
-/// unison, plus rising embers and a breathing ground glow. The mark sits in
-/// front, so the fire reads as burning behind the logo.
+/// a small cluster of flame tongues riding the top of the mark, each waving on
+/// its own phase and frequency so they lick upward organically rather than
+/// throbbing in unison, plus a few rising embers and a faint breathing halo.
+/// Complementary and subtle: the mark stays the subject, the fire is an
+/// accent at its tip, never a bonfire behind it.
 ///
 /// The fire is shaped to the logo: the whole widget is exactly the mark's
 /// bounding box, the painter is hard-clipped to it, and tongue heights are
@@ -58,8 +59,8 @@ class _BurningFlameState extends State<BurningFlame>
     super.initState();
     // Fixed seed: the fire looks alive but renders deterministically.
     final math.Random random = math.Random(7);
-    _tongues = List<_Tongue>.generate(9, (int i) => _Tongue(random, i, 9));
-    _embers = List<_Ember>.generate(30, (_) => _Ember(random));
+    _tongues = List<_Tongue>.generate(5, (int i) => _Tongue(random, i, 5));
+    _embers = List<_Ember>.generate(12, (_) => _Ember(random));
   }
 
   @override
@@ -175,26 +176,30 @@ class _FirePainter extends CustomPainter {
   final bool animating;
   final List<Color> colors;
 
+  /// Where the artwork's tip sits: the mark tapers to its point at ~0.44 of
+  /// the width (measured from the asset), right at the top of the box.
+  static const double _tipX = 0.44;
+
+  /// The crown line the small flames ride on, as a fraction of the height.
+  static const double _crown = 0.24;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final double cx = size.width / 2;
-    // The bed sits just above the box bottom so tongue-base blur fades out
-    // before the clip instead of being cut to a straight line.
-    final double base = size.height * 0.94;
+    final double cx = size.width * _tipX;
+    final double base = size.height * _crown;
     final double breathe =
         animating ? 0.5 + 0.5 * math.sin(t * 2 * math.pi) : 0.5;
 
-    // Ground glow: the heat under the burn, breathing (fixed at rest). Kept
-    // narrow enough that its blur fades out before the clip edges, so no
-    // straight clipped line ever shows.
+    // A faint warm halo behind the crown, breathing (fixed at rest). Small
+    // enough that its blur fades out before the clip edges.
     final Paint glowPaint = Paint()
-      ..color = colors.first.withValues(alpha: 0.14 + 0.10 * breathe)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.height * 0.045);
+      ..color = colors.first.withValues(alpha: 0.10 + 0.07 * breathe)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.height * 0.035);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(cx, size.height * 0.87),
-        width: size.width * 0.58,
-        height: size.height * 0.13,
+        center: Offset(cx, size.height * 0.15),
+        width: size.width * 0.34,
+        height: size.height * 0.16,
       ),
       glowPaint,
     );
@@ -202,13 +207,14 @@ class _FirePainter extends CustomPainter {
     // At rest (reduced motion) no fire is drawn — only the soft glow above.
     if (!animating) return;
 
-    // Two passes of tongues: a deep, dim layer and a bright, tighter layer in
-    // front of it, both still behind the mark. Each tongue waves on its own
-    // frequencies, so the bed licks and leans rather than pulsing as one.
+    // Two passes of small tongues riding the crown of the mark — a dim layer
+    // and a brighter, tighter one, both behind the logo, so short flames lick
+    // up around its tip. Complementary, not a bonfire: the mark stays the
+    // subject. Each tongue waves on its own frequencies.
     for (final (double scale, double alpha, Color color, double blur)
         in <(double, double, Color, double)>[
-      (1.05, 0.34, colors.last, 5),
-      (0.85, 0.50, colors.first, 4),
+      (1.0, 0.30, colors.last, 3),
+      (0.75, 0.46, colors.first, 2),
     ]) {
       final Paint paint = Paint()
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
@@ -219,19 +225,20 @@ class _FirePainter extends CustomPainter {
         final double sway = math.sin(
             2 * math.pi * (tongue.swayFreq * t + tongue.swayPhase));
 
-        // Outer tongues are shorter, so the bed silhouettes like a fire.
-        // Heights are clamped so every tip stays inside the logo's box.
+        // Outer tongues are shorter, so the cluster silhouettes like a small
+        // flame. Tips are clamped inside the top of the box.
         final double edgeFalloff = 1 - 0.55 * tongue.lane.abs();
         final double tongueHeight = (size.height *
                 tongue.height *
+                0.28 *
                 scale *
                 edgeFalloff *
                 (0.78 + 0.22 * rise))
-            .clamp(0.0, base * 0.92);
-        final double halfWidth = size.width * tongue.width * scale / 2;
-        // Lanes span less than the half-width so flanks, sway, and blur all
-        // fade out before the clip edges — no straight cut lines.
-        final double x = cx + tongue.lane * size.width * 0.24;
+            .clamp(0.0, base - size.height * 0.03);
+        final double halfWidth = size.width * tongue.width * scale * 0.30;
+        // A tight cluster around the tip; flanks, sway, and blur all fade
+        // out well before the clip edges.
+        final double x = cx + tongue.lane * size.width * 0.11;
         final double tipX = x + sway * halfWidth * 1.6;
         final double tipY = base - tongueHeight;
 
@@ -243,7 +250,7 @@ class _FirePainter extends CustomPainter {
               base - tongueHeight * 0.45,
               tipX,
               tipY)
-          // Right flank mirrors back down to the bed.
+          // Right flank mirrors back down to the crown.
           ..quadraticBezierTo(
               x + halfWidth * 1.15,
               base - tongueHeight * 0.45,
@@ -257,23 +264,25 @@ class _FirePainter extends CustomPainter {
       }
     }
 
-    // Embers drifting up out of the bed.
+    // A few embers drifting up from the crown.
     final Paint emberPaint = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
     for (final _Ember ember in embers) {
       final double p = (t * ember.speed + ember.phase) % 1.0;
       final double x = cx +
-          ember.lane * size.width * 0.26 +
+          ember.lane * size.width * 0.10 +
           math.sin(p * ember.sway * 2 * math.pi + ember.phase * 6) *
               size.width *
-              0.05 *
+              0.03 *
               p;
-      final double y = base - p * size.height * 0.85;
-      final double fade = (1 - p) * (p < 0.08 ? p / 0.08 : 1);
+      final double y = base - p * size.height * 0.18;
+      final double fade =
+          0.85 * (1 - p) * (p < 0.08 ? p / 0.08 : 1);
       if (fade <= 0) continue;
       emberPaint.color =
           Color.lerp(colors.first, colors.last, p)!.withValues(alpha: fade);
-      canvas.drawCircle(Offset(x, y), ember.size * (1 - p * 0.6), emberPaint);
+      canvas.drawCircle(
+          Offset(x, y), ember.size * 0.6 * (1 - p * 0.6), emberPaint);
     }
   }
 
