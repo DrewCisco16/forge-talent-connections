@@ -26,7 +26,7 @@ ASK = (
 )
 
 CEILING = float(__import__("os").environ.get("CANARY_CEILING", "3.50"))
-ROUNDS_TO_RUN = 1
+ROUNDS_TO_RUN = int(__import__("os").environ.get("CANARY_ROUNDS", "1"))
 """ONE ROUND, BECAUSE ONE ROUND ANSWERS THE QUESTION.
 
 Round one is where seats propose answers and declare what decides them. If

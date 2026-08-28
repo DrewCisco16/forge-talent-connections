@@ -474,6 +474,62 @@ def self_check(pred: Predicate) -> Ruling:
                   f"{said}{unevaluated}")
 
 
+CORROBORATION_THRESHOLD = 2
+"""How many seats must independently give the SAME replacement for an input
+before it outweighs the value the option declared.
+
+WHY A SINGLE CHALLENGER CANNOT DO IT. Their figure has no more standing than
+the proposer's: neither has been established, and preferring the later one
+lets any seat delete any answer by asserting a different number.
+
+WHY TWO CAN. The seats write blind, in the same round, without seeing each
+other. Two of them independently arriving at the same value for the same input
+is corroboration, and it is the one thing a five-seat blinded panel produces
+that a single model cannot. Against it stands one voice -- the proposer's --
+unless other seats also backed that figure, which is counted.
+
+This is not proof. The majority can be wrong and the proposer right. The
+removal is recorded with the count and the values so a reader can see exactly
+what outweighed what, and the answer is not deleted on one model's opinion.
+"""
+
+
+def corroborated_inputs(
+    pred: Predicate,
+    challenges: Sequence[tuple[str, Mapping[str, Fraction]]],
+) -> dict[str, tuple[Fraction, int, int]]:
+    """Inputs where independent seats agree on a different value.
+
+    Returns {name: (agreed value, seats for it, seats for the option's)}, and
+    only for inputs where the agreement clears the threshold AND outweighs the
+    support the option's own figure has.
+    """
+    mine = dict(pred.inputs)
+    votes: dict[str, dict[Fraction, int]] = {}
+    for pid, bindings in challenges:
+        if pid != pred.id:
+            continue
+        for name, value in bindings.items():
+            if name not in mine:
+                continue        # not an input of this formula; it names nothing
+            votes.setdefault(name, {})[value] = \
+                votes.setdefault(name, {}).get(value, 0) + 1
+    out: dict[str, tuple[Fraction, int, int]] = {}
+    for name, tally in votes.items():
+        # The option's own figure is backed by whoever proposed it, plus any
+        # seat that offered the same value rather than a different one.
+        held = mine[name]
+        for_held = 1 + tally.get(held, 0)
+        best = max((v for v in tally if v != held),
+                   key=lambda v: (tally[v], str(v)), default=None)
+        if best is None:
+            continue
+        against = tally[best]
+        if against >= CORROBORATION_THRESHOLD and against > for_held:
+            out[name] = (best, against, for_held)
+    return out
+
+
 def dispute(pred: Predicate, bindings: Mapping[str, Fraction]) -> Ruling:
     """A later seat's alternative INPUTS to the option's own formula.
 
@@ -587,6 +643,53 @@ def adjudicate(predicates: Sequence[Predicate],
             # inputs even when the option's own arithmetic came out clean.
             out[pid] = replace(prior,
                                disputes=(*prior.disputes, found.detail))
+
+    # CORROBORATED INPUTS, WHICH IS THE ONE THING A PANEL ADDS.
+    #
+    # Without this the later rounds cannot remove anything at all: an option
+    # is checked against its own arithmetic when it is proposed, and after
+    # that nothing can reach it. Four of the five rounds were commentary.
+    #
+    # A single challenger still decides nothing. Two seats writing blind, in
+    # the same round, arriving independently at the same value for the same
+    # input is corroboration -- and outweighing the proposer is exactly the
+    # judgement five separated observers exist to make.
+    for pred in predicates:
+        agreed = corroborated_inputs(pred, challenges)
+        if not agreed:
+            continue
+        merged = dict(pred.inputs)
+        merged.update({n: v for n, (v, _a, _f) in agreed.items()})
+        try:
+            got = _evaluate(pred.formula, merged)
+        except PredicateError as exc:
+            out[pred.id] = replace(
+                out[pred.id],
+                disputes=(*out[pred.id].disputes,
+                          f"seats corroborated different inputs but the "
+                          f"formula could not then be evaluated: {exc}"))
+            continue
+        shown = "; ".join(
+            f"{n}={_show(v)} (agreed by {a} seats, against {f} for "
+            f"{_show(dict(pred.inputs)[n])})"
+            for n, (v, a, f) in sorted(agreed.items()))
+        unit = f" {pred.unit}" if pred.unit else ""
+        said = (f"{pred.subject.strip()} {RELATIONS[pred.relation]} "
+                f"{_show(pred.value)}{unit}")
+        if _holds(pred, got):
+            out[pred.id] = replace(
+                out[pred.id],
+                disputes=(*out[pred.id].disputes,
+                          f"seats corroborated {shown}, and the commitment "
+                          f"still holds at {_show(got)}{unit}"))
+            continue
+        out[pred.id] = Ruling(
+            pred.id, "fail",
+            f"{shown}. The option's own formula {pred.formula} on those "
+            f"figures gives {_show(got)}{unit}, but it committed that "
+            f"{said}. NOBODY PROVED THE SEATS RIGHT -- they agreed, blind, "
+            f"and outnumbered the figure this option was resting on.",
+            disputes=out[pred.id].disputes)
     return out
 
 

@@ -170,6 +170,44 @@ def wrap_untrusted(text: str) -> str:
     return UNTRUSTED_OPEN + text + UNTRUSTED_CLOSE
 
 
+CHALLENGE_CONTRACT = """
+THE ONE LINE THAT CAN REMOVE AN ANSWER THIS ROUND:
+
+    CHALLENGE | <paste a commitment id from the list above> | per_round = 9
+
+You are shown every surviving answer with the commitments it made: a
+quantity, the formula that computes it, and the numbers put in. If you think
+one of those NUMBERS is wrong, write the line with the value you believe is
+right. You may change the inputs and nothing else -- a seat that could supply
+the formula could delete any answer it disliked by attaching arithmetic of
+its own choosing.
+
+YOUR CHALLENGE ALONE DOES NOT REMOVE ANYTHING, and you should know that
+before you decide whether to bother. Your figure has no more standing than
+the proposer's: neither has been established, and preferring yours because
+it came later would let any seat delete any answer by disagreeing confidently.
+
+WHAT DOES REMOVE IT is agreement. You are writing blind, without seeing the
+other seats this round. If another seat independently arrives at the same
+value for the same input, the two of you outweigh the one figure the answer
+was resting on, the formula is recomputed on the corroborated numbers, and
+the answer goes if it no longer produces what it committed to. That
+agreement, between separated observers who could not coordinate, is the one
+thing this panel produces that a single model cannot.
+
+So write the number you actually believe, not the number you think will
+carry. A figure invented to win is a figure no honest seat will match.
+
+WRITE THE LINE. A whole round of seats once concluded that two answers should
+die, wrote "Kill" in their own tables, put the arithmetic in CLAIM lines, and
+removed nothing -- because a CLAIM is checked and reported and does not touch
+the answer set. The analysis was right and it had no effect.
+
+If none of the numbers is wrong, write no CHALLENGE line. Saying so is a
+result; a challenge you do not mean is worse than none.
+
+"""
+
 OPTION_CONTRACT = """
 Every answer you are putting forward gets an OPTION line of its own:
 
@@ -223,44 +261,17 @@ you do not mean is worse than none, and this one is checked.
 
 CLAIM_CONTRACT = """
 ## Required output
-{options}
-Write your analysis normally. Then end with claim lines, one per line, and
-nothing after them:
+{options}{challenges}
+Write your analysis normally. Then end with the lines above, one per line.
 
     CLAIM | <kind> | <warrant> | <text>
 
 <kind> is one of: arithmetic, citation, code_behavior, schema, unit,
 quote_verification, judgment
 
-## Disputing an option you are shown
-
-From round two on you are shown the surviving options, each with the
-commitments it made, each with a bracketed id. A commitment names a quantity,
-how it is computed, and the numbers put into that computation.
-
-If you think one of those numbers is wrong, say which and what it should be:
-
-    CHALLENGE | <paste a commitment id from the list> | per_round = 9
-
-You may change the INPUTS and nothing else. You cannot supply the formula and
-you cannot create a commitment. That is deliberate: a seat that could write
-the computation could remove any answer it disliked by attaching arithmetic of
-its own choosing to it, and "2 + 3" attached to a commitment about annual
-accidents removed an option it had nothing to do with.
-
-A CHALLENGE DOES NOT REMOVE THE OPTION, and it is not meant to. It records
-that two seats put different numbers into the same formula and get different
-answers. Neither figure has been independently established, so a person
-settles it. Yours is not preferred for being later.
-
-WHAT DOES REMOVE AN OPTION is its own arithmetic failing: the formula it
-declared, with the inputs it declared, not producing the figure it committed
-to. That needs nothing from you.
-
-CLAIM lines are still read, still checked, and still reported. They do not
-remove anything. A sentence can always assert more than its warrant covers,
-and no rule for reading sentences caught that reliably -- one verified sum was
-accepting a proposition AND its negation.
+A CLAIM is READ AND CHECKED AND REPORTED, AND IT REMOVES NOTHING. A sentence
+can assert more than its warrant covers, so no sentence decides which answers
+survive. If you want an answer gone, the line that does it is above.
 
 <warrant> is the mechanically checkable evidence:
     arithmetic          an expression and its result, as "3 * 4 = 12".
@@ -349,7 +360,8 @@ def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
     """
     return CLAIM_CONTRACT.format(
         max_claims=max_claims, max_judgment=max_judgment,
-        options=OPTION_CONTRACT if invents else "")
+        options=OPTION_CONTRACT if invents else "",
+        challenges="" if invents else CHALLENGE_CONTRACT)
 
 
 # --------------------------------------------------------------------------

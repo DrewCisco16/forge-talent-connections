@@ -2452,3 +2452,83 @@ class TestTheInventionWarningDoesNotFireOnTheClosersOwnJob:
         merged = ("- Recommendation: acquire the Zurich subsidiary before "
                   "the regulatory filing deadline expires.\n")
         assert NL.closer_introduced(merged, self.SEATS)
+
+
+class TestOnlyCorroborationOutweighsTheProposer:
+    """Without this, rounds two through five cannot remove anything at all.
+
+    An option is checked against its own arithmetic when it is proposed, and
+    after that nothing could reach it: a challenge recorded a disagreement and
+    stopped there. Four of the five rounds were commentary with a cost.
+
+    A single challenger still decides nothing -- their figure has no more
+    standing than the proposer's, and preferring the later one lets any seat
+    delete any answer by disagreeing confidently. Two seats writing BLIND, in
+    the same round, arriving independently at the same value is a different
+    fact, and it is the one a five-seat panel exists to produce.
+    """
+
+    def _pred(self):
+        return P.Predicate(
+            option_id="o", subject="cost", relation="=", value=Fraction(30),
+            unit="api calls", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+
+    def _rule(self, *values):
+        pred = self._pred()
+        challenges = [(pred.id, {"per_round": Fraction(v)}) for v in values]
+        return pred, P.adjudicate([pred], challenges)[pred.id]
+
+    def test_no_challenge_leaves_it_standing(self):
+        assert self._rule()[1].status == "pass"
+
+    def test_one_seat_disagreeing_removes_nothing(self):
+        """The whole reason a challenge is not a refutation."""
+        assert self._rule(7)[1].status == "pass"
+
+    def test_two_seats_disagreeing_with_each_other_remove_nothing(self):
+        """Two objections are not agreement. Neither figure is corroborated,
+        and the option's own remains the only one anybody stood behind twice."""
+        assert self._rule(7, 8)[1].status == "pass"
+
+    def test_two_seats_agreeing_carry_it(self):
+        _, ruling = self._rule(7, 7)
+        assert ruling.status == "fail"
+        assert "agreed by 2 seats" in ruling.detail
+        assert "against 1 for 6" in ruling.detail
+
+    def test_the_removal_says_what_outweighed_what(self):
+        """A reader has to be able to see that this was agreement between
+        seats, not proof, and how narrow the margin was."""
+        _, ruling = self._rule(7, 7)
+        assert "NOBODY PROVED THE SEATS RIGHT" in ruling.detail
+        assert "rounds * per_round" in ruling.detail
+
+    def test_agreement_that_still_satisfies_the_commitment_removes_nothing(self):
+        """Corroborated inputs are recomputed, not assumed fatal. If the
+        answer survives its own formula on the agreed numbers, it survives."""
+        pred = P.Predicate(
+            option_id="o", subject="cost", relation="<=", value=Fraction(40),
+            unit="api calls", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+        ruling = P.adjudicate(
+            [pred], [(pred.id, {"per_round": Fraction(7)})] * 2)[pred.id]
+        assert ruling.status == "pass"
+        assert any("still holds" in d for d in ruling.disputes)
+
+    def test_seats_backing_the_option_are_counted_against_the_challengers(self):
+        """A seat that offers the SAME value the option declared is agreeing
+        with it, and that has to count -- otherwise two challengers could
+        outweigh four seats who had looked and found nothing wrong."""
+        pred = self._pred()
+        challenges = [(pred.id, {"per_round": Fraction(7)})] * 2 + \
+                     [(pred.id, {"per_round": Fraction(6)})] * 2
+        assert P.adjudicate([pred], challenges)[pred.id].status == "pass"
+
+    def test_a_challenge_naming_an_input_that_does_not_exist_is_ignored(self):
+        pred = self._pred()
+        challenges = [(pred.id, {"invented": Fraction(9)})] * 3
+        assert P.adjudicate([pred], challenges)[pred.id].status == "pass"
+
+    def test_the_threshold_is_stated_not_implied(self):
+        assert P.CORROBORATION_THRESHOLD == 2
