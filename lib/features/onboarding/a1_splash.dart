@@ -5,6 +5,7 @@ import "../../mock/fixtures.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/burning_flame.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
@@ -30,7 +31,9 @@ class _A1SplashState extends State<A1Splash> {
           const SizedBox(height: 20),
           const Align(alignment: Alignment.centerRight, child: DemoBadge()),
           const SizedBox(height: 10),
-          Image.asset(kFlameMark, height: 132, fit: BoxFit.contain),
+          // The flame burns: spec A1 motion, "flame flicker loop". Static under
+          // reduced motion.
+          const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
           const SizedBox(height: 8),
           GoldGradientText(
             "FORGE",
