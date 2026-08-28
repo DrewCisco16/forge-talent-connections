@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../theme/forge_theme.dart";
+import "device_frame.dart";
 import "router.dart";
 
 /// The application shell.
@@ -21,6 +22,8 @@ class _ForgeAppState extends State<ForgeApp> {
       debugShowCheckedModeBanner: false,
       theme: buildForgeTheme(),
       routerConfig: router,
+      builder: (BuildContext context, Widget? child) =>
+          ForgeDeviceFrame(child: child ?? const SizedBox.shrink()),
     );
   }
 }

@@ -18,6 +18,8 @@ const Map<String, Size> _viewports = <String, Size>{
   "iPhone 17 Pro 402x874": Size(402, 874),
   "design baseline 390x844": Size(390, 844),
   "iPhone SE 375x667": Size(375, 667),
+  "iPad Pro 11 portrait 834x1194": Size(834, 1194),
+  "iPad Pro 11 landscape 1194x834": Size(1194, 834),
 };
 
 void main() {
