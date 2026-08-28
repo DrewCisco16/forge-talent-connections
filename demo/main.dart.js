@@ -86004,7 +86004,7 @@ k+=11}}},
 dE(a){return!a.b.i(0,this.b)}}
 A.us.prototype={
 G(a){var s,r=null,q="Inter",p=A.b1(a),o=p.x,n=p.e,m=p.z,l=t.p
-l=A.b([B.SG,A.aB2("assets/brand/forge_flame_dark_bg.png",B.jg,88,r),B.v,new A.qj("FORGE",B.Wg,B.af,r),B.bq,A.U("TALENT CONNECTIONS",r,r,A.Y(r,r,o,r,r,r,r,r,q,r,r,11,r,r,B.aA,r,r,!0,r,2.8,r,r,r,r,r,r),B.af),B.a3,A.U("Welcome back.",r,r,A.Y(r,r,p.w,r,r,r,r,r,"Space Grotesk",r,r,26,r,r,B.q,r,r,!0,r,r,r,r,r,r,r,r),B.af),B.f8,B.GT,B.v,B.GV,B.v,new A.f0(B.aj,r,r,A.U("Forgot password",r,r,A.Y(r,r,n,r,r,r,r,r,q,r,r,11,r,r,B.aA,r,r,!0,r,r,r,r,r,r,r,r),r),r),B.p,A.fM("Sign In",new A.a4s(a)),B.bp,A.aI(A.b([A.bE(A.a57(m,r),1),new A.bi(B.Go,A.U("or",r,r,A.Y(r,r,o,r,r,r,r,r,q,r,r,11,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),r),r),A.bE(A.a57(m,r),1)],l),B.n,B.e,B.f),B.p],l)
+l=A.b([B.SG,A.aB2("assets/brand/forge_flame.png",B.jg,88,r),B.v,new A.qj("FORGE",B.Wg,B.af,r),B.bq,A.U("TALENT CONNECTIONS",r,r,A.Y(r,r,o,r,r,r,r,r,q,r,r,11,r,r,B.aA,r,r,!0,r,2.8,r,r,r,r,r,r),B.af),B.a3,A.U("Welcome back.",r,r,A.Y(r,r,p.w,r,r,r,r,r,"Space Grotesk",r,r,26,r,r,B.q,r,r,!0,r,r,r,r,r,r,r,r),B.af),B.f8,B.GT,B.v,B.GV,B.v,new A.f0(B.aj,r,r,A.U("Forgot password",r,r,A.Y(r,r,n,r,r,r,r,r,q,r,r,11,r,r,B.aA,r,r,!0,r,r,r,r,r,r,r,r),r),r),B.p,A.fM("Sign In",new A.a4s(a)),B.bp,A.aI(A.b([A.bE(A.a57(m,r),1),new A.bi(B.Go,A.U("or",r,r,A.Y(r,r,o,r,r,r,r,r,q,r,r,11,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),r),r),A.bE(A.a57(m,r),1)],l),B.n,B.e,B.f),B.p],l)
 for(m=["Google","Apple","LinkedIn"],s=0;s<3;++s)l.push(new A.bi(B.c5,new A.C0("Continue with "+m[s],new A.a4t(a),r),r))
 l.push(B.p)
 l.push(A.eF(A.c5(!1,r,!0,A.aHM(A.e_(A.b([A.e_(r,r,r,r,r,r,r,r,r,A.Y(r,r,o,r,r,r,r,r,q,r,r,13,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),"New here? "),A.e_(r,r,r,r,r,r,r,r,r,A.Y(r,r,n,r,r,r,r,r,q,r,r,13,r,r,B.q,r,r,!0,r,r,r,r,r,r,r,r),"Create an account")],t.VO),r,r,r,r,r,r,r,r,r,r),r,r),r,!0,r,r,r,r,r,r,new A.a4u(a),r,r,r),r,r))
@@ -86503,7 +86503,7 @@ n=l.f
 n===$&&A.a()
 p=A.Oz(0,A.hH(m,m,m,new A.Un(o,n,j,k,p.f,m),B.H))
 l.a.toString
-return A.iH(B.a_,A.b([q,p,A.aB2("assets/brand/forge_flame_dark_bg.png",B.jg,r,"FORGE Talent Connections flame")],t.p),B.W,B.bK)},
+return A.iH(B.a_,A.b([q,p,A.aB2("assets/brand/forge_flame.png",B.jg,r,"FORGE Talent Connections flame")],t.p),B.W,B.bK)},
 $S:605}
 A.Zg.prototype={}
 A.Ub.prototype={}

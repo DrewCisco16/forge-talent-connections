@@ -9,7 +9,7 @@ void main() {
     testWidgets("burns: frames keep scheduling while animating",
         (WidgetTester tester) async {
       await tester.pumpWidget(
-        harness(const BurningFlame(asset: "assets/brand/forge_flame_dark_bg.png")),
+        harness(const BurningFlame(asset: "assets/brand/forge_flame.png")),
       );
       await tester.pump(const Duration(milliseconds: 100));
       // A repeating controller keeps a frame scheduled; a static widget
@@ -25,7 +25,7 @@ void main() {
         (WidgetTester tester) async {
       await tester.pumpWidget(
         harness(
-          const BurningFlame(asset: "assets/brand/forge_flame_dark_bg.png"),
+          const BurningFlame(asset: "assets/brand/forge_flame.png"),
           disableAnimations: true,
         ),
       );
@@ -41,7 +41,7 @@ void main() {
       for (final bool reduced in <bool>[true, false]) {
         await tester.pumpWidget(
           harness(
-            const BurningFlame(asset: "assets/brand/forge_flame_dark_bg.png"),
+            const BurningFlame(asset: "assets/brand/forge_flame.png"),
             disableAnimations: reduced,
           ),
         );
