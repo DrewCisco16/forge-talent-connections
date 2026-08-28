@@ -440,6 +440,11 @@ class C6Rewards extends ConsumerWidget {
                           "— can be referred to law enforcement.",
                       "No purchase is ever necessary to earn points or "
                           "win. Void where prohibited by law.",
+                      "The program is run from Florida under Florida law "
+                          "as a competition of verified skill and effort. "
+                          "Where a prize period legally requires a state "
+                          "filing or a secured prize pool, that is done "
+                          "before it starts.",
                     ])
                       Padding(
                         padding: const EdgeInsets.only(bottom: 9),

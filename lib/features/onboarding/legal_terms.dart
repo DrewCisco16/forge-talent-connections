@@ -22,11 +22,11 @@ class LegalTerms extends StatelessWidget {
   static const List<(String, String)> _sections = <(String, String)>[
     (
       "Who we are",
-      "FORGE Talent Connections is operated by FORGE LINK LLC. "
-          "These terms are the agreement between you and FORGE LINK LLC, "
-          "covering every part of the product: profiles, verification, "
-          "vouching, projects, messaging, the rewards and referral "
-          "program, and exports.",
+      "FORGE Talent Connections is operated by FORGE LINK LLC, a "
+          "Florida limited liability company. These terms are the "
+          "agreement between you and FORGE LINK LLC, covering every part "
+          "of the product: profiles, verification, vouching, projects, "
+          "messaging, the rewards and referral program, and exports.",
     ),
     (
       "Agreeing to these terms",
@@ -37,11 +37,11 @@ class LegalTerms extends StatelessWidget {
     ),
     (
       "Eligibility and one account per person",
-      "You must be old enough to form a binding agreement where you live, "
-          "and you may hold exactly one account, created for yourself, with "
-          "your own true identity. Accounts created for someone else, "
-          "shared, purchased, or operated by software are not permitted and "
-          "can be closed.",
+      "You must have reached the age of majority where you live — 18 in "
+          "Florida — and you may hold exactly one account, created for "
+          "yourself, with your own true identity. Accounts created for "
+          "someone else, shared, purchased, or operated by software are "
+          "not permitted and can be closed.",
     ),
     (
       "Your identity, likeness, and consent",
@@ -52,7 +52,9 @@ class LegalTerms extends StatelessWidget {
           "carries a visible AI-generated label wherever it appears. An "
           "AI likeness is only ever generated when the verification "
           "confidence meets the required threshold; below it, nothing is "
-          "produced.",
+          "produced. Florida law protects your name and likeness from "
+          "unauthorized commercial use; nothing of yours is published or "
+          "used commercially without your recorded permission.",
     ),
     (
       "Verification and seals",
@@ -83,7 +85,14 @@ class LegalTerms extends StatelessWidget {
           "unless the official rules say otherwise, winners are "
           "responsible for applicable taxes, and the program is void "
           "where prohibited by law. Each prize period is governed by "
-          "official rules published before it starts.",
+          "official rules published before it starts. The program is "
+          "operated from Florida as a competition of verified skill and "
+          "effort — winners are determined by audited points, never by "
+          "chance. If any prize period instead qualifies as a game "
+          "promotion under chapter 849 of the Florida Statutes, its "
+          "official rules are filed with the State of Florida and the "
+          "prize pool is secured as that chapter requires before the "
+          "period begins.",
     ),
     (
       "Your privacy",
@@ -103,7 +112,8 @@ class LegalTerms extends StatelessWidget {
           "encrypted, and access inside the company is limited to what a "
           "task requires. No system is perfectly secure; if a breach "
           "affects you, you will be told what happened and what we are "
-          "doing about it.",
+          "doing about it within the time Florida law sets — no more "
+          "than 30 days.",
     ),
     (
       "Acceptable use",
@@ -115,13 +125,15 @@ class LegalTerms extends StatelessWidget {
     ),
     (
       "Disputes, governing law, and where claims go",
-      "Most problems are fixed fastest through support and human review, "
-          "so start there. For legal disputes, the final terms will name "
-          "the governing law, the venue, and the dispute process — "
-          "including any arbitration terms and your rights in small "
-          "claims court — for each place the product operates, in the "
-          "language required there. Nothing here limits rights that the "
-          "law of your home jurisdiction does not allow to be limited.",
+      "These terms are governed by the laws of the State of Florida, "
+          "and legal disputes belong in the courts located in Florida — "
+          "except where the law of your home jurisdiction gives you "
+          "rights that cannot be limited. Most problems are fixed "
+          "fastest through support and human review, so start there. "
+          "The final terms name the specific venue and any dispute "
+          "process — including arbitration terms and your rights in "
+          "small claims court — in the language each jurisdiction "
+          "requires.",
     ),
     (
       "Changes and contact",

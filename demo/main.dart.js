@@ -7410,7 +7410,7 @@ aLu(a,b,c,d,e,f,g,h){return new A.l1(a,b,c,d,g.a,g.b,h.a,h.b,f.a,f.b,e.a,e.b)},
 aFU(a,b,c,d,e){return new A.l1(a.a,a.b,a.c,a.d,d.a,d.b,e.a,e.b,c.a,c.b,b.a,b.b)},
 aXV(a,b,c,d,e,f,g,h,i,j,k,l){return new A.l1(f,j,g,c,h,i,k,l,d,e,a,b)},
 aXW(a,b,c,d,e,f,g,h,i,j,k,l,m){return new A.rQ(m,f,j,g,c,h,i,k,l,d,e,a,b)},
-QC(a,b){return a>0&&b>0?new A.Z(a,b):B.RX},
+QC(a,b){return a>0&&b>0?new A.Z(a,b):B.RV},
 Ds(a,b,c,d){var s=a+b
 if(s>c)return Math.min(d,c/s)
 return d},
@@ -11464,7 +11464,7 @@ case 4:s=l.a
 s===$&&A.a()
 s=A.bD(s,200)
 r=A.bD(A.a7Y(l,B.pT,B.LI),24)
-q=A.bD(A.a7Y(l,B.pT,B.Mv),32)
+q=A.bD(A.a7Y(l,B.pT,B.Mw),32)
 p=A.bD(l.a,10)
 o=A.bD(l.a,12)
 l.d===$&&A.a()
@@ -22080,7 +22080,7 @@ if(a.as!==q)return q?-1:1
 return 0},
 aVj(a,b){var s=A.a_(b).h("a1<1,dY>")
 s=A.a0(new A.a1(b,new A.a8S(),s),s.h("au.E"))
-return A.aUz(!0,s,a,B.ML,!0,B.H4,null)},
+return A.aUz(!0,s,a,B.MM,!0,B.H4,null)},
 aF1(a){var s
 try{a.e_()}catch(s){a.Qw()}a.w=B.a2N
 try{a.bi(A.b3o())}catch(s){}},
@@ -22703,7 +22703,7 @@ _.as=!0
 _.at=!1
 _.$ti=d},
 aca(a,b){var s
-if(a.j(0,b))return new A.Mp(B.MO)
+if(a.j(0,b))return new A.Mp(B.MP)
 s=A.b([],t.fJ)
 A.cj()
 a.nB(new A.acb(b,A.aD(t.u),s))
@@ -27139,7 +27139,7 @@ B.b.L(r,A.b(b.split("/"),s))
 return"/"+new A.aX(r,new A.aCY(),A.a_(r).h("aX<1>")).b5(0,"/")},
 aBO:function aBO(){},
 aCY:function aCY(){},
-dd(a,b,c){var s=A.b([],t.s),r=new A.qS(b,c,a,s,null,B.MX,null)
+dd(a,b,c){var s=A.b([],t.s),r=new A.qS(b,c,a,s,null,B.MY,null)
 r.y=A.aPt(c,s)
 return r},
 oI:function oI(){},
@@ -29826,7 +29826,7 @@ wR(){var s=this.as
 s===$&&A.a()
 return s},
 wS(a,b,c,d){var s,r,q,p
-if(a<0||b<0)return B.N_
+if(a<0||b<0)return B.N0
 s=this.a
 s===$&&A.a()
 s=s.a
@@ -30091,7 +30091,7 @@ j(a,b){if(b==null)return!1
 if(!(b instanceof A.Ba))return!1
 return b.d===this.d&&b.b==this.b&&A.hm(b.c,this.c)},
 gA(a){var s=this,r=s.c
-return A.M(s.d,s.a,s.b,A.bq(r==null?B.MM:r),B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a)},
+return A.M(s.d,s.a,s.b,A.bq(r==null?B.MN:r),B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a)},
 $ii7:1}
 A.zZ.prototype={
 Wx(a,b){var s=this.Q0(a),r=A.b5(new A.a5o(this,b,s))
@@ -35514,7 +35514,7 @@ if(m.f!==B.po){m.f=B.po
 m.SG()}}return m.d.a.a2R(a)},
 SG(){var s,r
 for(s=this.w,r=0;r<s.length;++r)s[r].$1(this.f)},
-a2Q(a){if(B.b.t(B.MB,a))return this.f===B.hT
+a2Q(a){if(B.b.t(B.MC,a))return this.f===B.hT
 return!1}}
 A.a9s.prototype={
 $0(){return new A.kv(Date.now(),0,!1)},
@@ -42622,7 +42622,7 @@ if(s==null||s.length<a)s=this.c=new Uint8Array(a)
 return J.kj(B.a_.gcg(s),s.byteOffset,a)}}
 A.ar6.prototype={
 C(a,b){this.y3(b,0,J.cL(b),!1)},
-b2(){this.y3(B.MI,0,0,!0)},
+b2(){this.y3(B.MJ,0,0,!0)},
 fj(a,b,c,d){A.ey(b,c,a.length,null,null)
 this.y3(a,b,c,d)}}
 A.aqC.prototype={
@@ -49765,7 +49765,7 @@ A.xW.prototype={
 K(){return"_CornerId."+this.b}}
 A.nd.prototype={}
 A.w4.prototype={
-lc(){var s,r,q,p=this,o=A.b1T(B.Mr,new A.afr(p,p.b.gaY().W(0,p.a.gaY()))),n=p.a
+lc(){var s,r,q,p=this,o=A.b1T(B.Ms,new A.afr(p,p.b.gaY().W(0,p.a.gaY()))),n=p.a
 n.toString
 s=o.a
 r=p.pV(n,s)
@@ -53476,7 +53476,7 @@ r.f=s.d},
 $S:0}
 A.Ps.prototype={
 F(a){var s=this.c.Z(0,new A.i(0,40.95))
-return A.aLw(A.MY(null,B.G8,!0),B.U,new A.w1(1,B.N8,new A.dp(B.D7,B.z)),s,1.25,B.VR)}}
+return A.aLw(A.MY(null,B.G8,!0),B.U,new A.w1(1,B.N9,new A.dp(B.D7,B.z)),s,1.25,B.VR)}}
 A.rh.prototype={
 K(){return"MaterialType."+this.b}}
 A.Cy.prototype={
@@ -53863,7 +53863,7 @@ $3(a,b,c){return new A.pE(b,this.a,!1,c,null)},
 $S:191}
 A.Q5.prototype={
 a8o(a){var s=t.Tr
-s=A.a0(new A.a1(B.Mq,new A.agI(a),s),s.h("au.E"))
+s=A.a0(new A.a1(B.Mr,new A.agI(a),s),s.h("au.E"))
 return s},
 j(a,b){if(b==null)return!1
 if(this===b)return!0
@@ -56481,7 +56481,7 @@ gCv(){return 14},
 ga7o(){return 48},
 ga7p(){return 40},
 gOu(){return 52},
-gCO(){return B.MS},
+gCO(){return B.MT},
 grV(){return 32},
 grX(){return 52},
 gCV(){return B.VL},
@@ -60158,7 +60158,7 @@ return s.d-s.b},
 xW(a1){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c=this,b=null,a=c.b,a0=a.a
 if(a0.c.gL2()<1)return b
 A:{s=a1.a
-if(0===s){r=B.RY
+if(0===s){r=B.RW
 break A}q=b
 r=!1
 q=a1.b
@@ -60217,7 +60217,7 @@ return new A.o1(r.a.cK(s.giw()),r.b,r.c)},
 cY(a){var s=this.b
 return s.a.c.cY(a.W(0,s.giw()))},
 qG(){var s,r,q=this.b,p=q.giw()
-if(!isFinite(p.a)||!isFinite(p.b))return B.MK
+if(!isFinite(p.a)||!isFinite(p.b))return B.ML
 s=q.f
 if(s==null){s=q.a.c.qG()
 q.f=s}if(p.j(0,B.j))r=s
@@ -64812,12 +64812,12 @@ l=s>r!==(B.aH===m)
 k=A.co(B.m,s,r,!1)
 j=A.b([],t.AO)
 for(q=q.nF(k),m=q.length,i=0;i<q.length;q.length===m||(0,A.z)(q),++i){h=q[i]
-j.push(new A.v(h.a,h.b,h.c,h.d))}A:{if(a0){q=B.S_
+j.push(new A.v(h.a,h.b,h.c,h.d))}A:{if(a0){q=B.RY
 break A}q=l
 g=q
 if(q){q=B.SJ
 break A}q=!1===g
-if(q){q=B.Sp
+if(q){q=B.Sq
 break A}q=a}f=q.a
 e=a
 d=q.b
@@ -70018,7 +70018,7 @@ break
 case 1:return A.P(q,r)}})
 return A.Q($async$FU,r)},
 ac2(a,b){var s,r,q,p
-if(a===b)return B.MW
+if(a===b)return B.MX
 s=A.b([],t.QP)
 if(a==null)s.push(b)
 else{r=B.b.hU(B.f9,a)
@@ -71888,7 +71888,7 @@ dG(a){return this.c.$1(a)}}
 A.a3d.prototype={
 ZT(a,b,c){return a.uc(b,c)},
 au6(a,b,c){if(a.ud(b,c))return new A.Z(!0,a.uc(b,c))
-return B.Sv}}
+return B.Sw}}
 A.pY.prototype={
 ac(){return new A.Gd(A.aD(t.od),new A.m())}}
 A.a3e.prototype={
@@ -72064,7 +72064,7 @@ A.mB.prototype={}
 A.Qy.prototype={
 lI(a,b){var s,r,q,p,o,n=$.a2.a7$.d.c
 if(n==null||n.e==null)return!1
-for(s=t.C,r=0;r<2;++r){q=B.MC[r]
+for(s=t.C,r=0;r<2;++r){q=B.MD[r]
 p=n.e
 p.toString
 o=A.aEr(p,q,s)
@@ -72301,7 +72301,7 @@ r=n.gagF()
 q=n.a
 q=q.ch
 q.toString
-l.a=A.aVL(!0,A.aL1(B.r,r,s,q,A.aPl(),n.gai5(),m,n.gaiy(),B.MJ,!0,"nav",B.a0R),"Navigator Scope",!0,m,m,m,m)}else{s=n.a.z
+l.a=A.aVL(!0,A.aL1(B.r,r,s,q,A.aPl(),n.gai5(),m,n.gaiy(),B.MK,!0,"nav",B.a0R),"Navigator Scope",!0,m,m,m,m)}else{s=n.a.z
 if(s!=null){r=s.d
 r===$&&A.a()
 q=s.e
@@ -74698,7 +74698,7 @@ h.HJ()
 r=h.gacV()
 q=q.vI
 h.e!==$&&A.aK()
-h.e=new A.RS(f,new A.ci(B.P7,l),new A.rd(),p,B.cI,0,k,h.gafn(),h.gafp(),r,B.cI,0,j,h.gafh(),h.gafj(),r,i,B.MP,s,g.CW,g.cx,g.cy,o,g,n,m,g.x,q,new A.N8(),new A.N8())
+h.e=new A.RS(f,new A.ci(B.P7,l),new A.rd(),p,B.cI,0,k,h.gafn(),h.gafp(),r,B.cI,0,j,h.gafh(),h.gafj(),r,i,B.MQ,s,g.CW,g.cx,g.cy,o,g,n,m,g.x,q,new A.N8(),new A.N8())
 return h},
 yb(a,b){var s,r,q,p=this,o=p.a.c,n=o.a.a.length
 if(n<a.b||n<a.a)return
@@ -76496,9 +76496,9 @@ switch(b){case B.cK:o=B.SH
 break
 case B.cM:o=B.SI
 break
-case B.cN:o=B.Su
+case B.cN:o=B.Sv
 break
-case B.cL:o=B.Sw
+case B.cL:o=B.Sx
 break}s=o.a
 q.b=s
 r=o.b
@@ -78118,7 +78118,7 @@ if(b==null)return!1
 if(J.T(b)!==A.o(s))return!1
 return b instanceof A.aE&&b.a===s.a&&b.b==s.b&&b.c==s.c&&b.d===s.d&&A.ck(null,null)},
 gA(a){var s=this
-return A.M(s.a,s.b,s.c,s.d,A.bq(B.MN),B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a)},
+return A.M(s.a,s.b,s.c,s.d,A.bq(B.MO),B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a,B.a)},
 k(a){return"IconData(U+"+B.c.pe(B.k.m1(this.a,16).toUpperCase(),5,"0")+")"}}
 A.qZ.prototype={
 cm(a){return!this.w.j(0,a.w)},
@@ -79210,7 +79210,7 @@ b=r?a1:a3.fr
 if(b==null)b=a2.b.c.z
 a3=r?a1:a3.fx
 if(a3==null)a3=a2.b.c.Q
-a=new A.CD(a4,s,q,p,m,o,n,a5,g===!0,a6,a7,i,h,l,k,j,f,new A.vk(a1),B.MV,e===!0,d,c,b,a3,A.aWQ(a2))
+a=new A.CD(a4,s,q,p,m,o,n,a5,g===!0,a6,a7,i,h,l,k,j,f,new A.vk(a1),B.MW,e===!0,d,c,b,a3,A.aWQ(a2))
 if(!a.j(0,a0.e))a0.aa(new A.aw8(a0,a))},
 Ax(){if(this.d==null)this.qk()},
 Je(){this.qk()},
@@ -80056,7 +80056,7 @@ F(a){var s,r,q=this,p=null,o=q.gaeQ(),n=A.o_(a),m=q.bS$,l=q.d
 l===$&&A.a()
 s=q.a.ay
 if(l.gM()==null){r=q.gOQ()
-r=J.jF(r.slice(0),A.a_(r).c)}else r=B.MZ
+r=J.jF(r.slice(0),A.a_(r).c)}else r=B.N_
 return new A.qV(p,new A.dQ(new A.agm(q,a),A.Cr(B.ch,new A.LD(!1,A.aF9(A.qG(!0,p,A.Tc(m,new A.wh(r,s,l)),p,p,p,q.y,!1,p,p,p,p,p,!0),p,n),p),o,q.gaeH(),p,p,o),p,t.w3),p)}}
 A.agh.prototype={
 $1(a){var s,r=this.a
@@ -83268,11 +83268,11 @@ this.HI()},
 HI(){var s,r,q,p,o,n,m=this,l=m.w
 switch(l.a.c.a){case 0:s=B.SC
 break
-case 2:s=B.Sy
+case 2:s=B.Sz
 break
-case 3:s=B.St
+case 3:s=B.Su
 break
-case 1:s=B.Sr
+case 1:s=B.Ss
 break
 default:s=null}r=s.a
 q=null
@@ -85444,7 +85444,7 @@ r.zn()
 return s.b0()},
 l(){var s,r,q,p,o=this
 for(s=o.b,r=s.length,q=o.gFW(),p=0;p<s.length;s.length===r||(0,A.z)(s),++p)s[p].I(q)
-o.b=B.MU
+o.b=B.MV
 o.y=!1
 o.d5()},
 ek(a,b){return a.n0(b)},
@@ -88944,7 +88944,7 @@ s.toString
 r=A.bz(s,B.fW,t.w).w.a.ge7()<600
 if(q.d===r)return
 q.d=r
-A.an6(r?B.LM:B.Ml)},
+A.an6(r?B.LM:B.Mm)},
 F(a){var s,r,q,p=null,o=A.bz(a,p,t.w).w,n=o.a
 if(n.a<=480)return this.a.c
 s=A.aT(a)
@@ -89045,7 +89045,7 @@ ac(){return new A.a19(B.hR)}}
 A.a19.prototype={
 F(a){var s,r=null,q=A.aT(a),p=new A.aBf(q),o=this.d,n=t.p,m=A.b([],n)
 for(s=0;s<5;++s)m.push(new A.eU(B.Nt[s],!1,r))
-return A.dy(new A.zO(o,new A.aB6(this),r),A.a5(A.b([B.o,B.IL,p.$2("Status chips",A.b([A.G9(m,8,8)],n)),p.$2("Buttons",A.b([A.eK("Primary action",new A.aB7()),B.p,B.IJ,B.p,A.ii("Secondary action",new A.aB8())],n)),p.$2("Social actions (vibe gradient)",A.b([A.ac(A.b([new A.lf("Vouch",new A.aB9(),B.JF,!1,r),B.al,new A.lf("Share",new A.aBa(),r,!1,r)],n),B.l,B.f,B.e),B.o,A.ac(B.MG,B.l,B.f,B.e)],n)),p.$2("Score ring",A.b([B.Ta],n)),p.$2("Banners",A.b([B.n2,B.p,B.n3,B.p,B.D1,B.p,B.CT],n)),p.$2("Fields",A.b([A.Bi("Display name",1,new A.aBb(),"Drew Cisco"),B.p,B.It],n)),p.$2("Seal card",A.b([B.Tm],n)),p.$2("Credential cards",A.b([new A.qj("CompTIA Security+ ce",B.dz,"COMP001022334455 \xb7 valid through 2028","Verify Credential",new A.aBc(),r),B.p,B.Gh,B.p,B.Gg],n)),p.$2("Feed card",A.b([A.aVA(new A.lf("Vouch",new A.aBd(),r,!1,r),r,u.u,"shipped a verified deliverable","Maya Chen",new A.aBe(),B.V,9)],n)),B.o,A.eJ(A.t("Tokens v3-dark-2026-08-26",r,r,r,A.I(r,r,q.x,r,r,r,r,r,"Inter",r,r,11,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),r,r),r,r),B.o],n),B.t,B.f,B.e))}}
+return A.dy(new A.zO(o,new A.aB6(this),r),A.a5(A.b([B.o,B.IL,p.$2("Status chips",A.b([A.G9(m,8,8)],n)),p.$2("Buttons",A.b([A.eK("Primary action",new A.aB7()),B.p,B.IJ,B.p,A.ii("Secondary action",new A.aB8())],n)),p.$2("Social actions (vibe gradient)",A.b([A.ac(A.b([new A.lf("Vouch",new A.aB9(),B.JF,!1,r),B.al,new A.lf("Share",new A.aBa(),r,!1,r)],n),B.l,B.f,B.e),B.o,A.ac(B.MH,B.l,B.f,B.e)],n)),p.$2("Score ring",A.b([B.Ta],n)),p.$2("Banners",A.b([B.n2,B.p,B.n3,B.p,B.D1,B.p,B.CT],n)),p.$2("Fields",A.b([A.Bi("Display name",1,new A.aBb(),"Drew Cisco"),B.p,B.It],n)),p.$2("Seal card",A.b([B.Tm],n)),p.$2("Credential cards",A.b([new A.qj("CompTIA Security+ ce",B.dz,"COMP001022334455 \xb7 valid through 2028","Verify Credential",new A.aBc(),r),B.p,B.Gh,B.p,B.Gg],n)),p.$2("Feed card",A.b([A.aVA(new A.lf("Vouch",new A.aBd(),r,!1,r),r,u.u,"shipped a verified deliverable","Maya Chen",new A.aBe(),B.V,9)],n)),B.o,A.eJ(A.t("Tokens v3-dark-2026-08-26",r,r,r,A.I(r,r,q.x,r,r,r,r,r,"Inter",r,r,11,r,r,r,r,r,!0,r,r,r,r,r,r,r,r),r,r),r,r),B.o],n),B.t,B.f,B.e))}}
 A.aBf.prototype={
 $2(a,b){var s=null,r=A.b([B.fG,A.t(a.toUpperCase(),s,s,s,A.I(s,s,this.a.e,s,s,s,s,s,"Inter",s,s,10,s,s,B.q,s,s,!0,s,1.1,s,s,s,s,s,s),s,s),B.p],t.p)
 B.b.L(r,b)
@@ -89676,7 +89676,7 @@ $0(){return A.bd(this.a).aV("/dashboard",null)},
 $S:0}
 A.vV.prototype={
 F(a){var s,r,q,p,o,n,m,l=null,k=A.aT(a),j=t.p,i=A.b([B.o,B.d2,B.aa,new A.h2("Terms & Privacy","The whole agreement, in plain language",new A.acX(a),l,l),B.o,B.CV,B.o],j)
-for(s=k.w,r=0;r<12;++r){q=B.Ni[r]
+for(s=k.w,r=0;r<12;++r){q=B.Ml[r]
 p=q.a
 o=l
 n=q.b
@@ -89795,7 +89795,7 @@ a3.push(B.X)
 a3.push(A.t("Entry comes through accountable trust. Standing is earned through your own work.",g,g,g,A.I(g,g,d,g,g,g,g,g,f,g,g,11,g,g,B.q,g,1.35,!0,g,g,g,g,g,g,g,g),g,g))
 a3.push(B.p)
 d=A.b([],c)
-for(b=[B.S2,B.SO,B.Sl,B.SE,B.SG,B.Sg,B.Sx],r=0;r<7;++r){a0=b[r]
+for(b=[B.S2,B.SO,B.Sl,B.SF,B.SG,B.Sf,B.Sy],r=0;r<7;++r){a0=b[r]
 l=a0.a
 k=g
 j=a0.b
@@ -89932,7 +89932,7 @@ a2.push(B.X)
 a2.push(A.t("Only verified actions earn. Nothing is awarded for taps, raw activity, or volume alone.",a,a,a,A.I(a,a,q,a,a,a,a,a,a0,a,a,11,a,a,a,a,1.35,!0,a,a,a,a,a,a,a,a),a,a))
 a2.push(B.p)
 a5=A.b([],a7)
-for(r=[B.SB,B.S9,B.SN,B.Sc],o=a4.e,p=0;p<4;++p){n=r[p]
+for(r=[B.SB,B.S8,B.SN,B.Sb],o=a4.e,p=0;p<4;++p){n=r[p]
 m=a
 l=n.b
 m=l
@@ -89983,7 +89983,7 @@ a2.push(B.TO)
 a2.push(B.p)
 a4=o.c9(0.55)
 a5=A.b([],a7)
-for(s=["Points must be earned by you, a person \u2014 never by a company, bot, script, AI agent, purchased account, or anyone acting on your behalf.","One account per person. Pooling, trading, or selling points voids them.","Every prize is preceded by a human audit of the points behind it.","Violations void the prize, forfeit the points, and can end membership. Conduct that breaks the law \u2014 fraud, impersonation, unauthorized automation \u2014 can be referred to law enforcement.","No purchase is ever necessary to earn points or win. Void where prohibited by law."],p=0;p<5;++p){b=s[p]
+for(s=["Points must be earned by you, a person \u2014 never by a company, bot, script, AI agent, purchased account, or anyone acting on your behalf.","One account per person. Pooling, trading, or selling points voids them.","Every prize is preceded by a human audit of the points behind it.","Violations void the prize, forfeit the points, and can end membership. Conduct that breaks the law \u2014 fraud, impersonation, unauthorized automation \u2014 can be referred to law enforcement.","No purchase is ever necessary to earn points or win. Void where prohibited by law.","The program is run from Florida under Florida law as a competition of verified skill and effort. Where a prize period legally requires a state filing or a secured prize pool, that is done before it starts."],p=0;p<6;++p){b=s[p]
 r=A.aC(B.pz,o,a,14)
 a5.push(new A.aJ(B.eY,A.ac(A.b([r,B.c7,new A.cV(1,B.aj,A.t(b,a,a,a,new A.j(!0,a6,a,a0,a,a,11,a,a,a,a,a,1.35,a,a,a,a,a,a,a,a,a,a,a,a,a),a,a),a)],a7),B.t,B.f,B.e),a))}a5.push(A.ii("Read the Full Terms & Privacy",new A.a59(k)))
 a2.push(new A.aO(A.a5(a5,B.t,B.f,B.e),a4,1,a,a))
@@ -90026,7 +90026,7 @@ B.b.L(a3,A.b([B.p,new A.fH(a2===1?u.W:""+a2+" files failed their check and stay 
 a3.push(B.TX)
 a3.push(B.p)
 a2=A.b([],n)
-for(k=[B.Sf,B.Sd,B.Sq,B.Sb],d=0;d<4;++d){j=k[d]
+for(k=[B.Se,B.Sc,B.Sr,B.Sa],d=0;d<4;++d){j=k[d]
 c=a
 b=j.b
 c=b
@@ -90158,7 +90158,7 @@ ac(){return new A.UI()}}
 A.UI.prototype={
 F(a7){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c=this,b=null,a="Inter",a0=A.aT(a7),a1=a0.x,a2=a0.w,a3=t.p,a4=A.ac(A.b([A.aC(B.hX,a1,b,13),B.c6,A.aN(A.t("Private check-in",b,b,b,A.I(b,b,a2,b,b,b,b,b,a,b,b,11,b,b,B.q,b,b,!0,b,b,b,b,b,b,b,b),b,b),1)],a3),B.l,B.f,B.e),a5=A.t(c.a.c,b,b,b,A.I(b,b,a2,b,b,b,b,b,a,b,b,13,b,b,b,b,1.3,!0,b,b,b,b,b,b,b,b),b,b),a6=A.b([],a3)
 for(s=a0.z,r=a0.d,q=a0.r,p=a0.e,o=0;o<3;++o){n={}
-m=B.Mz[o]
+m=B.MA[o]
 n.a=null
 l=m.a
 k=b
@@ -90261,7 +90261,7 @@ return A.U(o.jP(new A.CG(new A.at4(q,p),n,!1,0.5625,p.c,null,B.T7,null,null,e.ry
 case 2:return A.P(null,r)}})
 return A.Q($async$y_,r)},
 F(a0){var s,r,q,p,o,n=this,m="Inter",l=null,k=A.aT(a0),j=n.glY(),i=j.aS($.aEi(),t.iI),h=A.c8(new A.at9(k),"Loading profile",j.aS($.a2X(),t.PL),t.q5),g=A.c8(new A.ata(a0,k),"Loading record",j.aS($.Lz(),t.da),t.bB),f=k.x,e=A.t("This build has no backend. Switch the fixture set to see how every screen behaves when checks pass, are still running, or fail.",l,l,l,A.I(l,l,f,l,l,l,l,l,m,l,l,11,l,l,l,l,1.35,!0,l,l,l,l,l,l,l,l),l,l),d=k.Q,c=d.c9(0.5),b=t.p,a=A.b([],b)
-for(s=k.w,r=0;r<3;++r){q=B.Na[r]
+for(s=k.w,r=0;r<3;++r){q=B.Nb[r]
 p=q===i
 o=p?B.Jd:B.Je
 o=A.aC(o,p?d:f,l,18)
@@ -90465,7 +90465,7 @@ case 1:k="Possible match"
 break
 case 2:k="Weak match"
 break
-default:k=null}q=new A.mn(m,l,o,k,B.N6)
+default:k=null}q=new A.mn(m,l,o,k,B.N7)
 s=1
 break
 case 1:return A.P(q,r)}})
@@ -90543,7 +90543,7 @@ case 1:h="100 points are waiting on checks that are still running. They count on
 break
 case 2:h="Points frozen: a record on this account failed its check. Prize eligibility is suspended until a person reviews the hold."
 break
-default:h=k}return this.dq(new A.jW("Q3 2026","30 Sep 2026",s,r,q,2314,"DREW-TALENT-26",p,n,B.N3,i,B.ME,B.T3,o,h),t.Hu)},
+default:h=k}return this.dq(new A.jW("Q3 2026","30 Sep 2026",s,r,q,2314,"DREW-TALENT-26",p,n,B.N4,i,B.MF,B.T3,o,h),t.Hu)},
 $iaFe:1}
 A.afK.prototype={
 $0(){return this.a},
@@ -90564,7 +90564,7 @@ A.aDI.prototype={
 $1(a){var s=a.aS($.dj(),t.J),r=s.a,q=r===B.da,p=q?100:72
 if(q)r=B.V
 else r=r===B.dO?B.b4:B.c8
-return s.dq(new A.k6("Drew Cisco",B.MA,"Six years running cyber network operations for the Marine Corps.","assets/heroes/hero_10.png",p,r),t.q5)},
+return s.dq(new A.k6("Drew Cisco",B.MB,"Six years running cyber network operations for the Marine Corps.","assets/heroes/hero_10.png",p,r),t.q5)},
 $S:618}
 A.aCj.prototype={
 $1(a){return a.aS($.dj(),t.J).dq(B.M3,t.c6)},
@@ -90607,7 +90607,7 @@ $1(a){var s=a.aS($.dj(),t.J),r=A.b([B.PH,new A.op("Slide deck draft",s.gmC()),B.
 return s.dq(new A.mC("Employment Law Presentation","FIU Business School",r,A.b([B.GU,new A.nS("Slide_Deck_Draft.pptx",q,"24 Aug",s.a===B.cd?"File does not match what was created":null),B.GT],t.H9),B.KK,B.Nm,"How is the collaboration going this week?"),t.og)},
 $S:628}
 A.aDT.prototype={
-$1(a){return a.aS($.dj(),t.J).dq(B.Mt,t.w8)},
+$1(a){return a.aS($.dj(),t.J).dq(B.Mu,t.w8)},
 $S:629}
 A.aDa.prototype={
 $1(a){return a.aS($.dj(),t.J).dq(B.Lq,t.A8)},
@@ -90654,7 +90654,7 @@ A.aDU.prototype={
 $1(a){return a.aS($.dj(),t.J).auY()},
 $S:639}
 A.aDj.prototype={
-$1(a){return a.aS($.dj(),t.J).dq(B.Nd,t.ml)},
+$1(a){return a.aS($.dj(),t.J).dq(B.Ne,t.ml)},
 $S:640}
 A.aD3.prototype={
 $1(a){return a.aS($.dj(),t.J).auS()},
@@ -90945,7 +90945,7 @@ r.d!==$&&A.at()
 r.d=s
 q=s}return q},
 gT0(){var s=this.e
-return s===$?this.e=B.MT:s},
+return s===$?this.e=B.MU:s},
 aK(a){this.b_(a)
 if(this.a.c&&!a.c)this.P0()},
 az(){this.aR()
@@ -91444,7 +91444,7 @@ A.asX.prototype={
 $1(a){return this.a.$2(a,this.b)},
 $S:11}
 A.asY.prototype={
-$5(a,b,c,d,e){var s=a.gA(a),r=this.a.a,q=r.r,p=d==null?B.MQ:d,o=r.w
+$5(a,b,c,d,e){var s=a.gA(a),r=this.a.a,q=r.r,p=d==null?B.MR:d,o=r.w
 return A.aN2(q,r.y,r.z,new A.m8(s,t.bT),c,b.d,a,e,p,o)},
 $S:658}
 A.asZ.prototype={
@@ -91504,7 +91504,7 @@ QP(a){return new A.a1(a,new A.ajB(),A.a_(a).h("a1<1,n>")).b5(0," => ")},
 k(a){return"RouterConfiguration: "+A.k(this.a.a.a)},
 aqS(){var s,r,q=new A.cA("")
 q.a="Full paths for routes:\n"
-this.Q6(this.a.a.a,"",B.MR,q)
+this.Q6(this.a.a.a,"",B.MS,q)
 s=this.d
 if(s.a!==0){q.a+="known full paths for route names:\n"
 for(s=new A.eO(s,A.l(s).h("eO<1,2>")).gV(0);s.q();){r=s.d
@@ -98239,7 +98239,7 @@ B.EI=new A.aoM()
 B.ao=new A.Tj()
 B.dH=new A.Tl()
 B.ek=new A.Ts(0,0,0,0)
-B.MV=s([],A.af("q<a7A>"))
+B.MW=s([],A.af("q<a7A>"))
 B.a4c=new A.apc()
 B.eA=new A.TR()
 B.cs=new A.TS()
@@ -98988,10 +98988,10 @@ B.pK=new A.Cm(3,"endOfText")
 B.pM=new A.ra(B.ex,A.af("ra<fu>"))
 B.KH=new A.Cq(null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.KK=s(["Maya Chen approved the outline","You submitted Slide_Deck_Draft.pptx","Checking started on Case_Study_Appendix.pdf"],t.s)
-B.Mu=s([1373.2198709594231,-1100.4251190754821,-7.278681089101213],t.n)
+B.Mv=s([1373.2198709594231,-1100.4251190754821,-7.278681089101213],t.n)
 B.M5=s([-271.815969077903,559.6580465940733,-32.46047482791194],t.n)
 B.NF=s([1.9622899599665666,-57.173814538844006,308.7233197812385],t.n)
-B.KL=s([B.Mu,B.M5,B.NF],t.zg)
+B.KL=s([B.Mv,B.M5,B.NF],t.zg)
 B.UE=new A.eS("usmc","United States Marine Corps","USMC","Semper Fidelis")
 B.UC=new A.eS("usa","United States Army","USA","This We'll Defend")
 B.UB=new A.eS("usn","United States Navy","USN","Semper Fortis")
@@ -99007,8 +99007,8 @@ B.K2=new A.kJ(B.JV,!1,0,"png")
 B.JT=new A.mb(B.Nk,B.K2,0,"png")
 B.Nl=s([71,73,70,56,55,97],t.Z)
 B.JS=new A.mb(B.Nl,B.i_,1,"gif87a")
-B.Mp=s([71,73,70,56,57,97],t.Z)
-B.JR=new A.mb(B.Mp,B.i_,2,"gif89a")
+B.Mq=s([71,73,70,56,57,97],t.Z)
+B.JR=new A.mb(B.Mq,B.i_,2,"gif89a")
 B.KN=s([255,216,255],t.Z)
 B.JW=new A.o5(2,"jpeg")
 B.K6=new A.kJ(B.JW,!1,3,"jpeg")
@@ -99054,16 +99054,16 @@ B.fM=new A.mW(5,"end")
 B.LB=s([B.cH,B.ee,B.Y,B.fL,B.b3,B.fM],A.af("q<mW>"))
 B.LS=s([2,1.13276676],t.n)
 B.KQ=s([2.18349805,1.20311921],t.n)
-B.N4=s([2.33888662,1.28698796],t.n)
-B.N7=s([2.48660575,1.36351941],t.n)
+B.N5=s([2.33888662,1.28698796],t.n)
+B.N8=s([2.48660575,1.36351941],t.n)
 B.LF=s([2.62226596,1.44717976],t.n)
 B.LN=s([2.7514899,1.53385819],t.n)
-B.Mm=s([3.36298265,1.98288283],t.n)
+B.Mn=s([3.36298265,1.98288283],t.n)
 B.LW=s([4.08649929,2.23811846],t.n)
 B.Mc=s([4.85481134,2.47563463],t.n)
 B.LJ=s([5.62945551,2.72948597],t.n)
 B.LT=s([6.43023796,2.98020421],t.n)
-B.pP=s([B.LS,B.KQ,B.N4,B.N7,B.LF,B.LN,B.Mm,B.LW,B.Mc,B.LJ,B.LT],t.zg)
+B.pP=s([B.LS,B.KQ,B.N5,B.N8,B.LF,B.LN,B.Mn,B.LW,B.Mc,B.LJ,B.LT],t.zg)
 B.LD=s(["Arial"],t.s)
 B.LE=s([B.jI,B.jJ],A.af("q<zD>"))
 B.LG=s(["-apple-system","BlinkMacSystemFont"],t.s)
@@ -99150,12 +99150,25 @@ B.EU=new A.uR(0,"auto")
 B.EV=new A.uR(1,"full")
 B.EW=new A.uR(2,"chromium")
 B.Mj=s([B.EU,B.EV,B.EW],A.af("q<uR>"))
+B.Sg=new A.Z("Who we are","FORGE Talent Connections is operated by FORGE LINK LLC, a Florida limited liability company. These terms are the agreement between you and FORGE LINK LLC, covering every part of the product: profiles, verification, vouching, projects, messaging, the rewards and referral program, and exports.")
+B.SL=new A.Z("Agreeing to these terms","Creating an account, signing in, or continuing to use FORGE Talent Connections means you accept these terms and the privacy policy below. If you do not accept them, do not use the product.")
+B.S9=new A.Z("Eligibility and one account per person","You must have reached the age of majority where you live \u2014 18 in Florida \u2014 and you may hold exactly one account, created for yourself, with your own true identity. Accounts created for someone else, shared, purchased, or operated by software are not permitted and can be closed.")
+B.SE=new A.Z("Your identity, likeness, and consent","Verification can involve checking your identity against records you provide. Your likeness \u2014 photos, video, and any AI-generated presenter of you \u2014 is used only with your recorded consent, which you can withdraw at any time. Anything AI-generated carries a visible AI-generated label wherever it appears. An AI likeness is only ever generated when the verification confidence meets the required threshold; below it, nothing is produced. Florida law protects your name and likeness from unauthorized commercial use; nothing of yours is published or used commercially without your recorded permission.")
+B.Si=new A.Z("Verification and seals","Checks, seals, matches, and every other decision are made by our systems and reviewed by people \u2014 never silently. You can request human review of any decision about you. A record that fails its check stays locked and is never presented as verified.")
+B.SP=new A.Z("Vouching and accountability","A vouch is a signed, recorded statement that stays attached to your name. Vouches can be revoked, revocations are recorded, and misuse of vouching reduces your own standing. The ledger of vouches you give is public on your profile.")
+B.So=new A.Z("Rewards, referrals, and prizes","The rewards program awards points for verified actions only. Points must be earned personally, by you as an individual person: points generated by a company, bot, script, AI agent, automation, purchased or pooled accounts, or any other non-human means are void. Every prize award is preceded by a human audit. Breaking these rules voids prizes, forfeits points, and can end your membership; conduct that also breaks the law \u2014 fraud, impersonation, unauthorized automation \u2014 can be referred to law enforcement. No purchase is necessary to earn points or win, prizes are not exchangeable for cash unless the official rules say otherwise, winners are responsible for applicable taxes, and the program is void where prohibited by law. Each prize period is governed by official rules published before it starts. The program is operated from Florida as a competition of verified skill and effort \u2014 winners are determined by audited points, never by chance. If any prize period instead qualifies as a game promotion under chapter 849 of the Florida Statutes, its official rules are filed with the State of Florida and the prize pool is secured as that chapter requires before the period begins.")
+B.SK=new A.Z("Your privacy","We collect what the product needs to work: your account details, the records you submit for verification, your activity inside projects, and device information for security. We use it to run the product, verify work, prevent abuse, and improve the service. We never sell your personal information. You can access, correct, export, and delete your data from Settings; verified records you exported remain yours. Data is retained only as long as the product or the law requires. The product is not directed at children.")
+B.RZ=new A.Z("Security","Records are sealed with tamper-evident signatures, transport is encrypted, and access inside the company is limited to what a task requires. No system is perfectly secure; if a breach affects you, you will be told what happened and what we are doing about it within the time Florida law sets \u2014 no more than 30 days.")
+B.SD=new A.Z("Acceptable use","No impersonation, no false statements in vouches or records, no harassment, no scraping or automated access, no attempts to defeat verification, and no use of the product to break the law. We can suspend or close accounts that do these things, and every suspension can be appealed to a person.")
+B.S1=new A.Z("Disputes, governing law, and where claims go","These terms are governed by the laws of the State of Florida, and legal disputes belong in the courts located in Florida \u2014 except where the law of your home jurisdiction gives you rights that cannot be limited. Most problems are fixed fastest through support and human review, so start there. The final terms name the specific venue and any dispute process \u2014 including arbitration terms and your rights in small claims court \u2014 in the language each jurisdiction requires.")
+B.S5=new A.Z("Changes and contact","If these terms change in a way that matters, you will be told in the app before the change applies. Questions and privacy requests: legal@forgetalentconnections.com.")
+B.Ml=s([B.Sg,B.SL,B.S9,B.SE,B.Si,B.SP,B.So,B.SK,B.RZ,B.SD,B.S1,B.S5],A.af("q<+(n,n)>"))
 B.GX=new A.qt(1,"landscapeLeft")
 B.GY=new A.qt(2,"portraitDown")
 B.GZ=new A.qt(3,"landscapeRight")
-B.Ml=s([B.ot,B.GX,B.GY,B.GZ],t.UW)
+B.Mm=s([B.ot,B.GX,B.GY,B.GZ],t.UW)
 B.bp=new A.fS(1,"fuchsia")
-B.Mq=s([B.am,B.bp,B.P,B.bd,B.aN,B.be],A.af("q<fS>"))
+B.Mr=s([B.am,B.bp,B.P,B.bd,B.aN,B.be],A.af("q<fS>"))
 B.BO=new A.xW(0,"topLeft")
 B.BR=new A.xW(3,"bottomRight")
 B.a2J=new A.nd(B.BO,B.BR)
@@ -99164,14 +99177,14 @@ B.BP=new A.xW(1,"topRight")
 B.BQ=new A.xW(2,"bottomLeft")
 B.a2K=new A.nd(B.BP,B.BQ)
 B.a2L=new A.nd(B.BQ,B.BP)
-B.Mr=s([B.a2J,B.a2M,B.a2K,B.a2L],A.af("q<nd>"))
+B.Ms=s([B.a2J,B.a2M,B.a2K,B.a2L],A.af("q<nd>"))
 B.Wj=new A.hE("You","assets/heroes/hero_10.png",!0)
 B.Wn=new A.hE("Maya","assets/heroes/hero_04.png",!1)
 B.Wk=new A.hE("Jordan","assets/heroes/hero_12.png",!1)
 B.Wm=new A.hE("Ana","assets/heroes/hero_06.png",!1)
 B.Wl=new A.hE("Kai","assets/heroes/hero_14.png",!1)
-B.Mt=s([B.Wj,B.Wn,B.Wk,B.Wm,B.Wl],A.af("q<hE>"))
-B.Mv=s([35,30,20,25,30,35,30,25,25],t.n)
+B.Mu=s([B.Wj,B.Wn,B.Wk,B.Wm,B.Wl],A.af("q<hE>"))
+B.Mw=s([35,30,20,25,30,35,30,25,25],t.n)
 B.Bh=new A.xf(3,"violet")
 B.WM=new A.hG("Research",B.Bh)
 B.mn=new A.xf(0,"gold")
@@ -99179,113 +99192,100 @@ B.WN=new A.hG("Slides",B.mn)
 B.mo=new A.xf(2,"cyan")
 B.WL=new A.hG("Legal",B.mo)
 B.Me=s([B.WM,B.WN,B.WL],t.YZ)
-B.Mw=s(["Project","Remote","6 weeks"],t.s)
+B.Mx=s(["Project","Remote","6 weeks"],t.s)
 B.M9=s(["A 40-slide presentation with speaker notes","A sourced case-study appendix","One rehearsal session with the teaching team"],t.s)
-B.Ne=s(["Sealed project completion","Verified skills: research writing, slide design","A vouch from the teaching team on completion"],t.s)
-B.QF=new A.e1("employment-law-presentation","Employment Law Presentation",B.V,"Build the slide deck and speaker materials for a graduate employment law seminar. Clear visuals, sourced citations, and a case-study walkthrough.",B.Me,B.Mw,B.M9,"Academic credit","1 vouch, or a sealed verification",B.Ne)
+B.Nf=s(["Sealed project completion","Verified skills: research writing, slide design","A vouch from the teaching team on completion"],t.s)
+B.QF=new A.e1("employment-law-presentation","Employment Law Presentation",B.V,"Build the slide deck and speaker materials for a graduate employment law seminar. Clear visuals, sourced citations, and a case-study walkthrough.",B.Me,B.Mx,B.M9,"Academic credit","1 vouch, or a sealed verification",B.Nf)
 B.WK=new A.hG("Flutter",B.mn)
 B.WG=new A.xf(1,"green")
 B.WI=new A.hG("FastAPI",B.WG)
 B.WH=new A.hG("Analytics",B.mo)
-B.Ng=s([B.WK,B.WI,B.WH],t.YZ)
+B.Nh=s([B.WK,B.WI,B.WH],t.YZ)
 B.M2=s(["Project","Hybrid","One semester"],t.s)
-B.Ms=s(["A working dashboard against the cohort dataset","Faculty reviewer documentation","Handover session with the program office"],t.s)
+B.Mt=s(["A working dashboard against the cohort dataset","Faculty reviewer documentation","Handover session with the program office"],t.s)
 B.Nv=s(["Sealed dashboard deliverables","Verified skills: data engineering, dashboard design"],t.s)
-B.QG=new A.e1("analytics-capstone","Business Analytics Capstone Dashboard",B.V,"Stand up the live dashboard for the analytics capstone cohort. Data engineering plus a clean reviewer view for faculty.",B.Ng,B.M2,B.Ms,"Portfolio + faculty reference","2 vouches",B.Nv)
+B.QG=new A.e1("analytics-capstone","Business Analytics Capstone Dashboard",B.V,"Stand up the live dashboard for the analytics capstone cohort. Data engineering plus a clean reviewer view for faculty.",B.Nh,B.M2,B.Mt,"Portfolio + faculty reference","2 vouches",B.Nv)
 B.WO=new A.hG("UX",B.Bh)
 B.WJ=new A.hG("Figma",B.mn)
 B.WP=new A.hG("Web",B.mo)
-B.N0=s([B.WO,B.WJ,B.WP],t.YZ)
-B.MD=s(["Project","Remote","8 weeks"],t.s)
+B.N1=s([B.WO,B.WJ,B.WP],t.YZ)
+B.ME=s(["Project","Remote","8 weeks"],t.s)
 B.M7=s(["Registration and submission flows","Judge scoring view with an audit trail"],t.s)
 B.Lb=s(["Sealed portal deliverables","Verified skills: UX design, web build"],t.s)
-B.QE=new A.e1("entrepreneurship-pitch","Entrepreneurship Pitch Competition Portal",B.b4,"Build the submission and judging portal for the spring pitch competition. Team registration, deliverable uploads, judge scoring.",B.N0,B.MD,B.M7,"Service + portfolio","1 vouch, or a sealed verification",B.Lb)
+B.QE=new A.e1("entrepreneurship-pitch","Entrepreneurship Pitch Competition Portal",B.b4,"Build the submission and judging portal for the spring pitch competition. Team registration, deliverable uploads, judge scoring.",B.N1,B.ME,B.M7,"Service + portfolio","1 vouch, or a sealed verification",B.Lb)
 B.i4=s([B.QF,B.QG,B.QE],t.OO)
 B.Jz=new A.aE(62526,"MaterialIcons",null,!1)
 B.Sj=new A.Z(B.Jz,"Going well")
 B.Sk=new A.Z(B.pq,"Needs attention")
 B.Jx=new A.aE(62195,"MaterialIcons",null,!1)
-B.S0=new A.Z(B.Jx,"Talk to someone")
-B.Mz=s([B.Sj,B.Sk,B.S0],A.af("q<+(aE,n)>"))
-B.MA=s(["Network Operations","Splunk","Python","Incident Response"],t.s)
-B.MB=s(["click","scroll"],t.s)
+B.S_=new A.Z(B.Jx,"Talk to someone")
+B.MA=s([B.Sj,B.Sk,B.S_],A.af("q<+(aE,n)>"))
+B.MB=s(["Network Operations","Splunk","Python","Incident Response"],t.s)
+B.MC=s(["click","scroll"],t.s)
 B.DG=new A.ut()
 B.iG=new A.RL(1,"page")
 B.iH=new A.f5(B.bw,B.iG)
-B.MC=s([B.DG,B.iH],A.af("q<ba>"))
+B.MD=s([B.DG,B.iH],A.af("q<ba>"))
 B.T2=new A.wG("Sponsor gift cards","Gift cards from program sponsors for the quarter's top verified point earners.","$1,000+ combined value")
 B.T4=new A.wG("Concert and event tickets","Tickets to concerts and sporting events, supplied by sponsors each quarter.","$1,000+ combined value")
-B.ME=s([B.T2,B.T4],A.af("q<wG>"))
+B.MF=s([B.T2,B.T4],A.af("q<wG>"))
 B.Wi=new A.tq("You",null,!0,null)
 B.bc=new A.bQ(12,null,null,null)
 B.Wh=new A.tq("Maya",null,!1,null)
 B.Wg=new A.tq("Jordan",null,!1,null)
-B.MG=s([B.Wi,B.bc,B.Wh,B.bc,B.Wg],t.p)
-B.MW=s([],t.QP)
-B.MS=s([],t.sq)
+B.MH=s([B.Wi,B.bc,B.Wh,B.bc,B.Wg],t.p)
+B.MX=s([],t.QP)
+B.MT=s([],t.sq)
 B.pZ=s([],A.af("q<b4P>"))
-B.ML=s([],t.D)
+B.MM=s([],t.D)
 B.pX=s([],t.SE)
-B.MO=s([],t.fJ)
-B.MK=s([],t.ER)
+B.MP=s([],t.fJ)
+B.ML=s([],t.ER)
 B.a4k=s([],t.ss)
-B.MQ=s([],t.tc)
+B.MR=s([],t.tc)
 B.i7=s([],t.jl)
-B.MZ=s([],t.wi)
+B.N_=s([],t.wi)
 B.pY=s([],A.af("q<jN>"))
-B.MJ=s([],A.af("q<fr<@>>"))
+B.MK=s([],A.af("q<fr<@>>"))
 B.lm=s([],t.AO)
-B.MX=s([],t.yo)
+B.MY=s([],t.yo)
 B.i6=s([],t.i3)
 B.ln=s([],t.K1)
-B.MU=s([],t.D1)
+B.MV=s([],t.D1)
 B.i5=s([],t.QF)
-B.N_=s([],t.Lx)
-B.MP=s([],t.AS)
+B.N0=s([],t.Lx)
+B.MQ=s([],t.AS)
 B.a4l=s([],t.p)
-B.MR=s([],A.af("q<hi>"))
-B.MT=s([],A.af("q<u4>"))
-B.MM=s([],t.n)
-B.MI=s([],t.t)
+B.MS=s([],A.af("q<hi>"))
+B.MU=s([],A.af("q<u4>"))
+B.MN=s([],t.n)
+B.MJ=s([],t.t)
 B.q_=s([],t.ee)
-B.MN=s([],t._m)
+B.MO=s([],t._m)
 B.KE=new A.r7("Ana Duarte",980,"assets/heroes/hero_06.png")
 B.KF=new A.r7("Jordan Reyes",875,"assets/heroes/hero_03.png")
 B.KD=new A.r7("Maya Chen",860,"assets/heroes/hero_04.png")
-B.N3=s([B.KE,B.KF,B.KD],A.af("q<r7>"))
+B.N4=s([B.KE,B.KF,B.KD],A.af("q<r7>"))
 B.fn=new A.Pv(0,"supporting")
 B.Pv=new A.mm("Verified Splunk deliverables on 2 projects",B.fn)
 B.Pw=new A.mm("Cleared credential: Security+ ce",B.fn)
 B.Pt=new A.mm("Timezone overlap 6h",B.fn)
 B.w8=new A.Pv(1,"against")
 B.Pu=new A.mm("No prior legal-content projects",B.w8)
-B.N6=s([B.Pv,B.Pw,B.Pt,B.Pu],A.af("q<mm>"))
+B.N7=s([B.Pv,B.Pw,B.Pt,B.Pu],A.af("q<mm>"))
 B.Q8=new A.i(0,2)
 B.Dq=new A.e9(0.75,B.cq,B.nR,B.Q8,1.5)
-B.N8=s([B.Dq],t.sq)
-B.Na=s([B.da,B.dO,B.cd],A.af("q<kx>"))
+B.N9=s([B.Dq],t.sq)
+B.Nb=s([B.da,B.dO,B.cd],A.af("q<kx>"))
 B.IH=new A.jz("Maya Chen","assets/heroes/hero_04.png","Worked together on Employment Law Presentation \xb7 sealed","Aug 2026")
 B.II=new A.jz("Ana Duarte","assets/heroes/hero_06.png","Reviewed her accessibility work directly","Jul 2026")
-B.Nd=s([B.IH,B.II],A.af("q<jz>"))
+B.Ne=s([B.IH,B.II],A.af("q<jz>"))
 B.f9=s([B.d3,B.cc,B.h_,B.h0,B.h1],t.QP)
-B.Sa=new A.Z("Who we are","FORGE Talent Connections is operated by FORGE LINK LLC. These terms are the agreement between you and FORGE LINK LLC, covering every part of the product: profiles, verification, vouching, projects, messaging, the rewards and referral program, and exports.")
-B.SL=new A.Z("Agreeing to these terms","Creating an account, signing in, or continuing to use FORGE Talent Connections means you accept these terms and the privacy policy below. If you do not accept them, do not use the product.")
-B.RW=new A.Z("Eligibility and one account per person","You must be old enough to form a binding agreement where you live, and you may hold exactly one account, created for yourself, with your own true identity. Accounts created for someone else, shared, purchased, or operated by software are not permitted and can be closed.")
-B.Sz=new A.Z("Your identity, likeness, and consent","Verification can involve checking your identity against records you provide. Your likeness \u2014 photos, video, and any AI-generated presenter of you \u2014 is used only with your recorded consent, which you can withdraw at any time. Anything AI-generated carries a visible AI-generated label wherever it appears. An AI likeness is only ever generated when the verification confidence meets the required threshold; below it, nothing is produced.")
-B.Si=new A.Z("Verification and seals","Checks, seals, matches, and every other decision are made by our systems and reviewed by people \u2014 never silently. You can request human review of any decision about you. A record that fails its check stays locked and is never presented as verified.")
-B.SP=new A.Z("Vouching and accountability","A vouch is a signed, recorded statement that stays attached to your name. Vouches can be revoked, revocations are recorded, and misuse of vouching reduces your own standing. The ledger of vouches you give is public on your profile.")
-B.RV=new A.Z("Rewards, referrals, and prizes","The rewards program awards points for verified actions only. Points must be earned personally, by you as an individual person: points generated by a company, bot, script, AI agent, automation, purchased or pooled accounts, or any other non-human means are void. Every prize award is preceded by a human audit. Breaking these rules voids prizes, forfeits points, and can end your membership; conduct that also breaks the law \u2014 fraud, impersonation, unauthorized automation \u2014 can be referred to law enforcement. No purchase is necessary to earn points or win, prizes are not exchangeable for cash unless the official rules say otherwise, winners are responsible for applicable taxes, and the program is void where prohibited by law. Each prize period is governed by official rules published before it starts.")
-B.SK=new A.Z("Your privacy","We collect what the product needs to work: your account details, the records you submit for verification, your activity inside projects, and device information for security. We use it to run the product, verify work, prevent abuse, and improve the service. We never sell your personal information. You can access, correct, export, and delete your data from Settings; verified records you exported remain yours. Data is retained only as long as the product or the law requires. The product is not directed at children.")
-B.S4=new A.Z("Security","Records are sealed with tamper-evident signatures, transport is encrypted, and access inside the company is limited to what a task requires. No system is perfectly secure; if a breach affects you, you will be told what happened and what we are doing about it.")
-B.SD=new A.Z("Acceptable use","No impersonation, no false statements in vouches or records, no harassment, no scraping or automated access, no attempts to defeat verification, and no use of the product to break the law. We can suspend or close accounts that do these things, and every suspension can be appealed to a person.")
-B.SF=new A.Z("Disputes, governing law, and where claims go","Most problems are fixed fastest through support and human review, so start there. For legal disputes, the final terms will name the governing law, the venue, and the dispute process \u2014 including any arbitration terms and your rights in small claims court \u2014 for each place the product operates, in the language required there. Nothing here limits rights that the law of your home jurisdiction does not allow to be limited.")
-B.S6=new A.Z("Changes and contact","If these terms change in a way that matters, you will be told in the app before the change applies. Questions and privacy requests: legal@forgetalentconnections.com.")
-B.Ni=s([B.Sa,B.SL,B.RW,B.Sz,B.Si,B.SP,B.RV,B.SK,B.S4,B.SD,B.SF,B.S6],A.af("q<+(n,n)>"))
 B.Nm=s(["Weekly sync, Tuesdays 4pm","Feedback goes to the work, not the person","Say early when a deadline is at risk"],t.s)
 B.Lu=s([0.001200833568784504,0.002389694492170889,0.0002795742885861124],t.n)
-B.MF=s([0.0005891086651375999,0.0029785502573438758,0.0003270666104008398],t.n)
+B.MG=s([0.0005891086651375999,0.0029785502573438758,0.0003270666104008398],t.n)
 B.LH=s([0.00010146692491640572,0.0005364214359186694,0.0032979401770712076],t.n)
-B.Np=s([B.Lu,B.MF,B.LH],t.zg)
+B.Np=s([B.Lu,B.MG,B.LH],t.zg)
 B.Nq=s([45,95,45,20,45,90,45,45,45],t.n)
 B.Ns=s([120,120,20,45,20,15,20,120,120],t.n)
 B.c8=new A.p9(3,"failed")
@@ -99329,20 +99329,20 @@ B.ar=new A.f0(500)
 B.pg=new A.f0(900)
 B.ND=s([B.lb,B.Iz,B.IA,B.x,B.ar,B.O,B.q,B.pf,B.pg],A.af("q<f0>"))
 B.NE=s([0.015176349177441876,0.045529047532325624,0.07588174588720938,0.10623444424209313,0.13658714259697685,0.16693984095186062,0.19729253930674434,0.2276452376616281,0.2579979360165119,0.28835063437139563,0.3188300904430532,0.350925934958123,0.3848314933096426,0.42057480301049466,0.458183274052838,0.4976837250274023,0.5391024159806381,0.5824650784040898,0.6277969426914107,0.6751227633498623,0.7244668422128921,0.775853049866786,0.829304845476233,0.8848452951698498,0.942497089126609,1.0022825574869039,1.0642236851973577,1.1283421258858297,1.1946592148522128,1.2631959812511864,1.3339731595349034,1.407011200216447,1.4823302800086415,1.5599503113873272,1.6398909516233677,1.7221716113234105,1.8068114625156377,1.8938294463134073,1.9832442801866852,2.075074464868551,2.1693382909216234,2.2660538449872063,2.36523901573795,2.4669114995532007,2.5710888059345764,2.6777882626779785,2.7870270208169257,2.898822059350997,3.0131901897720907,3.1301480604002863,3.2497121605402226,3.3718988244681087,3.4967242352587946,3.624204428461639,3.754355295633311,3.887192587735158,4.022731918402185,4.160988767090289,4.301978482107941,4.445716283538092,4.592217266055746,4.741496401646282,4.893568542229298,5.048448422192488,5.20615066083972,5.3666897647573375,5.5300801301023865,5.696336044816294,5.865471690767354,6.037501145825082,6.212438385869475,6.390297286737924,6.571091626112461,6.7548350853498045,6.941541251256611,7.131223617812143,7.323895587840543,7.5195704746346665,7.7182615035334345,7.919981813454504,8.124744458384042,8.332562408825165,8.543448553206703,8.757415699253682,8.974476575321063,9.194643831691977,9.417930041841839,9.644347703669503,9.873909240696694,10.106627003236781,10.342513269534024,10.58158024687427,10.8238400726681,11.069304815507364,11.317986476196008,11.569896988756009,11.825048221409341,12.083451977536606,12.345119996613247,12.610063955123938,12.878295467455942,13.149826086772048,13.42466730586372,13.702830557985108,13.984327217668513,14.269168601521828,14.55736596900856,14.848930523210871,15.143873411576273,15.44220572664832,15.743938506781891,16.04908273684337,16.35764934889634,16.66964922287304,16.985093187232053,17.30399201960269,17.62635644741625,17.95219714852476,18.281524751807332,18.614349837764564,18.95068293910138,19.290534541298456,19.633915083172692,19.98083495742689,20.331304511189067,20.685334046541502,21.042933821039977,21.404114048223256,21.76888489811322,22.137256497705877,22.50923893145328,22.884842241736916,23.264076429332462,23.6469514538663,24.033477234264016,24.42366364919083,24.817520537484558,25.21505769858089,25.61628489293138,26.021211842414342,26.429848230738664,26.842203703840827,27.258287870275353,27.678110301598522,28.10168053274597,28.529008062403893,28.96010235337422,29.39497283293396,29.83362889318845,30.276079891419332,30.722335150426627,31.172403958865512,31.62629557157785,32.08401920991837,32.54558406207592,33.010999283389665,33.4802739966603,33.953417292456834,34.430438229418264,34.911345834551085,35.39614910352207,35.88485700094671,36.37747846067349,36.87402238606382,37.37449765026789,37.87891309649659,38.38727753828926,38.89959975977785,39.41588851594697,39.93615253289054,40.460400508064545,40.98864111053629,41.520882981230194,42.05713473317016,42.597404951718396,43.141702194811224,43.6900349931913,44.24241185063697,44.798841244188324,45.35933162437017,45.92389141541209,46.49252901546552,47.065252796817916,47.64207110610409,48.22299226451468,48.808024568002054,49.3971762874833,49.9904556690408,50.587870934119984,51.189430279724725,51.79514187861014,52.40501387947288,53.0190544071392,53.637271562750364,54.259673423945976,54.88626804504493,55.517063457223934,56.15206766869424,56.79128866487574,57.43473440856916,58.08241284012621,58.734331877617365,59.39049941699807,60.05092333227251,60.715611475655585,61.38457167773311,62.057811747619894,62.7353394731159,63.417162620860914,64.10328893648692,64.79372614476921,65.48848194977529,66.18756403501224,66.89098006357258,67.59873767827808,68.31084450182222,69.02730813691093,69.74813616640164,70.47333615344107,71.20291564160104,71.93688215501312,72.67524319850172,73.41800625771542,74.16517879925733,74.9167682708136,75.67278210128072,76.43322770089146,77.1981124613393,77.96744375590167,78.74122893956174,79.51947534912904,80.30219030335869,81.08938110306934,81.88105503125999,82.67721935322541,83.4778813166706,84.28304815182372,85.09272707154808,85.90692527145302,86.72564993000343,87.54890820862819,88.3767072518277,89.2090541872801,90.04595612594655,90.88742016217518,91.73345337380438,92.58406282226491,93.43925555268066,94.29903859396902,95.16341895893969,96.03240364439274,96.9059996312159,97.78421388448044,98.6670533535366,99.55452497210776],t.n)
-B.Ss=new A.Z(0.7078,8.3194)
-B.S8=new A.Z(0.7895,2.4523)
+B.St=new A.Z(0.7078,8.3194)
+B.S7=new A.Z(0.7895,2.4523)
 B.SM=new A.Z(0.8379,1.8528)
-B.S1=new A.Z(0.8701,1.6891)
+B.S0=new A.Z(0.8701,1.6891)
 B.Sm=new A.Z(0.8932,1.5806)
 B.S3=new A.Z(0.9107,1.5043)
-B.S7=new A.Z(0.9244,1.447)
-B.S5=new A.Z(0.9355,1.4037)
+B.S6=new A.Z(0.9244,1.447)
+B.S4=new A.Z(0.9355,1.4037)
 B.Sn=new A.Z(0.9448,1.3701)
-B.RZ=new A.Z(0.9526,1.3431)
-B.Se=new A.Z(0.9594,1.3212)
-B.So=new A.Z(0.9653,1.3032)
+B.RX=new A.Z(0.9526,1.3431)
+B.Sd=new A.Z(0.9594,1.3212)
+B.Sp=new A.Z(0.9653,1.3032)
 B.SA=new A.Z(0.9705,1.288)
-B.q3=s([B.Ss,B.S8,B.SM,B.S1,B.Sm,B.S3,B.S7,B.S5,B.Sn,B.RZ,B.Se,B.So,B.SA],A.af("q<+(N,N)>"))
+B.q3=s([B.St,B.S7,B.SM,B.S0,B.Sm,B.S3,B.S6,B.S4,B.Sn,B.RX,B.Sd,B.Sp,B.SA],A.af("q<+(N,N)>"))
 B.v=new A.Cu(0,"ignored")
 B.b9=new A.f(4294967304)
 B.fb=new A.f(4294967323)
@@ -99906,38 +99906,38 @@ B.L0=s([4294968072,null,null,8589935161],t.Z)
 B.Mi=s([8589934850,8589934850,8589934851,null],t.Z)
 B.w5=new A.dv(["*",B.L3,"+",B.L4,"-",B.L5,".",B.L6,"/",B.L7,"0",B.L8,"1",B.L9,"2",B.Lc,"3",B.Le,"4",B.Lf,"5",B.Lg,"6",B.Lh,"7",B.Li,"8",B.Lj,"9",B.Ll,"Alt",B.Mf,"AltGraph",B.KT,"ArrowDown",B.KU,"ArrowLeft",B.KV,"ArrowRight",B.KW,"ArrowUp",B.KX,"Clear",B.L1,"Control",B.Mg,"Delete",B.KS,"End",B.KY,"Enter",B.KR,"Home",B.KZ,"Insert",B.L2,"Meta",B.Mh,"PageDown",B.L_,"PageUp",B.L0,"Shift",B.Mi],A.af("dv<n,B<p?>>"))
 B.Lk=s([B.qa,null,null,B.vR],t.L)
-B.N1=s([B.vD,null,null,B.vS],t.L)
+B.N2=s([B.vD,null,null,B.vS],t.L)
 B.LQ=s([B.vE,null,null,B.vT],t.L)
 B.Mk=s([B.vF,null,null,B.di],t.L)
 B.KI=s([B.vG,null,null,B.vU],t.L)
 B.Nn=s([B.vH,null,null,B.ly],t.L)
-B.Nh=s([B.vI,null,null,B.fj],t.L)
+B.Ni=s([B.vI,null,null,B.fj],t.L)
 B.Lt=s([B.vJ,null,null,B.dj],t.L)
 B.Nw=s([B.vK,null,null,B.fk],t.L)
-B.Nf=s([B.vL,null,null,B.dk],t.L)
+B.Ng=s([B.vL,null,null,B.dk],t.L)
 B.Lr=s([B.vM,null,null,B.lz],t.L)
 B.KO=s([B.vN,null,null,B.dl],t.L)
 B.LC=s([B.vO,null,null,B.fl],t.L)
-B.N2=s([B.vP,null,null,B.dm],t.L)
-B.N5=s([B.vQ,null,null,B.fm],t.L)
+B.N3=s([B.vP,null,null,B.dm],t.L)
+B.N6=s([B.vQ,null,null,B.fm],t.L)
 B.Lv=s([B.fh,B.fh,B.ie,null],t.L)
 B.No=s([B.ia,null,B.ia,null],t.L)
 B.LX=s([B.ck,null,null,B.dj],t.L)
 B.LY=s([B.c0,null,null,B.dk],t.L)
 B.LZ=s([B.c1,null,null,B.dl],t.L)
 B.Nu=s([B.cl,null,null,B.dm],t.L)
-B.Nb=s([B.ls,null,null,B.lz],t.L)
+B.Nc=s([B.ls,null,null,B.lz],t.L)
 B.Lw=s([B.fg,B.fg,B.id,null],t.L)
-B.Mx=s([B.ba,null,null,B.di],t.L)
+B.My=s([B.ba,null,null,B.di],t.L)
 B.M_=s([B.df,null,null,B.fj],t.L)
 B.Lp=s([B.i9,null,null,B.lx],t.L)
 B.M0=s([B.dg,null,null,B.fl],t.L)
-B.Nc=s([B.ff,null,null,B.ly],t.L)
+B.Nd=s([B.ff,null,null,B.ly],t.L)
 B.Lx=s([B.fi,B.fi,B.ig,null],t.L)
 B.M1=s([B.fd,null,null,B.fk],t.L)
-B.MH=s([B.fe,null,null,B.fm],t.L)
+B.MI=s([B.fe,null,null,B.fm],t.L)
 B.Ly=s([B.cW,B.cW,B.dh,null],t.L)
-B.Po=new A.dv(["*",B.Lk,"+",B.N1,"-",B.LQ,".",B.Mk,"/",B.KI,"0",B.Nn,"1",B.Nh,"2",B.Lt,"3",B.Nw,"4",B.Nf,"5",B.Lr,"6",B.KO,"7",B.LC,"8",B.N2,"9",B.N5,"Alt",B.Lv,"AltGraph",B.No,"ArrowDown",B.LX,"ArrowLeft",B.LY,"ArrowRight",B.LZ,"ArrowUp",B.Nu,"Clear",B.Nb,"Control",B.Lw,"Delete",B.Mx,"End",B.M_,"Enter",B.Lp,"Home",B.M0,"Insert",B.Nc,"Meta",B.Lx,"PageDown",B.M1,"PageUp",B.MH,"Shift",B.Ly],A.af("dv<n,B<f?>>"))
+B.Po=new A.dv(["*",B.Lk,"+",B.N2,"-",B.LQ,".",B.Mk,"/",B.KI,"0",B.Nn,"1",B.Ni,"2",B.Lt,"3",B.Nw,"4",B.Ng,"5",B.Lr,"6",B.KO,"7",B.LC,"8",B.N3,"9",B.N6,"Alt",B.Lv,"AltGraph",B.No,"ArrowDown",B.LX,"ArrowLeft",B.LY,"ArrowRight",B.LZ,"ArrowUp",B.Nu,"Clear",B.Nc,"Control",B.Lw,"Delete",B.My,"End",B.M_,"Enter",B.Lp,"Home",B.M0,"Insert",B.Nd,"Meta",B.Lx,"PageDown",B.M1,"PageUp",B.MI,"Shift",B.Ly],A.af("dv<n,B<f?>>"))
 B.Q2={usmc:0,usa:1,usn:2,usaf:3,uscg:4,ussf:5}
 B.G6=new A.F(1,0.29411764705882354,0.3254901960784314,0.12549019607843137,B.h)
 B.Ge=new A.F(1,0,0,0.5019607843137255,B.h)
@@ -99949,12 +99949,12 @@ B.Q1={KeyA:0,KeyB:1,KeyC:2,KeyD:3,KeyE:4,KeyF:5,KeyG:6,KeyH:7,KeyI:8,KeyJ:9,KeyK
 B.w6=new A.bX(B.Q1,["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","1","2","3","4","5","6","7","8","9","0","-","=","[","]","\\",";","'","`",",",".","/"],t.li)
 B.Q0={"zh-Hant":0,"zh-TW":1,"zh-MO":2,"zh-HK":3,ja:4,ko:5,zh:6,"zh-Hans":7,"zh-CN":8}
 B.lk=s(["Noto Sans TC"],t.s)
-B.Mo=s(["Noto Sans HK","Noto Sans TC"],t.s)
+B.Mp=s(["Noto Sans HK","Noto Sans TC"],t.s)
 B.Ln=s(["Noto Sans JP"],t.s)
 B.KP=s(["Noto Sans KR"],t.s)
 B.pW=s(["Noto Sans SC"],t.s)
 B.NB=s(["Noto Sans SC","Noto Sans TC"],t.s)
-B.im=new A.bX(B.Q0,[B.lk,B.lk,B.lk,B.Mo,B.Ln,B.KP,B.pW,B.pW,B.NB],t.VJ)
+B.im=new A.bX(B.Q0,[B.lk,B.lk,B.lk,B.Mp,B.Ln,B.KP,B.pW,B.pW,B.NB],t.VJ)
 B.PY={Abort:0,Again:1,AltLeft:2,AltRight:3,ArrowDown:4,ArrowLeft:5,ArrowRight:6,ArrowUp:7,AudioVolumeDown:8,AudioVolumeMute:9,AudioVolumeUp:10,Backquote:11,Backslash:12,Backspace:13,BracketLeft:14,BracketRight:15,BrightnessDown:16,BrightnessUp:17,BrowserBack:18,BrowserFavorites:19,BrowserForward:20,BrowserHome:21,BrowserRefresh:22,BrowserSearch:23,BrowserStop:24,CapsLock:25,Comma:26,ContextMenu:27,ControlLeft:28,ControlRight:29,Convert:30,Copy:31,Cut:32,Delete:33,Digit0:34,Digit1:35,Digit2:36,Digit3:37,Digit4:38,Digit5:39,Digit6:40,Digit7:41,Digit8:42,Digit9:43,DisplayToggleIntExt:44,Eject:45,End:46,Enter:47,Equal:48,Escape:49,Esc:50,F1:51,F10:52,F11:53,F12:54,F13:55,F14:56,F15:57,F16:58,F17:59,F18:60,F19:61,F2:62,F20:63,F21:64,F22:65,F23:66,F24:67,F3:68,F4:69,F5:70,F6:71,F7:72,F8:73,F9:74,Find:75,Fn:76,FnLock:77,GameButton1:78,GameButton10:79,GameButton11:80,GameButton12:81,GameButton13:82,GameButton14:83,GameButton15:84,GameButton16:85,GameButton2:86,GameButton3:87,GameButton4:88,GameButton5:89,GameButton6:90,GameButton7:91,GameButton8:92,GameButton9:93,GameButtonA:94,GameButtonB:95,GameButtonC:96,GameButtonLeft1:97,GameButtonLeft2:98,GameButtonMode:99,GameButtonRight1:100,GameButtonRight2:101,GameButtonSelect:102,GameButtonStart:103,GameButtonThumbLeft:104,GameButtonThumbRight:105,GameButtonX:106,GameButtonY:107,GameButtonZ:108,Help:109,Home:110,Hyper:111,Insert:112,IntlBackslash:113,IntlRo:114,IntlYen:115,KanaMode:116,KeyA:117,KeyB:118,KeyC:119,KeyD:120,KeyE:121,KeyF:122,KeyG:123,KeyH:124,KeyI:125,KeyJ:126,KeyK:127,KeyL:128,KeyM:129,KeyN:130,KeyO:131,KeyP:132,KeyQ:133,KeyR:134,KeyS:135,KeyT:136,KeyU:137,KeyV:138,KeyW:139,KeyX:140,KeyY:141,KeyZ:142,KeyboardLayoutSelect:143,Lang1:144,Lang2:145,Lang3:146,Lang4:147,Lang5:148,LaunchApp1:149,LaunchApp2:150,LaunchAssistant:151,LaunchControlPanel:152,LaunchMail:153,LaunchScreenSaver:154,MailForward:155,MailReply:156,MailSend:157,MediaFastForward:158,MediaPause:159,MediaPlay:160,MediaPlayPause:161,MediaRecord:162,MediaRewind:163,MediaSelect:164,MediaStop:165,MediaTrackNext:166,MediaTrackPrevious:167,MetaLeft:168,MetaRight:169,MicrophoneMuteToggle:170,Minus:171,NonConvert:172,NumLock:173,Numpad0:174,Numpad1:175,Numpad2:176,Numpad3:177,Numpad4:178,Numpad5:179,Numpad6:180,Numpad7:181,Numpad8:182,Numpad9:183,NumpadAdd:184,NumpadBackspace:185,NumpadClear:186,NumpadClearEntry:187,NumpadComma:188,NumpadDecimal:189,NumpadDivide:190,NumpadEnter:191,NumpadEqual:192,NumpadMemoryAdd:193,NumpadMemoryClear:194,NumpadMemoryRecall:195,NumpadMemoryStore:196,NumpadMemorySubtract:197,NumpadMultiply:198,NumpadParenLeft:199,NumpadParenRight:200,NumpadSubtract:201,Open:202,PageDown:203,PageUp:204,Paste:205,Pause:206,Period:207,Power:208,PrintScreen:209,PrivacyScreenToggle:210,Props:211,Quote:212,Resume:213,ScrollLock:214,Select:215,SelectTask:216,Semicolon:217,ShiftLeft:218,ShiftRight:219,ShowAllWindows:220,Slash:221,Sleep:222,Space:223,Super:224,Suspend:225,Tab:226,Turbo:227,Undo:228,WakeUp:229,ZoomToggle:230}
 B.z8=new A.r(458907)
 B.yP=new A.r(458873)
@@ -100376,41 +100376,41 @@ B.cX=new A.av(2,2)
 B.RS=new A.av(-1/0,-1/0)
 B.RT=new A.av(1.5,1.5)
 B.RU=new A.av(1/0,1/0)
-B.RX=new A.Z(0,0)
-B.RY=new A.Z(0,!0)
+B.RV=new A.Z(0,0)
+B.RW=new A.Z(0,!0)
 B.cI=new A.Ft(2,"collapsed")
-B.S_=new A.Z(B.cI,B.cI)
+B.RY=new A.Z(B.cI,B.cI)
 B.S2=new A.Z("Who can vouch","Verified members, and community partners such as faculty, program staff, and veteran organizations.")
-B.S9=new A.Z("Someone you refer joins and verifies","+100")
+B.S8=new A.Z("Someone you refer joins and verifies","+100")
 B.Jv=new A.aE(62116,"MaterialIcons",null,!1)
-B.Sb=new A.Z(B.Jv,"PDF")
-B.Sc=new A.Z("A vouch you signed ages well for a year","+80")
+B.Sa=new A.Z(B.Jv,"PDF")
+B.Sb=new A.Z("A vouch you signed ages well for a year","+80")
 B.J6=new A.aE(58240,"MaterialIcons",null,!1)
-B.Sd=new A.Z(B.J6,"Link")
+B.Sc=new A.Z(B.J6,"Link")
 B.Jk=new A.aE(59124,"MaterialIcons",null,!1)
-B.Sf=new A.Z(B.Jk,"LinkedIn")
-B.Sg=new A.Z("Your first vouch","No network yet? A sealed verification counts as one vouch, and community partners can vouch for their own members.")
+B.Se=new A.Z(B.Jk,"LinkedIn")
+B.Sf=new A.Z("Your first vouch","No network yet? A sealed verification counts as one vouch, and community partners can vouch for their own members.")
 B.Sh=new A.Z(B.D,0)
 B.Sl=new A.Z("How many","Active vouches per member are limited, and the ledger of vouches you have given is public.")
 B.j5=new A.Ft(0,"left")
 B.j6=new A.Ft(1,"right")
-B.Sp=new A.Z(B.j5,B.j6)
+B.Sq=new A.Z(B.j5,B.j6)
 B.Jb=new A.aE(58613,"MaterialIcons",null,!1)
-B.Sq=new A.Z(B.Jb,"QR")
+B.Sr=new A.Z(B.Jb,"QR")
 B.iN=new A.cT(4,"scrollLeft")
 B.iO=new A.cT(8,"scrollRight")
-B.Sr=new A.Z(B.iN,B.iO)
-B.St=new A.Z(B.iO,B.iN)
-B.Su=new A.Z(!1,!1)
-B.Sv=new A.Z(!1,null)
-B.Sw=new A.Z(!1,!0)
-B.Sx=new A.Z("What outweighs what","Earned, verified work always ends up counting for more than who you knew when you arrived.")
+B.Ss=new A.Z(B.iN,B.iO)
+B.Su=new A.Z(B.iO,B.iN)
+B.Sv=new A.Z(!1,!1)
+B.Sw=new A.Z(!1,null)
+B.Sx=new A.Z(!1,!0)
+B.Sy=new A.Z("What outweighs what","Earned, verified work always ends up counting for more than who you knew when you arrived.")
 B.iK=new A.cT(16,"scrollUp")
 B.iL=new A.cT(32,"scrollDown")
-B.Sy=new A.Z(B.iK,B.iL)
+B.Sz=new A.Z(B.iK,B.iL)
 B.SB=new A.Z("A vouch you sign verifies","+40")
 B.SC=new A.Z(B.iL,B.iK)
-B.SE=new A.Z("Misuse","A vouch can be revoked; revocation is recorded. Abuse costs the voucher their own standing.")
+B.SF=new A.Z("Misuse","A vouch can be revoked; revocation is recorded. Abuse costs the voucher their own standing.")
 B.SG=new A.Z("Appeals","Any refusal or revocation can be sent to a person for review.")
 B.SH=new A.Z(!0,!1)
 B.SI=new A.Z(!0,!0)
@@ -100446,8 +100446,8 @@ B.ej=new A.aoT(1,"down")
 B.Te=new A.t6(87,"Strong match",96,null)
 B.VT=new A.bQ(16,null,null,null)
 B.Td=new A.t6(42,"Partial",78,null)
-B.Mn=s([B.Te,B.VT,B.Td],t.p)
-B.Ta=new A.t3(B.aJ,B.f,B.e,B.l,null,B.ej,null,0,B.Mn,null)
+B.Mo=s([B.Te,B.VT,B.Td],t.p)
+B.Ta=new A.t3(B.aJ,B.f,B.e,B.l,null,B.ej,null,0,B.Mo,null)
 B.Tb=new A.Ea(1333)
 B.lS=new A.Ea(2222)
 B.Tc=new A.Rx(null,null)
@@ -100470,10 +100470,10 @@ B.Ag=new A.wO(3,"bottom")
 B.Tl=new A.En(null,null,null,null,null,null,null,null,null,null,null)
 B.Pa=new A.bf("Status","VERIFIED",t.mT)
 B.P9=new A.bf("Fingerprint","ab39...e2f1",t.mT)
-B.N9=s([B.Pa,B.P9],t.Iq)
-B.Tm=new A.oL(u.i,"Integrity Certificate",B.N9,null)
-B.MY=s([],t.Iq)
-B.Tn=new A.oL(u.i,null,B.MY,null)
+B.Na=s([B.Pa,B.P9],t.Iq)
+B.Tm=new A.oL(u.i,"Integrity Certificate",B.Na,null)
+B.MZ=s([],t.Iq)
+B.Tn=new A.oL(u.i,null,B.MZ,null)
 B.To=new A.wQ(null)
 B.Tp=new A.Eo(null,null,null,null,null,null,null,null,null,null,null,null)
 B.Tq=new A.Ep(null,null,null,null,null,null,null,null,null,null,null,null,null)
@@ -100610,9 +100610,9 @@ B.Av=new A.fo([B.ax,B.bb,B.cn,B.bn,B.bK],t.Lu)
 B.G_=new A.F(0.23529411764705882,0,0,0,B.h)
 B.Qb=new A.i(0,4)
 B.Du=new A.e9(0.5,B.cq,B.G_,B.Qb,10)
-B.My=s([B.Du],t.sq)
+B.Mz=s([B.Du],t.sq)
 B.T8=new A.l4(B.n7,B.z)
-B.UP=new A.j1(null,null,null,B.My,B.T8)
+B.UP=new A.j1(null,null,null,B.Mz,B.T8)
 B.UQ=new A.ah(B.ff,!1,!0,!1,!1,B.v)
 B.Aw=new A.ah(B.lq,!1,!1,!1,!0,B.v)
 B.UR=new A.ah(B.q5,!0,!1,!1,!1,B.v)

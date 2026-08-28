@@ -48,6 +48,22 @@ void main() {
     );
     // The anti-automation prize rule is in the agreement itself.
     expect(find.textContaining("referred to law enforcement"), findsWidgets);
+    // The draft is anchored to Florida law: the operating company's home
+    // state governs, the game-promotion statute is named, and the breach
+    // notice window matches the statute.
+    expect(
+      find.textContaining("Florida limited liability company"),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining("governed by the laws of the State of Florida"),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining("chapter 849 of the Florida Statutes"),
+      findsOneWidget,
+    );
+    expect(find.textContaining("no more than 30 days"), findsOneWidget);
   });
 
   testWidgets("sign-up cannot continue until the terms are agreed",
