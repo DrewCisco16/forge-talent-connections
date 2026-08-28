@@ -48,11 +48,16 @@ class B5TrustWallet extends ConsumerWidget {
             pendingLabel: "Loading wallet",
             builder: (TrustWalletSummary s) => ForgeCard(
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: <Widget>[
-                  _Stat(value: s.deliverables, label: "Deliverables"),
-                  _Stat(value: s.credentials, label: "Credentials"),
-                  _Stat(value: s.vouches, label: "Vouches"),
+                  Expanded(
+                    child: _Stat(value: s.deliverables, label: "Deliverables"),
+                  ),
+                  Expanded(
+                    child: _Stat(value: s.credentials, label: "Credentials"),
+                  ),
+                  Expanded(
+                    child: _Stat(value: s.vouches, label: "Vouches"),
+                  ),
                 ],
               ),
             ),
@@ -95,68 +100,78 @@ class B5TrustWallet extends ConsumerWidget {
           AsyncView<List<Vouch>>(
             value: ref.watch(vouchesProvider),
             pendingLabel: "Loading vouches",
-            builder: (List<Vouch> vouches) => InkWell(
-              onTap: () => context.go("/vouch"),
-              child: ForgeCard(
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 26.0 * vouches.length + 12,
-                      height: 34,
-                      child: Stack(
-                        children: <Widget>[
-                          for (int i = 0; i < vouches.length; i++)
-                            Positioned(
-                              left: i * 24,
-                              child: Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: ForgeColors.navyDeep,
-                                    width: 2,
-                                  ),
-                                  image: DecorationImage(
-                                    image: AssetImage(vouches[i].fromAvatar),
-                                    fit: BoxFit.cover,
+            builder: (List<Vouch> vouches) {
+              // The headline count is the backend's, not a count of however
+              // many vouches this screen happened to load. Showing a different
+              // number here than in the summary strip would be a contradiction
+              // in a product whose whole claim is that its numbers hold up.
+              final int total =
+                  ref.watch(walletSummaryProvider).valueOrNull?.vouches ??
+                  vouches.length;
+              final List<Vouch> shown = vouches.take(5).toList();
+              return InkWell(
+                onTap: () => context.go("/vouch"),
+                child: ForgeCard(
+                  child: Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 26.0 * shown.length + 12,
+                        height: 34,
+                        child: Stack(
+                          children: <Widget>[
+                            for (int i = 0; i < shown.length; i++)
+                              Positioned(
+                                left: i * 24,
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: ForgeColors.navyDeep,
+                                      width: 2,
+                                    ),
+                                    image: DecorationImage(
+                                      image: AssetImage(shown[i].fromAvatar),
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            "${vouches.length} people signed their name to Drew's work",
-                            style: TextStyle(
-                              fontFamily: ForgeType.bodyFamily,
-                              fontSize: ForgeType.caption,
-                              fontWeight: FontWeight.w600,
-                              color: forge.text,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              "$total people signed their name to Drew's work",
+                              style: TextStyle(
+                                fontFamily: ForgeType.bodyFamily,
+                                fontSize: ForgeType.caption,
+                                fontWeight: FontWeight.w600,
+                                color: forge.text,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "Tap to read each vouch",
-                            style: TextStyle(
-                              fontFamily: ForgeType.bodyFamily,
-                              fontSize: ForgeType.caption,
-                              color: forge.textSub,
+                            const SizedBox(height: 2),
+                            Text(
+                              "Tap to read each vouch",
+                              style: TextStyle(
+                                fontFamily: ForgeType.bodyFamily,
+                                fontSize: ForgeType.caption,
+                                color: forge.textSub,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
@@ -202,6 +217,9 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: ForgeType.bodyFamily,
             fontSize: ForgeType.caption,

@@ -84,14 +84,19 @@ class SealCard extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
-                    Text(
-                      row.key,
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.caption,
-                        color: forge.textSub,
+                    Flexible(
+                      child: Text(
+                        row.key,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          color: forge.textSub,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 12),
                     Text(
                       row.value,
                       style: TextStyle(

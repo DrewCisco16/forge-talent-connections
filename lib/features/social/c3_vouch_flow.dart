@@ -117,16 +117,15 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Vouch scope"),
           const SizedBox(height: ForgeSpacing.gapCard),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
               for (final String s in <String>["Skills", "Character", "Both"])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _ScopeChip(
-                    label: s,
-                    selected: s == _scope,
-                    onTap: () => setState(() => _scope = s),
-                  ),
+                _ScopeChip(
+                  label: s,
+                  selected: s == _scope,
+                  onTap: () => setState(() => _scope = s),
                 ),
             ],
           ),

@@ -44,12 +44,16 @@ class AsyncView<T> extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              pendingLabel,
-              style: TextStyle(
-                fontFamily: ForgeType.bodyFamily,
-                fontSize: ForgeType.body,
-                color: forge.textSub,
+            Flexible(
+              child: Text(
+                pendingLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.body,
+                  color: forge.textSub,
+                ),
               ),
             ),
           ],

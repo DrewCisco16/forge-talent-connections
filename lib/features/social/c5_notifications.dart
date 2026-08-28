@@ -25,10 +25,12 @@ class C5Notifications extends ConsumerWidget {
         value: ref.watch(notificationsProvider),
         pendingLabel: "Loading activity",
         builder: (List<AppNotification> items) {
-          final List<AppNotification> today =
-              items.where((AppNotification n) => n.isToday).toList();
-          final List<AppNotification> earlier =
-              items.where((AppNotification n) => !n.isToday).toList();
+          final List<AppNotification> today = items
+              .where((AppNotification n) => n.isToday)
+              .toList();
+          final List<AppNotification> earlier = items
+              .where((AppNotification n) => !n.isToday)
+              .toList();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -36,16 +38,18 @@ class C5Notifications extends ConsumerWidget {
               const SizedBox(height: 24),
               Row(
                 children: <Widget>[
-                  Text(
-                    "Activity",
-                    style: TextStyle(
-                      fontFamily: ForgeType.displayFamily,
-                      fontSize: ForgeType.screenTitle,
-                      fontWeight: FontWeight.bold,
-                      color: forge.text,
+                  Expanded(
+                    child: Text(
+                      "Activity",
+                      style: TextStyle(
+                        fontFamily: ForgeType.displayFamily,
+                        fontSize: ForgeType.screenTitle,
+                        fontWeight: FontWeight.bold,
+                        color: forge.text,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 10),
                   Text(
                     "Mark all read",
                     style: TextStyle(
@@ -126,7 +130,8 @@ class _NotificationCard extends StatelessWidget {
                           fontFamily: ForgeType.bodyFamily,
                           fontSize: ForgeType.body,
                           fontWeight: FontWeight.w700,
-                          color: notification.kind ==
+                          color:
+                              notification.kind ==
                                   NotificationKind.exportBlocked
                               ? forge.red
                               : forge.text,
