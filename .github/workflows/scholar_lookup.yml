@@ -1,0 +1,20 @@
+# One-shot helper: queries the OpenAlex and Crossref scholarly registries
+# (blocked from the development container) on a GitHub runner and prints the
+# registered metadata to the job log for citation verification. Makes no
+# commits; removed once the lookup is done.
+name: Scholarly registry lookup
+
+on:
+  push:
+    branches:
+      - claude/forge-talent-flutter-build-r1coud
+
+permissions: {}
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query registries
+        run: python3 .github/scholar_lookup.py
