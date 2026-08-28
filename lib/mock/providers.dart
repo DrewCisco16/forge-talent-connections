@@ -101,3 +101,27 @@ final FutureProvider<IntegrityCertificate> certificateProvider =
 final FutureProvider<List<PathwayMatch>> pathwaysProvider =
     FutureProvider<List<PathwayMatch>>((Ref ref) =>
         ref.watch(forgeRepositoryProvider).loadPathways("0651"));
+
+final FutureProvider<MembershipStatus> membershipProvider =
+    FutureProvider<MembershipStatus>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadMembership());
+
+final FutureProvider<AssistantDraft> resumeDraftProvider =
+    FutureProvider<AssistantDraft>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadResumeDraft());
+
+final FutureProvider<List<VerifiedSkill>> verifiedSkillsProvider =
+    FutureProvider<List<VerifiedSkill>>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadVerifiedSkills());
+
+final FutureProvider<IntegrityStreak> streakProvider =
+    FutureProvider<IntegrityStreak>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadStreak());
+
+final FutureProvider<List<GivenVouch>> givenVouchesProvider =
+    FutureProvider<List<GivenVouch>>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadGivenVouches());
+
+final FutureProvider<List<SystemDecision>> decisionsProvider =
+    FutureProvider<List<SystemDecision>>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadDecisions());

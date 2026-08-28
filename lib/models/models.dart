@@ -5,6 +5,7 @@
 library;
 
 export "credential.dart";
+export "growth.dart";
 export "opportunity.dart";
 export "profile.dart";
 export "social.dart";

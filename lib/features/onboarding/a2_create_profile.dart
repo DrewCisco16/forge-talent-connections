@@ -13,6 +13,7 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
+import "../../widgets/status_chip.dart";
 
 /// A2 Create your profile.
 class A2CreateProfile extends ConsumerWidget {
@@ -86,6 +87,97 @@ class A2CreateProfile extends ConsumerWidget {
                   maxLines: 3,
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const SectionLabel("Two ways in"),
+          const SizedBox(height: 6),
+          Text(
+            "Joining takes two vouches — or one vouch plus a sealed "
+            "verification, so you can earn your way in on evidence when you "
+            "arrive without a network.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<MembershipStatus>(
+            value: ref.watch(membershipProvider),
+            pendingLabel: "Checking membership",
+            builder: (MembershipStatus m) => ForgeCard(
+              borderColor: m.gateOpen ? forge.gold : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(
+                        m.gateOpen ? Icons.lock_open : Icons.lock_outline,
+                        size: 18,
+                        color: m.gateOpen ? forge.gold : forge.textSub,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          m.gateOpen
+                              ? "Membership open"
+                              : "Membership pending",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.how_to_reg,
+                          size: 15, color: forge.gold),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          "Vouches: ${m.vouchesReceived} of "
+                          "${m.vouchesRequired}",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.body,
+                            color: forge.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Icon(Icons.verified_outlined,
+                          size: 15, color: forge.gold),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          m.earnedLaneLabel,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.body,
+                            height: 1.3,
+                            color: forge.text,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      StatusChip(status: m.earnedLaneStatus, dense: true),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),

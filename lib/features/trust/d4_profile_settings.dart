@@ -252,6 +252,93 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection + 4),
+          const SectionLabel("Decisions about you"),
+          const SizedBox(height: 6),
+          Text(
+            "Every decision the system renders about you is listed here in "
+            "plain language, with a path to a person. Decisions are never "
+            "silent.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<List<SystemDecision>>(
+            value: ref.watch(decisionsProvider),
+            pendingLabel: "Loading decisions",
+            builder: (List<SystemDecision> decisions) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (final SystemDecision d in decisions)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
+                    child: ForgeCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            d.what,
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.body,
+                              fontWeight: FontWeight.w700,
+                              color: forge.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            d.why,
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              height: 1.35,
+                              color: forge.textSub,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  d.when,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.chip,
+                                    color: forge.textSub,
+                                  ),
+                                ),
+                              ),
+                              if (d.canRequestReview)
+                                Flexible(
+                                  child: InkWell(
+                                    onTap: () {},
+                                    child: Text(
+                                      "Request human review",
+                                      maxLines: 2,
+                                      textAlign: TextAlign.end,
+                                      style: TextStyle(
+                                        fontFamily: ForgeType.bodyFamily,
+                                        fontSize: ForgeType.caption,
+                                        fontWeight: FontWeight.w700,
+                                        color: forge.gold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Account"),
           const SizedBox(height: ForgeSpacing.gapCard),
           for (final String item in <String>[

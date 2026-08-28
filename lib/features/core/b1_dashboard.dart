@@ -109,6 +109,79 @@ class B1Dashboard extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          // Recognition runs on verified events only: the ladder counts what
+          // passed a check, and the streak counts kept commitments — never
+          // taps or opens.
+          AsyncView<IntegrityStreak>(
+            value: ref.watch(streakProvider),
+            pendingLabel: "Loading your record",
+            builder: (IntegrityStreak streak) => ForgeCard(
+              borderColor: streak.active ? forge.gold : forge.strokeSoft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    streak.active
+                        ? Icons.local_fire_department
+                        : Icons.local_fire_department_outlined,
+                    size: 24,
+                    color: streak.active ? forge.gold : forge.textSub,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          streak.label,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          streak.note,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.3,
+                            color: forge.textSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<TrustWalletSummary>(
+            value: ref.watch(walletSummaryProvider),
+            pendingLabel: "Loading growth",
+            builder: (TrustWalletSummary s) => ForgeCard(
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _GrowthStat(
+                        value: s.deliverables, label: "Verified deliverables"),
+                  ),
+                  Expanded(
+                    child: _GrowthStat(
+                        value: s.credentials, label: "Sealed credentials"),
+                  ),
+                  Expanded(
+                    child:
+                        _GrowthStat(value: s.vouches, label: "Vouches earned"),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           Row(
             children: <Widget>[
@@ -268,6 +341,41 @@ class B1Dashboard extends ConsumerWidget {
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+class _GrowthStat extends StatelessWidget {
+  const _GrowthStat({required this.value, required this.label});
+
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    return Column(
+      children: <Widget>[
+        GoldGradientText(
+          "$value",
+          style: const TextStyle(
+            fontFamily: ForgeType.displayFamily,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: ForgeType.bodyFamily,
+            fontSize: ForgeType.chip,
+            height: 1.25,
+            color: forge.textSub,
+          ),
+        ),
+      ],
     );
   }
 }

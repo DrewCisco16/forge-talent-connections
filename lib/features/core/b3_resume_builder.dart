@@ -78,6 +78,119 @@ class B3ResumeBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(label: "Generate Resume", onPressed: () {}),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          const SectionLabel("Assistant draft"),
+          const SizedBox(height: 6),
+          Text(
+            "Every line the assistant writes shows the verified record it "
+            "rests on. It cannot invent a role, a date, or a number, because "
+            "it only writes from what passed a check.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<AssistantDraft>(
+            value: ref.watch(resumeDraftProvider),
+            pendingLabel: "Drafting from your verified record",
+            builder: (AssistantDraft draft) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                ForgeCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      for (final DraftLine line in draft.lines)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                line.text,
+                                style: TextStyle(
+                                  fontFamily: ForgeType.bodyFamily,
+                                  fontSize: ForgeType.body,
+                                  height: 1.35,
+                                  color: forge.text,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Icon(Icons.verified_outlined,
+                                      size: 13, color: forge.gold),
+                                  const SizedBox(width: 5),
+                                  Expanded(
+                                    child: Text(
+                                      line.sourceLabel,
+                                      style: TextStyle(
+                                        fontFamily: ForgeType.bodyFamily,
+                                        fontSize: ForgeType.chip,
+                                        fontWeight: FontWeight.w600,
+                                        color: forge.gold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                for (final DeclinedClaim d in draft.declined) ...<Widget>[
+                  const SizedBox(height: ForgeSpacing.gapCard),
+                  ForgeCard(
+                    borderColor: forge.strokeSoft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Icon(Icons.do_not_disturb_on_outlined,
+                                size: 15, color: forge.textSub),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Declined to claim ${d.claim}",
+                                style: TextStyle(
+                                  fontFamily: ForgeType.bodyFamily,
+                                  fontSize: ForgeType.body,
+                                  fontWeight: FontWeight.w600,
+                                  color: forge.text,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          d.reason,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.35,
+                            color: forge.textSub,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlineGoldButton(
+                          label: "Request Human Review",
+                          onPressed: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           // Required copy. Ships verbatim.
           const BannerNote(

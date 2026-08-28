@@ -60,6 +60,8 @@ class Vouch {
     required this.scope,
     required this.text,
     required this.signedOn,
+    this.basis,
+    this.basisStatus = VerificationStatus.unverified,
   });
 
   final String id;
@@ -70,6 +72,11 @@ class Vouch {
   final String scope;
   final String text;
   final String signedOn;
+
+  /// What the vouch rests on — a shared verified project outweighs
+  /// acquaintance, and the basis is shown on the vouch itself.
+  final String? basis;
+  final VerificationStatus basisStatus;
 }
 
 /// The headline counts on the trust wallet.

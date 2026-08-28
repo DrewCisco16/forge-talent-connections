@@ -170,6 +170,16 @@ const List<Story> kStories = <Story>[
 /// Feed entries.
 const List<FeedPost> kFeed = <FeedPost>[
   FeedPost(
+    id: "post-0",
+    authorName: "Maya Chen",
+    authorAvatar: "assets/heroes/hero_04.png",
+    authorStatus: VerificationStatus.verified,
+    event: "sealed a project milestone",
+    body:
+        "Discovery on the Employment Law Presentation is sealed. Congratulations to the whole team — every file passed its check.",
+    vouchCount: 12,
+  ),
+  FeedPost(
     id: "post-1",
     authorName: "Maya Chen",
     authorAvatar: "assets/heroes/hero_04.png",
@@ -207,6 +217,8 @@ const List<Vouch> kVouches = <Vouch>[
     scope: "Both",
     text: "Drew ran incident response for us under real pressure. Calm, exact, honest about what he did not know.",
     signedOn: "Aug 2026",
+    basis: "Worked together on Employment Law Presentation",
+    basisStatus: VerificationStatus.verified,
   ),
   Vouch(
     id: "v2",
@@ -215,6 +227,8 @@ const List<Vouch> kVouches = <Vouch>[
     scope: "Skills",
     text: "The Splunk work held up. I checked it myself against the raw feed.",
     signedOn: "Jul 2026",
+    basis: "Reviewed verified deliverables directly",
+    basisStatus: VerificationStatus.verified,
   ),
   Vouch(
     id: "v3",
@@ -223,6 +237,8 @@ const List<Vouch> kVouches = <Vouch>[
     scope: "Character",
     text: "Said no to a shortcut that would have cost us later. That is the whole recommendation.",
     signedOn: "Jun 2026",
+    basis: "Knows Drew outside a shared project",
+    basisStatus: VerificationStatus.unverified,
   ),
 ];
 

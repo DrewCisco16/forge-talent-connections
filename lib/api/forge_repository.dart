@@ -60,6 +60,20 @@ abstract interface class PathwayRepository {
   Future<List<PathwayMatch>> loadPathways(String occupationCode);
 }
 
+/// Reads membership standing, growth signals, and the decisions the system
+/// has rendered about the person.
+///
+/// The gate, the streaks, the assistant's draft, and every decision are all
+/// computed by the backend. This interface reports them; it decides nothing.
+abstract interface class GrowthRepository {
+  Future<MembershipStatus> loadMembership();
+  Future<AssistantDraft> loadResumeDraft();
+  Future<List<VerifiedSkill>> loadVerifiedSkills();
+  Future<IntegrityStreak> loadStreak();
+  Future<List<GivenVouch>> loadGivenVouches();
+  Future<List<SystemDecision>> loadDecisions();
+}
+
 /// The full surface the app needs.
 abstract interface class ForgeRepository
     implements
@@ -68,4 +82,5 @@ abstract interface class ForgeRepository
         TrustRepository,
         SocialRepository,
         ExportRepository,
-        PathwayRepository {}
+        PathwayRepository,
+        GrowthRepository {}

@@ -56,6 +56,8 @@ class ProjectSpace {
     required this.milestones,
     required this.deliverables,
     required this.activity,
+    this.teamNorms = const <String>[],
+    this.checkInPrompt,
   });
 
   final String projectName;
@@ -63,6 +65,12 @@ class ProjectSpace {
   final List<Milestone> milestones;
   final List<Deliverable> deliverables;
   final List<String> activity;
+
+  /// Working agreements the team accepted at kickoff.
+  final List<String> teamNorms;
+
+  /// The current private check-in question, if one is open.
+  final String? checkInPrompt;
 }
 
 /// A suggested civilian role for a military occupation.

@@ -19,6 +19,7 @@ import "../features/social/c3_vouch_flow.dart";
 import "../features/social/c4_chat.dart";
 import "../features/social/c5_notifications.dart";
 import "../features/trust/d1_export_certificate.dart";
+import "../features/trust/seal_check.dart";
 import "../features/trust/d2_project_space.dart";
 import "../features/trust/d3_sign_in.dart";
 import "../features/trust/d4_profile_settings.dart";
@@ -144,6 +145,11 @@ GoRouter buildRouter() {
             path: "/export",
             name: "export",
             builder: (_, __) => const D1ExportCertificate(),
+          ),
+          GoRoute(
+            path: "/seal-check",
+            name: "seal-check",
+            builder: (_, __) => const SealCheck(),
           ),
           GoRoute(
             path: "/project-space",

@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:go_router/go_router.dart";
 
 import "../../mock/providers.dart";
 import "../../models/models.dart";
@@ -186,12 +187,113 @@ class D1ExportCertificate extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: ForgeSpacing.gapSection),
+              const SectionLabel("Share a verified win"),
+              const SizedBox(height: 6),
+              Text(
+                "Publish a sealed result to your professional network. The "
+                "share carries its own check link, so anyone who sees it can "
+                "confirm it is genuine without joining.",
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.caption,
+                  height: 1.35,
+                  color: forge.textSub,
+                ),
+              ),
+              const SizedBox(height: ForgeSpacing.gapCard),
+              AsyncView<IntegrityCertificate>(
+                value: ref.watch(certificateProvider),
+                pendingLabel: "Preparing the share",
+                builder: (IntegrityCertificate cert) {
+                  final bool ready =
+                      cert.status == VerificationStatus.verified;
+                  return ForgeCard(
+                    borderColor: ready ? forge.gold : forge.strokeSoft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Icon(Icons.workspace_premium,
+                                size: 18, color: forge.gold),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Sealed: ${cert.filename}",
+                                style: TextStyle(
+                                  fontFamily: ForgeType.bodyFamily,
+                                  fontSize: ForgeType.body,
+                                  fontWeight: FontWeight.w600,
+                                  color: forge.text,
+                                ),
+                              ),
+                            ),
+                            StatusChip(status: cert.status, dense: true),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "Check link: forge.link/check/${cert.fingerprint}",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            color: forge.textSub,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: OutlineGoldButton(
+                                label: "Preview Check Page",
+                                onPressed: () => context.go("/seal-check"),
+                              ),
+                            ),
+                            const SizedBox(width: ForgeSpacing.gapCard),
+                            Expanded(
+                              child: GoldButton(
+                                label: "Share Win",
+                                // Fail-closed: nothing shareable until the
+                                // seal is verified.
+                                onPressed: ready ? () {} : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (!ready) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Text(
+                            "Sharing opens when the seal is verified.",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              color: forge.textSub,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: ForgeSpacing.gapSection),
               // A blocked export offers no action that could appear to succeed.
               GoldButton(
                 label: anyBlocked
                     ? "Export blocked"
                     : "Export Verified Work",
                 onPressed: anyBlocked ? null : () {},
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Your verified history exports in a form that outlives this "
+                "app. It is yours to take anywhere.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.caption,
+                  color: forge.textSub,
+                ),
               ),
               if (anyBlocked) ...<Widget>[
                 const SizedBox(height: 8),

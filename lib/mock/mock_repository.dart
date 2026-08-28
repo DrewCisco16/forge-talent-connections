@@ -208,6 +208,12 @@ class MockForgeRepository implements ForgeRepository {
             "You submitted Slide_Deck_Draft.pptx",
             "Checking started on Case_Study_Appendix.pdf",
           ],
+          teamNorms: const <String>[
+            "Weekly sync, Tuesdays 4pm",
+            "Feedback goes to the work, not the person",
+            "Say early when a deadline is at risk",
+          ],
+          checkInPrompt: "How is the collaboration going this week?",
         ),
       );
 
@@ -347,4 +353,154 @@ class MockForgeRepository implements ForgeRepository {
   @override
   Future<List<PathwayMatch>> loadPathways(String occupationCode) =>
       _serve(kPathways);
+
+  @override
+  Future<MembershipStatus> loadMembership() => _serve(
+        MembershipStatus(
+          vouchesReceived: scenario == DemoScenario.verified ? 2 : 1,
+          vouchesRequired: 2,
+          earnedLaneLabel: "A sealed service record counts as one vouch",
+          earnedLaneStatus: _outcome,
+          gateOpen: scenario == DemoScenario.verified,
+        ),
+      );
+
+  @override
+  Future<AssistantDraft> loadResumeDraft() => _serve(
+        AssistantDraft(
+          lines: const <DraftLine>[
+            DraftLine(
+              text: "Led incident response across a 4-person network "
+                  "operations team.",
+              sourceLabel: "Sealed service record",
+            ),
+            DraftLine(
+              text: "Delivered the seminar outline for the Employment Law "
+                  "Presentation on schedule.",
+              sourceLabel: "Verified deliverable · Seminar_Outline_v2.pdf",
+            ),
+            DraftLine(
+              text: "Vouched for by 2 verified collaborators on shared "
+                  "sealed projects.",
+              sourceLabel: "Vouches · Maya Chen, Jordan Reyes",
+            ),
+          ],
+          declined: <DeclinedClaim>[
+            const DeclinedClaim(
+              claim: "“Expert in cloud architecture”",
+              reason: "No verified record supports this yet. Verify the AWS "
+                  "credential or complete a cloud project and the assistant "
+                  "can claim it.",
+            ),
+            if (scenario == DemoScenario.denied)
+              const DeclinedClaim(
+                claim: "“Delivered the slide deck”",
+                reason: "The file did not match what was created, so this "
+                    "line cannot be written.",
+              ),
+          ],
+        ),
+      );
+
+  @override
+  Future<List<VerifiedSkill>> loadVerifiedSkills() => _serve(<VerifiedSkill>[
+        // Skill states mirror the records that prove them: when the record
+        // is locked or still checking, the skill is too. Nothing renders as
+        // verified in a world where its evidence is not.
+        VerifiedSkill(
+          name: "Incident response",
+          source: "Sealed service record",
+          status: scenario == DemoScenario.denied
+              ? VerificationStatus.locked
+              : scenario == DemoScenario.pending
+                  ? VerificationStatus.pending
+                  : VerificationStatus.verified,
+        ),
+        VerifiedSkill(
+          name: "Research writing",
+          source: "Employment Law Presentation",
+          status: _outcome,
+        ),
+        VerifiedSkill(
+          name: "Slide design",
+          source: "Slide_Deck_Draft.pptx",
+          status: _outcome,
+        ),
+        const VerifiedSkill(
+          name: "Cloud operations",
+          source: "AWS Cloud Practitioner — not yet verified",
+          status: VerificationStatus.unverified,
+        ),
+      ]);
+
+  @override
+  Future<IntegrityStreak> loadStreak() => _serve(
+        switch (scenario) {
+          DemoScenario.verified => const IntegrityStreak(
+              count: 4,
+              label: "4 deliverables in a row, delivered as created",
+              note: "Counts only work that passed its check.",
+              active: true,
+            ),
+          DemoScenario.pending => const IntegrityStreak(
+              count: 3,
+              label: "3 kept commitments — one check still running",
+              note: "The streak grows when the pending check passes.",
+              active: true,
+            ),
+          DemoScenario.denied => const IntegrityStreak(
+              count: 0,
+              label: "Streak paused",
+              note: "One file did not match what was created. Resolve it to "
+                  "start a new run.",
+              active: false,
+            ),
+        },
+      );
+
+  @override
+  Future<List<GivenVouch>> loadGivenVouches() => _serve(const <GivenVouch>[
+        GivenVouch(
+          toName: "Maya Chen",
+          toAvatar: "assets/heroes/hero_04.png",
+          basis: "Worked together on Employment Law Presentation · sealed",
+          signedOn: "Aug 2026",
+        ),
+        GivenVouch(
+          toName: "Ana Duarte",
+          toAvatar: "assets/heroes/hero_06.png",
+          basis: "Reviewed her accessibility work directly",
+          signedOn: "Jul 2026",
+        ),
+      ]);
+
+  @override
+  Future<List<SystemDecision>> loadDecisions() => _serve(<SystemDecision>[
+        if (scenario == DemoScenario.denied)
+          const SystemDecision(
+            id: "dec-lock",
+            what: "Slide_Deck_Draft.pptx stays locked",
+            why: "The file submitted does not match the file that was "
+                "created, so it cannot leave with a seal on it.",
+            when: "Today 08:30",
+            canRequestReview: true,
+          ),
+        SystemDecision(
+          id: "dec-match",
+          what: "Match suggestion scored "
+              "${switch (scenario) { DemoScenario.verified => 87, DemoScenario.pending => 61, DemoScenario.denied => 34 }} "
+              "for Employment Law Presentation",
+          why: "Based on verified deliverables, cleared credentials, and "
+              "timezone overlap. A person reviews every match.",
+          when: "Today 08:55",
+          canRequestReview: true,
+        ),
+        const SystemDecision(
+          id: "dec-claim",
+          what: "Assistant declined to claim cloud expertise",
+          why: "No verified record supports the claim yet.",
+          when: "Yesterday",
+          canRequestReview: true,
+        ),
+      ]);
 }

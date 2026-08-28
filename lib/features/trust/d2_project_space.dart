@@ -160,6 +160,88 @@ class D2ProjectSpace extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: ForgeSpacing.gapSection),
+              const SectionLabel("Team health"),
+              const SizedBox(height: 6),
+              Text(
+                "Integrity for the people, parallel to integrity for the "
+                "files. Check-ins are private to you and a human reviewer.",
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.caption,
+                  height: 1.35,
+                  color: forge.textSub,
+                ),
+              ),
+              const SizedBox(height: ForgeSpacing.gapCard),
+              if (space.teamNorms.isNotEmpty)
+                ForgeCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        "Working agreements · accepted at kickoff",
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          fontWeight: FontWeight.w700,
+                          color: forge.text,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final String norm in space.teamNorms)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Icon(Icons.handshake_outlined,
+                                  size: 13, color: forge.gold),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  norm,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.caption,
+                                    height: 1.3,
+                                    color: forge.text,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              if (space.checkInPrompt != null) ...<Widget>[
+                const SizedBox(height: ForgeSpacing.gapCard),
+                _CheckInCard(prompt: space.checkInPrompt!),
+              ],
+              const SizedBox(height: ForgeSpacing.gapCard),
+              InkWell(
+                onTap: () {},
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(Icons.flag_outlined, size: 14, color: forge.textSub),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        "Flag a concern — it goes to a person, quietly",
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          fontWeight: FontWeight.w600,
+                          color: forge.textSub,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: ForgeSpacing.gapSection),
               const SectionLabel("Activity"),
               const SizedBox(height: ForgeSpacing.gapCard),
               for (final String a in space.activity)
@@ -190,6 +272,132 @@ class D2ProjectSpace extends ConsumerWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The private weekly check-in. Selecting an option is local to the demo;
+/// in production the answer goes only to the person and a human reviewer.
+class _CheckInCard extends StatefulWidget {
+  const _CheckInCard({required this.prompt});
+
+  final String prompt;
+
+  @override
+  State<_CheckInCard> createState() => _CheckInCardState();
+}
+
+class _CheckInCardState extends State<_CheckInCard> {
+  String? _choice;
+
+  static const List<(IconData, String)> _options = <(IconData, String)>[
+    (Icons.thumb_up_alt_outlined, "Going well"),
+    (Icons.error_outline, "Needs attention"),
+    (Icons.record_voice_over_outlined, "Talk to someone"),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    return ForgeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.lock_outline, size: 13, color: forge.textSub),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  "Private check-in",
+                  style: TextStyle(
+                    fontFamily: ForgeType.bodyFamily,
+                    fontSize: ForgeType.caption,
+                    fontWeight: FontWeight.w700,
+                    color: forge.text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.prompt,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.body,
+              height: 1.3,
+              color: forge.text,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              for (final (IconData icon, String label) in _options)
+                InkWell(
+                  onTap: () => setState(() => _choice = label),
+                  borderRadius:
+                      BorderRadius.circular(ForgeShape.pillRadius),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _choice == label
+                          ? forge.goldDeep
+                          : forge.surface2,
+                      borderRadius:
+                          BorderRadius.circular(ForgeShape.pillRadius),
+                      border: Border.all(
+                        color: _choice == label
+                            ? forge.gold
+                            : forge.strokeSoft,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(icon,
+                            size: 14,
+                            color: _choice == label
+                                ? Colors.white
+                                : forge.textSub),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            fontWeight: FontWeight.w600,
+                            color: _choice == label
+                                ? Colors.white
+                                : forge.text,
+                          ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (_choice != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              "Recorded privately. A person follows up if you asked for one.",
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.chip,
+                color: forge.textSub,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

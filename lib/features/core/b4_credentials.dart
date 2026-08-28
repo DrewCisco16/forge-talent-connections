@@ -11,6 +11,7 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
+import "../../widgets/status_chip.dart";
 
 /// B4 Verified credentials.
 class B4Credentials extends ConsumerWidget {
@@ -92,6 +93,66 @@ class B4Credentials extends ConsumerWidget {
                 ],
               );
             },
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const SectionLabel("Verified skills"),
+          const SizedBox(height: 6),
+          Text(
+            "Skills here are demonstrated by verified work, not "
+            "self-described. Each one names the work that proves it.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<List<VerifiedSkill>>(
+            value: ref.watch(verifiedSkillsProvider),
+            pendingLabel: "Loading skills",
+            builder: (List<VerifiedSkill> skills) => ForgeCard(
+              child: Column(
+                children: <Widget>[
+                  for (final VerifiedSkill s in skills)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  s.name,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.body,
+                                    fontWeight: FontWeight.w600,
+                                    color: forge.text,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  s.source,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.caption,
+                                    color: forge.textSub,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          StatusChip(status: s.status, dense: true),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 24),
         ],

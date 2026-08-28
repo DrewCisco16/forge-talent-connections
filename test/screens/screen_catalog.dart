@@ -21,6 +21,7 @@ import "package:forge_talent_connections/features/trust/d2_project_space.dart";
 import "package:forge_talent_connections/features/trust/d3_sign_in.dart";
 import "package:forge_talent_connections/features/trust/d4_profile_settings.dart";
 import "package:forge_talent_connections/features/trust/d5_veteran_pathways.dart";
+import "package:forge_talent_connections/features/trust/seal_check.dart";
 import "package:forge_talent_connections/features/trust/trust_technology.dart";
 
 /// Every screen in the application, keyed by its specification label.
@@ -49,6 +50,7 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "C5 Notifications": const C5Notifications(),
   "D1 Export Certificate": const D1ExportCertificate(),
   "D2 Project Space": const D2ProjectSpace(),
+  "Seal Check": const SealCheck(),
   "D3 Sign In": const D3SignIn(),
   "D4 Profile Settings": const D4ProfileSettings(),
   "D5 Veteran Pathways": const D5VeteranPathways(),

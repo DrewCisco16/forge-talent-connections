@@ -173,6 +173,144 @@ class B5TrustWallet extends ConsumerWidget {
               );
             },
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          // A vouch carries its basis on its face: a shared verified project
+          // outweighs acquaintance, and the difference is shown, not hidden.
+          AsyncView<List<Vouch>>(
+            value: ref.watch(vouchesProvider),
+            pendingLabel: "Loading vouch detail",
+            builder: (List<Vouch> vouches) {
+              final Vouch v = vouches.first;
+              return ForgeCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      "“${v.text}”",
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.body,
+                        height: 1.4,
+                        fontStyle: FontStyle.italic,
+                        color: forge.text,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "— ${v.fromName}, ${v.signedOn}",
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.caption,
+                        color: forge.textSub,
+                      ),
+                    ),
+                    if (v.basis != null) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Icon(
+                            v.basisStatus.isProven
+                                ? Icons.verified_outlined
+                                : Icons.person_outline,
+                            size: 13,
+                            color: v.basisStatus.isProven
+                                ? forge.gold
+                                : forge.textSub,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              "Basis: ${v.basis}"
+                              "${v.basisStatus.isProven ? "" : " · carries less weight"}",
+                              style: TextStyle(
+                                fontFamily: ForgeType.bodyFamily,
+                                fontSize: ForgeType.chip,
+                                fontWeight: FontWeight.w600,
+                                color: v.basisStatus.isProven
+                                    ? forge.gold
+                                    : forge.textSub,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const SectionLabel("Vouches Drew has given"),
+          const SizedBox(height: 6),
+          Text(
+            "This ledger is public. A vouch spends your own credibility, so "
+            "everyone can see how each name was spent.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          AsyncView<List<GivenVouch>>(
+            value: ref.watch(givenVouchesProvider),
+            pendingLabel: "Loading ledger",
+            builder: (List<GivenVouch> given) => ForgeCard(
+              child: Column(
+                children: <Widget>[
+                  for (final GivenVouch g in given)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              image: DecorationImage(
+                                image: AssetImage(g.toAvatar),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  "${g.toName} · ${g.signedOn}",
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.body,
+                                    fontWeight: FontWeight.w600,
+                                    color: forge.text,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  g.basis,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.caption,
+                                    color: forge.textSub,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
             label: "Share Verified Profile",
