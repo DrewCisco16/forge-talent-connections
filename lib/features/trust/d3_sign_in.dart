@@ -4,6 +4,7 @@ import "package:go_router/go_router.dart";
 import "../../mock/fixtures.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/burning_flame.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -22,7 +23,9 @@ class D3SignIn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 40),
-          Image.asset(kFlameMark, height: 88, fit: BoxFit.contain),
+          // The same asymmetric burn as the splash screen: crown and right
+          // edge alight behind the mark, static glow under reduced motion.
+          const Center(child: BurningFlame(asset: kFlameMark, height: 88)),
           const SizedBox(height: 10),
           GoldGradientText(
             "FORGE",
