@@ -182,7 +182,12 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
   }
 }
 
-/// A solid block in the branch's authentic colour, standing in for flag art.
+/// The branch's service flag.
+///
+/// Shows the real flag artwork from assets/flags/<id>.png the moment the file
+/// exists. Until then it falls back to a block in the branch's authentic flag
+/// colour — never a themed or invented substitute. Flag colours are exempt
+/// from theming.
 class _FlagBlock extends StatelessWidget {
   const _FlagBlock({required this.id, required this.height});
 
@@ -191,11 +196,19 @@ class _FlagBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: _branchColors[id],
-        borderRadius: BorderRadius.circular(6),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.asset(
+        "assets/flags/$id.png",
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (BuildContext context, Object error, StackTrace? stack) {
+          return Container(
+            height: height,
+            width: height * 1.5,
+            color: _branchColors[id],
+          );
+        },
       ),
     );
   }
