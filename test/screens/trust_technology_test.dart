@@ -44,9 +44,9 @@ void main() {
       find.text("US Patent Application Publication 2026/0186826 A1"),
       findsOneWidget,
     );
-    // The third application has no publication number yet, and none is shown.
+    // The third application is pending, so it is cited by application number.
     expect(
-      find.text("US utility application filed; not yet published"),
+      find.text("US Patent Application 19/546,587 (pending)"),
       findsOneWidget,
     );
     expect(

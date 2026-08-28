@@ -20,12 +20,24 @@ import "package:flutter_test/flutter_test.dart";
 /// now displays them as provenance on the Trust Technology screen. Internal
 /// system names stay barred — the override was for filings, not for engine
 /// vocabulary.
+///
+/// The list also bars the prosecution and payment identifiers that appear on
+/// USPTO filing receipts: customer number, Patent Center number, confirmation
+/// number, payment transaction id, and card fragment. Those are account
+/// credentials and financial data, not product provenance. The override
+/// covered what identifies the invention publicly, never what grants access to
+/// the file or the payment method behind it.
 final List<String> _banned = <String>[
   "UEFDRE1HUw==",
   "UE1fREVDQUJT",
   "U0VEQ1BI",
   "U0VEQw==",
   "RGVjaXNpb25Ub2tlbg==",
+  "MjIwODYx",
+  "NzQ1NjU0NzM=",
+  "OTEwMw==",
+  "RTIwMjYyTUIwNTU5OTgyMQ==",
+  "OTc2Nw==",
 ].map((String e) => utf8.decode(base64Decode(e))).toList();
 
 /// Directories whose contents count as the repo's source of record.

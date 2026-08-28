@@ -85,7 +85,7 @@ class TrustTechnology extends StatelessWidget {
                 "Every file receives a standardized fingerprint when it is created. At the moment of export that fingerprint is checked again, and there is only one door out. If it does not match, it does not go out.",
             seeItLabel: "See it: Export",
             seeItRoute: "/export",
-            filing: "US utility application filed; not yet published",
+            filing: "US Patent Application 19/546,587 (pending)",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Why this matters"),
@@ -135,9 +135,12 @@ class _TechCard extends StatelessWidget {
   final String seeItLabel;
   final String seeItRoute;
 
-  /// The published application this capability is filed under, where one has
-  /// published. Null where an application is filed but not yet published: a
-  /// number is never shown unless it exists.
+  /// The filing this capability is covered by.
+  ///
+  /// Convention: cite the publication number once an application has published
+  /// (it is the citable public record), and the application number while it is
+  /// still pending. Null where neither exists — a number is never shown unless
+  /// it does.
   final String? filing;
 
   @override
