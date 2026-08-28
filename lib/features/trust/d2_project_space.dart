@@ -9,6 +9,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -136,7 +137,10 @@ class D2ProjectSpace extends ConsumerWidget {
                     ],
                   ),
                 ),
-              DottedDropZone(onTap: () {}),
+              DottedDropZone(
+                  onTap: () => demoNote(context,
+                      "Submitted files are checked by the backend. This demo "
+                      "renders the outcomes.")),
               if (blocked) ...<Widget>[
                 const SizedBox(height: ForgeSpacing.gapSection),
                 const BannerNote(
@@ -220,7 +224,8 @@ class D2ProjectSpace extends ConsumerWidget {
               ],
               const SizedBox(height: ForgeSpacing.gapCard),
               InkWell(
-                onTap: () {},
+                onTap: () => demoNote(context,
+                    "Flag recorded privately. A person will follow up."),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[

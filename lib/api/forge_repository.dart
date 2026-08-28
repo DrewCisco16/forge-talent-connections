@@ -72,6 +72,9 @@ abstract interface class GrowthRepository {
   Future<IntegrityStreak> loadStreak();
   Future<List<GivenVouch>> loadGivenVouches();
   Future<List<SystemDecision>> loadDecisions();
+
+  /// The AI video pitch studio's current state for this person.
+  Future<PitchStudio> loadPitchStudio();
 }
 
 /// The full surface the app needs.

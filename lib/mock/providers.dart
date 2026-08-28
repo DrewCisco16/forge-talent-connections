@@ -125,3 +125,7 @@ final FutureProvider<List<GivenVouch>> givenVouchesProvider =
 final FutureProvider<List<SystemDecision>> decisionsProvider =
     FutureProvider<List<SystemDecision>>((Ref ref) =>
         ref.watch(forgeRepositoryProvider).loadDecisions());
+
+final FutureProvider<PitchStudio> pitchStudioProvider =
+    FutureProvider<PitchStudio>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadPitchStudio());

@@ -6,6 +6,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -169,7 +170,11 @@ class D5VeteranPathways extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
-          GoldButton(label: "See My Pathways", onPressed: () {}),
+          GoldButton(
+              label: "See My Pathways",
+              onPressed: () => demoNote(context,
+                  "Pathway matching runs on the backend. These results are "
+                  "concept fixtures.")),
           const SizedBox(height: 24),
         ],
       ),

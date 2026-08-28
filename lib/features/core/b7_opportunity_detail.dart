@@ -7,6 +7,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -174,7 +175,10 @@ class B7OpportunityDetail extends ConsumerWidget {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlineGoldButton(label: "Save", onPressed: () {}),
+                  child: OutlineGoldButton(
+                      label: "Save",
+                      onPressed: () => demoNote(context,
+                          "Saving arrives with your account on the backend.")),
                 ),
                 const SizedBox(width: ForgeSpacing.gapCard),
                 Expanded(

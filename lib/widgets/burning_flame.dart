@@ -61,17 +61,18 @@ class _BurningFlameState extends State<BurningFlame>
     // Fixed seed: the fire looks alive but renders deterministically.
     final math.Random random = math.Random(7);
     // Anchor points (x, y as fractions of the box, relative size) where small
-    // flames ride the mark: a cluster at the crown, then down the right edge
-    // of the silhouette (positions measured from the asset).
+    // flames ride the mark. Deliberately asymmetric — one modest lick left of
+    // the tip, the tallest just right of it, then a strengthening chain down
+    // the right edge — so the burn follows the sweep of the mark's own curves
+    // instead of sitting on it like a symmetric crown.
     const List<(double, double, double)> anchors = <(double, double, double)>[
-      (0.33, 0.24, 1.0),
-      (0.385, 0.24, 1.05),
-      (0.44, 0.24, 1.1),
-      (0.495, 0.24, 1.05),
-      (0.55, 0.24, 1.0),
-      (0.64, 0.24, 0.85),
-      (0.80, 0.36, 0.9),
-      (0.83, 0.47, 0.85),
+      (0.30, 0.25, 0.65),
+      (0.42, 0.22, 1.2),
+      (0.49, 0.23, 0.95),
+      (0.58, 0.26, 1.05),
+      (0.68, 0.29, 0.9),
+      (0.80, 0.36, 1.0),
+      (0.84, 0.47, 0.9),
       (0.90, 0.57, 0.8),
     ];
     _tongues = <_Tongue>[
@@ -220,10 +221,11 @@ class _FirePainter extends CustomPainter {
     final Paint glowPaint = Paint()
       ..color = colors.first.withValues(alpha: 0.10 + 0.07 * breathe)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.height * 0.035);
+    // The halo leans right of the tip, matching the asymmetric burn.
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(cx, size.height * 0.15),
-        width: size.width * 0.34,
+        center: Offset(cx + size.width * 0.06, size.height * 0.16),
+        width: size.width * 0.36,
         height: size.height * 0.16,
       ),
       glowPaint,

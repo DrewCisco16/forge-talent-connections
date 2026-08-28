@@ -58,9 +58,6 @@ const String kDrewAvatar = "assets/heroes/hero_10.png";
 /// Index of [kDrewAvatar] within [kAvatars], for the selection grid.
 const int kDrewAvatarIndex = 9;
 
-/// The large preview circle on the avatar screen.
-const String kAvatarPreview = "assets/heroes/hero_preview_large.png";
-
 /// The flame mark, ready for a dark background.
 const String kFlameMark = "assets/brand/forge_flame.png";
 

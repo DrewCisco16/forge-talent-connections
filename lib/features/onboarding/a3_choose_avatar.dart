@@ -73,21 +73,27 @@ class _A3ChooseAvatarState extends ConsumerState<A3ChooseAvatar> {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection + 6),
-          Center(
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(colors: forge.goldGradient),
-              ),
-              padding: const EdgeInsets.all(5),
+          // The preview shows the avatar actually selected in the grid; the
+          // gold ring is drawn by the app, never baked into artwork.
+          AsyncView<List<AvatarOption>>(
+            value: ref.watch(avatarsProvider),
+            pendingLabel: "Loading preview",
+            builder: (List<AvatarOption> avatars) => Center(
               child: Container(
-                decoration: const BoxDecoration(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  image: DecorationImage(
-                    image: AssetImage(kAvatarPreview),
-                    fit: BoxFit.cover,
+                  gradient: LinearGradient(colors: forge.goldGradient),
+                ),
+                padding: const EdgeInsets.all(5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    image: DecorationImage(
+                      image: AssetImage(avatars[_selected].asset),
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),

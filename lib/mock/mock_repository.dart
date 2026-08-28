@@ -503,4 +503,35 @@ class MockForgeRepository implements ForgeRepository {
           canRequestReview: true,
         ),
       ]);
+
+  @override
+  Future<PitchStudio> loadPitchStudio() => _serve(
+        switch (scenario) {
+          DemoScenario.verified => const PitchStudio(
+              consentOnFile: true,
+              likenessConfidencePercent: 97,
+              requiredConfidencePercent: 95,
+              status: VerificationStatus.verified,
+              note: "Cleared to generate. The finished video always carries "
+                  "the AI-generated label.",
+            ),
+          DemoScenario.pending => const PitchStudio(
+              consentOnFile: true,
+              likenessConfidencePercent: 0,
+              requiredConfidencePercent: 95,
+              status: VerificationStatus.pending,
+              note: "Likeness verification is still running. Nothing is "
+                  "generated until it clears.",
+            ),
+          DemoScenario.denied => const PitchStudio(
+              consentOnFile: true,
+              likenessConfidencePercent: 88,
+              requiredConfidencePercent: 95,
+              status: VerificationStatus.failed,
+              note: "88 is below the required 95. On an app built on "
+                  "verifying who people are, a likeness below the line is "
+                  "never generated.",
+            ),
+        },
+      );
 }

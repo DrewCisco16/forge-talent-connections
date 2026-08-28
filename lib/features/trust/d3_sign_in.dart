@@ -107,6 +107,24 @@ class D3SignIn extends StatelessWidget {
                 onPressed: () => context.go("/dashboard"),
               ),
             ),
+          const OutlineGoldButton(
+            label: "Handshake · partnership in progress",
+            // Never rendered as working before the partnership exists.
+            onPressed: null,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Demo sign-in: no real account is used. Production sign-in "
+            "arrives with the backend over each provider's own secure "
+            "sign-in system.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.chip,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           Center(
             child: InkWell(

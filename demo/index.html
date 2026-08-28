@@ -55,9 +55,11 @@
       width: 120px; height: auto;
       filter: drop-shadow(0 0 16px rgba(227, 179, 65, 0.30));
     }
+    /* Asymmetric by design: a small lick left of the tip, the tallest just
+       right of it, then the chain down the right edge. */
     .mark .pyre, .mark .pyre2, .mark .pyre3, .mark .pyre4 {
       content: ""; position: absolute; z-index: 0;
-      left: 44%; bottom: calc(100% - 46px); width: 34px; height: 34px;
+      left: 47%; bottom: calc(100% - 44px); width: 34px; height: 40px;
       transform-origin: 50% 100%;
       background: radial-gradient(ellipse 50% 65% at 50% 90%,
         rgba(242, 199, 89, 0.50), rgba(199, 153, 41, 0.22) 55%,
@@ -66,7 +68,8 @@
       animation: forge-wave 2.2s ease-in-out infinite;
     }
     .mark .pyre2 {
-      width: 24px; height: 40px; filter: blur(4px);
+      left: 36%; bottom: calc(100% - 50px);
+      width: 20px; height: 26px; filter: blur(4px);
       animation: forge-wave2 1.7s ease-in-out infinite;
     }
     /* Small flames stepping down the right edge of the silhouette. */

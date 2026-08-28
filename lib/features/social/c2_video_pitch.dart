@@ -222,7 +222,9 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                   Row(
                     children: <Widget>[
                       Expanded(
-                        child: GoldButton(label: "Re-record", onPressed: () {}),
+                        child: GoldButton(
+                            label: "Re-record",
+                            onPressed: () => context.go("/elevator-pitch")),
                       ),
                       const SizedBox(width: ForgeSpacing.gapCard),
                       Expanded(

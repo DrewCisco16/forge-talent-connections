@@ -6,6 +6,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/credential_card.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
@@ -77,7 +78,9 @@ class B4Credentials extends ConsumerWidget {
                   const SizedBox(height: ForgeSpacing.gapSection),
                   GoldButton(
                     label: "Verify All Credentials",
-                    onPressed: () {},
+                    onPressed: () => demoNote(context,
+                        "Verification runs on the backend. Switch scenarios "
+                        "in Settings to see each outcome."),
                   ),
                   const SizedBox(height: ForgeSpacing.gapSection),
                   for (final Credential c in credentials) ...<Widget>[
@@ -86,7 +89,11 @@ class B4Credentials extends ConsumerWidget {
                       status: c.status,
                       meta: c.metaLine,
                       actionLabel: c.status.isProven ? null : "Verify Credential",
-                      onAction: c.status.isProven ? null : () {},
+                      onAction: c.status.isProven
+                          ? null
+                          : () => demoNote(context,
+                              "Verification runs on the backend. Switch "
+                              "scenarios in Settings to see each outcome."),
                     ),
                     const SizedBox(height: ForgeSpacing.gapCard),
                   ],

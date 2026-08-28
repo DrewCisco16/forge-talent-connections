@@ -6,6 +6,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
@@ -77,7 +78,11 @@ class B3ResumeBuilder extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
-          GoldButton(label: "Generate Resume", onPressed: () {}),
+          GoldButton(
+              label: "Generate Resume",
+              onPressed: () => demoNote(context,
+                  "The assistant's draft below is built from your verified "
+                  "record.")),
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           const SectionLabel("Assistant draft"),
           const SizedBox(height: 6),
@@ -182,7 +187,9 @@ class B3ResumeBuilder extends ConsumerWidget {
                         const SizedBox(height: 10),
                         OutlineGoldButton(
                           label: "Request Human Review",
-                          onPressed: () {},
+                          onPressed: () => demoNote(context,
+                              "Request recorded. A person will review this "
+                              "decision."),
                         ),
                       ],
                     ),

@@ -113,3 +113,28 @@ class SystemDecision {
   final String when;
   final bool canRequestReview;
 }
+
+/// The state of a request to generate an AI video pitch of the person.
+///
+/// A product built on verifying identity never ships a likeness it is not
+/// sure of: the backend reports how confident it is that the generated
+/// likeness is really this person, and below the required line the studio
+/// refuses outright. The threshold and the decision are the backend's; the
+/// UI only renders them.
+class PitchStudio {
+  const PitchStudio({
+    required this.consentOnFile,
+    required this.likenessConfidencePercent,
+    required this.requiredConfidencePercent,
+    required this.status,
+    required this.note,
+  });
+
+  final bool consentOnFile;
+
+  /// 0 while the likeness check is still running.
+  final int likenessConfidencePercent;
+  final int requiredConfidencePercent;
+  final VerificationStatus status;
+  final String note;
+}

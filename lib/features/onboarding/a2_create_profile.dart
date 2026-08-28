@@ -7,6 +7,7 @@ import "../../mock/providers.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
@@ -51,7 +52,10 @@ class A2CreateProfile extends ConsumerWidget {
                           Expanded(
                             child: GoldButton(
                               label: "Upload Photo",
-                              onPressed: () {},
+                              onPressed: () => demoNote(
+                                  context,
+                                  "Photo upload arrives with the backend. "
+                                  "Pick an avatar for now."),
                             ),
                           ),
                           const SizedBox(width: ForgeSpacing.gapCard),
@@ -70,20 +74,24 @@ class A2CreateProfile extends ConsumerWidget {
                 FieldBox(
                   label: "Display name",
                   value: profile.displayName,
-                  onHelp: () {},
+                  onHelp: () => demoNote(context,
+                      "Shown on your profile and inside projects."),
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 FieldBox(
                   label: "Skills",
                   value: profile.skills.join(", "),
-                  onHelp: () {},
+                  onHelp: () => demoNote(context,
+                      "How you describe yourself. Verified skills come from "
+                      "checked work and live on Credentials."),
                   maxLines: 2,
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 FieldBox(
                   label: "About",
                   value: profile.about,
-                  onHelp: () {},
+                  onHelp: () => demoNote(context,
+                      "A short introduction collaborators see first."),
                   maxLines: 3,
                 ),
               ],

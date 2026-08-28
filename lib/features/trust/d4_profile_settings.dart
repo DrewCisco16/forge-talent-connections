@@ -8,6 +8,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/demo_note.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
@@ -315,7 +316,9 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
                               if (d.canRequestReview)
                                 Flexible(
                                   child: InkWell(
-                                    onTap: () {},
+                                    onTap: () => demoNote(context,
+                                        "Request recorded. A person will "
+                                        "review this decision."),
                                     child: Text(
                                       "Request human review",
                                       maxLines: 2,
@@ -341,16 +344,28 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Account"),
           const SizedBox(height: ForgeSpacing.gapCard),
-          for (final String item in <String>[
-            "Personal info",
-            "Skills & availability",
-            "Payout methods",
-          ])
-            _Row(label: item, onTap: () {}),
+          _Row(
+            label: "Personal info",
+            onTap: () => context.go("/create-profile"),
+          ),
+          _Row(
+            label: "Skills & availability",
+            onTap: () => context.go("/credentials"),
+          ),
+          _Row(
+            label: "Payout methods",
+            onTap: () =>
+                demoNote(context, "Payout setup arrives with the backend."),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Privacy & trust"),
           const SizedBox(height: ForgeSpacing.gapCard),
-          _Row(label: "Profile visibility", trailing: "Public", onTap: () {}),
+          _Row(
+            label: "Profile visibility",
+            trailing: "Public",
+            onTap: () => demoNote(
+                context, "Visibility controls arrive with the backend."),
+          ),
           _ToggleRow(
             label: "Verification alerts",
             value: _verificationAlerts,
