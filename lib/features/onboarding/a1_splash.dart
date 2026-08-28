@@ -92,7 +92,16 @@ class _A1SplashState extends State<A1Splash> {
                     const SizedBox(height: ForgeSpacing.gapCard),
                 ],
                 const SizedBox(height: ForgeSpacing.gapSection),
-                _Continue(onTap: () => context.go("/create-profile")),
+                // Each role continues to its own surface: a collaborator
+                // builds a profile, a project sponsor goes to projects, a
+                // veteran starts with the service seal. One door, three paths.
+                _Continue(
+                  onTap: () => context.go(switch (_role) {
+                    ForgeRole.talent => "/create-profile",
+                    ForgeRole.opportunity => "/opportunities",
+                    ForgeRole.veteran => "/veteran-verification",
+                  }),
+                ),
               ],
             ),
           ),
@@ -114,6 +123,31 @@ class _A1SplashState extends State<A1Splash> {
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.caption,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // The category, said plainly, so a first-time visitor never reads
+          // this as one more job board.
+          Text(
+            "Build proof. Earn trust. Collaborate by invitation.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              fontWeight: FontWeight.w700,
+              color: forge.gold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "An invite-only project collaboration network. It complements "
+            "LinkedIn and Handshake — it is not a job board.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
               color: forge.textSub,
             ),
           ),

@@ -113,6 +113,13 @@ const List<Opportunity> kOpportunities = <Opportunity>[
       "A sourced case-study appendix",
       "One rehearsal session with the teaching team",
     ],
+    engagement: "Academic credit",
+    vouchLevel: "1 vouch, or a sealed verification",
+    evidence: <String>[
+      "Sealed project completion",
+      "Verified skills: research writing, slide design",
+      "A vouch from the teaching team on completion",
+    ],
   ),
   Opportunity(
     id: "analytics-capstone",
@@ -133,6 +140,12 @@ const List<Opportunity> kOpportunities = <Opportunity>[
       "Faculty reviewer documentation",
       "Handover session with the program office",
     ],
+    engagement: "Portfolio + faculty reference",
+    vouchLevel: "2 vouches",
+    evidence: <String>[
+      "Sealed dashboard deliverables",
+      "Verified skills: data engineering, dashboard design",
+    ],
   ),
   Opportunity(
     id: "entrepreneurship-pitch",
@@ -151,6 +164,12 @@ const List<Opportunity> kOpportunities = <Opportunity>[
     deliverables: <String>[
       "Registration and submission flows",
       "Judge scoring view with an audit trail",
+    ],
+    engagement: "Service + portfolio",
+    vouchLevel: "1 vouch, or a sealed verification",
+    evidence: <String>[
+      "Sealed portal deliverables",
+      "Verified skills: UX design, web build",
     ],
   ),
 ];

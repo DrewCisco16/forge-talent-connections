@@ -157,6 +157,89 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
               color: forge.textSub,
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          const SectionLabel("How vouching is governed"),
+          const SizedBox(height: 6),
+          Text(
+            "Entry comes through accountable trust. Standing is earned "
+            "through your own work.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+              color: forge.gold,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          ForgeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final (String q, String a) in <(String, String)>[
+                  (
+                    "Who can vouch",
+                    "Verified members, and community partners such as "
+                        "faculty, program staff, and veteran organizations.",
+                  ),
+                  (
+                    "What a vouch attests",
+                    "The signed statements above — never a favor. The basis "
+                        "is disclosed on the vouch itself.",
+                  ),
+                  (
+                    "How many",
+                    "Active vouches per member are limited, and the ledger "
+                        "of vouches you have given is public.",
+                  ),
+                  (
+                    "Misuse",
+                    "A vouch can be revoked; revocation is recorded. Abuse "
+                        "costs the voucher their own standing.",
+                  ),
+                  (
+                    "Appeals",
+                    "Any refusal or revocation can be sent to a person for "
+                        "review.",
+                  ),
+                  (
+                    "Your first vouch",
+                    "No network yet? A sealed verification counts as one "
+                        "vouch, and community partners can vouch for their "
+                        "own members.",
+                  ),
+                  (
+                    "What outweighs what",
+                    "Earned, verified work always ends up counting for more "
+                        "than who you knew when you arrived.",
+                  ),
+                ]) ...<Widget>[
+                  Text(
+                    q,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      fontWeight: FontWeight.w700,
+                      color: forge.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      a,
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.caption,
+                        height: 1.35,
+                        color: forge.textSub,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),

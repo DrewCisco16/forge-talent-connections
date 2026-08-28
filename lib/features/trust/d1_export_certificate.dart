@@ -40,6 +40,9 @@ class D1ExportCertificate extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               const SizedBox(height: 24),
+              const Align(
+                  alignment: Alignment.centerRight, child: DemoBadge()),
+              const SizedBox(height: 8),
               Text(
                 anyBlocked ? "Export blocked" : "Export ready",
                 style: TextStyle(

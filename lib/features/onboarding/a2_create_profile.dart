@@ -189,8 +189,11 @@ class A2CreateProfile extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
+          // Matching leads with contribution evidence, never appearance:
+          // prioritising photographs would quietly turn project discovery
+          // into a looks-influenced system.
           const BannerNote(
-            text: "Profiles with a photo and 3+ skills get matched first",
+            text: "Verified work and 3+ skills get matched first",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           Text(

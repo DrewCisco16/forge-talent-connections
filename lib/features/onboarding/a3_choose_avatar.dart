@@ -117,6 +117,26 @@ class _A3ChooseAvatarState extends ConsumerState<A3ChooseAvatar> {
               ),
             ],
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          // Avatars are expression, never a requirement: the community
+          // identity works for people who would rather not wear a hero.
+          InkWell(
+            onTap: () => context.go("/veteran-verification"),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                "Skip for now — avatars are optional and can be changed "
+                "anytime",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.caption,
+                  fontWeight: FontWeight.w600,
+                  color: forge.textSub,
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),

@@ -22,6 +22,9 @@ class Opportunity {
     required this.tags,
     this.pills = const <String>[],
     this.deliverables = const <String>[],
+    this.engagement,
+    this.vouchLevel,
+    this.evidence = const <String>[],
   });
 
   final String id;
@@ -39,6 +42,15 @@ class Opportunity {
   /// Meta pills such as Contract / Remote / a rate band.
   final List<String> pills;
   final List<String> deliverables;
+
+  /// The engagement's nature: paid, academic credit, service, portfolio.
+  final String? engagement;
+
+  /// The trust level required to join, stated plainly.
+  final String? vouchLevel;
+
+  /// The portable proof a contributor can earn by completing this project.
+  final List<String> evidence;
 }
 
 /// Whether a reason supports or counts against a suggestion.

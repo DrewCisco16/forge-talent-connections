@@ -123,7 +123,7 @@ class _WidgetGalleryState extends State<WidgetGallery> {
 
           section("Banners", <Widget>[
             const BannerNote(
-              text: "Profiles with a photo and 3+ skills get matched first",
+              text: "Verified work and 3+ skills get matched first",
             ),
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(

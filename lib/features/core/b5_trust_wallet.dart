@@ -25,6 +25,8 @@ class B5TrustWallet extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 24),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           GoldGradientText(
             "Trust Wallet",
             style: const TextStyle(
@@ -240,6 +242,32 @@ class B5TrustWallet extends ConsumerWidget {
                 ),
               );
             },
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          InkWell(
+            onTap: () => context.go("/vouch"),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.gavel_outlined, size: 13, color: forge.gold),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    "How vouching is governed",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      fontWeight: FontWeight.w700,
+                      color: forge.gold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward, size: 12, color: forge.gold),
+              ],
+            ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Vouches Drew has given"),

@@ -47,6 +47,8 @@ class SealCheck extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           Text(
             "Seal Check",
             style: TextStyle(
@@ -136,6 +138,12 @@ class SealCheck extends ConsumerWidget {
                               _KV("Sealed item", cert.filename),
                               _KV("Checked", cert.checkedOn),
                               _KV("Fingerprint", cert.fingerprint),
+                              const _KV("Sealed by",
+                                  "FORGE Talent Connections verification"),
+                              const _KV("Valid",
+                                  "Until the record changes"),
+                              const _KV("Corrections",
+                                  "Human review on request"),
                             ],
                           ),
                         ),
@@ -187,7 +195,8 @@ class SealCheck extends ConsumerWidget {
 }
 
 class _KV extends StatelessWidget {
-  const _KV(this.k, this.v);
+  // ignore: unused_element_parameter
+  const _KV(this.k, this.v, {super.key});
 
   final String k;
   final String v;

@@ -27,6 +27,8 @@ class B4Credentials extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           const HeroBand(
             title: "Verified Credentials",
             subtitle: "Sealed so collaborators can trust them anywhere",

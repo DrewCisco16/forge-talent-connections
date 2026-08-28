@@ -133,6 +133,118 @@ class B7OpportunityDetail extends ConsumerWidget {
                   ],
                 ),
               ),
+            if (o.engagement != null || o.vouchLevel != null ||
+                o.evidence.isNotEmpty) ...<Widget>[
+              const SizedBox(height: ForgeSpacing.gapSection),
+              const SectionLabel("The trust terms"),
+              const SizedBox(height: ForgeSpacing.gapCard),
+              ForgeCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (o.engagement != null)
+                      _TermRow(
+                        icon: Icons.school_outlined,
+                        label: "Engagement",
+                        value: o.engagement!,
+                      ),
+                    if (o.vouchLevel != null)
+                      _TermRow(
+                        icon: Icons.how_to_reg,
+                        label: "To join",
+                        value: o.vouchLevel!,
+                      ),
+                    if (o.evidence.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        "Proof you can earn here",
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          fontWeight: FontWeight.w700,
+                          color: forge.gold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final String e in o.evidence)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Icon(Icons.workspace_premium,
+                                  size: 13, color: forge.gold),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  e,
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.caption,
+                                    height: 1.3,
+                                    color: forge.text,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: ForgeSpacing.gapSection),
+            const SectionLabel("How a project works"),
+            const SizedBox(height: ForgeSpacing.gapCard),
+            ForgeCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (final (int i, String step) in <String>[
+                    "A sponsor posts a defined project",
+                    "Vouched members are invited, or ask to join",
+                    "A team forms around complementary verified skills",
+                    "Responsibilities and deliverables are recorded",
+                    "Contributions are reviewed and checked",
+                    "Outcomes are sealed when they pass",
+                    "Contributors take portable proof of the work",
+                    "That proof opens the next, bigger project",
+                  ].indexed)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          SizedBox(
+                            width: 22,
+                            child: Text(
+                              "${i + 1}",
+                              style: TextStyle(
+                                fontFamily: ForgeType.displayFamily,
+                                fontSize: ForgeType.body,
+                                fontWeight: FontWeight.w700,
+                                color: forge.gold,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              step,
+                              style: TextStyle(
+                                fontFamily: ForgeType.bodyFamily,
+                                fontSize: ForgeType.caption,
+                                height: 1.35,
+                                color: forge.text,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
             const SizedBox(height: ForgeSpacing.gapSection),
             ForgeCard(
               borderColor: forge.green.withValues(alpha: 0.55),
@@ -192,6 +304,53 @@ class B7OpportunityDetail extends ConsumerWidget {
             const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TermRow extends StatelessWidget {
+  const _TermRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(icon, size: 15, color: forge.gold),
+          const SizedBox(width: 9),
+          Text(
+            "$label: ",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              fontWeight: FontWeight.w700,
+              color: forge.textSub,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.caption,
+                height: 1.3,
+                color: forge.text,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

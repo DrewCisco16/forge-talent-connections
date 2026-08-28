@@ -125,7 +125,7 @@ void main() {
       const Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          BannerNote(text: "Profiles with a photo and 3+ skills get matched first"),
+          BannerNote(text: "Verified work and 3+ skills get matched first"),
           SizedBox(height: 10),
           BannerNote(
             tone: BannerTone.governance,
