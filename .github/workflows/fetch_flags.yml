@@ -1,0 +1,44 @@
+# One-shot helper: downloads the six official service-flag renditions from
+# Wikimedia Commons (US federal government works, public domain) and commits
+# them to the branch this workflow is dispatched on. GitHub-hosted runners
+# have the open-internet access the development container does not.
+name: Fetch official service flags
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download public-domain flag renditions
+        run: |
+          set -euo pipefail
+          mkdir -p assets/flags
+          fetch () {
+            local id="$1" name="$2"
+            local url="https://commons.wikimedia.org/wiki/Special:FilePath/${name}?width=900"
+            curl -fsSL --retry 3 -o "assets/flags/${id}.png" "$url"
+            file "assets/flags/${id}.png" | grep -q "PNG image data" \
+              || { echo "::error::${id} is not a PNG"; exit 1; }
+          }
+          fetch usmc "Flag_of_the_United_States_Marine_Corps.svg"
+          fetch usa  "Flag_of_the_United_States_Army.svg"
+          fetch usn  "Flag_of_the_United_States_Navy.svg"
+          fetch usaf "Flag_of_the_United_States_Air_Force.svg"
+          fetch uscg "Flag_of_the_United_States_Coast_Guard.svg"
+          fetch ussf "Flag_of_the_United_States_Space_Force.svg"
+          ls -la assets/flags/
+
+      - name: Commit the artwork to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/flags/*.png
+          git commit -m "feat(a4): official service flag artwork (Wikimedia Commons, public domain)"
+          git push
