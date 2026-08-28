@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../../mock/providers.dart";
+import "../../util/linear_search.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
@@ -90,6 +91,23 @@ class D1ExportCertificate extends ConsumerWidget {
               ),
               const SizedBox(height: ForgeSpacing.gapSection),
               const SectionLabel("Files in this export"),
+              const SizedBox(height: 6),
+              // Exhaustive by construction: the release decision rests on
+              // every file having been examined, and the line says so with
+              // counts produced by a full scan of the served queue.
+              Text(
+                "${queue.length} of ${queue.length} files examined — "
+                "${countWhere(queue, (ExportItem e) => e.status == VerificationStatus.verified)} cleared, "
+                "${countWhere(queue, (ExportItem e) => e.status == VerificationStatus.pending)} still checking, "
+                "${countWhere(queue, (ExportItem e) => e.status.blocksRelease)} locked. Nothing was skipped.",
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.chip,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                  color: forge.gold,
+                ),
+              ),
               const SizedBox(height: ForgeSpacing.gapCard),
               for (final ExportItem e in queue)
                 Container(

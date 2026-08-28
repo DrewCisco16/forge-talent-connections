@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../../mock/providers.dart";
+import "../../util/linear_search.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
@@ -89,6 +90,22 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
             ),
             const SizedBox(height: ForgeSpacing.gapSection + 4),
             const SectionLabel("Why this is suggested"),
+            const SizedBox(height: 6),
+            // Exhaustive by construction: the suggestion shows every factor
+            // it rests on, for and against, counted by a full scan.
+            Text(
+              "All ${match.factors.length} factors shown — "
+              "${countWhere(match.factors, (MatchFactor f) => f.kind == MatchFactorKind.supporting)} for, "
+              "${countWhere(match.factors, (MatchFactor f) => f.kind == MatchFactorKind.against)} against. "
+              "Nothing was hidden.",
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.chip,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+                color: forge.gold,
+              ),
+            ),
             const SizedBox(height: ForgeSpacing.gapCard),
             ForgeCard(
               child: Column(

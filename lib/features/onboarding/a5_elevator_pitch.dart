@@ -9,6 +9,7 @@ import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
 import "../../widgets/demo_note.dart";
 import "../../widgets/banner_note.dart";
+import "../../widgets/confidence_meter.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -172,6 +173,16 @@ class A5ElevatorPitch extends ConsumerWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    // The reported confidence against the required line,
+                    // visible at a glance. A miss shows the shortfall; it
+                    // is never dressed up as a pass.
+                    ConfidenceMeter(
+                      value: studio.likenessConfidencePercent,
+                      required_: studio.requiredConfidencePercent,
+                      pending:
+                          studio.status == VerificationStatus.pending,
                     ),
                     const SizedBox(height: 10),
                     Text(

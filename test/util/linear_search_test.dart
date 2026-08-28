@@ -57,4 +57,46 @@ void main() {
       expect(indexOfMax(<int>[], (int v) => v), isNull);
     });
   });
+
+  group("indexOfFirst", () {
+    test("best case: the first element matches, one comparison", () {
+      expect(indexOfFirst(<int>[9, 1, 9], (int v) => v == 9), 0);
+    });
+
+    test("first occurrence wins over later ones", () {
+      expect(indexOfFirst(<int>[1, 9, 9], (int v) => v == 9), 1);
+    });
+
+    test("the classic -1 contract when nothing matches", () {
+      expect(indexOfFirst(<int>[1, 2, 3], (int v) => v == 9), -1);
+    });
+  });
+
+  group("indexOfMin", () {
+    test("minimum at the end — the full walk", () {
+      expect(indexOfMin(<int>[93, 88, 75], (int v) => v), 2);
+    });
+
+    test("ties resolve to the first occurrence", () {
+      expect(indexOfMin(<int>[5, 3, 3, 5], (int v) => v), 1);
+    });
+
+    test("empty list returns null", () {
+      expect(indexOfMin(<int>[], (int v) => v), isNull);
+    });
+  });
+
+  group("countWhere", () {
+    test("counts every match across the whole list", () {
+      expect(countWhere(<int>[55, 65, 32, 40, 55], (int v) => v > 50), 3);
+    });
+
+    test("zero matches counts honestly to zero", () {
+      expect(countWhere(<int>[1, 2, 3], (int v) => v > 50), 0);
+    });
+
+    test("empty list counts to zero", () {
+      expect(countWhere(<int>[], (int v) => true), 0);
+    });
+  });
 }

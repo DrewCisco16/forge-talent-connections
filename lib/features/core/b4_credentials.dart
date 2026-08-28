@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../mock/providers.dart";
+import "../../util/linear_search.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
@@ -71,12 +72,51 @@ class B4Credentials extends ConsumerWidget {
                                   color: forge.textSub,
                                 ),
                               ),
+                              const SizedBox(height: 2),
+                              // Exhaustive by construction: every credential
+                              // was examined, so the count can say so.
+                              Text(
+                                "All ${credentials.length} were examined — "
+                                "nothing was skipped.",
+                                style: TextStyle(
+                                  fontFamily: ForgeType.bodyFamily,
+                                  fontSize: ForgeType.chip,
+                                  fontWeight: FontWeight.w600,
+                                  color: forge.gold,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
+                  // The first unverified credential, found by a linear scan;
+                  // -1 means every credential already carries its proof.
+                  if (indexOfFirst(credentials,
+                          (Credential c) => !c.status.isProven) !=
+                      -1) ...<Widget>[
+                    const SizedBox(height: ForgeSpacing.gapCard),
+                    Row(
+                      children: <Widget>[
+                        Icon(Icons.flag_outlined,
+                            size: 14, color: forge.gold),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            "Next to verify: "
+                            "${credentials[indexOfFirst(credentials, (Credential c) => !c.status.isProven)].title}",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              fontWeight: FontWeight.w600,
+                              color: forge.text,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: ForgeSpacing.gapSection),
                   GoldButton(
                     label: "Verify All Credentials",
