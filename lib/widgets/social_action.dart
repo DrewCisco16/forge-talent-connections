@@ -245,15 +245,20 @@ class _HoldToSignVouchState extends State<HoldToSignVouch>
                         color: forge.text,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _controller.isCompleted
-                            ? widget.label
-                            : "${widget.label} — hold",
-                        style: TextStyle(
-                          fontFamily: ForgeType.bodyFamily,
-                          fontSize: ForgeType.cardTitle,
-                          fontWeight: FontWeight.w700,
-                          color: forge.text,
+                      Flexible(
+                        child: Text(
+                          _controller.isCompleted
+                              ? widget.label
+                              : "${widget.label} — hold",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
                         ),
                       ),
                     ],

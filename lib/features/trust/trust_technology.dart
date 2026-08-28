@@ -63,6 +63,7 @@ class TrustTechnology extends StatelessWidget {
                 "Every AI suggestion must clear a confidence bar before it is even considered. Anything uncertain goes to a person instead. A suggestion can never change your record — only verified actions by people do — and every decision is captured in a tamper-evident log.",
             seeItLabel: "See it: AI Match",
             seeItRoute: "/match/atlas-telemetry",
+            filing: "US Patent Application Publication 2026/0246640 A1",
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           _TechCard(
@@ -73,6 +74,7 @@ class TrustTechnology extends StatelessWidget {
                 "Your verified record is locked by default. A change is staged, checked, and only becomes real once it passes — all at once, or not at all. The full history stays replayable, so what happened can always be shown.",
             seeItLabel: "See it: Trust Wallet",
             seeItRoute: "/trust-wallet",
+            filing: "US Patent Application Publication 2026/0186826 A1",
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           _TechCard(
@@ -83,6 +85,7 @@ class TrustTechnology extends StatelessWidget {
                 "Every file receives a standardized fingerprint when it is created. At the moment of export that fingerprint is checked again, and there is only one door out. If it does not match, it does not go out.",
             seeItLabel: "See it: Export",
             seeItRoute: "/export",
+            filing: "US utility application filed; not yet published",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("Why this matters"),
@@ -93,6 +96,17 @@ class TrustTechnology extends StatelessWidget {
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.body,
               height: 1.45,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          Text(
+            "Patent pending. Applications are published by the USPTO and are "
+            "public; publication is not a granted patent.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.chip,
+              height: 1.4,
               color: forge.textSub,
             ),
           ),
@@ -111,6 +125,7 @@ class _TechCard extends StatelessWidget {
     required this.body,
     required this.seeItLabel,
     required this.seeItRoute,
+    this.filing,
   });
 
   final IconData icon;
@@ -119,6 +134,11 @@ class _TechCard extends StatelessWidget {
   final String body;
   final String seeItLabel;
   final String seeItRoute;
+
+  /// The published application this capability is filed under, where one has
+  /// published. Null where an application is filed but not yet published: a
+  /// number is never shown unless it exists.
+  final String? filing;
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +185,39 @@ class _TechCard extends StatelessWidget {
               color: forge.text,
             ),
           ),
+          if (filing != null) ...<Widget>[
+            const SizedBox(height: ForgeSpacing.gapCard),
+            Container(
+              decoration: BoxDecoration(
+                color: ForgeColors.navyDeep.withValues(alpha: 0.5),
+                border: Border.all(color: forge.strokeSoft),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.description_outlined,
+                      size: 12, color: forge.textSub),
+                  const SizedBox(width: 7),
+                  Flexible(
+                    child: Text(
+                      filing!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.chip,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: forge.textSub,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: ForgeSpacing.gapCard),
           InkWell(
             onTap: () => context.go(seeItRoute),

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../mock/fixtures.dart";
 import "../../mock/providers.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
@@ -79,7 +80,7 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             image: DecorationImage(
-                              image: AssetImage("assets/heroes/hero_01.png"),
+                              image: AssetImage(kDrewAvatar),
                               fit: BoxFit.cover,
                             ),
                           ),

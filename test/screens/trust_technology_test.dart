@@ -32,6 +32,29 @@ void main() {
     expect(find.text("PATENT-PENDING TECHNOLOGY"), findsOneWidget);
   });
 
+  testWidgets("displays the published filings, and claims no number it lacks",
+      (WidgetTester tester) async {
+    await pump(tester);
+    // Exactly as published by the USPTO.
+    expect(
+      find.text("US Patent Application Publication 2026/0246640 A1"),
+      findsOneWidget,
+    );
+    expect(
+      find.text("US Patent Application Publication 2026/0186826 A1"),
+      findsOneWidget,
+    );
+    // The third application has no publication number yet, and none is shown.
+    expect(
+      find.text("US utility application filed; not yet published"),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining("publication is not a granted patent"),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("each feature links to where it is visible in the app",
       (WidgetTester tester) async {
     await pump(tester);

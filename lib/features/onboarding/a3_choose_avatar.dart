@@ -20,7 +20,9 @@ class A3ChooseAvatar extends ConsumerStatefulWidget {
 }
 
 class _A3ChooseAvatarState extends ConsumerState<A3ChooseAvatar> {
-  int _selected = 0;
+  // Opens on the persona's own avatar rather than the first cell, so the
+  // screen reflects who the user actually is.
+  int _selected = kDrewAvatarIndex;
 
   @override
   Widget build(BuildContext context) {

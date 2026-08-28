@@ -48,6 +48,16 @@ const List<AvatarOption> kAvatars = <AvatarOption>[
   AvatarOption(id: "hero_16", asset: "assets/heroes/hero_16.png"),
 ];
 
+/// The signed-in demo persona's avatar.
+///
+/// Drew Cisco is the stand-in for the product owner, so the avatar is male.
+/// Named here rather than indexed into [kAvatars] so it cannot drift when the
+/// grid order changes, and so every surface showing "you" shows the same face.
+const String kDrewAvatar = "assets/heroes/hero_10.png";
+
+/// Index of [kDrewAvatar] within [kAvatars], for the selection grid.
+const int kDrewAvatarIndex = 9;
+
 /// The large preview circle on the avatar screen.
 const String kAvatarPreview = "assets/heroes/hero_preview_large.png";
 
@@ -147,11 +157,11 @@ const List<Opportunity> kOpportunities = <Opportunity>[
 
 /// Stories on the social feed.
 const List<Story> kStories = <Story>[
-  Story(id: "self", name: "You", avatar: "assets/heroes/hero_01.png", isSelf: true),
+  Story(id: "self", name: "You", avatar: "assets/heroes/hero_10.png", isSelf: true),
   Story(id: "maya", name: "Maya", avatar: "assets/heroes/hero_04.png"),
-  Story(id: "jordan", name: "Jordan", avatar: "assets/heroes/hero_10.png"),
+  Story(id: "jordan", name: "Jordan", avatar: "assets/heroes/hero_12.png"),
   Story(id: "ana", name: "Ana", avatar: "assets/heroes/hero_06.png"),
-  Story(id: "kai", name: "Kai", avatar: "assets/heroes/hero_12.png"),
+  Story(id: "kai", name: "Kai", avatar: "assets/heroes/hero_14.png"),
 ];
 
 /// Feed entries.
@@ -168,7 +178,7 @@ const List<FeedPost> kFeed = <FeedPost>[
   FeedPost(
     id: "post-2",
     authorName: "Jordan Reyes",
-    authorAvatar: "assets/heroes/hero_10.png",
+    authorAvatar: "assets/heroes/hero_12.png",
     authorStatus: VerificationStatus.verified,
     event: "earned a credential",
     body: "Cloud Practitioner cleared its check this morning.",
@@ -198,7 +208,7 @@ const List<Vouch> kVouches = <Vouch>[
   Vouch(
     id: "v2",
     fromName: "Jordan Reyes",
-    fromAvatar: "assets/heroes/hero_10.png",
+    fromAvatar: "assets/heroes/hero_12.png",
     scope: "Skills",
     text: "The Splunk work held up. I checked it myself against the raw feed.",
     signedOn: "Jul 2026",

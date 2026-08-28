@@ -42,7 +42,7 @@ class MockForgeRepository implements ForgeRepository {
           ],
           about:
               "Six years running cyber network operations for the Marine Corps.",
-          avatarAsset: kAvatars.first.asset,
+          avatarAsset: kDrewAvatar,
           completionPercent: scenario == DemoScenario.verified ? 100 : 72,
           serviceRecord: scenario == DemoScenario.verified
               ? VerificationStatus.verified

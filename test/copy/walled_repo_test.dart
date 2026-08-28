@@ -14,16 +14,18 @@ import "package:flutter_test/flutter_test.dart";
 /// because writing them literally here would put them in the repo — the exact
 /// thing this test exists to prevent. The encoded forms never match the
 /// decoded scan, so the test cannot flag itself.
+///
+/// Publication numbers were removed from this list on Andrew's explicit
+/// override: published applications are public USPTO records, and the product
+/// now displays them as provenance on the Trust Technology screen. Internal
+/// system names stay barred — the override was for filings, not for engine
+/// vocabulary.
 final List<String> _banned = <String>[
   "UEFDRE1HUw==",
   "UE1fREVDQUJT",
   "U0VEQ1BI",
   "U0VEQw==",
   "RGVjaXNpb25Ub2tlbg==",
-  "MjAyNjAyNDY2NDA=",
-  "MjAyNi8wMjQ2NjQw",
-  "MjAyNjAxODY4MjY=",
-  "MjAyNi8wMTg2ODI2",
 ].map((String e) => utf8.decode(base64Decode(e))).toList();
 
 /// Directories whose contents count as the repo's source of record.
