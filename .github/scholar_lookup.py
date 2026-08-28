@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Discovery pass for the category-realignment review: journal articles from
-2024 onward on collaboration-network themes, from the OpenAlex registry.
-Read-only; prints registered metadata to stdout."""
+"""Crossref verification pass for the category-realignment sources (DOIs
+taken verbatim from OpenAlex registry records). Read-only; prints to stdout."""
 import json
 import time
 import urllib.parse
 import urllib.request
 
-THEMES = [
-    ("pbl", "project-based learning employability skills higher education"),
-    ("pbl2", "project-based learning teamwork outcomes empirical university"),
-    ("community", "online community membership participation belonging"),
-    ("exclusivity", "exclusive community gated membership online platform"),
-    ("social-capital", "social capital online networks career development young"),
-    ("avatar-identity", "avatar self-presentation digital identity virtual community"),
-    ("team-formation", "team formation skill complementarity collaboration online"),
-    ("peer-assessment", "peer assessment reputation systems online platform trust"),
-    ("wil", "work-integrated learning graduate outcomes empirical"),
-    ("inst-trust", "institutional trust technology adoption young adults platform"),
-    ("eportfolio2", "e-portfolio evidence learning employability assessment"),
-    ("mentoring", "peer mentoring community college students belonging outcomes"),
+DOIS = [
+    "10.1038/s41598-025-10385-4",
+    "10.3390/educsci14060617",
+    "10.1016/j.heliyon.2024.e39988",
+    "10.1038/s44271-024-00112-6",
+    "10.1108/jpbm-02-2023-4373",
+    "10.1016/j.chb.2024.108544",
+    "10.1145/3637347",
+    "10.1002/cb.2482",
+    "10.1108/cdi-02-2024-0073",
+    "10.1002/berj.4050",
+    "10.1002/mar.22129",
+    "10.3389/frvir.2024.1305758",
+    "10.1186/s41239-024-00501-1",
+    "10.1080/03075079.2024.2334837",
+    "10.1080/03075079.2024.2326956",
+    "10.1186/s40594-024-00472-9",
+    "10.1187/cbe.23-04-0059",
+    "10.1002/job.2898",
 ]
 
 
@@ -29,41 +34,28 @@ def fetch(url):
         return json.load(r)
 
 
-def abstract_from_inverted(inv):
-    if not inv:
-        return ""
-    pos = {}
-    for word, idxs in inv.items():
-        for i in idxs:
-            pos[i] = word
-    words = [pos[i] for i in sorted(pos)]
-    return " ".join(words[:110])
-
-
-for theme, query in THEMES:
-    print(f"===== THEME {theme} =====")
-    q = urllib.parse.quote(query)
-    url = ("https://api.openalex.org/works?search=" + q +
-           "&filter=from_publication_date:2024-01-01,type:article"
-           "&sort=relevance_score:desc&per-page=4")
+for doi in DOIS:
+    url = "https://api.crossref.org/works/" + urllib.parse.quote(doi)
     try:
-        data = fetch(url)
-        for w in data.get("results", []):
-            authors = [a["author"]["display_name"] for a in w.get("authorships", [])][:8]
-            src = (w.get("primary_location") or {}).get("source") or {}
-            print(json.dumps({
-                "theme": theme,
-                "title": w.get("title"),
-                "authors": authors,
-                "year": w.get("publication_year"),
-                "venue": src.get("display_name"),
-                "doi": (w.get("doi") or "").replace("https://doi.org/", ""),
-                "type": w.get("type"),
-                "cited_by": w.get("cited_by_count"),
-                "abstract": abstract_from_inverted(w.get("abstract_inverted_index")),
-            }, ensure_ascii=False))
+        m = fetch(url)["message"]
     except Exception as e:  # noqa: BLE001
-        print(json.dumps({"theme": theme, "error": str(e)}))
+        print(json.dumps({"crossref_doi": doi, "error": str(e)}))
+        time.sleep(1)
+        continue
+    print(json.dumps({
+        "crossref_doi": doi,
+        "title": (m.get("title") or [""])[0],
+        "authors": [f"{a.get('family','')}, {a.get('given','')}" for a in m.get("author", [])][:12],
+        "container": (m.get("container-title") or [""])[0],
+        "year": (m.get("issued", {}).get("date-parts") or [[None]])[0][0],
+        "volume": m.get("volume"),
+        "issue": m.get("issue"),
+        "pages": m.get("page"),
+        "article_number": m.get("article-number"),
+        "type": m.get("type"),
+        "update_to": m.get("update-to", []),
+        "publisher": m.get("publisher"),
+    }, ensure_ascii=False))
     time.sleep(1)
 
 print("===== DONE =====")
