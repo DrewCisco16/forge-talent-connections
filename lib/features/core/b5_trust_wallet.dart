@@ -188,6 +188,32 @@ class B5TrustWallet extends ConsumerWidget {
               color: forge.textSub,
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          InkWell(
+            onTap: () => context.go("/trust-technology"),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.shield_outlined, size: 14, color: forge.gold),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    "Built on patent-pending technology",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      fontWeight: FontWeight.w700,
+                      color: forge.gold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward, size: 12, color: forge.gold),
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),

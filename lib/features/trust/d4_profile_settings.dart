@@ -274,6 +274,11 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             value: _matchSuggestions,
             onChanged: (bool v) => setState(() => _matchSuggestions = v),
           ),
+          _Row(
+            label: "How FORGE protects you",
+            trailing: "Patent pending",
+            onTap: () => context.go("/trust-technology"),
+          ),
           _Row(label: "Data & downloads", onTap: () => context.go("/export")),
           const SizedBox(height: ForgeSpacing.gapSection),
           _Row(

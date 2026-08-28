@@ -23,6 +23,7 @@ import "../features/trust/d2_project_space.dart";
 import "../features/trust/d3_sign_in.dart";
 import "../features/trust/d4_profile_settings.dart";
 import "../features/trust/d5_veteran_pathways.dart";
+import "../features/trust/trust_technology.dart";
 import "app_shell.dart";
 import "widget_gallery.dart";
 
@@ -158,6 +159,11 @@ GoRouter buildRouter() {
             path: "/pathways",
             name: "pathways",
             builder: (_, __) => const D5VeteranPathways(),
+          ),
+          GoRoute(
+            path: "/trust-technology",
+            name: "trust-technology",
+            builder: (_, __) => const TrustTechnology(),
           ),
         ],
       ),
