@@ -109,7 +109,7 @@ class MockForgeRepository implements ForgeRepository {
             "Verified Splunk deliverables on 2 projects", MatchFactorKind.supporting),
         MatchFactor("Cleared credential: Security+ ce", MatchFactorKind.supporting),
         MatchFactor("Timezone overlap 6h", MatchFactorKind.supporting),
-        MatchFactor("No prior healthcare projects", MatchFactorKind.against),
+        MatchFactor("No prior legal-content projects", MatchFactorKind.against),
       ],
       reviewState: scenario == DemoScenario.verified
           ? VerificationStatus.verified
@@ -172,24 +172,24 @@ class MockForgeRepository implements ForgeRepository {
   @override
   Future<ProjectSpace> loadProjectSpace() => _serve(
         ProjectSpace(
-          projectName: "Patient Portal Redesign",
-          organization: "Atlas Health Systems",
+          projectName: "Employment Law Presentation",
+          organization: "FIU Business School",
           milestones: <Milestone>[
             const Milestone(name: "Discovery", status: VerificationStatus.verified),
-            Milestone(name: "High-fidelity screens", status: _outcome),
+            Milestone(name: "Slide deck draft", status: _outcome),
             const Milestone(
-                name: "Accessibility pass", status: VerificationStatus.unverified),
+                name: "Rehearsal", status: VerificationStatus.unverified),
           ],
           deliverables: <Deliverable>[
             const Deliverable(
               id: "d1",
-              name: "Discovery_Notes_v2.pdf",
+              name: "Seminar_Outline_v2.pdf",
               status: VerificationStatus.verified,
               submittedOn: "12 Aug",
             ),
             Deliverable(
               id: "d2",
-              name: "HiFi_Screens_v1.fig",
+              name: "Slide_Deck_Draft.pptx",
               status: _outcome,
               submittedOn: "24 Aug",
               failureReason: scenario == DemoScenario.denied
@@ -198,15 +198,15 @@ class MockForgeRepository implements ForgeRepository {
             ),
             const Deliverable(
               id: "d3",
-              name: "Component_Library.zip",
+              name: "Case_Study_Appendix.pdf",
               status: VerificationStatus.pending,
               submittedOn: "26 Aug",
             ),
           ],
           activity: const <String>[
-            "Maya Chen approved Discovery",
-            "You submitted HiFi_Screens_v1.fig",
-            "Checking started on Component_Library.zip",
+            "Maya Chen approved the outline",
+            "You submitted Slide_Deck_Draft.pptx",
+            "Checking started on Case_Study_Appendix.pdf",
           ],
         ),
       );
@@ -221,7 +221,7 @@ class MockForgeRepository implements ForgeRepository {
   Future<ChatThread> loadThread() => _serve(
         ChatThread(
           withName: "Maya Chen",
-          presence: "online · Atlas project",
+          presence: "online · FIU project",
           messages: <ChatMessage>[
             const ChatMessage(
               id: "m1",
@@ -240,7 +240,7 @@ class MockForgeRepository implements ForgeRepository {
               text: "",
               fromMe: true,
               sentAt: "09:14",
-              attachmentName: "HiFi_Screens_v1.fig",
+              attachmentName: "Slide_Deck_Draft.pptx",
               attachmentStatus: _outcome,
             ),
             const ChatMessage(
@@ -259,7 +259,7 @@ class MockForgeRepository implements ForgeRepository {
           id: "n1",
           kind: NotificationKind.deliverableVerified,
           title: "Deliverable verified",
-          body: "Discovery_Notes_v2.pdf passed its check.",
+          body: "Seminar_Outline_v2.pdf passed its check.",
           when: "09:40",
           unread: true,
           isToday: true,
@@ -307,12 +307,12 @@ class MockForgeRepository implements ForgeRepository {
   Future<List<ExportItem>> loadExportQueue() => _serve(<ExportItem>[
         const ExportItem(
           id: "e1",
-          filename: "Discovery_Notes_v2.pdf",
+          filename: "Seminar_Outline_v2.pdf",
           status: VerificationStatus.verified,
         ),
         ExportItem(
           id: "e2",
-          filename: "HiFi_Screens_v1.fig",
+          filename: "Slide_Deck_Draft.pptx",
           status: switch (scenario) {
             DemoScenario.verified => VerificationStatus.verified,
             DemoScenario.pending => VerificationStatus.pending,
@@ -324,7 +324,7 @@ class MockForgeRepository implements ForgeRepository {
         ),
         const ExportItem(
           id: "e3",
-          filename: "Component_Library.zip",
+          filename: "Case_Study_Appendix.pdf",
           status: VerificationStatus.pending,
         ),
       ]);
@@ -332,7 +332,7 @@ class MockForgeRepository implements ForgeRepository {
   @override
   Future<IntegrityCertificate> loadCertificate() => _serve(
         IntegrityCertificate(
-          filename: "Discovery_Notes_v2.pdf",
+          filename: "Seminar_Outline_v2.pdf",
           status: scenario == DemoScenario.denied
               ? VerificationStatus.failed
               : scenario == DemoScenario.pending

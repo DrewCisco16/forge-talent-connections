@@ -232,7 +232,7 @@ void main() {
         name: "Maya Chen",
         status: VerificationStatus.verified,
         event: "shipped a verified deliverable",
-        body: "Closed out the telemetry dashboard milestone two days early.",
+        body: "Closed out the capstone dashboard milestone two days early.",
         vouchCount: 9,
         action: VibeButton(label: "Vouch", onPressed: () {}),
         onMessage: () {},

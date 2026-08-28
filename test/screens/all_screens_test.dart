@@ -118,7 +118,7 @@ void main() {
       for (final DemoScenario s in DemoScenario.values) {
         await _pump(
           tester,
-          const B6AiMatch(opportunityId: "atlas-telemetry"),
+          const B6AiMatch(opportunityId: "employment-law-presentation"),
           s,
         );
         expect(

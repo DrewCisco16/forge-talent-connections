@@ -95,62 +95,62 @@ const List<ServiceBranch> kBranches = <ServiceBranch>[
 /// Opportunities shown on discovery. Fixture organisations.
 const List<Opportunity> kOpportunities = <Opportunity>[
   Opportunity(
-    id: "atlas-telemetry",
-    title: "Atlas Telemetry Dashboard",
-    organization: "Florida International University",
+    id: "employment-law-presentation",
+    title: "Employment Law Presentation",
+    organization: "FIU Business School",
     organizationKind: "University",
     organizationStatus: VerificationStatus.verified,
     description:
-        "Build a live telemetry dashboard for a research cluster. Data engineering plus a clean operator view.",
+        "Build the slide deck and speaker materials for a graduate employment law seminar. Clear visuals, sourced citations, and a case-study walkthrough.",
+    tags: <TechTag>[
+      TechTag("Research", TechTagTone.violet),
+      TechTag("Slides", TechTagTone.gold),
+      TechTag("Legal", TechTagTone.cyan),
+    ],
+    pills: <String>["Project", "Remote", "6 weeks"],
+    deliverables: <String>[
+      "A 40-slide presentation with speaker notes",
+      "A sourced case-study appendix",
+      "One rehearsal session with the teaching team",
+    ],
+  ),
+  Opportunity(
+    id: "analytics-capstone",
+    title: "Business Analytics Capstone Dashboard",
+    organization: "FIU Business School",
+    organizationKind: "University",
+    organizationStatus: VerificationStatus.verified,
+    description:
+        "Stand up the live dashboard for the analytics capstone cohort. Data engineering plus a clean reviewer view for faculty.",
     tags: <TechTag>[
       TechTag("Flutter", TechTagTone.gold),
       TechTag("FastAPI", TechTagTone.green),
-      TechTag("AWS", TechTagTone.cyan),
+      TechTag("Analytics", TechTagTone.cyan),
     ],
-    pills: <String>["Contract", "Remote", "\$8k-12k"],
+    pills: <String>["Project", "Hybrid", "One semester"],
     deliverables: <String>[
-      "A working dashboard against the live feed",
-      "Operator documentation",
-      "Handover session with the research team",
+      "A working dashboard against the cohort dataset",
+      "Faculty reviewer documentation",
+      "Handover session with the program office",
     ],
   ),
   Opportunity(
-    id: "patient-portal",
-    title: "Mobile App Redesign for Patient Portal",
-    organization: "Atlas Health Systems",
-    organizationKind: "Health system",
-    organizationStatus: VerificationStatus.verified,
+    id: "entrepreneurship-pitch",
+    title: "Entrepreneurship Pitch Competition Portal",
+    organization: "FIU Business School",
+    organizationKind: "University",
+    organizationStatus: VerificationStatus.pending,
     description:
-        "Redesign the patient portal for mobile. Accessibility is a hard requirement, not a nice to have.",
+        "Build the submission and judging portal for the spring pitch competition. Team registration, deliverable uploads, judge scoring.",
     tags: <TechTag>[
       TechTag("UX", TechTagTone.violet),
       TechTag("Figma", TechTagTone.gold),
-      TechTag("Contract", TechTagTone.cyan),
+      TechTag("Web", TechTagTone.cyan),
     ],
-    pills: <String>["Contract", "Remote", "\$8k-12k"],
+    pills: <String>["Project", "Remote", "8 weeks"],
     deliverables: <String>[
-      "Annotated high-fidelity screens",
-      "A component library the team can build from",
-      "An accessibility pass with findings",
-    ],
-  ),
-  Opportunity(
-    id: "field-ops",
-    title: "Field Operations Incident Tooling",
-    organization: "Northwind Logistics",
-    organizationKind: "Logistics",
-    organizationStatus: VerificationStatus.pending,
-    description:
-        "Internal tooling for incident triage across depots. Existing Splunk footprint.",
-    tags: <TechTag>[
-      TechTag("Python", TechTagTone.green),
-      TechTag("Splunk", TechTagTone.gold),
-      TechTag("On-site", TechTagTone.cyan),
-    ],
-    pills: <String>["Contract", "Hybrid", "\$10k-14k"],
-    deliverables: <String>[
-      "Triage runbook tooling",
-      "Alert routing configuration",
+      "Registration and submission flows",
+      "Judge scoring view with an audit trail",
     ],
   ),
 ];
@@ -172,7 +172,7 @@ const List<FeedPost> kFeed = <FeedPost>[
     authorAvatar: "assets/heroes/hero_04.png",
     authorStatus: VerificationStatus.verified,
     event: "shipped a verified deliverable",
-    body: "Closed out the telemetry dashboard milestone two days early.",
+    body: "Closed out the capstone dashboard milestone two days early.",
     vouchCount: 9,
   ),
   FeedPost(

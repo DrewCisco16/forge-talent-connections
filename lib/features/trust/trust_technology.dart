@@ -62,7 +62,7 @@ class TrustTechnology extends StatelessWidget {
             body:
                 "Every AI suggestion must clear a confidence bar before it is even considered. Anything uncertain goes to a person instead. A suggestion can never change your record — only verified actions by people do — and every decision is captured in a tamper-evident log.",
             seeItLabel: "See it: AI Match",
-            seeItRoute: "/match/atlas-telemetry",
+            seeItRoute: "/match/employment-law-presentation",
             filing: "US Patent Application Publication 2026/0246640 A1",
           ),
           const SizedBox(height: ForgeSpacing.gapCard),

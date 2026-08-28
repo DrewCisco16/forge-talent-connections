@@ -38,9 +38,9 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "B3 Resume Builder": const B3ResumeBuilder(),
   "B4 Credentials": const B4Credentials(),
   "B5 Trust Wallet": const B5TrustWallet(),
-  "B6 AI Match": const B6AiMatch(opportunityId: "atlas-telemetry"),
+  "B6 AI Match": const B6AiMatch(opportunityId: "employment-law-presentation"),
   "B7 Opportunity Detail": const B7OpportunityDetail(
-    opportunityId: "atlas-telemetry",
+    opportunityId: "employment-law-presentation",
   ),
   "C1 Feed": const C1Feed(),
   "C2 Video Pitch": const C2VideoPitch(),

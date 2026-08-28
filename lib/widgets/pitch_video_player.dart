@@ -97,11 +97,18 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
     final VideoPlayerController? controller = _controller;
     final bool playing = controller?.value.isPlaying ?? false;
 
+    // The window takes the video's own aspect ratio once it is known, so the
+    // full frame fills it edge to edge: nothing letterboxed, nothing cropped.
+    // Until then (pending/error) the design's card proportions hold.
+    final double cardWidth = (_ready == true && controller != null)
+        ? widget.height * controller.value.aspectRatio
+        : widget.width;
+
     return Column(
       children: <Widget>[
         Center(
           child: Container(
-            width: widget.width,
+            width: cardWidth,
             height: widget.height,
             decoration: BoxDecoration(
               color: ForgeColors.navyDeep,
@@ -113,15 +120,9 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
               alignment: Alignment.center,
               children: <Widget>[
                 if (_ready == true && controller != null)
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: controller.value.size.width,
-                      height: controller.value.size.height,
-                      child: VideoPlayer(controller),
-                    ),
-                  ),
+                  // The window already matches the video's aspect, so the
+                  // frame fills it exactly on every platform.
+                  Positioned.fill(child: VideoPlayer(controller)),
                 if (_ready == null)
                   Semantics(
                     label: "Video is loading",

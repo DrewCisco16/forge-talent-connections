@@ -71,7 +71,7 @@ class ChatThread {
 
   final String withName;
 
-  /// For instance "online · Atlas project".
+  /// For instance "online · FIU project".
   final String presence;
   final List<ChatMessage> messages;
 }
