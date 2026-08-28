@@ -1042,10 +1042,18 @@ def run_night(
         rulings = {**settled, **adjudicate(standing, challenges)}
         settled.update(rulings)
         res.challenges = len(challenges)
-        res.challenges_ruled = len(rulings)
+        # NAMING A COMMITMENT THAT EXISTS, which is not the same as the
+        # number of rulings. This reported len(rulings) -- every commitment
+        # the panel holds, whether anyone challenged it or not -- so a live
+        # round with ONE challenge printed "1 challenge(s), 18 naming a
+        # commitment that exists". The second figure was seventeen higher than
+        # the first and measured something else entirely.
+        standing_ids = {pr.id for pr in standing}
+        res.challenges_ruled = sum(1 for pid, _ in challenges
+                                   if pid in standing_ids)
         if challenges:
-            emit(f"  {len(challenges)} challenge(s), {len(rulings)} naming a "
-                 f"commitment that exists")
+            emit(f"  {len(challenges)} challenge(s), "
+                 f"{res.challenges_ruled} naming a commitment that exists")
         removed = eliminate(options, rulings, r.n)
         res.options_removed = [o.id for o in removed]
         if removed:

@@ -188,10 +188,37 @@ class Predicate:
                 self.unit))
 
     def render(self) -> str:
-        """How it appears to a seat being invited to challenge it."""
+        """How it appears to a seat being invited to challenge it.
+
+        THE FORMULA AND THE INPUT NAMES ARE PART OF IT, and leaving them out
+        made challenging impossible. A challenge names an input:
+
+            CHALLENGE | <id> | per_round = 9
+
+        but this showed only the subject, the relation and the value, so a
+        seat had no way to learn what any input was called. Measured live: the
+        one seat that tried wrote `saved_calls_per_run` against a commitment
+        whose input is `saving_per_run`. It named nothing, and was correctly
+        ignored -- for a fault entirely in what it had been shown.
+
+        The prompt told seats they were being given "the formula that computes
+        it, and the numbers put in". They were not. This makes that true.
+        """
         unit = f" {self.unit}" if self.unit else ""
-        return (f"[{self.id}] {self.subject.strip()} "
+        head = (f"[{self.id}] {self.subject.strip()} "
                 f"{RELATIONS[self.relation]} {_show(self.value)}{unit}")
+        routes = [(self.formula, self.inputs), *self.alternates]
+        lines = [head]
+        for formula, inputs in routes:
+            if not (formula or "").strip():
+                continue
+            shown = ", ".join(f"{n} = {_show(v)}" for n, v in inputs)
+            lines.append(f"       computed as {formula}"
+                         + (f", with {shown}" if shown else ""))
+        if len(lines) == 1:
+            lines.append("       (no formula declared, so nothing here can be "
+                         "recomputed or challenged)")
+        return "\n".join(lines)
 
 
 def predicate_id(option_id: str, subject: str, relation: str, value: Fraction,

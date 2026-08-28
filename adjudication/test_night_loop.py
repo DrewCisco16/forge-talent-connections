@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 from fractions import Fraction
 from typing import ClassVar
 
@@ -2532,3 +2533,60 @@ class TestOnlyCorroborationOutweighsTheProposer:
 
     def test_the_threshold_is_stated_not_implied(self):
         assert P.CORROBORATION_THRESHOLD == 2
+
+
+class TestASeatCanSeeWhatItIsAskedToChallenge:
+    """A challenge names an input:
+
+        CHALLENGE | <id> | per_round = 9
+
+    and the commitment was rendered as subject, relation and value only -- no
+    formula, no input names. So a seat had no way to learn what any input was
+    called, while the prompt told it it was being shown "the formula that
+    computes it, and the numbers put in".
+
+    Measured live: the one seat that attempted a challenge wrote
+    `saved_calls_per_run` against a commitment whose input is
+    `saving_per_run`. It named nothing and was correctly ignored, for a fault
+    entirely in what it had been shown.
+    """
+
+    def _pred(self, **kw):
+        base = {"option_id": "o", "subject": "cost", "relation": "=",
+                "value": Fraction(30), "unit": "api calls",
+                "formula": "rounds * per_round",
+                "inputs": (("rounds", Fraction(5)),
+                           ("per_round", Fraction(6)))}
+        base.update(kw)
+        return P.Predicate(**base)
+
+    def test_the_formula_is_shown(self):
+        assert "rounds * per_round" in self._pred().render()
+
+    def test_every_input_name_and_value_is_shown(self):
+        out = self._pred().render()
+        assert "rounds = 5" in out
+        assert "per_round = 6" in out
+
+    def test_a_seat_can_form_a_valid_challenge_from_what_it_sees(self):
+        """The property that matters: what is on the page is sufficient to
+        write a line the parser will bind."""
+        pred = self._pred()
+        shown = pred.render()
+        pid = re.search(r"\[(pred_[0-9a-f]{12})\]", shown).group(1)
+        name = re.search(r"with (\w+) = ", shown).group(1)
+        parsed = P.parse_challenges(f"CHALLENGE | {pid} | {name} = 9")
+        assert parsed == [(pid, {name: Fraction(9)})]
+        # And it binds to a real input rather than naming nothing.
+        assert name in dict(pred.inputs)
+
+    def test_an_alternate_route_is_shown_too(self):
+        """Another advocate's reasoning is challengeable on the same terms."""
+        pred = self._pred(alternates=(("a * b", (("a", Fraction(3)),
+                                                 ("b", Fraction(10)))),))
+        out = pred.render()
+        assert "a * b" in out and "a = 3" in out
+
+    def test_a_commitment_with_no_formula_says_so(self):
+        out = self._pred(formula="", inputs=()).render()
+        assert "no formula declared" in out
