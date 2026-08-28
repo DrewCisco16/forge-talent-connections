@@ -10,3 +10,6 @@ analyzer:
     todo: ignore
   exclude:
     - build/**
+    - android/**
+    - ios/**
+    - web/**

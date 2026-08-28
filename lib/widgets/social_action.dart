@@ -146,3 +146,124 @@ class StoryRing extends StatelessWidget {
     );
   }
 }
+
+/// The vouch signing control: held, not tapped.
+///
+/// Signing a vouch attaches a person's name to someone else's work permanently,
+/// so it is deliberately harder than a tap. The fill sweeps while held and the
+/// signature is only recorded when the sweep completes; lifting early cancels
+/// and records nothing.
+///
+/// Reduced motion: when animations are disabled the control completes on a
+/// single press rather than stranding the person behind an animation they
+/// cannot see.
+class HoldToSignVouch extends StatefulWidget {
+  const HoldToSignVouch({
+    required this.label,
+    required this.onCompleted,
+    this.holdDuration = const Duration(milliseconds: 1100),
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback onCompleted;
+  final Duration holdDuration;
+
+  @override
+  State<HoldToSignVouch> createState() => _HoldToSignVouchState();
+}
+
+class _HoldToSignVouchState extends State<HoldToSignVouch>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.holdDuration,
+  )..addStatusListener((AnimationStatus status) {
+      if (status == AnimationStatus.completed) widget.onCompleted();
+    });
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _start() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+      widget.onCompleted();
+      return;
+    }
+    _controller.forward();
+  }
+
+  void _cancel() {
+    if (!_controller.isCompleted) _controller.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+
+    return GestureDetector(
+      onTapDown: (_) => _start(),
+      onTapUp: (_) => _cancel(),
+      onTapCancel: _cancel,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (BuildContext context, Widget? child) {
+          return Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border.all(color: forge.violet, width: 1.5),
+              borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: _controller.value,
+                    child: const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: _kVibeGradient),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Icon(
+                        _controller.isCompleted
+                            ? Icons.verified
+                            : Icons.touch_app_outlined,
+                        size: 16,
+                        color: forge.text,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _controller.isCompleted
+                            ? widget.label
+                            : "${widget.label} — hold",
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.cardTitle,
+                          fontWeight: FontWeight.w700,
+                          color: forge.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

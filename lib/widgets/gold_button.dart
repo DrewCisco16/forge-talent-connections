@@ -51,13 +51,18 @@ class GoldButton extends StatelessWidget {
                     Icon(icon, size: 16, color: Colors.white),
                     const SizedBox(width: 8),
                   ],
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: ForgeType.bodyFamily,
-                      fontSize: ForgeType.cardTitle,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.cardTitle,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -112,13 +117,18 @@ class OutlineGoldButton extends StatelessWidget {
                   Icon(icon, size: 16, color: forge.gold),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: ForgeType.bodyFamily,
-                    fontSize: ForgeType.cardTitle,
-                    fontWeight: FontWeight.w700,
-                    color: forge.gold,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.cardTitle,
+                      fontWeight: FontWeight.w700,
+                      color: forge.gold,
+                    ),
                   ),
                 ),
               ],
