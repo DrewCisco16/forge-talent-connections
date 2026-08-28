@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
-"""Query OpenAlex (discovery) and Crossref (verification) for journal
-articles from 2024 onward on themes relevant to the product analysis, and
-print the registered metadata to stdout. Read-only; no commits."""
+"""Crossref verification pass: full registered metadata + retraction flags
+for the selected DOIs (all taken verbatim from OpenAlex registry records).
+Read-only; prints to stdout."""
 import json
 import time
 import urllib.parse
 import urllib.request
 
-THEMES = [
-    ("micro-credentials", "micro-credentials employability graduates higher education"),
-    ("ai-career", "generative artificial intelligence career development university students"),
-    ("ai-hiring-perception", "artificial intelligence hiring applicant reactions fairness perceptions"),
-    ("verifiable-credentials", "verifiable credentials blockchain diploma employer verification"),
-    ("genz-linkedin", "Generation Z LinkedIn professional identity social media career"),
-    ("referrals", "employee referrals social capital job search networks"),
-    ("endorsement-trust", "peer endorsement online reputation system trust platform"),
-    ("gig-reputation", "gig economy platform reputation trust freelancer"),
-    ("genz-work", "Generation Z workplace expectations mentoring early career"),
-    ("eportfolio", "e-portfolio skills employability signaling employers graduates"),
-    ("gamification", "gamification engagement mobile application Generation Z"),
-    ("psych-safety", "psychological safety virtual team collaboration students"),
-    ("privacy", "privacy concerns young adults personal data platforms"),
-    ("skills-hiring", "skills-based hiring degree requirements employers"),
-]
-
-EXPLICIT_DOIS = [
-    # Seen in publisher URLs during web search; verify against the registry.
+DOIS = [
     "10.1080/03075079.2025.2516709",
+    "10.3390/educsci15050525",
     "10.1007/s11528-025-01148-z",
+    "10.3390/educsci14121307",
+    "10.1007/s11846-024-00789-3",
+    "10.1111/ijsa.12472",
+    "10.1145/3696457",
+    "10.1016/j.techfore.2025.124042",
+    "10.1007/s10639-024-12493-6",
+    "10.3390/s25113450",
+    "10.1111/ejed.12862",
+    "10.3390/admsci15010029",
+    "10.3390/admsci15040133",
+    "10.1002/job.2775",
+    "10.1177/14697874241275346",
+    "10.1007/s11159-024-10111-8",
+    "10.1016/j.heliyon.2024.e25948",
+    "10.1080/13639080.2024.2383561",
+    "10.3389/fcomm.2024.1460321",
 ]
 
 
@@ -37,72 +36,28 @@ def fetch(url):
         return json.load(r)
 
 
-def abstract_from_inverted(inv):
-    if not inv:
-        return ""
-    pos = {}
-    for word, idxs in inv.items():
-        for i in idxs:
-            pos[i] = word
-    words = [pos[i] for i in sorted(pos)]
-    return " ".join(words[:120])
-
-
-def show_openalex(theme, query):
-    q = urllib.parse.quote(query)
-    url = ("https://api.openalex.org/works?search=" + q +
-           "&filter=from_publication_date:2024-01-01,type:article"
-           "&sort=relevance_score:desc&per-page=4")
-    data = fetch(url)
-    for w in data.get("results", []):
-        authors = [a["author"]["display_name"] for a in w.get("authorships", [])][:8]
-        src = (w.get("primary_location") or {}).get("source") or {}
-        print(json.dumps({
-            "theme": theme,
-            "title": w.get("title"),
-            "authors": authors,
-            "year": w.get("publication_year"),
-            "venue": src.get("display_name"),
-            "doi": (w.get("doi") or "").replace("https://doi.org/", ""),
-            "type": w.get("type"),
-            "cited_by": w.get("cited_by_count"),
-            "abstract": abstract_from_inverted(w.get("abstract_inverted_index")),
-        }, ensure_ascii=False))
-
-
-def show_crossref_doi(doi):
+for doi in DOIS:
     url = "https://api.crossref.org/works/" + urllib.parse.quote(doi)
     try:
         m = fetch(url)["message"]
     except Exception as e:  # noqa: BLE001 - report and continue
         print(json.dumps({"crossref_doi": doi, "error": str(e)}))
-        return
+        time.sleep(1)
+        continue
     print(json.dumps({
         "crossref_doi": doi,
         "title": (m.get("title") or [""])[0],
-        "authors": [f"{a.get('family','')}, {a.get('given','')}" for a in m.get("author", [])][:10],
+        "authors": [f"{a.get('family','')}, {a.get('given','')}" for a in m.get("author", [])][:12],
         "container": (m.get("container-title") or [""])[0],
         "year": (m.get("issued", {}).get("date-parts") or [[None]])[0][0],
         "volume": m.get("volume"),
         "issue": m.get("issue"),
         "pages": m.get("page"),
+        "article_number": m.get("article-number"),
         "type": m.get("type"),
         "update_to": m.get("update-to", []),
         "publisher": m.get("publisher"),
     }, ensure_ascii=False))
-
-
-for theme, query in THEMES:
-    print(f"===== THEME {theme} =====")
-    try:
-        show_openalex(theme, query)
-    except Exception as e:  # noqa: BLE001
-        print(json.dumps({"theme": theme, "error": str(e)}))
-    time.sleep(1)
-
-print("===== EXPLICIT DOI CHECKS (Crossref) =====")
-for doi in EXPLICIT_DOIS:
-    show_crossref_doi(doi)
     time.sleep(1)
 
 print("===== DONE =====")
