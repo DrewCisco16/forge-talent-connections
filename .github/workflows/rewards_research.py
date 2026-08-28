@@ -1,8 +1,7 @@
-# Registry-first scholarly discovery + Crossref verification.
-# Runs on a GitHub runner because the dev container's egress proxy blocks
-# scholarly hosts. Discovery via OpenAlex; every candidate is then resolved
-# against Crossref (api.crossref.org/works/{doi}) so nothing unverified is
-# ever cited. Output goes to the job log only.
+# Registry-first scholarly discovery + Crossref verification, pass 2.
+# Title/abstract-scoped queries for precision on referral incentives,
+# reward-type preferences, and TPB-in-gamification. Runs on a GitHub runner
+# because the dev container's egress proxy blocks scholarly hosts.
 import json
 import time
 import urllib.parse
@@ -11,15 +10,13 @@ import urllib.request
 MAILTO = "research@example.org"
 
 QUERIES = [
-    # (label, openalex fulltext search)
-    ("gamif_genz", "gamification rewards motivation Generation Z"),
-    ("tpb_apps", "theory of planned behavior mobile application intention"),
-    ("referral", "referral program incentive customer acquisition"),
-    ("loyalty_exp", "loyalty program experiential rewards young consumers"),
-    ("leaderboard", "leaderboard competition motivation gamification"),
-    ("points_engage", "points reward system engagement retention app"),
-    ("lottery_incent", "lottery incentive uncertain reward motivation"),
-    ("fairness_contest", "perceived fairness contest reward participation"),
+    ("referral_prog", "referral program reward incentive"),
+    ("genz_gamif", "gamification Generation Z"),
+    ("loyalty_young", "loyalty program millennials Generation Z"),
+    ("reward_type", "monetary non-monetary incentive motivation experiment"),
+    ("tpb_gamif", "theory of planned behavior gamification"),
+    ("leaderboard_t", "leaderboard motivation"),
+    ("wiifm", "perceived value continuance intention mobile app rewards"),
 ]
 
 
@@ -31,10 +28,11 @@ def get(url):
 
 def openalex(label, query):
     url = (
-        "https://api.openalex.org/works?search="
+        "https://api.openalex.org/works?"
+        + "filter=title_and_abstract.search:"
         + urllib.parse.quote(query)
-        + "&filter=from_publication_date:2024-01-01,type:article,is_retracted:false"
-        + "&sort=cited_by_count:desc&per-page=12&mailto=" + MAILTO
+        + ",from_publication_date:2024-01-01,type:article,is_retracted:false"
+        + "&sort=cited_by_count:desc&per-page=10&mailto=" + MAILTO
     )
     try:
         data = get(url)
@@ -53,11 +51,6 @@ def openalex(label, query):
                 "title": w.get("title"),
                 "year": w.get("publication_year"),
                 "cited": w.get("cited_by_count"),
-                "venue": (w.get("primary_location") or {})
-                .get("source", {})
-                .get("display_name")
-                if (w.get("primary_location") or {}).get("source")
-                else None,
             }
         )
     return out
@@ -83,7 +76,6 @@ def crossref(doi):
             f"{a.get('family', '?')}, {(a.get('given') or '?')[:1]}."
             for a in m.get("author", [])
         ],
-        "update_to": m.get("update-to"),
         "retracted": any(
             u.get("type") == "retraction" for u in m.get("update-to", []) or []
         ),
