@@ -184,8 +184,8 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
 
 /// The branch's service flag.
 ///
-/// Shows the real flag artwork from assets/flags/<id>.png the moment the file
-/// exists. Until then it falls back to a block in the branch's authentic flag
+/// Shows the real flag artwork from `assets/flags/{id}.png` the moment the
+/// file exists. Until then it falls back to a block in the branch's authentic flag
 /// colour — never a themed or invented substitute. Flag colours are exempt
 /// from theming.
 class _FlagBlock extends StatelessWidget {

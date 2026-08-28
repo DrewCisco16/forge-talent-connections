@@ -227,13 +227,17 @@ class _TechCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(
+                // Flexible so the link text wraps at large text sizes
+                // instead of running past the card edge.
+                Flexible(
+                  child: Text(
                   seeItLabel,
                   style: TextStyle(
                     fontFamily: ForgeType.bodyFamily,
                     fontSize: ForgeType.caption,
                     fontWeight: FontWeight.w700,
                     color: accent,
+                  ),
                   ),
                 ),
                 const SizedBox(width: 4),

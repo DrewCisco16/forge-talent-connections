@@ -98,7 +98,12 @@ class _ScoreRingState extends State<ScoreRing>
               strokeWidth: widget.strokeWidth,
             ),
             child: Center(
-              child: Column(
+              // The ring is a fixed-diameter dial, so its figures cap their
+              // text scaling like any gauge — the full-size reading lives in
+              // the surrounding copy, which scales freely.
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.45,
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Text(
@@ -121,6 +126,7 @@ class _ScoreRingState extends State<ScoreRing>
                       ),
                     ),
                 ],
+                ),
               ),
             ),
           ),

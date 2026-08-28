@@ -14,13 +14,13 @@ import "screen_catalog.dart";
 /// exists to make readable. The SOP requires the edges be tested, not just the
 /// happy path.
 ///
-/// 1.3 is a realistic large-text setting. Anything beyond roughly this needs a
-/// reflowing layout rather than a scaled one, which is a design decision, not
-/// a code fix — so this pins the range the current design is expected to hold.
+/// 1.3 is a realistic large-text setting; 2.0 is the top of the standard iOS
+/// Dynamic Type range. Every screen reflows — wrapping, truncating, or
+/// growing — rather than clipping, at both.
 void main() {
-  const double scale = 1.3;
   const Size phone = Size(440, 956);
 
+  for (final double scale in <double>[1.3, 2.0]) {
   group("layout holds at ${scale}x text scale", () {
     for (final MapEntry<String, Widget> screen in screenCatalog.entries) {
       testWidgets(screen.key, (WidgetTester tester) async {
@@ -37,7 +37,7 @@ void main() {
             child: MaterialApp(
               theme: buildForgeTheme(),
               home: MediaQuery(
-                data: const MediaQueryData(
+                data: MediaQueryData(
                   size: phone,
                   disableAnimations: true,
                   textScaler: TextScaler.linear(scale),
@@ -58,4 +58,5 @@ void main() {
       });
     }
   });
+  }
 }

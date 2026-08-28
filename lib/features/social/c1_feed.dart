@@ -76,7 +76,11 @@ class C1Feed extends ConsumerWidget {
             value: ref.watch(storiesProvider),
             pendingLabel: "Loading stories",
             builder: (List<Story> stories) => SizedBox(
-              height: 92,
+              // Ring (62) + gap + one label line; the label line grows with
+              // the accessibility text setting so names never clip.
+              height: 74 +
+                  MediaQuery.textScalerOf(context).scale(ForgeType.caption) *
+                      1.6,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: stories.length,

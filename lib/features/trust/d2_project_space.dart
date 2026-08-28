@@ -210,16 +210,22 @@ class DottedDropZone extends StatelessWidget {
       borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
       child: CustomPaint(
         painter: _DashedBorderPainter(color: forge.stroke),
-        child: SizedBox(
-          height: 88,
+        // A minimum height rather than a fixed one: at large accessibility
+        // text sizes the caption wraps and the zone grows with it.
+        child: Container(
           width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 88),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Icon(Icons.upload_file, size: 21, color: forge.textSub),
               const SizedBox(height: 7),
               Text(
                 "Drop a file to submit it for checking",
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: ForgeType.bodyFamily,
                   fontSize: ForgeType.caption,

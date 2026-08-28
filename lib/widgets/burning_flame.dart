@@ -12,10 +12,19 @@ import "../theme/forge_theme.dart";
 /// unison, plus rising embers and a breathing ground glow. The mark sits in
 /// front, so the fire reads as burning behind the logo.
 ///
+/// The fire is shaped to the logo: the whole widget is exactly the mark's
+/// bounding box, the painter is hard-clipped to it, and tongue heights are
+/// clamped inside it — so the burn never spills past the top or bottom of
+/// the design.
+///
 /// Reduced motion: when `MediaQuery.disableAnimations` is set, no controller
 /// runs and the static mark renders with a fixed soft glow — no fire is drawn,
 /// because a frozen frame of flames reads as a smudge, not a burn.
 class BurningFlame extends StatefulWidget {
+  /// Aspect ratio of assets/brand/forge_flame.png (578 x 780). The widget's
+  /// footprint is exactly the mark's box, so the fire cannot escape it.
+  static const double logoAspect = 578 / 780;
+
   const BurningFlame({
     required this.asset,
     this.height = 132,
@@ -73,50 +82,25 @@ class _BurningFlameState extends State<BurningFlame>
   Widget build(BuildContext context) {
     final ForgeTheme forge = ForgeTheme.of(context);
     final double h = widget.height;
-    final double stageWidth = h * 1.5;
-    final double stageHeight = h * 1.35;
 
     return SizedBox(
-      width: stageWidth,
-      height: stageHeight,
+      width: h * BurningFlame.logoAspect,
+      height: h,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (BuildContext context, Widget? child) {
-          final double t = _controller.value;
-          final bool still = !_controller.isAnimating;
-          final double breathe =
-              still ? 0.5 : 0.5 + 0.5 * math.sin(t * 2 * math.pi);
-
           return Stack(
-            alignment: Alignment.center,
+            fit: StackFit.expand,
             children: <Widget>[
-              // Ground glow: the heat under the burn, breathing.
-              Positioned(
-                bottom: 0,
-                child: Container(
-                  width: h * 1.1,
-                  height: h * 0.42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: forge.gold
-                            .withValues(alpha: 0.22 + 0.16 * breathe),
-                        blurRadius: h * 0.42,
-                        spreadRadius: h * 0.05,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // The fire, entirely behind the mark: waving tongues + embers.
-              Positioned.fill(
+              // The fire — glow, waving tongues, embers — hard-clipped to the
+              // mark's own box so the burn never spills past the design.
+              ClipRect(
                 child: CustomPaint(
                   painter: _FirePainter(
                     tongues: _tongues,
                     embers: _embers,
-                    t: t,
-                    animating: !still,
+                    t: _controller.value,
+                    animating: _controller.isAnimating,
                     colors: forge.goldGradient,
                   ),
                 ),
@@ -124,7 +108,6 @@ class _BurningFlameState extends State<BurningFlame>
               // The original mark, in front, untouched: no transform, ever.
               Image.asset(
                 widget.asset,
-                height: h,
                 fit: BoxFit.contain,
                 semanticLabel: "FORGE Talent Connections flame",
               ),
@@ -194,19 +177,38 @@ class _FirePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // At rest (reduced motion) no fire is drawn at all.
-    if (!animating) return;
-
     final double cx = size.width / 2;
-    final double base = size.height * 0.88;
+    // The bed sits just above the box bottom so tongue-base blur fades out
+    // before the clip instead of being cut to a straight line.
+    final double base = size.height * 0.94;
+    final double breathe =
+        animating ? 0.5 + 0.5 * math.sin(t * 2 * math.pi) : 0.5;
+
+    // Ground glow: the heat under the burn, breathing (fixed at rest). Kept
+    // narrow enough that its blur fades out before the clip edges, so no
+    // straight clipped line ever shows.
+    final Paint glowPaint = Paint()
+      ..color = colors.first.withValues(alpha: 0.14 + 0.10 * breathe)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.height * 0.045);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, size.height * 0.87),
+        width: size.width * 0.58,
+        height: size.height * 0.13,
+      ),
+      glowPaint,
+    );
+
+    // At rest (reduced motion) no fire is drawn — only the soft glow above.
+    if (!animating) return;
 
     // Two passes of tongues: a deep, dim layer and a bright, tighter layer in
     // front of it, both still behind the mark. Each tongue waves on its own
     // frequencies, so the bed licks and leans rather than pulsing as one.
     for (final (double scale, double alpha, Color color, double blur)
         in <(double, double, Color, double)>[
-      (1.25, 0.34, colors.last, 7),
-      (0.95, 0.50, colors.first, 4),
+      (1.05, 0.34, colors.last, 5),
+      (0.85, 0.50, colors.first, 4),
     ]) {
       final Paint paint = Paint()
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
@@ -218,14 +220,18 @@ class _FirePainter extends CustomPainter {
             2 * math.pi * (tongue.swayFreq * t + tongue.swayPhase));
 
         // Outer tongues are shorter, so the bed silhouettes like a fire.
+        // Heights are clamped so every tip stays inside the logo's box.
         final double edgeFalloff = 1 - 0.55 * tongue.lane.abs();
-        final double tongueHeight = size.height *
-            tongue.height *
-            scale *
-            edgeFalloff *
-            (0.78 + 0.22 * rise);
+        final double tongueHeight = (size.height *
+                tongue.height *
+                scale *
+                edgeFalloff *
+                (0.78 + 0.22 * rise))
+            .clamp(0.0, base * 0.92);
         final double halfWidth = size.width * tongue.width * scale / 2;
-        final double x = cx + tongue.lane * size.width * 0.30;
+        // Lanes span less than the half-width so flanks, sway, and blur all
+        // fade out before the clip edges — no straight cut lines.
+        final double x = cx + tongue.lane * size.width * 0.24;
         final double tipX = x + sway * halfWidth * 1.6;
         final double tipY = base - tongueHeight;
 

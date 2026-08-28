@@ -142,15 +142,21 @@ class FeedCard extends StatelessWidget {
               if (action != null) action!,
               const Spacer(),
               if (onMessage != null)
-                InkWell(
-                  onTap: onMessage,
-                  child: Text(
-                    "Message",
-                    style: TextStyle(
-                      fontFamily: ForgeType.bodyFamily,
-                      fontSize: ForgeType.caption,
-                      fontWeight: FontWeight.w700,
-                      color: forge.textSub,
+                // Flexible so the link truncates at large text sizes
+                // rather than overflowing the card.
+                Flexible(
+                  child: InkWell(
+                    onTap: onMessage,
+                    child: Text(
+                      "Message",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.caption,
+                        fontWeight: FontWeight.w700,
+                        color: forge.textSub,
+                      ),
                     ),
                   ),
                 ),

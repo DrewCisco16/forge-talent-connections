@@ -54,12 +54,16 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
               children: <Widget>[
                 Icon(Icons.search, size: 16, color: forge.textSub),
                 const SizedBox(width: 8),
-                Text(
+                Expanded(
+                  child: Text(
                   "Search projects",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: ForgeType.bodyFamily,
                     fontSize: ForgeType.body,
                     color: forge.textSub,
+                  ),
                   ),
                 ),
               ],
@@ -117,10 +121,13 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    const SectionLabel("Search results"),
-                    const Spacer(),
+                    // Expanded lets the label wrap at large text sizes
+                    // instead of colliding with the count.
+                    const Expanded(child: SectionLabel("Search results")),
+                    const SizedBox(width: 8),
                     Text(
                       "${items.length} projects",
+                      maxLines: 1,
                       style: TextStyle(
                         fontFamily: ForgeType.bodyFamily,
                         fontSize: ForgeType.caption,

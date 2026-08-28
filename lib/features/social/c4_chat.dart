@@ -33,27 +33,35 @@ class C4Chat extends ConsumerWidget {
                   child: Icon(Icons.arrow_back, size: 19, color: forge.text),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      thread.withName,
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.cardTitle,
-                        fontWeight: FontWeight.w700,
-                        color: forge.text,
+                // Expanded so a long name or presence line truncates at
+                // large text sizes instead of pushing past the edge.
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        thread.withName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.cardTitle,
+                          fontWeight: FontWeight.w700,
+                          color: forge.text,
+                        ),
                       ),
-                    ),
-                    Text(
-                      thread.presence,
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.caption,
-                        color: forge.green,
+                      Text(
+                        thread.presence,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          color: forge.green,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),

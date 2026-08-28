@@ -46,15 +46,17 @@
       transition: opacity 260ms ease-out;
       font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    /* The logo never moves; the fire waves behind it. */
-    .mark { position: relative; width: 120px; }
+    /* The logo never moves; the fire waves behind it — clipped to the
+       mark's own box so the burn never spills past the design. */
+    .mark { position: relative; width: 120px; overflow: hidden; }
     .mark img {
-      position: relative; z-index: 1; width: 120px; height: auto;
+      display: block; position: relative; z-index: 1;
+      width: 120px; height: auto;
       filter: drop-shadow(0 0 16px rgba(227, 179, 65, 0.30));
     }
     .mark .pyre, .mark .pyre2 {
       content: ""; position: absolute; z-index: 0;
-      left: 50%; bottom: 4px; width: 96px; height: 120px;
+      left: 50%; bottom: 4px; width: 96px; height: 100px;
       transform-origin: 50% 100%;
       background: radial-gradient(ellipse 50% 65% at 50% 90%,
         rgba(242, 199, 89, 0.55), rgba(199, 153, 41, 0.25) 55%,
@@ -63,7 +65,7 @@
       animation: forge-wave 2.2s ease-in-out infinite;
     }
     .mark .pyre2 {
-      width: 70px; height: 140px; filter: blur(7px);
+      width: 70px; height: 118px; filter: blur(7px);
       animation: forge-wave2 1.7s ease-in-out infinite;
     }
     @keyframes forge-wave {
