@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../mock/providers.dart";
+import "../../util/linear_search.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
@@ -92,37 +93,71 @@ class D5VeteranPathways extends ConsumerWidget {
                 AsyncView<List<PathwayMatch>>(
                   value: ref.watch(pathwaysProvider),
                   pendingLabel: "Translating your role",
-                  builder: (List<PathwayMatch> matches) => Column(
-                    children: <Widget>[
-                      for (final PathwayMatch m in matches)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: Text(
-                                  m.role,
-                                  style: TextStyle(
-                                    fontFamily: ForgeType.bodyFamily,
-                                    fontSize: ForgeType.body,
-                                    color: forge.text,
+                  builder: (List<PathwayMatch> matches) {
+                    // Brute-force maximum over the served fit figures: a
+                    // linear scan tracking the largest value's index. Pure
+                    // display ranking — the figures themselves are the
+                    // backend's, and stay concept placeholders here.
+                    final int? top = indexOfMax(
+                        matches, (PathwayMatch m) => m.fitPercent);
+                    return Column(
+                      children: <Widget>[
+                        for (final (int i, PathwayMatch m)
+                            in matches.indexed)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    m.role,
+                                    style: TextStyle(
+                                      fontFamily: ForgeType.bodyFamily,
+                                      fontSize: ForgeType.body,
+                                      fontWeight: i == top
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                      color: forge.text,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Text(
-                                "${m.fitPercent}% fit",
-                                style: TextStyle(
-                                  fontFamily: ForgeType.bodyFamily,
-                                  fontSize: ForgeType.caption,
-                                  fontWeight: FontWeight.w700,
-                                  color: forge.green,
+                                if (i == top)
+                                  Container(
+                                    margin:
+                                        const EdgeInsets.only(right: 8),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                          colors: forge.goldGradient),
+                                      borderRadius: BorderRadius.circular(
+                                          ForgeShape.pillRadius),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    child: const Text(
+                                      "Top match",
+                                      style: TextStyle(
+                                        fontFamily: ForgeType.bodyFamily,
+                                        fontSize: ForgeType.chip,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  "${m.fitPercent}% fit",
+                                  style: TextStyle(
+                                    fontFamily: ForgeType.bodyFamily,
+                                    fontSize: ForgeType.caption,
+                                    fontWeight: FontWeight.w700,
+                                    color: forge.green,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

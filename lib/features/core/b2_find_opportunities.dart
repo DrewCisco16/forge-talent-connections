@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../../mock/providers.dart";
+import "../../util/linear_search.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
@@ -22,6 +23,19 @@ class B2FindOpportunities extends ConsumerStatefulWidget {
 
 class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
   String _activeFilter = "Skills";
+  String _query = "";
+
+  /// Whether one project matches the query, checked field by field. Feeds
+  /// the linear search below; presentation-only filtering of data the
+  /// backend already served.
+  bool _matchesQuery(Opportunity o) {
+    final String q = _query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return o.title.toLowerCase().contains(q) ||
+        o.organization.toLowerCase().contains(q) ||
+        o.description.toLowerCase().contains(q) ||
+        o.tags.any((TechTag t) => t.label.toLowerCase().contains(q));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,15 +69,26 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                 Icon(Icons.search, size: 16, color: forge.textSub),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                  "Search projects",
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: ForgeType.bodyFamily,
-                    fontSize: ForgeType.body,
-                    color: forge.textSub,
-                  ),
+                  // A live linear search over the served list: every
+                  // keystroke re-scans each project sequentially.
+                  child: TextField(
+                    onChanged: (String value) =>
+                        setState(() => _query = value),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText: "Search projects",
+                      hintStyle: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.body,
+                        color: forge.textSub,
+                      ),
+                    ),
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.body,
+                      color: forge.text,
+                    ),
                   ),
                 ),
               ],
@@ -116,36 +141,74 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
           AsyncView<List<Opportunity>>(
             value: ref.watch(opportunitiesProvider),
             pendingLabel: "Searching",
-            builder: (List<Opportunity> items) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    // Expanded lets the label wrap at large text sizes
-                    // instead of colliding with the count.
-                    const Expanded(child: SectionLabel("Search results")),
-                    const SizedBox(width: 8),
-                    Text(
-                      "${items.length} projects",
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.caption,
-                        color: forge.textSub,
+            builder: (List<Opportunity> items) {
+              // Linear search, multiple-match variant: scan every project
+              // and keep all hits. An empty result renders explicitly —
+              // never a silent blank.
+              final List<int> hits = linearSearchAll(items, _matchesQuery);
+              final List<Opportunity> shown =
+                  <Opportunity>[for (final int i in hits) items[i]];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      // Expanded lets the label wrap at large text sizes
+                      // instead of colliding with the count.
+                      const Expanded(child: SectionLabel("Search results")),
+                      const SizedBox(width: 8),
+                      Text(
+                        _query.trim().isEmpty
+                            ? "${items.length} projects"
+                            : "${shown.length} of ${items.length} projects",
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          color: forge.textSub,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: ForgeSpacing.gapCard),
-                for (final Opportunity o in items) ...<Widget>[
-                  OpportunityCard(
-                    opportunity: o,
-                    onTap: () => context.go("/opportunity/${o.id}"),
+                    ],
                   ),
                   const SizedBox(height: ForgeSpacing.gapCard),
+                  if (shown.isEmpty)
+                    ForgeCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            "No projects matched your search",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.body,
+                              fontWeight: FontWeight.w700,
+                              color: forge.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Nothing is hidden — every project was checked. "
+                            "Clear the search to see all ${items.length}.",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              height: 1.35,
+                              color: forge.textSub,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  for (final Opportunity o in shown) ...<Widget>[
+                    OpportunityCard(
+                      opportunity: o,
+                      onTap: () => context.go("/opportunity/${o.id}"),
+                    ),
+                    const SizedBox(height: ForgeSpacing.gapCard),
+                  ],
                 ],
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(height: 24),
         ],
