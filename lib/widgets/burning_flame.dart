@@ -4,16 +4,17 @@ import "package:flutter/material.dart";
 
 import "../theme/forge_theme.dart";
 
-/// The burning flame: the brand mark, actually alight.
+/// The burning flame: the original mark, with fire waving behind it.
 ///
-/// Fire is drawn procedurally around the flame artwork — rising ember
-/// particles and a breathing ground glow — while the mark itself flickers with
-/// a small scale-and-sway. Everything is painted in the brand golds, so the
-/// fire reads as the logo burning rather than an effect pasted behind it.
+/// The logo itself is never transformed — no pulsing, no scaling. The burn is
+/// a bed of flame tongues drawn behind the mark, each waving on its own phase
+/// and frequency so they lick upward organically rather than throbbing in
+/// unison, plus rising embers and a breathing ground glow. The mark sits in
+/// front, so the fire reads as burning behind the logo.
 ///
 /// Reduced motion: when `MediaQuery.disableAnimations` is set, no controller
-/// runs and the static flame renders with a fixed soft glow. The animation is
-/// an enhancement, never a requirement for the splash to function.
+/// runs and the static mark renders with a fixed soft glow — no fire is drawn,
+/// because a frozen frame of flames reads as a smudge, not a burn.
 class BurningFlame extends StatefulWidget {
   const BurningFlame({
     required this.asset,
@@ -34,21 +35,22 @@ class _BurningFlameState extends State<BurningFlame>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    // One full particle cycle; phases spread the embers across it so the fire
-    // has no visible loop seam.
-    duration: const Duration(seconds: 2),
+    // One full cycle. Every wave frequency is an integer number of cycles per
+    // loop, so the burn has no visible seam when it repeats.
+    duration: const Duration(milliseconds: 2400),
   );
 
+  late final List<_Tongue> _tongues;
   late final List<_Ember> _embers;
   bool _started = false;
 
   @override
   void initState() {
     super.initState();
-    // Fixed seed: the fire looks alive but tests and goldens stay
-    // deterministic frame for frame.
+    // Fixed seed: the fire looks alive but renders deterministically.
     final math.Random random = math.Random(7);
-    _embers = List<_Ember>.generate(42, (_) => _Ember(random));
+    _tongues = List<_Tongue>.generate(9, (int i) => _Tongue(random, i, 9));
+    _embers = List<_Ember>.generate(30, (_) => _Ember(random));
   }
 
   @override
@@ -71,7 +73,6 @@ class _BurningFlameState extends State<BurningFlame>
   Widget build(BuildContext context) {
     final ForgeTheme forge = ForgeTheme.of(context);
     final double h = widget.height;
-    // The stage leaves room above for rising embers and below for the glow.
     final double stageWidth = h * 1.5;
     final double stageHeight = h * 1.35;
 
@@ -83,18 +84,13 @@ class _BurningFlameState extends State<BurningFlame>
         builder: (BuildContext context, Widget? child) {
           final double t = _controller.value;
           final bool still = !_controller.isAnimating;
-          // Flicker curves; at rest they collapse to their midpoints.
           final double breathe =
               still ? 0.5 : 0.5 + 0.5 * math.sin(t * 2 * math.pi);
-          final double flicker = still
-              ? 0
-              : math.sin(t * 14 * math.pi) * 0.5 +
-                  math.sin(t * 6 * math.pi) * 0.5;
 
           return Stack(
             alignment: Alignment.center,
             children: <Widget>[
-              // Ground glow: the heat under the flame, breathing.
+              // Ground glow: the heat under the burn, breathing.
               Positioned(
                 bottom: 0,
                 child: Container(
@@ -113,10 +109,11 @@ class _BurningFlameState extends State<BurningFlame>
                   ),
                 ),
               ),
-              // Rising embers, painted behind the mark.
+              // The fire, entirely behind the mark: waving tongues + embers.
               Positioned.fill(
                 child: CustomPaint(
-                  painter: _EmberPainter(
+                  painter: _FirePainter(
+                    tongues: _tongues,
                     embers: _embers,
                     t: t,
                     animating: !still,
@@ -124,20 +121,12 @@ class _BurningFlameState extends State<BurningFlame>
                   ),
                 ),
               ),
-              // The mark itself, flickering: a small vertical stretch and sway,
-              // the way a flame leans and recovers.
-              Transform(
-                alignment: Alignment.bottomCenter,
-                transform: Matrix4.identity()
-                  ..scaleByDouble(
-                      1.0 + 0.012 * flicker, 1.0 + 0.03 * flicker, 1.0, 1.0)
-                  ..rotateZ(0.010 * flicker),
-                child: Image.asset(
-                  widget.asset,
-                  height: h,
-                  fit: BoxFit.contain,
-                  semanticLabel: "FORGE Talent Connections flame",
-                ),
+              // The original mark, in front, untouched: no transform, ever.
+              Image.asset(
+                widget.asset,
+                height: h,
+                fit: BoxFit.contain,
+                semanticLabel: "FORGE Talent Connections flame",
               ),
             ],
           );
@@ -147,32 +136,57 @@ class _BurningFlameState extends State<BurningFlame>
   }
 }
 
-/// One ember's fixed characteristics; its motion comes from the shared clock.
+/// One flame tongue's fixed characteristics; its wave rides the shared clock.
+class _Tongue {
+  _Tongue(math.Random random, int index, int count)
+      // Spread across the base with slight jitter; outer tongues sit lower.
+      : lane = (index / (count - 1)) * 2 - 1,
+        // Integer cycles per loop keep the repeat seamless.
+        riseFreq = 1 + random.nextInt(3),
+        swayFreq = 1 + random.nextInt(2),
+        risePhase = random.nextDouble(),
+        swayPhase = random.nextDouble(),
+        width = 0.10 + random.nextDouble() * 0.08,
+        height = 0.5 + random.nextDouble() * 0.45;
+
+  /// Horizontal position, -1..1 across the fire bed.
+  final double lane;
+  final int riseFreq;
+  final int swayFreq;
+  final double risePhase;
+  final double swayPhase;
+
+  /// Base width and nominal height, as fractions of the stage.
+  final double width;
+  final double height;
+}
+
+/// One ember's fixed characteristics.
 class _Ember {
   _Ember(math.Random random)
       : phase = random.nextDouble(),
         lane = random.nextDouble() * 2 - 1,
         speed = 0.6 + random.nextDouble() * 0.8,
-        size = 1.4 + random.nextDouble() * 2.4,
+        size = 1.4 + random.nextDouble() * 2.2,
         sway = 0.5 + random.nextDouble() * 1.5;
 
   final double phase;
-
-  /// Horizontal starting lane, -1..1 across the flame's width.
   final double lane;
   final double speed;
   final double size;
   final double sway;
 }
 
-class _EmberPainter extends CustomPainter {
-  const _EmberPainter({
+class _FirePainter extends CustomPainter {
+  const _FirePainter({
+    required this.tongues,
     required this.embers,
     required this.t,
     required this.animating,
     required this.colors,
   });
 
+  final List<_Tongue> tongues;
   final List<_Ember> embers;
   final double t;
   final bool animating;
@@ -180,36 +194,84 @@ class _EmberPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // At rest (reduced motion) the fire is not drawn at all: a static frame of
-    // frozen sparks reads as dirt on the screen, not as fire.
+    // At rest (reduced motion) no fire is drawn at all.
     if (!animating) return;
 
     final double cx = size.width / 2;
-    final double base = size.height * 0.86;
-    final Paint paint = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    final double base = size.height * 0.88;
 
+    // Two passes of tongues: a deep, dim layer and a bright, tighter layer in
+    // front of it, both still behind the mark. Each tongue waves on its own
+    // frequencies, so the bed licks and leans rather than pulsing as one.
+    for (final (double scale, double alpha, Color color, double blur)
+        in <(double, double, Color, double)>[
+      (1.25, 0.34, colors.last, 7),
+      (0.95, 0.50, colors.first, 4),
+    ]) {
+      final Paint paint = Paint()
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
+
+      for (final _Tongue tongue in tongues) {
+        final double rise = math.sin(
+            2 * math.pi * (tongue.riseFreq * t + tongue.risePhase));
+        final double sway = math.sin(
+            2 * math.pi * (tongue.swayFreq * t + tongue.swayPhase));
+
+        // Outer tongues are shorter, so the bed silhouettes like a fire.
+        final double edgeFalloff = 1 - 0.55 * tongue.lane.abs();
+        final double tongueHeight = size.height *
+            tongue.height *
+            scale *
+            edgeFalloff *
+            (0.78 + 0.22 * rise);
+        final double halfWidth = size.width * tongue.width * scale / 2;
+        final double x = cx + tongue.lane * size.width * 0.30;
+        final double tipX = x + sway * halfWidth * 1.6;
+        final double tipY = base - tongueHeight;
+
+        final Path path = Path()
+          ..moveTo(x - halfWidth, base)
+          // Left flank bows outward low and pulls in toward the waving tip.
+          ..quadraticBezierTo(
+              x - halfWidth * 1.15,
+              base - tongueHeight * 0.45,
+              tipX,
+              tipY)
+          // Right flank mirrors back down to the bed.
+          ..quadraticBezierTo(
+              x + halfWidth * 1.15,
+              base - tongueHeight * 0.45,
+              x + halfWidth,
+              base)
+          ..close();
+
+        paint.color =
+            color.withValues(alpha: alpha * (0.8 + 0.2 * rise.abs()));
+        canvas.drawPath(path, paint);
+      }
+    }
+
+    // Embers drifting up out of the bed.
+    final Paint emberPaint = Paint()
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
     for (final _Ember ember in embers) {
       final double p = (t * ember.speed + ember.phase) % 1.0;
-      final double rise = p * size.height * 0.8;
       final double x = cx +
-          ember.lane * size.width * 0.24 +
+          ember.lane * size.width * 0.26 +
           math.sin(p * ember.sway * 2 * math.pi + ember.phase * 6) *
               size.width *
               0.05 *
               p;
-      final double y = base - rise;
+      final double y = base - p * size.height * 0.85;
       final double fade = (1 - p) * (p < 0.08 ? p / 0.08 : 1);
       if (fade <= 0) continue;
-
-      // Hotter (lighter gold) low, cooling to deep gold as it climbs.
-      paint.color =
+      emberPaint.color =
           Color.lerp(colors.first, colors.last, p)!.withValues(alpha: fade);
-      canvas.drawCircle(Offset(x, y), ember.size * (1 - p * 0.6), paint);
+      canvas.drawCircle(Offset(x, y), ember.size * (1 - p * 0.6), emberPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _EmberPainter old) =>
+  bool shouldRepaint(covariant _FirePainter old) =>
       old.t != t || old.animating != animating;
 }

@@ -46,26 +46,39 @@
       transition: opacity 260ms ease-out;
       font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    #forge-splash img {
-      width: 120px; height: auto;
-      transform-origin: 50% 100%;
-      animation: forge-burn 1.6s ease-in-out infinite;
-      filter: drop-shadow(0 0 18px rgba(227, 179, 65, 0.35));
+    /* The logo never moves; the fire waves behind it. */
+    .mark { position: relative; width: 120px; }
+    .mark img {
+      position: relative; z-index: 1; width: 120px; height: auto;
+      filter: drop-shadow(0 0 16px rgba(227, 179, 65, 0.30));
     }
-    @keyframes forge-burn {
-      0%   { transform: scale(1, 1) rotate(0deg);
-             filter: drop-shadow(0 0 14px rgba(227, 179, 65, 0.30)) brightness(1); }
-      27%  { transform: scale(1.012, 1.03) rotate(0.6deg);
-             filter: drop-shadow(0 0 26px rgba(242, 199, 89, 0.55)) brightness(1.08); }
-      54%  { transform: scale(0.995, 0.985) rotate(-0.5deg);
-             filter: drop-shadow(0 0 16px rgba(227, 179, 65, 0.35)) brightness(0.97); }
-      78%  { transform: scale(1.008, 1.02) rotate(0.3deg);
-             filter: drop-shadow(0 0 22px rgba(242, 199, 89, 0.48)) brightness(1.05); }
-      100% { transform: scale(1, 1) rotate(0deg);
-             filter: drop-shadow(0 0 14px rgba(227, 179, 65, 0.30)) brightness(1); }
+    .mark .pyre, .mark .pyre2 {
+      content: ""; position: absolute; z-index: 0;
+      left: 50%; bottom: 4px; width: 96px; height: 120px;
+      transform-origin: 50% 100%;
+      background: radial-gradient(ellipse 50% 65% at 50% 90%,
+        rgba(242, 199, 89, 0.55), rgba(199, 153, 41, 0.25) 55%,
+        rgba(199, 153, 41, 0) 75%);
+      filter: blur(10px);
+      animation: forge-wave 2.2s ease-in-out infinite;
+    }
+    .mark .pyre2 {
+      width: 70px; height: 140px; filter: blur(7px);
+      animation: forge-wave2 1.7s ease-in-out infinite;
+    }
+    @keyframes forge-wave {
+      0%   { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .85; }
+      30%  { transform: translateX(-54%) skewX(-4deg) scaleY(1.14); opacity: 1;   }
+      60%  { transform: translateX(-46%) skewX(3deg)  scaleY(0.94); opacity: .8;  }
+      100% { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .85; }
+    }
+    @keyframes forge-wave2 {
+      0%   { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .7; }
+      45%  { transform: translateX(-53%) skewX(-3deg) scaleY(1.18); opacity: .95; }
+      100% { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .7; }
     }
     @media (prefers-reduced-motion: reduce) {
-      #forge-splash img { animation: none; }
+      .mark .pyre, .mark .pyre2 { animation: none; }
     }
     #forge-splash .wordmark {
       margin-top: 10px; font-size: 40px; font-weight: 700;
@@ -94,7 +107,11 @@
 </head>
 <body>
   <div id="forge-splash" aria-label="FORGE Talent Connections is loading">
-    <img src="assets/assets/brand/forge_flame_dark_bg.png" alt="">
+    <div class="mark">
+      <div class="pyre"></div>
+      <div class="pyre2"></div>
+      <img src="assets/assets/brand/forge_flame_dark_bg.png" alt="">
+    </div>
     <div class="wordmark">FORGE</div>
     <div class="descriptor">TALENT CONNECTIONS</div>
     <div class="bar"></div>
