@@ -27,7 +27,7 @@ class B4Credentials extends ConsumerWidget {
           const SizedBox(height: ForgeSpacing.gapSection),
           const HeroBand(
             title: "Verified Credentials",
-            subtitle: "Sealed so employers can trust them anywhere",
+            subtitle: "Sealed so collaborators can trust them anywhere",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           AsyncView<List<Credential>>(
@@ -60,7 +60,7 @@ class B4Credentials extends ConsumerWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                "Employers see only what the check proved.",
+                                "Collaborators see only what the check proved.",
                                 style: TextStyle(
                                   fontFamily: ForgeType.bodyFamily,
                                   fontSize: ForgeType.caption,

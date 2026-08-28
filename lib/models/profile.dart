@@ -3,8 +3,8 @@ import "verification_status.dart";
 /// Which kind of account the visitor says they are, chosen on the splash screen.
 enum ForgeRole {
   talent("Talent", "Show verified work and get matched"),
-  opportunity("Opportunity", "Post projects and hire proven people"),
-  veteran("Veteran", "Translate your service into civilian work");
+  opportunity("Opportunity", "Post projects and onboard proven people"),
+  veteran("Veteran", "Translate your service into project work");
 
   const ForgeRole(this.label, this.blurb);
 

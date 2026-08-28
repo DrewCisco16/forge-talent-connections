@@ -183,7 +183,7 @@ void main() {
       const SealCard(
         title: "Integrity Certificate",
         text:
-            "Once verified, your service record is sealed and tamper-evident. Employers see the seal, never your documents.",
+            "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
         rows: <MapEntry<String, String>>[
           MapEntry("Status", "VERIFIED"),
           MapEntry("Fingerprint", "ab39...e2f1"),

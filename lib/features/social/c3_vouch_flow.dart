@@ -88,7 +88,7 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                 for (final String line in <String>[
                   "I worked with Maya directly",
                   "Her verified deliverables match what I saw",
-                  "I would hire her again",
+                  "I would onboard her again",
                 ])
                   Padding(
                     padding: const EdgeInsets.only(bottom: 9),

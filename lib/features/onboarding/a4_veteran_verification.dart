@@ -168,7 +168,7 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           const SealCard(
             text:
-                "Once verified, your service record is sealed and tamper-evident. Employers see the seal, never your documents.",
+                "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
