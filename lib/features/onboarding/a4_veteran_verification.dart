@@ -203,10 +203,24 @@ class _FlagBlock extends StatelessWidget {
         height: height,
         fit: BoxFit.cover,
         errorBuilder: (BuildContext context, Object error, StackTrace? stack) {
+          // Until the real flag artwork is supplied, the card shows the
+          // branch initials on its authentic field colour. Never an invented
+          // rendition of official heraldry.
           return Container(
             height: height,
             width: height * 1.5,
             color: _branchColors[id],
+            alignment: Alignment.center,
+            child: Text(
+              id.toUpperCase(),
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: height * 0.30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+                color: Colors.white.withValues(alpha: 0.92),
+              ),
+            ),
           );
         },
       ),
