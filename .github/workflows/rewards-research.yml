@@ -1,0 +1,15 @@
+name: rewards-research
+on:
+  push:
+    branches: [claude/forge-talent-flutter-build-r1coud]
+jobs:
+  discover:
+    if: contains(github.event.head_commit.message, 'rewards-research')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Registry discovery and Crossref verification
+        run: python .github/workflows/rewards_research.py
