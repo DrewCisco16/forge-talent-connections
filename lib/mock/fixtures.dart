@@ -64,6 +64,9 @@ const String kAvatarPreview = "assets/heroes/hero_preview_large.png";
 /// The flame mark, ready for a dark background.
 const String kFlameMark = "assets/brand/forge_flame_dark_bg.png";
 
+/// The FORGE wordmark artwork, in the brand's own lettering.
+const String kWordmark = "assets/brand/forge_wordmark.png";
+
 /// Branches of service. Flag colours are authentic and exempt from theming.
 const List<ServiceBranch> kBranches = <ServiceBranch>[
   ServiceBranch(

@@ -70,8 +70,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
+    testWidgets("A1 Splash", (WidgetTester tester) async {
+      // A1 renders the wordmark as the brand's own lettering (artwork), so
+      // the name is carried by semantics rather than a text run.
+      await pump(tester, const A1Splash());
+      expect(find.bySemanticsLabel("FORGE"), findsOneWidget,
+          reason: "A1 shows the wordmark artwork");
+      expect(find.text("TALENT CONNECTIONS"), findsOneWidget,
+          reason: "A1 must complete the lockup — the wordmark never "
+              "stands alone");
+    });
+
     for (final (String name, Widget screen) in <(String, Widget)>[
-      ("A1 Splash", const A1Splash()),
       ("C1 Feed", const C1Feed()),
       ("D3 Sign In", const D3SignIn()),
     ]) {

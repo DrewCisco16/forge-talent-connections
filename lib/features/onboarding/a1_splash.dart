@@ -35,14 +35,14 @@ class _A1SplashState extends State<A1Splash> {
           // reduced motion.
           const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
           const SizedBox(height: 8),
-          GoldGradientText(
-            "FORGE",
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: ForgeType.displayFamily,
-              fontSize: ForgeType.wordmark,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3,
+          // The wordmark is the brand's own lettering, not themed text. The
+          // semantics carry the name for readers and for the lockup guard.
+          Center(
+            child: Image.asset(
+              kWordmark,
+              height: ForgeType.wordmark,
+              fit: BoxFit.contain,
+              semanticLabel: "FORGE",
             ),
           ),
           const SizedBox(height: 8),
