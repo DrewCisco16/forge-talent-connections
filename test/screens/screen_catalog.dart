@@ -11,9 +11,11 @@ import "package:forge_talent_connections/features/onboarding/a2_create_profile.d
 import "package:forge_talent_connections/features/onboarding/a3_choose_avatar.dart";
 import "package:forge_talent_connections/features/onboarding/a4_veteran_verification.dart";
 import "package:forge_talent_connections/features/onboarding/a5_elevator_pitch.dart";
+import "package:forge_talent_connections/features/onboarding/legal_terms.dart";
 import "package:forge_talent_connections/features/social/c1_feed.dart";
 import "package:forge_talent_connections/features/social/c2_video_pitch.dart";
 import "package:forge_talent_connections/features/social/c3_vouch_flow.dart";
+import "package:forge_talent_connections/features/social/c6_rewards.dart";
 import "package:forge_talent_connections/features/social/c4_chat.dart";
 import "package:forge_talent_connections/features/social/c5_notifications.dart";
 import "package:forge_talent_connections/features/trust/d1_export_certificate.dart";
@@ -48,6 +50,8 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "C3 Vouch Flow": const C3VouchFlow(),
   "C4 Chat": const C4Chat(),
   "C5 Notifications": const C5Notifications(),
+  "C6 Rewards": const C6Rewards(),
+  "Legal Terms": const LegalTerms(),
   "D1 Export Certificate": const D1ExportCertificate(),
   "D2 Project Space": const D2ProjectSpace(),
   "Seal Check": const SealCheck(),

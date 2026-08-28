@@ -80,7 +80,37 @@ class D3SignIn extends StatelessWidget {
             label: "Sign In",
             onPressed: () => context.go("/dashboard"),
           ),
-          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          const SizedBox(height: 8),
+          Center(
+            child: InkWell(
+              onTap: () => context.go("/legal"),
+              child: Text.rich(
+                TextSpan(
+                  children: <InlineSpan>[
+                    TextSpan(
+                      text: "By continuing you agree to the ",
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.chip,
+                        color: forge.textSub,
+                      ),
+                    ),
+                    TextSpan(
+                      text: "Terms & Privacy Policy",
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.chip,
+                        fontWeight: FontWeight.w700,
+                        color: forge.gold,
+                      ),
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection - 4),
           Row(
             children: <Widget>[
               Expanded(child: Divider(color: forge.strokeSoft)),

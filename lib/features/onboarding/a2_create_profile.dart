@@ -17,11 +17,19 @@ import "../../widgets/section_label.dart";
 import "../../widgets/status_chip.dart";
 
 /// A2 Create your profile.
-class A2CreateProfile extends ConsumerWidget {
+class A2CreateProfile extends ConsumerStatefulWidget {
   const A2CreateProfile({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<A2CreateProfile> createState() => _A2CreateProfileState();
+}
+
+class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
+  // Consent is explicit and unticked by default; continuing is gated on it.
+  bool _agreedToTerms = false;
+
+  @override
+  Widget build(BuildContext context) {
     final ForgeTheme forge = ForgeTheme.of(context);
 
     return PhoneScaffold(
@@ -194,6 +202,93 @@ class A2CreateProfile extends ConsumerWidget {
           // into a looks-influenced system.
           const BannerNote(
             text: "Verified work and 3+ skills get matched first",
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const SectionLabel("Legal & privacy"),
+          const SizedBox(height: 6),
+          Text(
+            "One agreement covers the whole product: identity and likeness "
+            "consent, vouching accountability, the rewards program's fair-"
+            "play rules, and how your data is handled.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          ForgeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                InkWell(
+                  onTap: () => context.go("/legal"),
+                  child: Row(
+                    children: <Widget>[
+                      Icon(Icons.description_outlined,
+                          size: 17, color: forge.gold),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          "Read the Terms & Privacy Policy",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.body,
+                            fontWeight: FontWeight.w600,
+                            color: forge.gold,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 18, color: forge.textSub),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () =>
+                      setState(() => _agreedToTerms = !_agreedToTerms),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Icon(
+                        _agreedToTerms
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        size: 20,
+                        color:
+                            _agreedToTerms ? forge.gold : forge.textSub,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          "I have read and agree to the Terms of Use and "
+                          "Privacy Policy.",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.35,
+                            color: forge.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          // Fail-closed: no agreement, no account. The button never looks
+          // like it might work before consent is given.
+          GoldButton(
+            label: _agreedToTerms
+                ? "Agree & Continue"
+                : "Agree to the terms to continue",
+            onPressed: _agreedToTerms
+                ? () => context.go("/choose-avatar")
+                : null,
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           Text(

@@ -8,6 +8,7 @@ export "credential.dart";
 export "growth.dart";
 export "opportunity.dart";
 export "profile.dart";
+export "rewards.dart";
 export "social.dart";
 export "trust.dart";
 export "verification_status.dart";

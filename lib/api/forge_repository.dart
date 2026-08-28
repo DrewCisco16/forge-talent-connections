@@ -75,6 +75,10 @@ abstract interface class GrowthRepository {
 
   /// The AI video pitch studio's current state for this person.
   Future<PitchStudio> loadPitchStudio();
+
+  /// The rewards and referral program standing. Points, standings, and
+  /// eligibility are computed by the backend from verified events only.
+  Future<RewardsProgram> loadRewards();
 }
 
 /// The full surface the app needs.

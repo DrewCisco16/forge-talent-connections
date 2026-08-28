@@ -534,4 +534,108 @@ class MockForgeRepository implements ForgeRepository {
             ),
         },
       );
+
+  @override
+  Future<RewardsProgram> loadRewards() => _serve(
+        RewardsProgram(
+          quarterLabel: "Q3 2026",
+          quarterEnds: "30 Sep 2026",
+          pointsVerified: switch (scenario) {
+            DemoScenario.verified => 340,
+            DemoScenario.pending => 240,
+            DemoScenario.denied => 0,
+          },
+          pointsPending: switch (scenario) {
+            DemoScenario.verified => 0,
+            DemoScenario.pending => 100,
+            DemoScenario.denied => 340,
+          },
+          standingNote: switch (scenario) {
+            DemoScenario.verified => "Top 12% this quarter",
+            DemoScenario.pending => "Top 18% once pending points verify",
+            DemoScenario.denied => "Standing suspended during the hold",
+          },
+          membersEarning: 2314,
+          referralCode: "DREW-TALENT-26",
+          referralsJoined: scenario == DemoScenario.verified ? 3 : 2,
+          referralsPending: scenario == DemoScenario.pending ? 1 : 0,
+          topThree: const <LeaderEntry>[
+            LeaderEntry(
+                name: "Ana Duarte",
+                points: 980,
+                avatar: "assets/heroes/hero_06.png"),
+            LeaderEntry(
+                name: "Jordan Reyes",
+                points: 875,
+                avatar: "assets/heroes/hero_03.png"),
+            LeaderEntry(
+                name: "Maya Chen",
+                points: 860,
+                avatar: "assets/heroes/hero_04.png"),
+          ],
+          events: <RewardEvent>[
+            RewardEvent(
+              label: "Vouch for Maya Chen verified",
+              points: 40,
+              status: _outcome,
+              when: "Aug 2026",
+            ),
+            RewardEvent(
+              label: "Referred member joined and verified",
+              points: 100,
+              status: scenario == DemoScenario.denied
+                  ? VerificationStatus.locked
+                  : VerificationStatus.verified,
+              when: "Aug 2026",
+            ),
+            RewardEvent(
+              label: "Sealed deliverable: Seminar_Outline_v2.pdf",
+              points: 60,
+              status: scenario == DemoScenario.denied
+                  ? VerificationStatus.locked
+                  : scenario == DemoScenario.pending
+                      ? VerificationStatus.pending
+                      : VerificationStatus.verified,
+              when: "Jul 2026",
+            ),
+          ],
+          quarterlyPrizes: const <RewardPrize>[
+            RewardPrize(
+              title: "Sponsor gift cards",
+              detail: "Gift cards from program sponsors for the quarter's "
+                  "top verified point earners.",
+              valueLabel: r"$1,000+ combined value",
+            ),
+            RewardPrize(
+              title: "Concert and event tickets",
+              detail: "Tickets to concerts and sporting events, supplied "
+                  "by sponsors each quarter.",
+              valueLabel: r"$1,000+ combined value",
+            ),
+          ],
+          yearlyPrize: const RewardPrize(
+            title: "Yearly car giveaway",
+            detail: "One car awarded each year to the member with the most "
+                "verified points, after a human audit of every point.",
+            valueLabel: "Awarded once per year",
+          ),
+          status: switch (scenario) {
+            DemoScenario.verified => VerificationStatus.verified,
+            DemoScenario.pending => VerificationStatus.pending,
+            DemoScenario.denied => VerificationStatus.locked,
+          },
+          note: switch (scenario) {
+            DemoScenario.verified =>
+              "Active and eligible. Every point on this account came from "
+                  "a verified action.",
+            DemoScenario.pending =>
+              "100 points are waiting on checks that are still running. "
+                  "They count only when the checks pass.",
+            DemoScenario.denied =>
+              "Points frozen: a record on this account failed its check. "
+                  "Prize eligibility is suspended until a person reviews "
+                  "the hold.",
+          },
+        ),
+      );
 }

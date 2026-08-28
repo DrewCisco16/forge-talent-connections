@@ -34,7 +34,9 @@ void main() {
           if (!literal.contains("FORGE")) continue;
           final bool isWordmark = literal == '"FORGE"';
           final bool isFullName = literal.contains("FORGE Talent Connections");
-          if (!isWordmark && !isFullName) {
+          // The operating company's legal name is sanctioned in legal copy.
+          final bool isLegalEntity = literal.contains("FORGE LINK LLC");
+          if (!isWordmark && !isFullName && !isLegalEntity) {
             offences.add("${entity.path}:${i + 1}  $literal");
           }
         }

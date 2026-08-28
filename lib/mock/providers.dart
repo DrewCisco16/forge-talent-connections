@@ -129,3 +129,7 @@ final FutureProvider<List<SystemDecision>> decisionsProvider =
 final FutureProvider<PitchStudio> pitchStudioProvider =
     FutureProvider<PitchStudio>((Ref ref) =>
         ref.watch(forgeRepositoryProvider).loadPitchStudio());
+
+final FutureProvider<RewardsProgram> rewardsProvider =
+    FutureProvider<RewardsProgram>((Ref ref) =>
+        ref.watch(forgeRepositoryProvider).loadRewards());

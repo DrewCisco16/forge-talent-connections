@@ -3,6 +3,8 @@ import "package:go_router/go_router.dart";
 
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/confetti_burst.dart";
+import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 import "../../widgets/social_action.dart";
@@ -143,20 +145,95 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
-          HoldToSignVouch(
-            label: _signed ? "Vouch signed" : "Sign My Vouch",
-            onCompleted: () => setState(() => _signed = true),
+          // The burst plays over the hold control the moment the sweep
+          // completes. Celebration only: it ignores pointers, plays once,
+          // and paints nothing under reduced motion.
+          Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  HoldToSignVouch(
+                    label: _signed ? "Vouch signed" : "Sign My Vouch",
+                    onCompleted: () => setState(() => _signed = true),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Recorded with a tamper-evident signature",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      color: forge.textSub,
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: -230,
+                bottom: 0,
+                child: ConfettiBurst(
+                  play: _signed,
+                  colors: <Color>[
+                    forge.gold,
+                    forge.violet,
+                    forge.green,
+                    forge.cyan,
+                    forge.coral,
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            "Recorded with a tamper-evident signature",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: ForgeType.bodyFamily,
-              fontSize: ForgeType.caption,
-              color: forge.textSub,
+          if (_signed) ...<Widget>[
+            const SizedBox(height: ForgeSpacing.gapSection),
+            ForgeCard(
+              borderColor: forge.gold,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.celebration_outlined,
+                          size: 18, color: forge.gold),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Your vouch is sealed",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Your name now stands behind Maya's work. Reward "
+                    "points for this vouch are awarded by the backend "
+                    "once the vouch verifies — never by the tap itself.",
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      height: 1.35,
+                      color: forge.textSub,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlineGoldButton(
+                    label: "View Rewards & Referrals",
+                    onPressed: () => context.go("/rewards"),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           const SectionLabel("How vouching is governed"),
           const SizedBox(height: 6),

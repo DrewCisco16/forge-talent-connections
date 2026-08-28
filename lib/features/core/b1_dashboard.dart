@@ -160,6 +160,56 @@ class B1Dashboard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
+          // Rewards run on the same rule as everything else: verified
+          // events only. The dashboard row is a teaser; the program screen
+          // carries the rules.
+          AsyncView<RewardsProgram>(
+            value: ref.watch(rewardsProvider),
+            pendingLabel: "Loading rewards",
+            builder: (RewardsProgram program) => InkWell(
+              onTap: () => context.go("/rewards"),
+              borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+              child: ForgeCard(
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.emoji_events_outlined,
+                        size: 22, color: forge.gold),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            "${program.pointsVerified} reward points this "
+                            "quarter",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.cardTitle,
+                              fontWeight: FontWeight.w700,
+                              color: forge.text,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            program.standingNote,
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              height: 1.3,
+                              color: forge.textSub,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right,
+                        size: 20, color: forge.textSub),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
           AsyncView<TrustWalletSummary>(
             value: ref.watch(walletSummaryProvider),
             pendingLabel: "Loading growth",

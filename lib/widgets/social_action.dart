@@ -56,13 +56,19 @@ class VibeButton extends StatelessWidget {
                     Icon(icon, size: 15, color: Colors.white),
                     const SizedBox(width: 7),
                   ],
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: ForgeType.bodyFamily,
-                      fontSize: ForgeType.body,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                  // Flexible so large accessibility text truncates instead
+                  // of overflowing the pill.
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.body,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],

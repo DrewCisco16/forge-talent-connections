@@ -13,9 +13,11 @@ import "../features/onboarding/a2_create_profile.dart";
 import "../features/onboarding/a3_choose_avatar.dart";
 import "../features/onboarding/a4_veteran_verification.dart";
 import "../features/onboarding/a5_elevator_pitch.dart";
+import "../features/onboarding/legal_terms.dart";
 import "../features/social/c1_feed.dart";
 import "../features/social/c2_video_pitch.dart";
 import "../features/social/c3_vouch_flow.dart";
+import "../features/social/c6_rewards.dart";
 import "../features/social/c4_chat.dart";
 import "../features/social/c5_notifications.dart";
 import "../features/trust/d1_export_certificate.dart";
@@ -64,6 +66,11 @@ GoRouter buildRouter() {
         path: "/sign-in",
         name: "sign-in",
         builder: (_, __) => const D3SignIn(),
+      ),
+      GoRoute(
+        path: "/legal",
+        name: "legal",
+        builder: (_, __) => const LegalTerms(),
       ),
       GoRoute(
         path: "/video-pitch",
@@ -130,6 +137,11 @@ GoRouter buildRouter() {
             path: "/vouch",
             name: "vouch",
             builder: (_, __) => const C3VouchFlow(),
+          ),
+          GoRoute(
+            path: "/rewards",
+            name: "rewards",
+            builder: (_, __) => const C6Rewards(),
           ),
           GoRoute(
             path: "/chat",
