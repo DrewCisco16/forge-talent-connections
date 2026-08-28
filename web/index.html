@@ -55,7 +55,7 @@
       width: 120px; height: auto;
       filter: drop-shadow(0 0 16px rgba(227, 179, 65, 0.30));
     }
-    .mark .pyre, .mark .pyre2 {
+    .mark .pyre, .mark .pyre2, .mark .pyre3, .mark .pyre4 {
       content: ""; position: absolute; z-index: 0;
       left: 44%; bottom: calc(100% - 46px); width: 34px; height: 34px;
       transform-origin: 50% 100%;
@@ -69,6 +69,16 @@
       width: 24px; height: 40px; filter: blur(4px);
       animation: forge-wave2 1.7s ease-in-out infinite;
     }
+    /* Small flames stepping down the right edge of the silhouette. */
+    .mark .pyre3 {
+      left: 80%; bottom: calc(100% - 78px); width: 26px; height: 32px;
+      animation-duration: 1.9s;
+    }
+    .mark .pyre4 {
+      left: 88%; bottom: calc(100% - 100px); width: 20px; height: 26px;
+      animation: forge-wave2 2.1s ease-in-out infinite;
+      filter: blur(4px);
+    }
     @keyframes forge-wave {
       0%   { transform: translateX(-50%) skewX(0deg)  scaleY(1);    opacity: .55; }
       30%  { transform: translateX(-54%) skewX(-4deg) scaleY(1.12); opacity: .7;  }
@@ -81,7 +91,7 @@
       100% { transform: translateX(-48%) skewX(2deg)  scaleY(0.95); opacity: .45; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .mark .pyre, .mark .pyre2 { animation: none; }
+      .mark .pyre, .mark .pyre2, .mark .pyre3, .mark .pyre4 { animation: none; }
     }
     #forge-splash .wordmark-art { margin-top: 14px; width: 170px; height: auto; }
     #forge-splash .descriptor {
@@ -110,6 +120,8 @@
     <div class="mark">
       <div class="pyre"></div>
       <div class="pyre2"></div>
+      <div class="pyre3"></div>
+      <div class="pyre4"></div>
       <img src="assets/assets/brand/forge_flame.png" alt="">
     </div>
     <img class="wordmark-art" src="assets/assets/brand/forge_wordmark.png" alt="FORGE">

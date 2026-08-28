@@ -7,9 +7,10 @@ import "../theme/forge_theme.dart";
 /// The burning flame: the original mark, with a subtle burn at its crown.
 ///
 /// The logo itself is never transformed — no pulsing, no scaling. The burn is
-/// a small cluster of flame tongues riding the top of the mark, each waving on
-/// its own phase and frequency so they lick upward organically rather than
-/// throbbing in unison, plus a few rising embers and a faint breathing halo.
+/// a small cluster of flame tongues riding the top of the mark and stepping
+/// down its right edge, each waving on its own phase and frequency so they
+/// lick upward organically rather than throbbing in unison, plus a few rising
+/// embers and a faint breathing halo.
 /// Complementary and subtle: the mark stays the subject, the fire is an
 /// accent at its tip, never a bonfire behind it.
 ///
@@ -59,8 +60,28 @@ class _BurningFlameState extends State<BurningFlame>
     super.initState();
     // Fixed seed: the fire looks alive but renders deterministically.
     final math.Random random = math.Random(7);
-    _tongues = List<_Tongue>.generate(5, (int i) => _Tongue(random, i, 5));
-    _embers = List<_Ember>.generate(12, (_) => _Ember(random));
+    // Anchor points (x, y as fractions of the box, relative size) where small
+    // flames ride the mark: a cluster at the crown, then down the right edge
+    // of the silhouette (positions measured from the asset).
+    const List<(double, double, double)> anchors = <(double, double, double)>[
+      (0.33, 0.24, 1.0),
+      (0.385, 0.24, 1.05),
+      (0.44, 0.24, 1.1),
+      (0.495, 0.24, 1.05),
+      (0.55, 0.24, 1.0),
+      (0.64, 0.24, 0.85),
+      (0.80, 0.36, 0.9),
+      (0.83, 0.47, 0.85),
+      (0.90, 0.57, 0.8),
+    ];
+    _tongues = <_Tongue>[
+      for (final (double ax, double ay, double s) in anchors)
+        _Tongue(random, ax: ax, ay: ay, size: s),
+    ];
+    _embers = <_Ember>[
+      for (int i = 0; i < 14; i++)
+        _Ember(random, anchors[random.nextInt(anchors.length)]),
+    ];
   }
 
   @override
@@ -122,19 +143,23 @@ class _BurningFlameState extends State<BurningFlame>
 
 /// One flame tongue's fixed characteristics; its wave rides the shared clock.
 class _Tongue {
-  _Tongue(math.Random random, int index, int count)
-      // Spread across the base with slight jitter; outer tongues sit lower.
-      : lane = (index / (count - 1)) * 2 - 1,
-        // Integer cycles per loop keep the repeat seamless.
-        riseFreq = 1 + random.nextInt(3),
+  _Tongue(math.Random random,
+      {required this.ax, required this.ay, required this.size})
+      // Integer cycles per loop keep the repeat seamless.
+      : riseFreq = 1 + random.nextInt(3),
         swayFreq = 1 + random.nextInt(2),
         risePhase = random.nextDouble(),
         swayPhase = random.nextDouble(),
         width = 0.10 + random.nextDouble() * 0.08,
         height = 0.5 + random.nextDouble() * 0.45;
 
-  /// Horizontal position, -1..1 across the fire bed.
-  final double lane;
+  /// Anchor of the flame's base, as fractions of the box.
+  final double ax;
+  final double ay;
+
+  /// Relative scale of this tongue within the set.
+  final double size;
+
   final int riseFreq;
   final int swayFreq;
   final double risePhase;
@@ -145,15 +170,19 @@ class _Tongue {
   final double height;
 }
 
-/// One ember's fixed characteristics.
+/// One ember's fixed characteristics; it rises from one of the flame anchors.
 class _Ember {
-  _Ember(math.Random random)
-      : phase = random.nextDouble(),
+  _Ember(math.Random random, (double, double, double) anchor)
+      : ax = anchor.$1,
+        ay = anchor.$2,
+        phase = random.nextDouble(),
         lane = random.nextDouble() * 2 - 1,
         speed = 0.6 + random.nextDouble() * 0.8,
         size = 1.4 + random.nextDouble() * 2.2,
         sway = 0.5 + random.nextDouble() * 1.5;
 
+  final double ax;
+  final double ay;
   final double phase;
   final double lane;
   final double speed;
@@ -180,13 +209,9 @@ class _FirePainter extends CustomPainter {
   /// the width (measured from the asset), right at the top of the box.
   static const double _tipX = 0.44;
 
-  /// The crown line the small flames ride on, as a fraction of the height.
-  static const double _crown = 0.24;
-
   @override
   void paint(Canvas canvas, Size size) {
     final double cx = size.width * _tipX;
-    final double base = size.height * _crown;
     final double breathe =
         animating ? 0.5 + 0.5 * math.sin(t * 2 * math.pi) : 0.5;
 
@@ -203,14 +228,24 @@ class _FirePainter extends CustomPainter {
       ),
       glowPaint,
     );
+    // And a fainter one along the right edge, where the side flames ride.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.84, size.height * 0.44),
+        width: size.width * 0.16,
+        height: size.height * 0.30,
+      ),
+      glowPaint,
+    );
 
     // At rest (reduced motion) no fire is drawn — only the soft glow above.
     if (!animating) return;
 
-    // Two passes of small tongues riding the crown of the mark — a dim layer
-    // and a brighter, tighter one, both behind the logo, so short flames lick
-    // up around its tip. Complementary, not a bonfire: the mark stays the
-    // subject. Each tongue waves on its own frequencies.
+    // Two passes of small tongues riding the mark — a dim layer and a
+    // brighter, tighter one, both behind the logo — clustered at the crown
+    // and stepping down the right edge of the silhouette, so short flames
+    // lick up around the tip and along the right side. Complementary, not a
+    // bonfire: the mark stays the subject. Each waves on its own frequencies.
     for (final (double scale, double alpha, Color color, double blur)
         in <(double, double, Color, double)>[
       (1.0, 0.30, colors.last, 3),
@@ -225,20 +260,20 @@ class _FirePainter extends CustomPainter {
         final double sway = math.sin(
             2 * math.pi * (tongue.swayFreq * t + tongue.swayPhase));
 
-        // Outer tongues are shorter, so the cluster silhouettes like a small
-        // flame. Tips are clamped inside the top of the box.
-        final double edgeFalloff = 1 - 0.55 * tongue.lane.abs();
+        // Each tongue rises from its own anchor on the mark. Tips are
+        // clamped inside the top of the box; anchors sit far enough from
+        // the sides that flanks, sway, and blur fade before the clip edges.
+        final double base = size.height * tongue.ay;
         final double tongueHeight = (size.height *
                 tongue.height *
                 0.28 *
                 scale *
-                edgeFalloff *
+                tongue.size *
                 (0.78 + 0.22 * rise))
             .clamp(0.0, base - size.height * 0.03);
-        final double halfWidth = size.width * tongue.width * scale * 0.30;
-        // A tight cluster around the tip; flanks, sway, and blur all fade
-        // out well before the clip edges.
-        final double x = cx + tongue.lane * size.width * 0.11;
+        final double halfWidth =
+            size.width * tongue.width * scale * tongue.size * 0.30;
+        final double x = size.width * tongue.ax;
         final double tipX = x + sway * halfWidth * 1.6;
         final double tipY = base - tongueHeight;
 
@@ -264,18 +299,18 @@ class _FirePainter extends CustomPainter {
       }
     }
 
-    // A few embers drifting up from the crown.
+    // A few embers drifting up from the flame anchors.
     final Paint emberPaint = Paint()
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
     for (final _Ember ember in embers) {
       final double p = (t * ember.speed + ember.phase) % 1.0;
-      final double x = cx +
-          ember.lane * size.width * 0.10 +
+      final double x = size.width * ember.ax +
+          ember.lane * size.width * 0.05 +
           math.sin(p * ember.sway * 2 * math.pi + ember.phase * 6) *
               size.width *
               0.03 *
               p;
-      final double y = base - p * size.height * 0.18;
+      final double y = size.height * ember.ay - p * size.height * 0.16;
       final double fade =
           0.85 * (1 - p) * (p < 0.08 ? p / 0.08 : 1);
       if (fade <= 0) continue;
