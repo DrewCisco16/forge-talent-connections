@@ -26,21 +26,48 @@ class C1Feed extends ConsumerWidget {
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              GoldGradientText(
-                "FORGE",
-                style: const TextStyle(
-                  fontFamily: ForgeType.displayFamily,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
+              // The brand is always the whole name: wordmark plus descriptor.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    GoldGradientText(
+                      "FORGE",
+                      style: const TextStyle(
+                        fontFamily: ForgeType.displayFamily,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    Text(
+                      "TALENT CONNECTIONS",
+                      style: TextStyle(
+                        fontFamily: ForgeType.bodyFamily,
+                        fontSize: ForgeType.chip,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2.4,
+                        color: forge.textSub,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              InkWell(
-                onTap: () => context.go("/notifications"),
-                child: Icon(Icons.notifications_none,
-                    size: 21, color: forge.gold),
+              Semantics(
+                button: true,
+                label: "Notifications",
+                child: InkWell(
+                  onTap: () => context.go("/notifications"),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    child: Icon(Icons.notifications_none,
+                        size: 21, color: forge.gold),
+                  ),
+                ),
               ),
             ],
           ),

@@ -42,7 +42,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
-              "Sign out of FORGE?",
+              "Sign out of FORGE Talent Connections?",
               style: TextStyle(
                 fontFamily: ForgeType.bodyFamily,
                 fontSize: ForgeType.cardTitle,
@@ -275,7 +275,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             onChanged: (bool v) => setState(() => _matchSuggestions = v),
           ),
           _Row(
-            label: "How FORGE protects you",
+            label: "How FORGE Talent Connections protects you",
             trailing: "Patent pending",
             onTap: () => context.go("/trust-technology"),
           ),

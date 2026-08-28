@@ -28,7 +28,7 @@ class TrustTechnology extends StatelessWidget {
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
           HeroBand(
-            title: "How FORGE Protects You",
+            title: "How FORGE Talent Connections Protects You",
             subtitle: "Three technologies underneath every check",
             onBack: () => context.go("/profile"),
           ),
@@ -91,7 +91,7 @@ class TrustTechnology extends StatelessWidget {
           const SectionLabel("Why this matters"),
           const SizedBox(height: ForgeSpacing.gapCard),
           Text(
-            "Most platforms ask you to trust what a profile says. FORGE is built so the platform itself cannot lie to you: checks fail closed, denials are shown honestly, and nothing unverified is ever presented as fact.",
+            "Most platforms ask you to trust what a profile says. FORGE Talent Connections is built so the platform itself cannot lie to you: checks fail closed, denials are shown honestly, and nothing unverified is ever presented as fact.",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.body,

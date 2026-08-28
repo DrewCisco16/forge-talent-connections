@@ -34,6 +34,19 @@ class D3SignIn extends StatelessWidget {
               letterSpacing: 2.5,
             ),
           ),
+          const SizedBox(height: 6),
+          // The brand is always the whole name: wordmark plus descriptor.
+          Text(
+            "TALENT CONNECTIONS",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 2.8,
+              color: forge.textSub,
+            ),
+          ),
           const SizedBox(height: 24),
           Text(
             "Welcome back.",

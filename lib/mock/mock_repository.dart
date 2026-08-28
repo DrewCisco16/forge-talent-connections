@@ -61,10 +61,13 @@ class MockForgeRepository implements ForgeRepository {
   @override
   Future<ElevatorPitch> loadElevatorPitch() => _serve(
         const ElevatorPitch(
-          durationSeconds: 60,
-          positionSeconds: 14,
+          // Nominal values; once the video initializes, its own clock wins.
+          durationSeconds: 80,
+          positionSeconds: 0,
           captionsOn: true,
           isAiPresented: true,
+          // Andrew's AI-made marketing advertisement, bundled with the demo.
+          videoAsset: "assets/media/forge_ad.mp4",
           transcript:
               "...six years running cyber network operations...",
         ),

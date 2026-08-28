@@ -69,14 +69,21 @@ class ElevatorPitch {
     required this.positionSeconds,
     required this.captionsOn,
     required this.isAiPresented,
+    this.videoAsset,
     this.transcript,
   });
 
+  /// Nominal duration and position, used until real playback metadata is
+  /// available. Once a video initializes, the player's own clock wins.
   final int durationSeconds;
   final int positionSeconds;
   final bool captionsOn;
 
   /// Drives the visible AI-generated label wherever this pitch plays.
   final bool isAiPresented;
+
+  /// Bundled video to play. Null renders the empty player state; the UI never
+  /// pretends a video exists when none does.
+  final String? videoAsset;
   final String? transcript;
 }

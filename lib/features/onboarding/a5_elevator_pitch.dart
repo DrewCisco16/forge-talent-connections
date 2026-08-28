@@ -11,16 +11,11 @@ import "../../widgets/banner_note.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
-import "../../widgets/section_label.dart";
+import "../../widgets/pitch_video_player.dart";
 
 /// A5 Elevator pitch.
 class A5ElevatorPitch extends ConsumerWidget {
   const A5ElevatorPitch({super.key});
-
-  static String _clock(int seconds) {
-    final String s = (seconds % 60).toString().padLeft(2, "0");
-    return "${seconds ~/ 60}:$s";
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,84 +38,21 @@ class A5ElevatorPitch extends ConsumerWidget {
             builder: (ElevatorPitch pitch) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Center(
-                  child: Container(
-                    width: 210,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color: ForgeColors.navyDeep,
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.cardRadius),
-                      border: Border.all(color: forge.gold, width: 1.5),
-                    ),
-                    child: Stack(
-                      children: <Widget>[
-                        Center(
-                          child: Container(
-                            width: 54,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient:
-                                  LinearGradient(colors: forge.goldGradient),
-                            ),
-                            child: const Icon(Icons.play_arrow,
-                                size: 28, color: Colors.white),
-                          ),
-                        ),
-                        Positioned(
-                          left: 10,
-                          top: 10,
-                          child: _Chip(
-                            label: pitch.captionsOn ? "CC on" : "CC off",
-                          ),
-                        ),
-                        if (pitch.isAiPresented)
-                          const Positioned(
-                            right: 10,
-                            top: 10,
-                            child: AiGeneratedLabel(),
-                          ),
-                      ],
-                    ),
-                  ),
+                // Andrew's marketing advertisement, made with AI inside the
+                // product; the visible AI-generated label is mandatory.
+                PitchVideoPlayer(
+                  videoAsset: pitch.videoAsset,
+                  showAiLabel: pitch.isAiPresented,
                 ),
-                const SizedBox(height: ForgeSpacing.gapSection),
-                Row(
-                  children: <Widget>[
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(colors: forge.goldGradient),
-                      ),
-                      child: const Icon(Icons.play_arrow,
-                          size: 17, color: Colors.white),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: pitch.positionSeconds / pitch.durationSeconds,
-                          minHeight: 5,
-                          backgroundColor: forge.strokeSoft,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(forge.gold),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      "${_clock(pitch.positionSeconds)} / ${_clock(pitch.durationSeconds)}",
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.caption,
-                        color: forge.textSub,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 6),
+                Text(
+                  "Marketing advertisement · made in FORGE Talent Connections",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: ForgeType.bodyFamily,
+                    fontSize: ForgeType.caption,
+                    color: forge.textSub,
+                  ),
                 ),
                 const SizedBox(height: ForgeSpacing.gapSection),
                 Row(
@@ -164,30 +96,3 @@ class A5ElevatorPitch extends ConsumerWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final ForgeTheme forge = ForgeTheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: ForgeColors.navyDeep.withValues(alpha: 0.8),
-        border: Border.all(color: forge.strokeSoft),
-        borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: ForgeType.bodyFamily,
-          fontSize: ForgeType.chip,
-          fontWeight: FontWeight.w700,
-          color: forge.text,
-        ),
-      ),
-    );
-  }
-}
