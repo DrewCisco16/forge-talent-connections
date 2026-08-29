@@ -5,6 +5,7 @@ import "../../mock/fixtures.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/brand_lockup.dart";
 import "../../widgets/burning_flame.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -35,41 +36,10 @@ class _A1SplashState extends State<A1Splash> {
           // reduced motion.
           const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
           const SizedBox(height: 8),
-          // The lockup is typeset, not artwork, so every letter on the
-          // screen shares the one sans-serif family. Both lines are large,
-          // bold, and centred on the same axis as the mark above them.
-          GoldGradientText(
-            "FORGE",
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: ForgeType.displayFamily,
-              fontSize: ForgeType.wordmark,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 4,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Container(
-              width: 120,
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: forge.goldGradient),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "TALENT CONNECTIONS",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: ForgeType.bodyFamily,
-              fontSize: ForgeType.lockupDescriptor,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3.4,
-              color: forge.text,
-            ),
-          ),
+          // The lockup is one even block, like the marketing sticker:
+          // FORGE and TALENT CONNECTIONS fitted to the same width, the gold
+          // rule spanning the same measure, all on the mark's own axis.
+          const Center(child: BrandLockup(width: 264)),
           const SizedBox(height: 26),
           ForgeCard(
             child: Column(

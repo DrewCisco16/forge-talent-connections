@@ -1,6 +1,8 @@
 import "dart:math" as math;
+import "dart:ui" as ui;
 
 import "package:flutter/material.dart";
+import "package:flutter/services.dart" show ByteData, rootBundle;
 
 import "../theme/forge_theme.dart";
 
@@ -51,9 +53,30 @@ class _BurningFlameState extends State<BurningFlame>
   late final List<_Ember> _embers;
   bool _started = false;
 
+  /// Alpha mask of the mark's interior line channels. Fire drawn through it
+  /// fills the lines of the flame and can never overlap the gold shape,
+  /// because the untouched artwork always paints on top.
+  ui.Image? _lineMask;
+
+  Future<void> _loadLineMask() async {
+    try {
+      final ByteData data = await rootBundle.load(
+        "assets/brand/forge_flame_linefire_mask.png",
+      );
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+      );
+      final ui.FrameInfo frame = await codec.getNextFrame();
+      if (mounted) setState(() => _lineMask = frame.image);
+    } catch (_) {
+      // Fail closed to the previous look: no mask, no line fire.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadLineMask();
     // Fixed seed: the fire looks alive but renders deterministically.
     final math.Random random = math.Random(7);
     // Anchor points (x, y as fractions of the box, relative size) where small
@@ -124,6 +147,20 @@ class _BurningFlameState extends State<BurningFlame>
                   ),
                 ),
               ),
+              // Fire inside the lines of the flame: an animated furnace
+              // fill masked to the mark's interior channels, painted under
+              // the artwork so it never overlaps the gold shape.
+              if (_lineMask != null)
+                CustomPaint(
+                  painter: _LineFirePainter(
+                    mask: _lineMask!,
+                    t: _controller.value,
+                    animating: _controller.isAnimating,
+                    ember: forge.coral,
+                    deep: forge.goldDeep,
+                    bright: forge.gold,
+                  ),
+                ),
               // The original mark, in front, untouched: no transform, ever.
               Image.asset(
                 widget.asset,
@@ -337,4 +374,95 @@ class _FirePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _FirePainter old) =>
       old.t != t || old.animating != animating;
+}
+
+/// Paints the furnace inside the mark's line channels.
+///
+/// A vertical molten gradient breathes while three soft hotspots rise
+/// through the channels; the whole layer is then masked by the interior
+/// alpha map, so not one pixel lands outside the lines. Under reduced
+/// motion the fill renders as a single still frame: warmth without
+/// movement.
+class _LineFirePainter extends CustomPainter {
+  const _LineFirePainter({
+    required this.mask,
+    required this.t,
+    required this.animating,
+    required this.ember,
+    required this.deep,
+    required this.bright,
+  });
+
+  final ui.Image mask;
+  final double t;
+  final bool animating;
+  final Color ember;
+  final Color deep;
+  final Color bright;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect rect = Offset.zero & size;
+    final double clock = animating ? t : 0.35;
+
+    canvas.saveLayer(rect, Paint());
+
+    // The molten base: ember at the foot of the mark, bright gold toward
+    // the crown, with the middle stop breathing on the shared clock.
+    final double breathe = 0.52 + 0.08 * math.sin(clock * 2 * math.pi);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: <Color>[
+            ember.withValues(alpha: 0.75),
+            deep.withValues(alpha: 0.7),
+            bright.withValues(alpha: 0.55),
+          ],
+          stops: <double>[0.0, breathe, 1.0],
+        ).createShader(rect),
+    );
+
+    // Rising hotspots: integer cycles per loop keep the repeat seamless.
+    const List<(double, double, int)> lanes = <(double, double, int)>[
+      (0.34, 0.0, 1),
+      (0.55, 0.45, 2),
+      (0.72, 0.8, 1),
+    ];
+    for (final (double lx, double phase, int freq) in lanes) {
+      final double progress = (clock * freq + phase) % 1.0;
+      final Offset c = Offset(
+        size.width * lx,
+        size.height * (1.05 - 1.1 * progress),
+      );
+      canvas.drawCircle(
+        c,
+        size.width * 0.22,
+        Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[
+              Colors.white.withValues(alpha: 0.25),
+              bright.withValues(alpha: 0.16),
+              bright.withValues(alpha: 0.0),
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: size.width * 0.22)),
+      );
+    }
+
+    // Keep only what falls inside the lines of the flame.
+    canvas.drawImageRect(
+      mask,
+      Rect.fromLTWH(0, 0, mask.width.toDouble(), mask.height.toDouble()),
+      rect,
+      Paint()..blendMode = BlendMode.dstIn,
+    );
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineFirePainter oldDelegate) =>
+      oldDelegate.t != t || oldDelegate.mask != mask;
 }

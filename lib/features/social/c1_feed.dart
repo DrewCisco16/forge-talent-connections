@@ -6,6 +6,7 @@ import "../../mock/providers.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/brand_lockup.dart";
 import "../../widgets/async_view.dart";
 import "../../widgets/feed_card.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -29,30 +30,12 @@ class C1Feed extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               // The brand is always the whole name: wordmark plus descriptor.
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    GoldGradientText(
-                      "FORGE",
-                      style: const TextStyle(
-                        fontFamily: ForgeType.displayFamily,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    Text(
-                      "TALENT CONNECTIONS",
-                      style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.caption,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.4,
-                        color: forge.text,
-                      ),
-                    ),
-                  ],
+              // The compact lockup is the same even block as the splash,
+              // scaled down: both lines share one width, no ragged edge.
+              const Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BrandLockup(width: 148, showDivider: false),
                 ),
               ),
               Semantics(

@@ -4,11 +4,11 @@ import "package:go_router/go_router.dart";
 import "../../mock/fixtures.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
+import "../../widgets/brand_lockup.dart";
 import "../../widgets/burning_flame.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
-import "../../widgets/section_label.dart";
 
 /// D3 Sign in.
 class D3SignIn extends StatelessWidget {
@@ -27,30 +27,9 @@ class D3SignIn extends StatelessWidget {
           // edge alight behind the mark, static glow under reduced motion.
           const Center(child: BurningFlame(asset: kFlameMark, height: 88)),
           const SizedBox(height: 10),
-          GoldGradientText(
-            "FORGE",
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: ForgeType.displayFamily,
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          // The brand is always the whole name: wordmark plus descriptor,
-          // both large and bold on the same centre axis.
-          Text(
-            "TALENT CONNECTIONS",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: ForgeType.bodyFamily,
-              fontSize: ForgeType.lockupDescriptor,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2.8,
-              color: forge.text,
-            ),
-          ),
+          // One even block, like the marketing sticker: both lines fitted
+          // to the same width on the mark's axis.
+          const Center(child: BrandLockup(width: 236)),
           const SizedBox(height: 24),
           Text(
             "Welcome back.",

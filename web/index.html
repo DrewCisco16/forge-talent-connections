@@ -96,15 +96,7 @@
     @media (prefers-reduced-motion: reduce) {
       .mark .pyre, .mark .pyre2, .mark .pyre3, .mark .pyre4 { animation: none; }
     }
-    #forge-splash .wordmark-text {
-      margin-top: 14px; font-size: 44px; font-weight: 700; letter-spacing: 4px;
-      background: linear-gradient(#F2C759, #C79929);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-    #forge-splash .descriptor {
-      margin-top: 6px; font-size: 18px; font-weight: 700;
-      letter-spacing: 3.4px; color: #F5F7FC;
-    }
+    #forge-splash .lockup { margin-top: 14px; display: block; }
     #forge-splash .bar {
       margin-top: 26px; width: 120px; height: 2px;
       background: #334059; overflow: hidden; border-radius: 2px;
@@ -131,8 +123,22 @@
       <div class="pyre4"></div>
       <img src="assets/assets/brand/forge_flame.png" alt="">
     </div>
-    <div class="wordmark-text" role="img" aria-label="FORGE">FORGE</div>
-    <div class="descriptor">TALENT CONNECTIONS</div>
+    <!-- One even block, like the marketing sticker: both lines fitted to
+         the same width via textLength. -->
+    <svg class="lockup" width="240" height="104" viewBox="0 0 240 104"
+         role="img" aria-label="FORGE TALENT CONNECTIONS">
+      <defs>
+        <linearGradient id="forge-gg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#F2C759"/>
+          <stop offset="1" stop-color="#C79929"/>
+        </linearGradient>
+      </defs>
+      <text x="0" y="58" textLength="240" lengthAdjust="spacingAndGlyphs"
+            style="font: 800 64px Arial, sans-serif; fill: url(#forge-gg);">FORGE</text>
+      <rect x="0" y="72" width="240" height="1.5" fill="url(#forge-gg)"/>
+      <text x="0" y="98" textLength="240" lengthAdjust="spacingAndGlyphs"
+            style="font: 700 19px Arial, sans-serif; fill: #F5F7FC;">TALENT CONNECTIONS</text>
+    </svg>
     <div class="bar"></div>
   </div>
   <script>
