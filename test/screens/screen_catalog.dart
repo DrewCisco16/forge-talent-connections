@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
+import "package:forge_talent_connections/features/core/ai_assistant.dart";
 import "package:forge_talent_connections/features/core/b1_dashboard.dart";
 import "package:forge_talent_connections/features/core/b2_find_opportunities.dart";
-import "package:forge_talent_connections/features/core/b3_resume_builder.dart";
+import "package:forge_talent_connections/features/core/b3_proof_builder.dart";
 import "package:forge_talent_connections/features/core/b4_credentials.dart";
 import "package:forge_talent_connections/features/core/b5_trust_wallet.dart";
 import "package:forge_talent_connections/features/core/b6_ai_match.dart";
@@ -38,9 +39,10 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "A4 Veteran Verification": const A4VeteranVerification(),
   "A5 Elevator Pitch": const A5ElevatorPitch(),
   "Mission": const MissionScreen(),
+  "AI Assistant": const AiAssistant(),
   "B1 Dashboard": const B1Dashboard(),
   "B2 Find Opportunities": const B2FindOpportunities(),
-  "B3 Resume Builder": const B3ResumeBuilder(),
+  "B3 Proof Builder": const B3ProofBuilder(),
   "B4 Credentials": const B4Credentials(),
   "B5 Trust Wallet": const B5TrustWallet(),
   "B6 AI Match": const B6AiMatch(opportunityId: "employment-law-presentation"),

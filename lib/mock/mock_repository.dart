@@ -371,7 +371,11 @@ class MockForgeRepository implements ForgeRepository {
   );
 
   @override
-  Future<AssistantDraft> loadResumeDraft() => _serve(
+  Future<List<AssistantExchange>> loadAssistantTranscript() =>
+      _serve(kAssistantTranscript);
+
+  @override
+  Future<AssistantDraft> loadPortfolioDraft() => _serve(
     AssistantDraft(
       lines: const <DraftLine>[
         DraftLine(

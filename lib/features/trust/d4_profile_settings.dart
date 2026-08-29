@@ -387,6 +387,11 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             onTap: () => context.go("/trust-technology"),
           ),
           _Row(label: "Data & downloads", onTap: () => context.go("/export")),
+          _Row(label: "AI Assistant", onTap: () => context.go("/assistant")),
+          _Row(
+            label: "Proof Builder",
+            onTap: () => context.go("/proof-builder"),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           _Row(
             label: "Veteran roads",

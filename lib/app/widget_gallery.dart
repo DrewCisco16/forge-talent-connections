@@ -131,7 +131,7 @@ class _WidgetGalleryState extends State<WidgetGallery> {
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(
               tone: BannerTone.governance,
-              text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+              text: "Your Verified Portfolio only claims what is verified. No invented roles, dates, or numbers, ever.",
             ),
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(

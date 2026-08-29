@@ -8,6 +8,7 @@ import "package:forge_talent_connections/features/onboarding/a4_veteran_verifica
 import "package:forge_talent_connections/features/onboarding/legal_terms.dart";
 import "package:forge_talent_connections/features/social/c6_rewards.dart";
 import "package:forge_talent_connections/features/trust/d1_export_certificate.dart";
+import "package:forge_talent_connections/features/core/ai_assistant.dart";
 import "package:forge_talent_connections/features/trust/d5_veteran_roads.dart";
 import "package:forge_talent_connections/features/trust/seal_check.dart";
 import "package:forge_talent_connections/features/trust/trust_technology.dart";
@@ -24,6 +25,7 @@ void main() {
     "C6 Rewards": const C6Rewards(),
     "D1 Export": const D1ExportCertificate(),
     "D5 Veteran Roads": const D5VeteranRoads(),
+    "AI Assistant": const AiAssistant(),
     "Legal Terms": const LegalTerms(),
     "Seal Check": const SealCheck(),
     "Trust Technology": const TrustTechnology(),

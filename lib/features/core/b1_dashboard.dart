@@ -293,6 +293,94 @@ class B1Dashboard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
+          // The assistant and the Proof Builder, one tap away. Both are
+          // honest about what runs where: scripted samples in the demo,
+          // Google Cloud Vertex AI behind the backend in production.
+          InkWell(
+            onTap: () => context.go("/assistant"),
+            borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+            child: ForgeCard(
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.smart_toy_outlined, size: 22, color: forge.violet),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          "AI Assistant",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Answers, drafting help, and premium scholarly "
+                          "research",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.3,
+                            color: forge.textSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: forge.textSub),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          InkWell(
+            onTap: () => context.go("/proof-builder"),
+            borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+            child: ForgeCard(
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.workspace_premium_outlined,
+                    size: 22,
+                    color: forge.gold,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          "Proof Builder",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Your Verified Portfolio, assembled from proof",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.3,
+                            color: forge.textSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: forge.textSub),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
           AsyncView<TrustWalletSummary>(
             value: ref.watch(walletSummaryProvider),
             pendingLabel: "Loading growth",

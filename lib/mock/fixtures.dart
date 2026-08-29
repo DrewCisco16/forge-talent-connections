@@ -298,3 +298,44 @@ const List<RoadMatch> kRoads = <RoadMatch>[
   RoadMatch(role: "Cloud Support Specialist", fitPercent: 88),
   RoadMatch(role: "IT Operations Analyst", fitPercent: 82),
 ];
+
+/// Scripted AI Assistant transcript. Sample conversation only: the demo
+/// assistant never generates text, and the research entries are labelled
+/// samples, never fabricated citations.
+const List<AssistantExchange> kAssistantTranscript = <AssistantExchange>[
+  AssistantExchange(
+    question: "How do I earn my second vouch?",
+    answer:
+        "Two humans, earned separately. Your invitation opened the door; "
+        "a vouch is earned by shipping real work someone will put their "
+        "name behind. Finish your current deliverable in Project Space, "
+        "then ask your reviewer. No credential or algorithm can stand in "
+        "for either person, and that includes me.",
+  ),
+  AssistantExchange(
+    question: "Pull scholarly articles for my pitch competition project.",
+    answer:
+        "Research is a premium capability. I search real scholarly "
+        "registries first, then summarise only records that actually "
+        "exist, with their identifiers attached. Here is the shape of "
+        "what you get back:",
+    premium: true,
+    sampleResults: <String>[
+      "Sample registry record 1: peer-reviewed article on pitch "
+          "persuasion, with journal, year, and DOI shown",
+      "Sample registry record 2: peer-reviewed article on venture "
+          "storytelling, with journal, year, and DOI shown",
+      "Sample registry record 3: peer-reviewed article on presentation "
+          "design, with journal, year, and DOI shown",
+    ],
+  ),
+  AssistantExchange(
+    question: "Can you change my record for me?",
+    answer:
+        "No. I can explain, draft, and research, but nothing becomes "
+        "real without the integrity check, and no credential, "
+        "institution, algorithm, seal, patent application, or "
+        "recommendation replaces the two humans behind a vouch. I never "
+        "write to your record.",
+  ),
+];

@@ -14,12 +14,12 @@ import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
-/// B3 Resume builder.
+/// B3 Proof Builder: the Verified Portfolio, assembled from proof.
 ///
 /// Consumer-safe language only: the checking machinery is described by what it
 /// does for the person, never by internal system names.
-class B3ResumeBuilder extends ConsumerWidget {
-  const B3ResumeBuilder({super.key});
+class B3ProofBuilder extends ConsumerWidget {
+  const B3ProofBuilder({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,8 +31,8 @@ class B3ResumeBuilder extends ConsumerWidget {
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
           const HeroBand(
-            title: "AI Resume Builder",
-            subtitle: "Create a professional resume in minutes",
+            title: "Proof Builder",
+            subtitle: "Your Verified Portfolio, assembled from proof",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           AsyncView<UserProfile>(
@@ -79,7 +79,7 @@ class B3ResumeBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
-            label: "Generate Resume",
+            label: "Assemble Verified Portfolio",
             onPressed: () => demoNote(
               context,
               "The assistant's draft below is built from your verified "
@@ -92,7 +92,9 @@ class B3ResumeBuilder extends ConsumerWidget {
           Text(
             "Every line the assistant writes shows the verified record it "
             "rests on. It cannot invent a role, a date, or a number, because "
-            "it only writes from what passed a check.",
+            "it only writes from what passed a check. In production the "
+            "drafting runs on Google Cloud Vertex AI, always behind the "
+            "integrity check.",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.caption,
@@ -102,7 +104,7 @@ class B3ResumeBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           AsyncView<AssistantDraft>(
-            value: ref.watch(resumeDraftProvider),
+            value: ref.watch(portfolioDraftProvider),
             pendingLabel: "Drafting from your verified record",
             builder: (AssistantDraft draft) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -218,7 +220,7 @@ class B3ResumeBuilder extends ConsumerWidget {
           // Required copy. Ships verbatim.
           const BannerNote(
             tone: BannerTone.governance,
-            text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+            text: "Your Verified Portfolio only claims what is verified. No invented roles, dates, or numbers, ever.",
           ),
           const SizedBox(height: 24),
         ],

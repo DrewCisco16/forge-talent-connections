@@ -127,9 +127,9 @@ final FutureProvider<MembershipStatus> membershipProvider =
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadMembership(),
     );
 
-final FutureProvider<AssistantDraft> resumeDraftProvider =
+final FutureProvider<AssistantDraft> portfolioDraftProvider =
     FutureProvider<AssistantDraft>(
-      (Ref ref) => ref.watch(forgeRepositoryProvider).loadResumeDraft(),
+      (Ref ref) => ref.watch(forgeRepositoryProvider).loadPortfolioDraft(),
     );
 
 final FutureProvider<List<VerifiedSkill>> verifiedSkillsProvider =
@@ -160,6 +160,11 @@ final FutureProvider<PitchStudio> pitchStudioProvider =
 final FutureProvider<RewardsProgram> rewardsProvider =
     FutureProvider<RewardsProgram>(
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadRewards(),
+    );
+
+final FutureProvider<List<AssistantExchange>> assistantTranscriptProvider =
+    FutureProvider<List<AssistantExchange>>(
+      (Ref ref) => ref.watch(forgeRepositoryProvider).loadAssistantTranscript(),
     );
 
 /// Live backend health.

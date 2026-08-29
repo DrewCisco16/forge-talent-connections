@@ -45,7 +45,7 @@ class DeclinedClaim {
   final String reason;
 }
 
-/// The assistant's resume draft: only lines with verified sources, plus an
+/// The assistant's Verified Portfolio draft: only lines with verified sources, plus an
 /// explicit list of what it refused to claim and why.
 class AssistantDraft {
   const AssistantDraft({required this.lines, required this.declined});
@@ -139,4 +139,28 @@ class PitchStudio {
   final int requiredConfidencePercent;
   final VerificationStatus status;
   final String note;
+}
+
+/// One scripted exchange with the AI Assistant.
+///
+/// The demo transcript is fixture data; in production the assistant runs on
+/// Google Cloud Vertex AI behind the product backend, and research results
+/// come from real scholarly registries before the model summarises them.
+class AssistantExchange {
+  const AssistantExchange({
+    required this.question,
+    required this.answer,
+    this.premium = false,
+    this.sampleResults = const <String>[],
+  });
+
+  final String question;
+  final String answer;
+
+  /// True for the paid research capability.
+  final bool premium;
+
+  /// Illustrative registry results; clearly labelled samples, never
+  /// fabricated citations with invented authors or identifiers.
+  final List<String> sampleResults;
 }

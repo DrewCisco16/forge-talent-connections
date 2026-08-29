@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:forge_talent_connections/features/core/b1_dashboard.dart";
-import "package:forge_talent_connections/features/core/b3_resume_builder.dart";
+import "package:forge_talent_connections/features/core/b3_proof_builder.dart";
 import "package:forge_talent_connections/features/core/b4_credentials.dart";
 import "package:forge_talent_connections/features/core/b6_ai_match.dart";
 import "package:forge_talent_connections/features/onboarding/a5_elevator_pitch.dart";
@@ -143,7 +143,7 @@ void main() {
       await tester.binding.setSurfaceSize(surface);
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await _pump(tester, const B3ResumeBuilder(), DemoScenario.verified);
+      await _pump(tester, const B3ProofBuilder(), DemoScenario.verified);
 
       expect(
         find.text(
@@ -153,7 +153,7 @@ void main() {
       );
       expect(
         find.text(
-          "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+          "Your Verified Portfolio only claims what is verified. No invented roles, dates, or numbers, ever.",
         ),
         findsOneWidget,
       );

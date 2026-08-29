@@ -129,7 +129,7 @@ void main() {
           SizedBox(height: 10),
           BannerNote(
             tone: BannerTone.governance,
-            text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+            text: "Your Verified Portfolio only claims what is verified. No invented roles, dates, or numbers, ever.",
           ),
           SizedBox(height: 10),
           BannerNote(

@@ -67,7 +67,7 @@ abstract interface class RoadRepository {
 /// computed by the backend. This interface reports them; it decides nothing.
 abstract interface class GrowthRepository {
   Future<MembershipStatus> loadMembership();
-  Future<AssistantDraft> loadResumeDraft();
+  Future<AssistantDraft> loadPortfolioDraft();
   Future<List<VerifiedSkill>> loadVerifiedSkills();
   Future<IntegrityStreak> loadStreak();
   Future<List<GivenVouch>> loadGivenVouches();
@@ -79,6 +79,7 @@ abstract interface class GrowthRepository {
   /// The rewards and referral program standing. Points, standings, and
   /// eligibility are computed by the backend from verified events only.
   Future<RewardsProgram> loadRewards();
+  Future<List<AssistantExchange>> loadAssistantTranscript();
 }
 
 /// The full surface the app needs.

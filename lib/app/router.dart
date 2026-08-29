@@ -1,9 +1,10 @@
 import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 
+import "../features/core/ai_assistant.dart";
 import "../features/core/b1_dashboard.dart";
 import "../features/core/b2_find_opportunities.dart";
-import "../features/core/b3_resume_builder.dart";
+import "../features/core/b3_proof_builder.dart";
 import "../features/core/b4_credentials.dart";
 import "../features/core/b5_trust_wallet.dart";
 import "../features/core/b6_ai_match.dart";
@@ -122,9 +123,14 @@ GoRouter buildRouter() {
                 B6AiMatch(opportunityId: state.pathParameters["id"]!),
           ),
           GoRoute(
-            path: "/resume-builder",
-            name: "resume-builder",
-            builder: (_, __) => const B3ResumeBuilder(),
+            path: "/proof-builder",
+            name: "proof-builder",
+            builder: (_, __) => const B3ProofBuilder(),
+          ),
+          GoRoute(
+            path: "/assistant",
+            name: "assistant",
+            builder: (_, __) => const AiAssistant(),
           ),
           GoRoute(
             path: "/credentials",
