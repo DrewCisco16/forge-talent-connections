@@ -50,6 +50,7 @@ class _BurningFlameState extends State<BurningFlame>
   );
 
   late final List<_Tongue> _tongues;
+  late final List<_Tongue> _lineTongues;
   late final List<_Ember> _embers;
   bool _started = false;
 
@@ -102,6 +103,23 @@ class _BurningFlameState extends State<BurningFlame>
       for (int i = 0; i < 14; i++)
         _Ember(random, anchors[random.nextInt(anchors.length)]),
     ];
+    // The in-line fire: taller tongues rising from the foot of the mark up
+    // through its channels. Same look and clock as the crown burn; the mask
+    // decides where they show.
+    final math.Random lineRandom = math.Random(11);
+    const List<(double, double, double)> lineAnchors =
+        <(double, double, double)>[
+          (0.24, 0.92, 0.85),
+          (0.34, 0.99, 1.1),
+          (0.44, 1.0, 1.25),
+          (0.54, 1.0, 1.15),
+          (0.64, 0.97, 1.0),
+          (0.74, 0.92, 0.9),
+        ];
+    _lineTongues = <_Tongue>[
+      for (final (double ax, double ay, double sz) in lineAnchors)
+        _Tongue(lineRandom, ax: ax, ay: ay, size: sz),
+    ];
   }
 
   @override
@@ -147,18 +165,18 @@ class _BurningFlameState extends State<BurningFlame>
                   ),
                 ),
               ),
-              // Fire inside the lines of the flame: an animated furnace
-              // fill masked to the mark's interior channels, painted under
-              // the artwork so it never overlaps the gold shape.
+              // Fire inside the lines of the flame: the same waving-tongue
+              // animation as the crown burn, rising through the mark's
+              // interior channels behind a transparent ground, masked so it
+              // never overlaps the gold shape or leaves the design.
               if (_lineMask != null)
                 CustomPaint(
                   painter: _LineFirePainter(
                     mask: _lineMask!,
+                    tongues: _lineTongues,
                     t: _controller.value,
                     animating: _controller.isAnimating,
-                    ember: forge.coral,
-                    deep: forge.goldDeep,
-                    bright: forge.gold,
+                    colors: forge.goldGradient,
                   ),
                 ),
               // The original mark, in front, untouched: no transform, ever.
@@ -376,79 +394,88 @@ class _FirePainter extends CustomPainter {
       old.t != t || old.animating != animating;
 }
 
-/// Paints the furnace inside the mark's line channels.
+/// Paints the crown-style flame animation inside the mark's line channels.
 ///
-/// A vertical molten gradient breathes while three soft hotspots rise
-/// through the channels; the whole layer is then masked by the interior
-/// alpha map, so not one pixel lands outside the lines. Under reduced
-/// motion the fill renders as a single still frame: warmth without
-/// movement.
+/// The ground is fully transparent: nothing is filled. Only the waving
+/// tongues render, in the same two-pass gold palette, wave math, and clock
+/// as the crown burn, and the interior alpha mask then keeps every stroke
+/// inside the lines of the flame. Under reduced motion nothing is drawn,
+/// exactly like the crown fire.
 class _LineFirePainter extends CustomPainter {
   const _LineFirePainter({
     required this.mask,
+    required this.tongues,
     required this.t,
     required this.animating,
-    required this.ember,
-    required this.deep,
-    required this.bright,
+    required this.colors,
   });
 
   final ui.Image mask;
+  final List<_Tongue> tongues;
   final double t;
   final bool animating;
-  final Color ember;
-  final Color deep;
-  final Color bright;
+  final List<Color> colors;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Rect rect = Offset.zero & size;
-    final double clock = animating ? t : 0.35;
+    if (!animating) return;
 
+    final Rect rect = Offset.zero & size;
     canvas.saveLayer(rect, Paint());
 
-    // The molten base: ember at the foot of the mark, bright gold toward
-    // the crown, with the middle stop breathing on the shared clock.
-    final double breathe = 0.52 + 0.08 * math.sin(clock * 2 * math.pi);
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: <Color>[
-            ember.withValues(alpha: 0.75),
-            deep.withValues(alpha: 0.7),
-            bright.withValues(alpha: 0.55),
-          ],
-          stops: <double>[0.0, breathe, 1.0],
-        ).createShader(rect),
-    );
+    // Identical rendering to the crown burn: a dim wide pass and a bright
+    // tight pass, each tongue waving on its own frequencies - only taller,
+    // so the flames sweep up through the channels.
+    for (final (double scale, double alpha, Color color, double blur)
+        in <(double, double, Color, double)>[
+          (1.0, 0.34, colors.last, 3),
+          (0.75, 0.5, colors.first, 2),
+        ]) {
+      final Paint paint = Paint()
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
 
-    // Rising hotspots: integer cycles per loop keep the repeat seamless.
-    const List<(double, double, int)> lanes = <(double, double, int)>[
-      (0.34, 0.0, 1),
-      (0.55, 0.45, 2),
-      (0.72, 0.8, 1),
-    ];
-    for (final (double lx, double phase, int freq) in lanes) {
-      final double progress = (clock * freq + phase) % 1.0;
-      final Offset c = Offset(
-        size.width * lx,
-        size.height * (1.05 - 1.1 * progress),
-      );
-      canvas.drawCircle(
-        c,
-        size.width * 0.22,
-        Paint()
-          ..shader = RadialGradient(
-            colors: <Color>[
-              Colors.white.withValues(alpha: 0.25),
-              bright.withValues(alpha: 0.16),
-              bright.withValues(alpha: 0.0),
-            ],
-          ).createShader(Rect.fromCircle(center: c, radius: size.width * 0.22)),
-      );
+      for (final _Tongue tongue in tongues) {
+        final double rise = math.sin(
+          2 * math.pi * (tongue.riseFreq * t + tongue.risePhase),
+        );
+        final double sway = math.sin(
+          2 * math.pi * (tongue.swayFreq * t + tongue.swayPhase),
+        );
+
+        final double base = size.height * tongue.ay;
+        final double tongueHeight =
+            (size.height *
+                    tongue.height *
+                    0.95 *
+                    scale *
+                    tongue.size *
+                    (0.78 + 0.22 * rise))
+                .clamp(0.0, base - size.height * 0.04);
+        final double halfWidth =
+            size.width * tongue.width * scale * tongue.size * 0.55;
+        final double x = size.width * tongue.ax;
+        final double tipX = x + sway * halfWidth * 1.4;
+        final double tipY = base - tongueHeight;
+
+        final Path path = Path()
+          ..moveTo(x - halfWidth, base)
+          ..quadraticBezierTo(
+            x - halfWidth * 1.15,
+            base - tongueHeight * 0.45,
+            tipX,
+            tipY,
+          )
+          ..quadraticBezierTo(
+            x + halfWidth * 1.15,
+            base - tongueHeight * 0.45,
+            x + halfWidth,
+            base,
+          )
+          ..close();
+
+        paint.color = color.withValues(alpha: alpha * (0.8 + 0.2 * rise.abs()));
+        canvas.drawPath(path, paint);
+      }
     }
 
     // Keep only what falls inside the lines of the flame.
