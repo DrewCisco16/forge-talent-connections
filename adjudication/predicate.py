@@ -64,9 +64,12 @@ import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
+from typing import Any
 
 from adjudication_orchestrator import (
+    _CALLABLE,
     _bounded,
     _reject_unbounded,
     _safe_eval,
@@ -142,6 +145,19 @@ class Predicate:
     relation: str
     value: Fraction
     unit: str
+    written: str = ""
+    """The committed value EXACTLY AS THE SEAT WROTE IT, for precision.
+
+    A Fraction alone cannot say how precisely the figure was asserted, and
+    that difference removed a sound answer on a live five-round run: an option
+    committed "fixed cost of six-month capacity equals 10000 dollars" with
+    monthly_cost=1666.67 over 6 months. Exact arithmetic gives 10000.02, which
+    is not 10000, so the option was eliminated over two cents.
+
+    Nobody writing "10000 dollars" has asserted anything about cents. The
+    comparison uses the precision the SEAT chose, the same rule
+    adjudication_orchestrator._agrees_to_written_precision applies to claims,
+    and it was never brought across to this engine."""
     id: str = ""
     formula: str = ""
     """How the option says its quantity is computed, in named variables.
@@ -329,6 +345,7 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
             pred = Predicate(option_id=option_id,
                              subject=m.group("subject").strip(),
                              relation=rel, value=value, unit=unit,
+                             written=m.group("value").strip(),
                              formula=formula, inputs=tuple(inputs))
         except PredicateError:
             continue
@@ -405,7 +422,11 @@ def _evaluate(formula: str, bindings: Mapping[str, Fraction]) -> Fraction:
         left, _, right = expr.partition("=")
         if _NAME.fullmatch(left.strip()) and right.strip():
             expr = right.strip()
-    names = set(_NAME.findall(expr))
+    # A FUNCTION NAME IS NOT A VARIABLE. `floor(cap / per_round)` matches
+    # `floor` as an identifier, so it was reported as an input nobody supplied
+    # and the commitment came back BLOCKED -- which is how two of twenty-one
+    # commitments on the first five-round run became uncheckable.
+    names = set(_NAME.findall(expr)) - set(_CALLABLE)
     missing = sorted(names - set(bindings))
     if missing:
         raise PredicateError(
@@ -430,11 +451,64 @@ def _evaluate(formula: str, bindings: Mapping[str, Fraction]) -> Fraction:
         raise PredicateError(f"could not evaluate {expr!r}: {exc}") from exc
 
 
+def _same_to_written_precision(got: Fraction, pred: Predicate) -> bool:
+    """Does the computed value round to exactly the figure the seat wrote?
+
+    THE PRECISION IS THE SEAT'S, NOT A TOLERANCE THIS CODE PICKED. Someone who
+    writes "10000 dollars" has asserted dollars; someone who writes "10000.00"
+    has asserted cents; someone who writes "0.3333" has asserted four places.
+    Each is held to what they actually wrote.
+
+    WHY THIS EXISTS. On the first full five-round run the only elimination the
+    whole panel produced was this:
+
+        monthly_cost * months with (monthly_cost=1666.67, months=6)
+        gives 10000.02 dollars, but it committed ... equals 10000 dollars
+
+    A sound option was removed over two cents, and it was the ONLY removal in
+    thirty calls -- so the engine's entire measured output for that run was one
+    false positive. The design commitment is "fail closed on the conclusion,
+    never on the candidate", and exact Fraction equality does the opposite: it
+    fails closed on the candidate for a discrepancy below the precision anyone
+    asserted.
+
+    INTEGERS COUNT, and that is the difference from the orchestrator's version
+    of this rule, which returns False when there is no decimal point. There it
+    guards a free-text arithmetic claim, where an integer written without a
+    decimal is most naturally read as exact. Here the figure is a declared
+    commitment with a unit attached, and "10000 dollars" is a statement about
+    dollars. A seat that means cents writes cents.
+
+    It only ever forgives a discrepancy SMALLER than the last digit written.
+    30 against a computed 31 still fails; 30 against 30.02 does not.
+    """
+    text = (pred.written or "").strip()
+    if not text or "e" in text.lower():
+        return got == pred.value
+    places = len(text.split(".", 1)[1]) if "." in text else 0
+    if places > 30:
+        return got == pred.value
+    try:
+        quantum = Decimal(1).scaleb(-places)
+        as_dec = Decimal(got.numerator) / Decimal(got.denominator)
+        claimed = Decimal(pred.value.numerator) / Decimal(pred.value.denominator)
+        return (as_dec.quantize(quantum, rounding=ROUND_HALF_UP)
+                == claimed.quantize(quantum, rounding=ROUND_HALF_UP))
+    except (InvalidOperation, ValueError, ZeroDivisionError):
+        return got == pred.value
+
+
 def _holds(pred: Predicate, got: Fraction) -> bool:
-    """Whether a computed value satisfies the relation the option declared."""
+    """Whether a computed value satisfies the relation the option declared.
+
+    Equality is judged at the precision the seat wrote. The ORDER relations
+    are not: "at least 12" is a boundary the seat chose, and rounding a
+    computed 11.6 up to 12 would satisfy a bound the arithmetic misses.
+    """
+    same = _same_to_written_precision(got, pred)
     return {
-        "=": got == pred.value,
-        "!=": got != pred.value,
+        "=": same,
+        "!=": not same,
         "<": got < pred.value,
         "<=": got <= pred.value,
         ">": got > pred.value,
@@ -523,7 +597,7 @@ what outweighed what, and the answer is not deleted on one model's opinion.
 
 def corroborated_inputs(
     pred: Predicate,
-    challenges: Sequence[tuple[str, Mapping[str, Fraction]]],
+    challenges: Sequence[tuple[Any, ...]],
 ) -> dict[str, tuple[Fraction, int, int]]:
     """Inputs where independent seats agree on a different value.
 
@@ -532,26 +606,44 @@ def corroborated_inputs(
     support the option's own figure has.
     """
     mine = dict(pred.inputs)
-    votes: dict[str, dict[Fraction, int]] = {}
-    for pid, bindings in challenges:
+    # DISTINCT SEATS, NOT CHALLENGE LINES. What carries weight is agreement
+    # between observers who could not coordinate, so the unit of account has
+    # to be the observer. Counting lines let ONE seat corroborate itself by
+    # writing the same dispute twice -- which hands any seat the power to
+    # delete any answer by repeating itself, the exact defect this rule
+    # exists to prevent.
+    #
+    # It was reachable before challenges accumulated across rounds (a seat
+    # could repeat a line inside one reply) and trivially reachable after, so
+    # it is fixed here rather than in the caller: a challenge without a seat
+    # attached cannot be weighed, and the count has to refuse to treat two
+    # lines from one seat as two seats.
+    #
+    # A challenge whose seat is unknown is given a distinct identity of its
+    # own. That preserves the older behaviour for every caller that supplies
+    # two-element challenges, and it is the safe direction: an unknown seat
+    # can never be silently merged INTO another seat's vote.
+    votes: dict[str, dict[Fraction, set[str]]] = {}
+    for index, challenge in enumerate(challenges):
+        pid, bindings = challenge[0], challenge[1]
+        seat = str(challenge[2]) if len(challenge) > 2 else f"?{index}"
         if pid != pred.id:
             continue
         for name, value in bindings.items():
             if name not in mine:
                 continue        # not an input of this formula; it names nothing
-            votes.setdefault(name, {})[value] = \
-                votes.setdefault(name, {}).get(value, 0) + 1
+            votes.setdefault(name, {}).setdefault(value, set()).add(seat)
     out: dict[str, tuple[Fraction, int, int]] = {}
     for name, tally in votes.items():
         # The option's own figure is backed by whoever proposed it, plus any
         # seat that offered the same value rather than a different one.
         held = mine[name]
-        for_held = 1 + tally.get(held, 0)
+        for_held = 1 + len(tally.get(held, set()))
         best = max((v for v in tally if v != held),
-                   key=lambda v: (tally[v], str(v)), default=None)
+                   key=lambda v: (len(tally[v]), str(v)), default=None)
         if best is None:
             continue
-        against = tally[best]
+        against = len(tally[best])
         if against >= CORROBORATION_THRESHOLD and against > for_held:
             out[name] = (best, against, for_held)
     return out
@@ -639,7 +731,7 @@ def parse_challenges(text: str) -> list[tuple[str, dict[str, Fraction]]]:
 
 
 def adjudicate(predicates: Sequence[Predicate],
-               challenges: Sequence[tuple[str, Mapping[str, Fraction]]],
+               challenges: Sequence[tuple[Any, ...]],
                ) -> dict[str, Ruling]:
     """Every commitment ruled on, keyed by predicate id.
 
@@ -658,7 +750,11 @@ def adjudicate(predicates: Sequence[Predicate],
     """
     by_id = {p.id: p for p in predicates}
     out: dict[str, Ruling] = {p.id: self_check(p) for p in predicates}
-    for pid, bindings in challenges:
+    for challenge in challenges:
+        # A challenge may carry the seat that wrote it as a third element.
+        # corroborated_inputs needs it to count observers rather than lines;
+        # nothing else here does, so both shapes are accepted.
+        pid, bindings = challenge[0], challenge[1]
         pred = by_id.get(pid)
         if pred is None:
             continue

@@ -1057,6 +1057,27 @@ def run_night(
     # Every commitment ruled on so far, carried between rounds. A check that
     # happened in round two is still a check in round five.
     settled: dict[str, Ruling] = {}
+    standing_challenges: list[tuple[str, Mapping[str, Fraction], str]] = []
+    """Every challenge any seat has written, across all rounds so far.
+
+    ACCUMULATED FOR THE SAME REASON RULINGS ARE, and it was not. Each round
+    ruled on its OWN challenges only, so two seats disputing the same input in
+    DIFFERENT rounds never met: corroboration needs two seats to agree, it
+    checked one round at a time, and a dispute raised in round two was gone by
+    round four.
+
+    They are still blind to each other across rounds -- what carries forward
+    is the surviving option list and its commitments, never anyone's
+    challenge -- so two seats agreeing in different rounds is exactly the
+    independent agreement the rule is built on. Nothing about it requires the
+    two to have written in the same round.
+
+    Measured on the first full five-round run, replaying its own eight
+    challenges: ruled round by round they removed NOTHING, and ruled together
+    they remove one option on a corroborated dispute. That is the difference
+    between an engine whose only output was a false positive and one that
+    refuted something.
+    """
 
     # Fixed for the whole run. A persona that moved between rounds would make
     # measured rho meaningless: the correlation would be between shuffled
@@ -1169,10 +1190,14 @@ def run_night(
         # Round one has nothing standing to challenge yet; it is the round
         # that creates the commitments.
         standing = [pr for o in options if o.alive for pr in o.predicates]
-        challenges: list[tuple[str, Mapping[str, Fraction]]] = []
+        # THE SEAT IS ATTACHED HERE, and it is load-bearing. Corroboration
+        # weighs agreement between observers who could not coordinate, so it
+        # counts distinct SEATS; a challenge with no seat on it cannot be
+        # weighed against another and is treated as its own lone observer.
+        challenges: list[tuple[str, Mapping[str, Fraction], str]] = []
         for seat_id, raw in texts.items():
             mine = parse_challenges(raw)
-            challenges.extend(mine)
+            challenges.extend((pid, b, seat_id) for pid, b in mine)
             # WHO challenged WHAT, not merely how many (SOP 6.2). f1 counts
             # errors found by exactly one seat and f2 by exactly two, and
             # neither is recoverable from a total.
@@ -1185,7 +1210,12 @@ def run_night(
         # rounds -- never counted as examined, and the run reported it as
         # untested to the end. Whether something was checked does not stop
         # being true because a later round did not check it again.
-        rulings = {**settled, **adjudicate(standing, challenges)}
+        # RULED AGAINST EVERY CHALLENGE EVER WRITTEN, not only this round's.
+        # Two seats disputing the same input in different rounds are still two
+        # seats who could not see each other, and per-round adjudication threw
+        # that agreement away.
+        standing_challenges.extend(challenges)
+        rulings = {**settled, **adjudicate(standing, standing_challenges)}
         settled.update(rulings)
         res.challenges = len(challenges)
         # NAMING A COMMITMENT THAT EXISTS, which is not the same as the
@@ -1195,8 +1225,8 @@ def run_night(
         # commitment that exists". The second figure was seventeen higher than
         # the first and measured something else entirely.
         standing_ids = {pr.id for pr in standing}
-        res.challenges_ruled = sum(1 for pid, _ in challenges
-                                   if pid in standing_ids)
+        res.challenges_ruled = sum(1 for c in challenges
+                                   if c[0] in standing_ids)
         if challenges:
             emit(f"  {len(challenges)} challenge(s), "
                  f"{res.challenges_ruled} naming a commitment that exists")

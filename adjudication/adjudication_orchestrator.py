@@ -390,7 +390,81 @@ def _safe_eval(node: ast.AST, source: str | None = None) -> Fraction:
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
         return _bounded(_UNARY_OPS[type(node.op)](
             _safe_eval(node.operand, source)))
+    if isinstance(node, ast.Call):
+        return _safe_call(node, source)
     raise ValueError("unsupported expression")
+
+
+def _half_up(value: Fraction, places: Fraction = Fraction(0)) -> Fraction:
+    """round(), half away from zero, exact on Fractions.
+
+    NOT Python's round(), which is half-to-even: round(0.5) is 0 and
+    round(2.5) is 2. A seat writing round(x) means the schoolroom rule, and a
+    commitment ruled on a convention the seat did not intend is a refutation
+    of this code's reading rather than of the seat's arithmetic. Half-up also
+    matches _agrees_to_written_precision, so the evaluator and the comparison
+    round the same way."""
+    if places.denominator != 1:
+        raise ValueError("unsupported expression")
+    scale = Fraction(10) ** int(places)
+    scaled = value * scale
+    whole, rest = divmod(abs(scaled.numerator), scaled.denominator)
+    if rest * 2 >= scaled.denominator:
+        whole += 1
+    return Fraction(whole if scaled >= 0 else -whole) / scale
+
+
+_CALLABLE: dict[str, Any] = {
+    "floor": lambda *a: Fraction(math.floor(_one(a))),
+    "ceil": lambda *a: Fraction(math.ceil(_one(a))),
+    "abs": lambda *a: abs(_one(a)),
+    "min": lambda *a: min(_at_least_one(a)),
+    "max": lambda *a: max(_at_least_one(a)),
+    "round": lambda *a: _half_up(a[0], a[1] if len(a) > 1 else Fraction(0)),
+}
+"""The only functions an expression may call, and every one is exact on
+Fractions.
+
+WHY THEY EXIST. On the first full five-round run, two of twenty-one
+commitments came back BLOCKED with "unsupported expression" -- one used
+floor(cap / per_round_escalations) and one used min(maximum_rounds, ...).
+Those are ordinary arithmetic, and a blocked commitment is one that can never
+be verified OR refuted: the option carrying it survives marked untested. Two
+of twenty-one is a tenth of everything the panel committed to, lost because
+the evaluator could not do floor.
+
+NOTHING ELSE IS REACHABLE. The name must be a bare identifier in this map --
+no attribute access, no keywords, no *args -- so there is no route from an
+expression to any other callable, and the evaluator still never uses eval().
+"""
+
+
+def _one(args: tuple[Fraction, ...]) -> Fraction:
+    if len(args) != 1:
+        raise ValueError("unsupported expression")
+    return args[0]
+
+
+def _at_least_one(args: tuple[Fraction, ...]) -> tuple[Fraction, ...]:
+    if not args:
+        raise ValueError("unsupported expression")
+    return args
+
+
+def _safe_call(node: ast.Call, source: str | None) -> Fraction:
+    """One allowlisted arithmetic function, on already-evaluated arguments."""
+    if (not isinstance(node.func, ast.Name)
+            or node.func.id not in _CALLABLE
+            or node.keywords
+            or any(isinstance(a, ast.Starred) for a in node.args)):
+        raise ValueError("unsupported expression")
+    args = tuple(_safe_eval(a, source) for a in node.args)
+    try:
+        return _bounded(Fraction(_CALLABLE[node.func.id](*args)))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("unsupported expression") from exc
 
 
 _NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")

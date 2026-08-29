@@ -528,9 +528,60 @@ def unexamined(options: Sequence[Option],
             in ("pass", "fail")
             for pred in opt.predicates
         )
-        if not settled:
+        if not settled or not externally_tested(opt, verdicts):
             out.append(opt)
     return out
+
+
+def externally_tested(opt: Option,
+                      verdicts: Mapping[str, object]) -> bool:
+    """Did anything OUTSIDE this option ever touch one of its commitments?
+
+    THE FAIL-OPEN THIS CLOSES, AND IT WAS THE WHOLE OUTPUT OF A PAID RUN.
+
+    A self-check asks whether the option's own formula, on the option's own
+    inputs, produces the option's own figure. A competent model always passes
+    that, because it is a check on the seat's ARITHMETIC and not on its claim
+    about the world. Measured on the first full five-round run: twenty-one
+    commitments, eighteen PASS, and every one of the eighteen was of this
+    shape --
+
+        gives 30, committed equals 30      gives 12, committed equals 12
+        gives  6, committed equals  6      gives 24, committed equals 24
+
+    -- a seat computing 5 * 6 and committing to 30. Twelve options survived
+    and the packet listed their commitments under rulings, which reads as
+    twelve answers that were checked and held. Nothing about any of them had
+    been tested. One of the panel's own escalated claims said so outright:
+    "Every surviving option's cost commitment depends on the input
+    per_round = 6, which no seat evidenced and no check in this run
+    established."
+
+    That is precisely the confusion `unexamined` exists to prevent, one level
+    down: surviving because nothing examined you looks identical to surviving
+    scrutiny, and a PASS on your own multiplication looks identical to a PASS
+    somebody tried to break.
+
+    WHAT COUNTS AS EXTERNAL. Only evidence from outside the option:
+
+      * a DISPUTE -- another seat put different numbers into this formula.
+        The commitment survived someone attacking its inputs.
+      * an ALTERNATE -- another seat reached the same figure by its own route.
+        Two independent derivations agreeing is corroboration.
+
+    Nothing here reads text, and nothing depends on which seat said what: both
+    facts are recorded by the machinery when a challenge is ruled or a merge
+    absorbs a second advocate.
+
+    A PASS still means the arithmetic held, and it is still reported. What it
+    stops meaning is that the answer was examined.
+    """
+    for pred in opt.predicates:
+        if getattr(pred, "alternates", ()):
+            return True
+        if getattr(verdicts.get(getattr(pred, "id", "")), "disputes", ()):
+            return True
+    return False
 
 
 _MERGE = re.compile(r"^\s*MERGE\s*\|(.+)$", re.IGNORECASE)

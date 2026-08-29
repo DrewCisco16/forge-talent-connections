@@ -14,6 +14,7 @@ is not written down gets deleted the first time it is inconvenient.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import pathlib
@@ -1623,10 +1624,48 @@ class TestCodeOwnsTheSurvivorSet:
         opt = OS.Option(id="o1", text="an option")
         assert OS.unexamined([opt], {}) == [opt]
 
-    def test_a_fully_ruled_survivor_is_examined(self):
+    def test_a_survivor_checked_only_against_its_own_arithmetic_is_untested(self):
+        """CORRECTED, AND A PAID RUN IS WHAT CORRECTED IT.
+
+        This asserted that a fully ruled survivor is EXAMINED. A self-check
+        asks whether the option's own formula on the option's own inputs gives
+        the option's own figure, and a competent model always passes that --
+        it is a check on the seat's arithmetic, not on its claim about the
+        world.
+
+        Measured on the first full five-round run: twenty-one commitments,
+        eighteen PASS, and all eighteen of that shape -- "gives 30, committed
+        equals 30". Twelve options survived and their commitments appeared
+        under rulings, which reads as twelve answers that were checked and
+        held. Not one had been tested by anything outside itself.
+        """
         opt = self._opt_with((4, "2 + 2"))
         rulings = P.adjudicate(opt.predicates, [])
         assert rulings[opt.predicates[0].id].status == "pass"
+        assert OS.unexamined([opt], rulings) == [opt], (
+            "a PASS on your own multiplication is not scrutiny")
+
+    def test_a_disputed_commitment_that_still_holds_counts_as_tested(self):
+        """The other half, and the fix is worthless without it. A commitment
+        somebody attacked and could not break HAS been examined, and it must
+        stop being reported as untested -- otherwise the warning fires on
+        every surviving option forever and an operator learns to ignore it."""
+        opt = self._opt_with((4, "2 + 2"))
+        pid = opt.predicates[0].id
+        rulings = P.adjudicate(opt.predicates, [(pid, {"a": Fraction(9)})])
+        assert OS.unexamined([opt], rulings) == [] or rulings[pid].disputes, (
+            "the setup is broken if no dispute was recorded")
+        if rulings[pid].disputes:
+            assert OS.unexamined([opt], rulings) == []
+
+    def test_a_second_seats_independent_route_counts_as_tested(self):
+        """An ALTERNATE is another seat reaching the same figure its own way.
+        Two independent derivations agreeing is corroboration, which is the
+        one thing a five-seat panel produces that one model cannot."""
+        opt = self._opt_with((4, "2 + 2"))
+        opt.predicates = [dataclasses.replace(
+            opt.predicates[0], alternates=(("1 + 3", ()),))]
+        rulings = P.adjudicate(opt.predicates, [])
         assert OS.unexamined([opt], rulings) == []
 
     def test_one_settled_commitment_does_not_cover_an_unsettled_one(self):
