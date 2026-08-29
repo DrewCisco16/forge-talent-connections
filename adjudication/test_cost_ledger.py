@@ -1113,11 +1113,57 @@ class TestThePerSeatOutputBound:
             assert rates["seat_1"].output_multiplier == \
                 CL.HIDDEN_OUTPUT_MULTIPLIER, bad
 
-    def test_the_shipped_rates_carry_measured_multipliers(self):
+    def test_every_shipped_seat_states_its_own_multiplier(self):
+        """THE PROXY THIS REPLACES WAS WRONG, and a live run proved it.
+
+        It asserted every shipped multiplier was BELOW the unmeasured default
+        of 5.0, using "below the default" as a stand-in for "measured". Then
+        seat_2 was measured at 2.9x on the first five-round run -- it billed
+        $0.1475 against $0.1289 authorised and the overrun halt stopped the
+        run on call three -- and raising it to 6.0 for headroom turned this
+        test red for a value that is BETTER established than the one it was
+        defending. A proxy that fails on new evidence is measuring the wrong
+        thing.
+
+        What the file actually promises is that no seat is silently running on
+        the default, so that is what this checks: an explicit key per seat.
+        """
         with open("rates.json", encoding="utf-8") as fh:
-            rates = CL.rates_from_config(json.load(fh))
-        assert all(r.output_multiplier < CL.HIDDEN_OUTPUT_MULTIPLIER
-                   for r in rates.values())
+            blob = json.load(fh)
+        seats = {k: v for k, v in blob.items()
+                 if not k.startswith("_") and isinstance(v, dict)}
+        assert seats, "rates.json shipped with no seats"
+        missing = [k for k, v in seats.items() if "output_multiplier" not in v]
+        assert not missing, (
+            f"{missing} would silently take the {CL.HIDDEN_OUTPUT_MULTIPLIER}x "
+            f"default, so nobody has looked at what those seats actually bill")
+
+    def test_every_shipped_multiplier_has_headroom_over_its_measurement(self):
+        """The file's own convention: roughly double the largest measurement.
+
+        seat_2 is why this exists. It sat at 2.5 against a 1.23x measurement
+        -- 2.0x headroom, which read as comfortable -- and a longer round-one
+        prompt on the real five-round run produced 2.9x. A multiplier is a
+        BOUND, and a bound with no margin over the only figure anyone has
+        measured is a bound waiting to halt a paid run.
+        """
+        import re
+        with open("rates.json", encoding="utf-8") as fh:
+            blob = json.load(fh)
+        thin = []
+        for seat, cfg in sorted(blob.items()):
+            if seat.startswith("_") or not isinstance(cfg, dict):
+                continue
+            note = cfg.get("_note_output_multiplier", "")
+            found = [float(x) for x in re.findall(r"([\d.]+)x", note)]
+            if not found:
+                continue          # nothing measured yet; nothing to compare
+            if cfg["output_multiplier"] < 2.0 * max(found):
+                thin.append(f"{seat}: {cfg['output_multiplier']} against a "
+                            f"measured {max(found)}x")
+        assert not thin, (
+            "these multipliers have less than 2x headroom over their own "
+            "recorded measurement: " + "; ".join(thin))
 
     def test_the_bound_reaches_the_seat(self):
         """A multiplier nothing reads is the same as no multiplier."""
