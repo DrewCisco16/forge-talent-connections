@@ -7,6 +7,7 @@ import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/brand_lockup.dart";
 import "../../widgets/burning_flame.dart";
+import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
@@ -124,7 +125,10 @@ class _A1SplashState extends State<A1Splash> {
               color: forge.textSub,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          // The operating company, small at the foot of the first page.
+          const OperatorFooter(),
+          const SizedBox(height: 20),
         ],
       ),
     );

@@ -112,6 +112,7 @@ class _BurningFlameState extends State<BurningFlame>
           // Full sweep, end to end: the outermost anchors sit under the
           // thin channels at the far left and far right of the mark, so
           // fire travels through every line, not just the middle ones.
+          (0.115, 0.8, 0.7),
           (0.16, 0.88, 0.8),
           (0.24, 0.92, 0.9),
           (0.34, 0.99, 1.1),
@@ -120,7 +121,11 @@ class _BurningFlameState extends State<BurningFlame>
           (0.64, 0.97, 1.0),
           (0.74, 0.92, 0.95),
           (0.84, 0.86, 0.9),
-          (0.92, 0.8, 0.75),
+          (0.92, 0.8, 0.85),
+          // The far right channel opens at mid-height, off the rising path
+          // of the 0.92 tongue: this one sits directly beneath its mouth so
+          // fire always climbs through the very end of the mark.
+          (0.955, 0.72, 0.85),
         ];
     _lineTongues = <_Tongue>[
       for (final (double ax, double ay, double sz) in lineAnchors)
@@ -429,16 +434,62 @@ class _LineFirePainter extends CustomPainter {
     final Rect rect = Offset.zero & size;
     canvas.saveLayer(rect, Paint());
 
+    // A river of light along the channels: a breathing base glow and two
+    // traveling highlights that each sweep the full width every loop. This
+    // guarantees visible, moving fire in every channel - the thin mouths at
+    // the far left and far right included - even at small render sizes
+    // where individual tongues thin out below visibility.
+    final double breathe = 0.5 + 0.5 * math.sin(2 * math.pi * t);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(0, size.height),
+          Offset(0, size.height * 0.30),
+          <Color>[
+            colors.first.withValues(alpha: 0.20 + 0.10 * breathe),
+            colors.last.withValues(alpha: 0.10 + 0.05 * breathe),
+            colors.last.withValues(alpha: 0),
+          ],
+          <double>[0, 0.55, 1],
+        ),
+    );
+    final Paint sweepPaint = Paint()
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.height * 0.05);
+    for (final (double phase, double dir) in <(double, double)>[
+      (0.0, 1.0),
+      (0.5, -1.0),
+    ]) {
+      // One full crossing per loop keeps the repeat seamless; the sweep
+      // starts and ends past the edges so the ends get the full highlight.
+      final double p = (t * dir + phase) % 1.0;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset((p * 1.5 - 0.25) * size.width, size.height * 0.62),
+          width: size.width * 0.32,
+          height: size.height * 0.78,
+        ),
+        sweepPaint..color = colors.first.withValues(alpha: 0.18),
+      );
+    }
+
     // Identical rendering to the crown burn: a dim wide pass and a bright
     // tight pass, each tongue waving on its own frequencies - only taller,
-    // so the flames sweep up through the channels.
+    // so the flames sweep up through the channels. Blur scales with the
+    // render size so the small sign-in mark burns as brightly as the large
+    // splash mark instead of washing out.
     for (final (double scale, double alpha, Color color, double blur)
         in <(double, double, Color, double)>[
           (1.0, 0.34, colors.last, 3),
           (0.75, 0.5, colors.first, 2),
         ]) {
       final Paint paint = Paint()
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
+        ..maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          // Normalized to the splash mark's height, where this burn was
+          // tuned: the same look at every size.
+          math.max(0.6, blur * size.height / 132),
+        );
 
       for (final _Tongue tongue in tongues) {
         final double rise = math.sin(

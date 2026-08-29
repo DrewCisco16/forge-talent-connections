@@ -8,6 +8,7 @@ import "../../widgets/brand_lockup.dart";
 import "../../widgets/burning_flame.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
+import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
 
 /// D3 Sign in.
@@ -167,7 +168,10 @@ class D3SignIn extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          // The operating company, small at the foot of the door page.
+          const OperatorFooter(),
+          const SizedBox(height: 20),
         ],
       ),
     );

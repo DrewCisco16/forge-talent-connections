@@ -6,6 +6,7 @@ import "../../theme/tokens.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
+import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
@@ -22,8 +23,9 @@ class LegalTerms extends StatelessWidget {
   static const List<(String, String)> _sections = <(String, String)>[
     (
       "Who we are",
-      "FORGE Talent Connections is operated by FORGE LINK LLC, a "
-          "Florida limited liability company. These terms are the "
+      "FORGE Talent Connections is owned and operated by FORGE LINK LLC, "
+          "a Delaware limited liability company headquartered in Doral, "
+          "Florida. These terms are the "
           "agreement between you and FORGE LINK LLC, covering every part "
           "of the product: profiles, verification, vouching, projects, "
           "messaging, the rewards and referral program, and exports.",
@@ -191,7 +193,10 @@ class LegalTerms extends StatelessWidget {
             label: "Back to Sign-Up",
             onPressed: () => context.go("/create-profile"),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          // The operating company's mark closes the legal page.
+          const OperatorFooter(),
+          const SizedBox(height: 20),
         ],
       ),
     );

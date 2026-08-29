@@ -48,11 +48,14 @@ void main() {
     );
     // The anti-automation prize rule is in the agreement itself.
     expect(find.textContaining("referred to law enforcement"), findsWidgets);
-    // The draft is anchored to Florida law: the operating company's home
-    // state governs, the game-promotion statute is named, and the breach
-    // notice window matches the statute.
+    // The operating company is named accurately: a Delaware LLC with its
+    // headquarters in Doral, Florida. The draft stays anchored to Florida
+    // law: the game-promotion statute is named and the breach notice
+    // window matches the statute.
     expect(
-      find.textContaining("Florida limited liability company"),
+      find.textContaining(
+        "Delaware limited liability company headquartered in Doral",
+      ),
       findsOneWidget,
     );
     expect(
