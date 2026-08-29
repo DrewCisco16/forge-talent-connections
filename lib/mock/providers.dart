@@ -5,6 +5,7 @@
 // no screen needs to change.
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../api/forge_api_client.dart";
 import "../api/forge_repository.dart";
 import "../models/models.dart";
 import "fixtures.dart";
@@ -160,3 +161,21 @@ final FutureProvider<RewardsProgram> rewardsProvider =
     FutureProvider<RewardsProgram>(
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadRewards(),
     );
+
+/// Live backend health.
+///
+/// Null means this build was compiled without FORGE_API_BASE_URL: there is
+/// no live backend, nothing is checked, and nothing about a backend is shown.
+/// True and false are the real answer from the live edge's health endpoint,
+/// fail-closed: any error is false, never an optimistic true.
+final FutureProvider<bool?> backendHealthProvider = FutureProvider<bool?>((
+  Ref ref,
+) async {
+  if (!forgeApiConfigured) return null;
+  final ForgeApiClient client = ForgeApiClient();
+  try {
+    return await client.isHealthy();
+  } finally {
+    client.close();
+  }
+});

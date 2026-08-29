@@ -37,7 +37,11 @@ void main() {
           final bool isFullName = literal.contains("FORGE Talent Connections");
           // The operating company's legal name is sanctioned in legal copy.
           final bool isLegalEntity = literal.contains("FORGE LINK LLC");
-          if (!isWordmark && !isFullName && !isLegalEntity) {
+          // The backend configuration key is a technical identifier from the
+          // founder's backend connection package; it must match the deployed
+          // environment variable name exactly, so it is sanctioned as-is.
+          final bool isConfigKey = literal.contains("FORGE_API_BASE_URL");
+          if (!isWordmark && !isFullName && !isLegalEntity && !isConfigKey) {
             offences.add("${entity.path}:${i + 1}  $literal");
           }
         }

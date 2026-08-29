@@ -47,6 +47,9 @@ class B1Dashboard extends ConsumerWidget {
                   child: DemoBadge(),
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
+                // Renders only in a build compiled with a live backend
+                // address; the pure demo shows nothing here.
+                const _LiveBackendBanner(),
                 ForgeCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,6 +580,72 @@ class _WideButton extends StatelessWidget {
             fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The live-connection banner.
+///
+/// Truthful in all three states: absent entirely when the build carries no
+/// backend address (the pure fixture demo), a quiet confirmation when the
+/// live edge answers healthy, and a plain fail-closed notice when it does
+/// not. It never renders a connected state it has not verified.
+class _LiveBackendBanner extends ConsumerWidget {
+  const _LiveBackendBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    final AsyncValue<bool?> health = ref.watch(backendHealthProvider);
+
+    final bool? healthy = health.whenOrNull(data: (bool? v) => v);
+    if (health.hasValue && healthy == null) {
+      // No backend configured: this is the fixture demo, show nothing.
+      return const SizedBox.shrink();
+    }
+    if (!health.hasValue && !health.isLoading) {
+      return const SizedBox.shrink();
+    }
+    if (health.isLoading) {
+      return const SizedBox.shrink();
+    }
+
+    final bool ok = healthy ?? false;
+    final Color tone = ok ? forge.gold : forge.violet;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
+      child: Container(
+        decoration: BoxDecoration(
+          color: tone.withValues(alpha: 0.09),
+          border: Border.all(color: tone.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              ok ? Icons.cloud_done : Icons.cloud_off,
+              size: 18,
+              color: tone,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                ok
+                    ? "Live backend connected"
+                    : "Live backend unreachable. Demo data is shown and "
+                          "nothing was changed.",
+                style: TextStyle(
+                  fontFamily: ForgeType.bodyFamily,
+                  fontSize: ForgeType.caption,
+                  fontWeight: FontWeight.w600,
+                  color: forge.text,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
