@@ -244,14 +244,27 @@ recomputed, so it can never be verified and it can never be ruled out; it
 survives to the end marked untested, which is not the same as surviving
 scrutiny.
 
-WHAT THIS EXPOSES YOU TO. Your option is removed if YOUR formula with YOUR
-inputs does not produce YOUR figure. Nobody else's arithmetic can remove it.
-Another seat may say one of your inputs is wrong, and that is recorded for a
-person to settle -- it does not remove anything, because their number has no
-more standing than yours until somebody establishes it.
+WHAT THIS EXPOSES YOU TO, IN FULL. Two things can remove your option, and
+nothing else can:
 
-So the risk of writing this down is exactly that your own numbers have to add
-up. Check them before you commit to them.
+  1. YOUR formula with YOUR inputs does not produce YOUR figure. Your own
+     arithmetic, checked the moment you write it.
+
+  2. In a later round, TWO OR MORE other seats independently give the same
+     different value for one of your inputs, that outnumbers the support your
+     figure has, and your own formula on those numbers no longer produces
+     what you committed to.
+
+A single seat disagreeing with you removes nothing: their number has no more
+standing than yours. What outweighs you is agreement between seats who wrote
+blind and could not coordinate. You are one such seat when you read someone
+else's option, and the same rule protects you and binds you.
+
+So the risk of writing this down is that your own numbers have to add up AND
+have to survive other people checking them. Check them before you commit, and
+put down the figure you actually believe rather than the one that is hardest
+to attack -- a number chosen to be safe is a number no honest seat will
+match, and it will not save the answer.
 
 State the figure that actually decides the answer. If nothing quantitative
 decides it, write no PREDICATE line rather than a decorative one: a commitment

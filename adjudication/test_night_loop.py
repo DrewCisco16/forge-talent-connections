@@ -2590,3 +2590,56 @@ class TestASeatCanSeeWhatItIsAskedToChallenge:
     def test_a_commitment_with_no_formula_says_so(self):
         out = self._pred(formula="", inputs=()).render()
         assert "no formula declared" in out
+
+
+class TestTheTwoContractsAgreeWithEachOther:
+    """Round one told seats "it does not remove anything" about another
+    seat's disagreement. Corroboration made that false, and round two says
+    the opposite -- so a seat proposing an answer was told one rule and a
+    seat challenging one was told another.
+
+    Caught in a pre-flight rather than by a test, which is why the pre-flight
+    exists: nothing here fails when two prompts disagree, because each is
+    correct on its own.
+    """
+
+    @staticmethod
+    def _flat(text):
+        """Whitespace-normalised, because these are WRAPPED paragraphs.
+
+        An assertion that happens to span a line break fails on a reflow that
+        changed nothing, and passes only by luck when it does not -- so it
+        tests the formatter rather than the wording."""
+        return " ".join(text.split())
+
+    def _round_one(self):
+        return self._flat(NL.thinker_prompt(NL.ROUNDS[0], "x", None,
+                                            persona=NL.PERSONAS[0]))
+
+    def _later(self):
+        return self._flat(NL.thinker_prompt(NL.ROUNDS[1], "x", "options here",
+                                            persona=NL.PERSONAS[0]))
+
+    def test_round_one_does_not_promise_immunity_from_other_seats(self):
+        one = self._round_one()
+        assert "it does not remove anything" not in one
+        assert "Nobody else's arithmetic can remove it" not in one
+
+    def test_round_one_names_both_ways_an_option_dies(self):
+        one = self._round_one()
+        assert "TWO OR MORE other seats" in one
+        assert "does not produce YOUR figure" in one
+
+    def test_both_rounds_say_one_dissenter_decides_nothing(self):
+        assert "A single seat disagreeing with you removes nothing" \
+            in self._round_one()
+        assert "ALONE DOES NOT REMOVE ANYTHING" in self._later()
+
+    def test_both_rounds_say_agreement_is_what_carries(self):
+        assert "agreement between seats who wrote blind" in self._round_one()
+        assert "WHAT DOES REMOVE IT is agreement" in self._later()
+
+    def test_the_threshold_the_prompts_describe_is_the_one_in_the_code(self):
+        """Two prompts saying "two or more" over a constant set to three
+        would be a lie nobody would notice until a run went wrong."""
+        assert P.CORROBORATION_THRESHOLD == 2
