@@ -6,7 +6,7 @@ import "package:flutter/material.dart";
 ///
 /// The burst is celebration, not information: it plays once, ignores
 /// pointers, and paints nothing after it finishes. Under reduced motion it
-/// paints nothing at all — the signed state itself is the confirmation, so
+/// paints nothing at all - the signed state itself is the confirmation, so
 /// nobody is stranded behind an animation they cannot see.
 class ConfettiBurst extends StatefulWidget {
   const ConfettiBurst({
@@ -136,13 +136,13 @@ class _ConfettiPainter extends CustomPainter {
     final Offset origin = Offset(size.width / 2, size.height * 0.82);
     final double reach = size.shortestSide;
     // Fade over the last third so the burst ends rather than stops.
-    final double fade =
-        t < 0.66 ? 1.0 : (1 - (t - 0.66) / 0.34).clamp(0.0, 1.0);
+    final double fade = t < 0.66
+        ? 1.0
+        : (1 - (t - 0.66) / 0.34).clamp(0.0, 1.0);
     final Paint paint = Paint();
 
     for (final _Particle p in particles) {
-      final double x =
-          origin.dx + (p.vx + p.drift * t) * reach * t * 0.9;
+      final double x = origin.dx + (p.vx + p.drift * t) * reach * t * 0.9;
       final double y =
           origin.dy + p.vy * reach * t * 0.9 + 0.65 * reach * t * t;
       if (y > size.height + 12) continue;
@@ -153,7 +153,10 @@ class _ConfettiPainter extends CustomPainter {
       if (p.isRect) {
         canvas.drawRect(
           Rect.fromCenter(
-              center: Offset.zero, width: p.size, height: p.size * 0.6),
+            center: Offset.zero,
+            width: p.size,
+            height: p.size * 0.6,
+          ),
           paint,
         );
       } else {

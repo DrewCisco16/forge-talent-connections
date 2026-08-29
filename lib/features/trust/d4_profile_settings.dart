@@ -275,8 +275,9 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
               children: <Widget>[
                 for (final SystemDecision d in decisions)
                   Padding(
-                    padding:
-                        const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
+                    padding: const EdgeInsets.only(
+                      bottom: ForgeSpacing.gapCard,
+                    ),
                     child: ForgeCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,9 +317,11 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
                               if (d.canRequestReview)
                                 Flexible(
                                   child: InkWell(
-                                    onTap: () => demoNote(context,
-                                        "Request recorded. A person will "
-                                        "review this decision."),
+                                    onTap: () => demoNote(
+                                      context,
+                                      "Request recorded. A person will "
+                                      "review this decision.",
+                                    ),
                                     child: Text(
                                       "Request human review",
                                       maxLines: 2,
@@ -364,7 +367,9 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             label: "Profile visibility",
             trailing: "Public",
             onTap: () => demoNote(
-                context, "Visibility controls arrive with the backend."),
+              context,
+              "Visibility controls arrive with the backend.",
+            ),
           ),
           _ToggleRow(
             label: "Verification alerts",

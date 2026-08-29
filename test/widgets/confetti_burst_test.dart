@@ -5,15 +5,16 @@ import "package:forge_talent_connections/widgets/confetti_burst.dart";
 /// The celebration burst is one-shot, honest, and optional.
 ///
 /// It paints only while playing, ends on its own, and paints nothing at all
-/// under reduced motion — the signed state, not the animation, is the record.
+/// under reduced motion - the signed state, not the animation, is the record.
 void main() {
   Finder burstPaint() => find.descendant(
-        of: find.byType(ConfettiBurst),
-        matching: find.byType(CustomPaint),
-      );
+    of: find.byType(ConfettiBurst),
+    matching: find.byType(CustomPaint),
+  );
 
-  testWidgets("plays once on the rising edge and ends by itself",
-      (WidgetTester tester) async {
+  testWidgets("plays once on the rising edge and ends by itself", (
+    WidgetTester tester,
+  ) async {
     bool play = false;
     late StateSetter setPlay;
     await tester.pumpWidget(
@@ -45,8 +46,9 @@ void main() {
     expect(burstPaint(), findsNothing);
   });
 
-  testWidgets("reduced motion: nothing is painted",
-      (WidgetTester tester) async {
+  testWidgets("reduced motion: nothing is painted", (
+    WidgetTester tester,
+  ) async {
     bool play = false;
     late StateSetter setPlay;
     await tester.pumpWidget(

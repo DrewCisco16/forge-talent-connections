@@ -8,7 +8,7 @@ import "../theme/tokens.dart";
 /// Renders a value the backend reported (never computed here) as a bar with
 /// a visible tick at the required line, so "97 of 95 required" or "88 of 95
 /// required" reads at a glance. Below the line the bar shows the shortfall
-/// in the caution colour — the meter never dresses a miss up as a pass.
+/// in the caution colour - the meter never dresses a miss up as a pass.
 class ConfidenceMeter extends StatelessWidget {
   const ConfidenceMeter({
     required this.value,
@@ -17,10 +17,10 @@ class ConfidenceMeter extends StatelessWidget {
     super.key,
   });
 
-  /// The reported confidence, 0–100.
+  /// The reported confidence, 0-100.
   final int value;
 
-  /// The threshold the backend enforces, 0–100.
+  /// The threshold the backend enforces, 0-100.
   final int required_;
 
   /// True while the check is still running; the bar renders empty.
@@ -30,8 +30,9 @@ class ConfidenceMeter extends StatelessWidget {
   Widget build(BuildContext context) {
     final ForgeTheme forge = ForgeTheme.of(context);
     final bool cleared = !pending && value >= required_;
-    final Color fill =
-        pending ? forge.strokeSoft : (cleared ? forge.gold : forge.red);
+    final Color fill = pending
+        ? forge.strokeSoft
+        : (cleared ? forge.gold : forge.red);
 
     return Semantics(
       label: pending
@@ -91,7 +92,7 @@ class ConfidenceMeter extends StatelessWidget {
             pending
                 ? "Checking · $required_ required"
                 : "$value of $required_ required"
-                    "${cleared ? "" : " · below the line"}",
+                      "${cleared ? "" : " · below the line"}",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.chip,

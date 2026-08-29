@@ -32,9 +32,7 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
     return Scaffold(
       backgroundColor: ForgeColors.navyDeep,
       body: GestureDetector(
-        onTap: () => setState(
-          () => _segment = (_segment + 1) % _segments,
-        ),
+        onTap: () => setState(() => _segment = (_segment + 1) % _segments),
         onVerticalDragEnd: (DragEndDetails d) {
           if ((d.primaryVelocity ?? 0) > 0) context.go("/feed");
         },
@@ -153,8 +151,11 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                                 onPressed: () => context.go("/vouch"),
                               ),
                               const SizedBox(height: 14),
-                              Icon(Icons.favorite_border,
-                                  size: 22, color: forge.text),
+                              Icon(
+                                Icons.favorite_border,
+                                size: 22,
+                                color: forge.text,
+                              ),
                               Text(
                                 "214",
                                 style: TextStyle(
@@ -164,8 +165,11 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                                 ),
                               ),
                               const SizedBox(height: 14),
-                              Icon(Icons.ios_share,
-                                  size: 20, color: forge.text),
+                              Icon(
+                                Icons.ios_share,
+                                size: 20,
+                                color: forge.text,
+                              ),
                             ],
                           ),
                         ),
@@ -176,8 +180,9 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                             bottom: 44,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: ForgeColors.navyDeep
-                                    .withValues(alpha: 0.75),
+                                color: ForgeColors.navyDeep.withValues(
+                                  alpha: 0.75,
+                                ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               padding: const EdgeInsets.all(9),
@@ -223,8 +228,9 @@ class _C2VideoPitchState extends ConsumerState<C2VideoPitch> {
                     children: <Widget>[
                       Expanded(
                         child: GoldButton(
-                            label: "Re-record",
-                            onPressed: () => context.go("/elevator-pitch")),
+                          label: "Re-record",
+                          onPressed: () => context.go("/elevator-pitch"),
+                        ),
                       ),
                       const SizedBox(width: ForgeSpacing.gapCard),
                       Expanded(

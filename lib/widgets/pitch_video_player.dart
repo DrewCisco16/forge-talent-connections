@@ -10,7 +10,7 @@ import "section_label.dart";
 /// Plays a bundled video with the app's own controls. Every state is designed
 /// rather than improvised: initializing renders a pending state, failure
 /// renders an explicit refusal with the reason, and a null asset renders the
-/// empty state — the player never pretends a video exists when none does.
+/// empty state - the player never pretends a video exists when none does.
 ///
 /// Playback never starts on its own. Autoplay is both a web-policy problem and
 /// a reduced-motion problem; the person presses play. Controls carry semantic
@@ -56,20 +56,22 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
       _failureReason = "No video has been added yet.";
       return;
     }
-    final VideoPlayerController controller =
-        VideoPlayerController.asset(asset);
+    final VideoPlayerController controller = VideoPlayerController.asset(asset);
     _controller = controller;
     controller.setLooping(true);
-    controller.initialize().then((_) {
-      if (mounted) setState(() => _ready = true);
-    }).catchError((Object error) {
-      if (mounted) {
-        setState(() {
-          _ready = false;
-          _failureReason = "The video could not be loaded on this device.";
+    controller
+        .initialize()
+        .then((_) {
+          if (mounted) setState(() => _ready = true);
+        })
+        .catchError((Object error) {
+          if (mounted) {
+            setState(() {
+              _ready = false;
+              _failureReason = "The video could not be loaded on this device.";
+            });
+          }
         });
-      }
-    });
   }
 
   @override
@@ -141,8 +143,11 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
-                        Icon(Icons.videocam_off_outlined,
-                            size: 26, color: forge.textSub),
+                        Icon(
+                          Icons.videocam_off_outlined,
+                          size: 26,
+                          color: forge.textSub,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           _failureReason ?? "The video could not be loaded.",
@@ -169,11 +174,13 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
                         height: 54,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient:
-                              LinearGradient(colors: forge.goldGradient),
+                          gradient: LinearGradient(colors: forge.goldGradient),
                         ),
-                        child: const Icon(Icons.play_arrow,
-                            size: 28, color: Colors.white),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          size: 28,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -223,13 +230,12 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
                           height: 32,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient:
-                                LinearGradient(colors: forge.goldGradient),
+                            gradient: LinearGradient(
+                              colors: forge.goldGradient,
+                            ),
                           ),
                           child: Icon(
-                            value.isPlaying
-                                ? Icons.pause
-                                : Icons.play_arrow,
+                            value.isPlaying ? Icons.pause : Icons.play_arrow,
                             size: 17,
                             color: Colors.white,
                           ),

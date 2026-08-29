@@ -13,9 +13,7 @@ Future<double> _childWidth(WidgetTester tester, Size deviceSize) async {
     MaterialApp(
       home: MediaQuery(
         data: MediaQueryData(size: deviceSize),
-        child: ForgeDeviceFrame(
-          child: SizedBox.expand(key: probe),
-        ),
+        child: ForgeDeviceFrame(child: SizedBox.expand(key: probe)),
       ),
     ),
   );
@@ -25,18 +23,21 @@ Future<double> _childWidth(WidgetTester tester, Size deviceSize) async {
 
 void main() {
   group("ForgeDeviceFrame", () {
-    testWidgets("a phone gets the full width, untouched",
-        (WidgetTester tester) async {
+    testWidgets("a phone gets the full width, untouched", (
+      WidgetTester tester,
+    ) async {
       expect(await _childWidth(tester, const Size(440, 956)), 440);
     });
 
-    testWidgets("the narrowest supported phone is untouched",
-        (WidgetTester tester) async {
+    testWidgets("the narrowest supported phone is untouched", (
+      WidgetTester tester,
+    ) async {
       expect(await _childWidth(tester, const Size(375, 667)), 375);
     });
 
-    testWidgets("an iPad in portrait is held to the content column",
-        (WidgetTester tester) async {
+    testWidgets("an iPad in portrait is held to the content column", (
+      WidgetTester tester,
+    ) async {
       // 834 wide would stretch a 390-wide design across the whole glass.
       expect(
         await _childWidth(tester, const Size(834, 1194)),
@@ -44,16 +45,18 @@ void main() {
       );
     });
 
-    testWidgets("an iPad in landscape is held to the same column",
-        (WidgetTester tester) async {
+    testWidgets("an iPad in landscape is held to the same column", (
+      WidgetTester tester,
+    ) async {
       expect(
         await _childWidth(tester, const Size(1194, 834)),
         ForgeDeviceFrame.maxContentWidth,
       );
     });
 
-    testWidgets("the column is centred, not pinned to one edge",
-        (WidgetTester tester) async {
+    testWidgets("the column is centred, not pinned to one edge", (
+      WidgetTester tester,
+    ) async {
       final GlobalKey probe = GlobalKey();
       const Size ipad = Size(834, 1194);
       tester.view.physicalSize = ipad;
@@ -72,12 +75,16 @@ void main() {
 
       final double left = tester.getTopLeft(find.byKey(probe)).dx;
       final double right = tester.getTopRight(find.byKey(probe)).dx;
-      expect(left, closeTo((ipad.width - ForgeDeviceFrame.maxContentWidth) / 2, 0.5));
+      expect(
+        left,
+        closeTo((ipad.width - ForgeDeviceFrame.maxContentWidth) / 2, 0.5),
+      );
       expect(ipad.width - right, closeTo(left, 0.5));
     });
 
-    testWidgets("inside the column the app sees the narrow width",
-        (WidgetTester tester) async {
+    testWidgets("inside the column the app sees the narrow width", (
+      WidgetTester tester,
+    ) async {
       // Screens read MediaQuery to lay themselves out. If they still saw the
       // iPad's full width inside a 480-wide column, they would overflow it.
       late double seenWidth;

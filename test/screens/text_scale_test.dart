@@ -15,48 +15,49 @@ import "screen_catalog.dart";
 /// happy path.
 ///
 /// 1.3 is a realistic large-text setting; 2.0 is the top of the standard iOS
-/// Dynamic Type range. Every screen reflows — wrapping, truncating, or
-/// growing — rather than clipping, at both.
+/// Dynamic Type range. Every screen reflows - wrapping, truncating, or
+/// growing - rather than clipping, at both.
 void main() {
   const Size phone = Size(440, 956);
 
   for (final double scale in <double>[1.3, 2.0]) {
-  group("layout holds at ${scale}x text scale", () {
-    for (final MapEntry<String, Widget> screen in screenCatalog.entries) {
-      testWidgets(screen.key, (WidgetTester tester) async {
-        tester.view.physicalSize = phone;
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+    group("layout holds at ${scale}x text scale", () {
+      for (final MapEntry<String, Widget> screen in screenCatalog.entries) {
+        testWidgets(screen.key, (WidgetTester tester) async {
+          tester.view.physicalSize = phone;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: <Override>[
-              demoScenarioProvider
-                  .overrideWith((Ref ref) => DemoScenario.verified),
-            ],
-            child: MaterialApp(
-              theme: buildForgeTheme(),
-              home: MediaQuery(
-                data: MediaQueryData(
-                  size: phone,
-                  disableAnimations: true,
-                  textScaler: TextScaler.linear(scale),
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: <Override>[
+                demoScenarioProvider.overrideWith(
+                  (Ref ref) => DemoScenario.verified,
                 ),
-                child: screen.value,
+              ],
+              child: MaterialApp(
+                theme: buildForgeTheme(),
+                home: MediaQuery(
+                  data: MediaQueryData(
+                    size: phone,
+                    disableAnimations: true,
+                    textScaler: TextScaler.linear(scale),
+                  ),
+                  child: screen.value,
+                ),
               ),
             ),
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 400));
-        await tester.pump(const Duration(milliseconds: 400));
+          );
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.pump(const Duration(milliseconds: 400));
 
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: "${screen.key} clips or overflows at ${scale}x text scale",
-        );
-      });
-    }
-  });
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: "${screen.key} clips or overflows at ${scale}x text scale",
+          );
+        });
+      }
+    });
   }
 }

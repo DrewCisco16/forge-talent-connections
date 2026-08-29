@@ -10,7 +10,7 @@ import "../../widgets/async_view.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
-/// Seal Check — the page a check link opens for someone outside the app.
+/// Seal Check - the page a check link opens for someone outside the app.
 ///
 /// Selective disclosure is the whole design: the visitor learns whether the
 /// seal is genuine and unaltered, and nothing else. No documents, no
@@ -60,7 +60,7 @@ class SealCheck extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            "What anyone with the link sees — and all they see.",
+            "What anyone with the link sees - and all they see.",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.body,
@@ -74,8 +74,9 @@ class SealCheck extends ConsumerWidget {
             builder: (IntegrityCertificate cert) {
               final bool valid = cert.status == VerificationStatus.verified;
               final bool pending = cert.status == VerificationStatus.pending;
-              final Color verdictColor =
-                  valid ? forge.green : (pending ? forge.gold : forge.red);
+              final Color verdictColor = valid
+                  ? forge.green
+                  : (pending ? forge.gold : forge.red);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -87,8 +88,8 @@ class SealCheck extends ConsumerWidget {
                           valid
                               ? Icons.verified
                               : pending
-                                  ? Icons.hourglass_top
-                                  : Icons.gpp_bad_outlined,
+                              ? Icons.hourglass_top
+                              : Icons.gpp_bad_outlined,
                           size: 44,
                           color: verdictColor,
                         ),
@@ -97,8 +98,8 @@ class SealCheck extends ConsumerWidget {
                           valid
                               ? "SEAL VALID"
                               : pending
-                                  ? "CHECK PENDING"
-                                  : "NOT VALID",
+                              ? "CHECK PENDING"
+                              : "NOT VALID",
                           style: TextStyle(
                             fontFamily: ForgeType.displayFamily,
                             fontSize: 22,
@@ -111,12 +112,12 @@ class SealCheck extends ConsumerWidget {
                         Text(
                           valid
                               ? "This record is genuine and has not been "
-                                  "altered since it was sealed."
+                                    "altered since it was sealed."
                               : pending
-                                  ? "The check has not finished. Nothing is "
-                                      "confirmed yet."
-                                  : "This seal could not be confirmed. Treat "
-                                      "the record as unverified.",
+                              ? "The check has not finished. Nothing is "
+                                    "confirmed yet."
+                              : "This seal could not be confirmed. Treat "
+                                    "the record as unverified.",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: ForgeType.bodyFamily,
@@ -132,18 +133,23 @@ class SealCheck extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           child: Column(
                             children: <Widget>[
                               _KV("Sealed item", cert.filename),
                               _KV("Checked", cert.checkedOn),
                               _KV("Fingerprint", cert.fingerprint),
-                              const _KV("Sealed by",
-                                  "FORGE Talent Connections verification"),
-                              const _KV("Valid",
-                                  "Until the record changes"),
-                              const _KV("Corrections",
-                                  "Human review on request"),
+                              const _KV(
+                                "Sealed by",
+                                "FORGE Talent Connections verification",
+                              ),
+                              const _KV("Valid", "Until the record changes"),
+                              const _KV(
+                                "Corrections",
+                                "Human review on request",
+                              ),
                             ],
                           ),
                         ),
@@ -155,13 +161,16 @@ class SealCheck extends ConsumerWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Icon(Icons.visibility_off_outlined,
-                            size: 17, color: forge.textSub),
+                        Icon(
+                          Icons.visibility_off_outlined,
+                          size: 17,
+                          color: forge.textSub,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             "Documents are never shown here. A check link "
-                            "proves the seal — it discloses nothing else.",
+                            "proves the seal - it discloses nothing else.",
                             style: TextStyle(
                               fontFamily: ForgeType.bodyFamily,
                               fontSize: ForgeType.caption,

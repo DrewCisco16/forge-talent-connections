@@ -31,8 +31,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets("legal screen carries the full agreement and the honest frame",
-      (WidgetTester tester) async {
+  testWidgets("legal screen carries the full agreement and the honest frame", (
+    WidgetTester tester,
+  ) async {
     await pumpScreen(tester, const LegalTerms());
     // The draft names itself a draft, with counsel review before launch.
     expect(find.textContaining("licensed counsel"), findsWidgets);
@@ -40,8 +41,7 @@ void main() {
     // render uppercased.
     expect(find.text("REWARDS, REFERRALS, AND PRIZES"), findsOneWidget);
     expect(find.text("YOUR PRIVACY"), findsOneWidget);
-    expect(
-        find.text("YOUR IDENTITY, LIKENESS, AND CONSENT"), findsOneWidget);
+    expect(find.text("YOUR IDENTITY, LIKENESS, AND CONSENT"), findsOneWidget);
     expect(
       find.text("DISPUTES, GOVERNING LAW, AND WHERE CLAIMS GO"),
       findsOneWidget,
@@ -66,8 +66,9 @@ void main() {
     expect(find.textContaining("no more than 30 days"), findsOneWidget);
   });
 
-  testWidgets("sign-up cannot continue until the terms are agreed",
-      (WidgetTester tester) async {
+  testWidgets("sign-up cannot continue until the terms are agreed", (
+    WidgetTester tester,
+  ) async {
     await pumpScreen(tester, const A2CreateProfile());
     // Fail-closed: the gate is visibly shut before consent.
     expect(find.text("Agree to the terms to continue"), findsOneWidget);

@@ -27,18 +27,18 @@ class BannerNote extends StatelessWidget {
   final String? title;
 
   Color _accent(ForgeTheme forge) => switch (tone) {
-        BannerTone.info => forge.cyan,
-        BannerTone.governance => forge.gold,
-        BannerTone.denial => forge.red,
-        BannerTone.coach => forge.violet,
-      };
+    BannerTone.info => forge.cyan,
+    BannerTone.governance => forge.gold,
+    BannerTone.denial => forge.red,
+    BannerTone.coach => forge.violet,
+  };
 
   IconData get _defaultIcon => switch (tone) {
-        BannerTone.info => Icons.info_outline,
-        BannerTone.governance => Icons.verified_user_outlined,
-        BannerTone.denial => Icons.lock_outline,
-        BannerTone.coach => Icons.lightbulb_outline,
-      };
+    BannerTone.info => Icons.info_outline,
+    BannerTone.governance => Icons.verified_user_outlined,
+    BannerTone.denial => Icons.lock_outline,
+    BannerTone.coach => Icons.lightbulb_outline,
+  };
 
   @override
   Widget build(BuildContext context) {

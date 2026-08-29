@@ -35,14 +35,17 @@ class _A1SplashState extends State<A1Splash> {
           // reduced motion.
           const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
           const SizedBox(height: 8),
-          // The wordmark is the brand's own lettering, not themed text. The
-          // semantics carry the name for readers and for the lockup guard.
-          Center(
-            child: Image.asset(
-              kWordmark,
-              height: ForgeType.wordmark,
-              fit: BoxFit.contain,
-              semanticLabel: "FORGE",
+          // The lockup is typeset, not artwork, so every letter on the
+          // screen shares the one sans-serif family. Both lines are large,
+          // bold, and centred on the same axis as the mark above them.
+          GoldGradientText(
+            "FORGE",
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: ForgeType.displayFamily,
+              fontSize: ForgeType.wordmark,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 4,
             ),
           ),
           const SizedBox(height: 8),
@@ -61,10 +64,10 @@ class _A1SplashState extends State<A1Splash> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
-              fontSize: ForgeType.body,
-              fontWeight: FontWeight.w600,
+              fontSize: ForgeType.lockupDescriptor,
+              fontWeight: FontWeight.bold,
               letterSpacing: 3.4,
-              color: forge.textSub,
+              color: forge.text,
             ),
           ),
           const SizedBox(height: 26),
@@ -142,7 +145,7 @@ class _A1SplashState extends State<A1Splash> {
           const SizedBox(height: 4),
           Text(
             "An invite-only project collaboration network. It complements "
-            "LinkedIn and Handshake — it is not a job board.",
+            "LinkedIn and Handshake - it is not a job board.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
@@ -179,7 +182,9 @@ class _RolePill extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          gradient: selected ? LinearGradient(colors: forge.goldGradient) : null,
+          gradient: selected
+              ? LinearGradient(colors: forge.goldGradient)
+              : null,
           border: selected ? null : Border.all(color: forge.gold, width: 1.4),
           borderRadius: BorderRadius.circular(ForgeShape.ctaRadius),
         ),

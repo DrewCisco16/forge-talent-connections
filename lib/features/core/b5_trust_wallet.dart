@@ -199,7 +199,7 @@ class B5TrustWallet extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "— ${v.fromName}, ${v.signedOn}",
+                      "- ${v.fromName}, ${v.signedOn}",
                       style: TextStyle(
                         fontFamily: ForgeType.bodyFamily,
                         fontSize: ForgeType.caption,

@@ -72,8 +72,7 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                   // A live linear search over the served list: every
                   // keystroke re-scans each project sequentially.
                   child: TextField(
-                    onChanged: (String value) =>
-                        setState(() => _query = value),
+                    onChanged: (String value) => setState(() => _query = value),
                     decoration: InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
@@ -104,8 +103,9 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                     padding: const EdgeInsets.only(right: 8),
                     child: InkWell(
                       onTap: () => setState(() => _activeFilter = f),
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.pillRadius),
+                      borderRadius: BorderRadius.circular(
+                        ForgeShape.pillRadius,
+                      ),
                       child: Container(
                         decoration: BoxDecoration(
                           color: f == _activeFilter
@@ -116,19 +116,23 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                                 ? forge.goldDeep
                                 : forge.strokeSoft,
                           ),
-                          borderRadius:
-                              BorderRadius.circular(ForgeShape.pillRadius),
+                          borderRadius: BorderRadius.circular(
+                            ForgeShape.pillRadius,
+                          ),
                         ),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 13, vertical: 7),
+                          horizontal: 13,
+                          vertical: 7,
+                        ),
                         child: Text(
                           f,
                           style: TextStyle(
                             fontFamily: ForgeType.bodyFamily,
                             fontSize: ForgeType.caption,
                             fontWeight: FontWeight.w600,
-                            color:
-                                f == _activeFilter ? Colors.white : forge.textSub,
+                            color: f == _activeFilter
+                                ? Colors.white
+                                : forge.textSub,
                           ),
                         ),
                       ),
@@ -143,11 +147,12 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
             pendingLabel: "Searching",
             builder: (List<Opportunity> items) {
               // Linear search, multiple-match variant: scan every project
-              // and keep all hits. An empty result renders explicitly —
+              // and keep all hits. An empty result renders explicitly -
               // never a silent blank.
               final List<int> hits = linearSearchAll(items, _matchesQuery);
-              final List<Opportunity> shown =
-                  <Opportunity>[for (final int i in hits) items[i]];
+              final List<Opportunity> shown = <Opportunity>[
+                for (final int i in hits) items[i],
+              ];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -170,6 +175,23 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  // Qualified supply is counted by a full scan of the served
+                  // list: real seats, real reviewers, real scope. Interest
+                  // alone never counts.
+                  Text(
+                    "${countWhere(items, (Opportunity o) => o.qualified == true)} "
+                    "of ${items.length} count as qualified supply: verified "
+                    "sponsor, written scope, confirmed reviewer, open seats. "
+                    "Interest-only listings are never counted.",
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.chip,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                      color: forge.gold,
+                    ),
+                  ),
                   const SizedBox(height: ForgeSpacing.gapCard),
                   if (shown.isEmpty)
                     ForgeCard(
@@ -187,7 +209,7 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "Nothing is hidden — every project was checked. "
+                            "Nothing is hidden - every project was checked. "
                             "Clear the search to see all ${items.length}.",
                             style: TextStyle(
                               fontFamily: ForgeType.bodyFamily,
@@ -229,11 +251,11 @@ class OpportunityCard extends StatelessWidget {
   final VoidCallback onTap;
 
   Color _tone(ForgeTheme forge, TechTagTone tone) => switch (tone) {
-        TechTagTone.gold => forge.gold,
-        TechTagTone.green => forge.green,
-        TechTagTone.cyan => forge.cyan,
-        TechTagTone.violet => forge.violet,
-      };
+    TechTagTone.gold => forge.gold,
+    TechTagTone.green => forge.green,
+    TechTagTone.cyan => forge.cyan,
+    TechTagTone.violet => forge.violet,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +295,8 @@ class OpportunityCard extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: ForgeType.bodyFamily,
                       fontSize: ForgeType.caption,
-                      color: opportunity.organizationStatus ==
+                      color:
+                          opportunity.organizationStatus ==
                               VerificationStatus.verified
                           ? forge.green
                           : forge.textSub,
@@ -304,11 +327,14 @@ class OpportunityCard extends StatelessWidget {
                       border: Border.all(
                         color: _tone(forge, t.tone).withValues(alpha: 0.5),
                       ),
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.pillRadius),
+                      borderRadius: BorderRadius.circular(
+                        ForgeShape.pillRadius,
+                      ),
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
                     child: Text(
                       t.label,
                       style: TextStyle(

@@ -8,7 +8,7 @@ import "package:forge_talent_connections/features/social/c1_feed.dart";
 import "package:forge_talent_connections/features/trust/d3_sign_in.dart";
 import "package:forge_talent_connections/theme/forge_theme.dart";
 
-/// The product name is "FORGE Talent Connections" — the whole name, always.
+/// The product name is "FORGE Talent Connections" - the whole name, always.
 ///
 /// Two legal forms exist: the full name inside sentence copy, and the visual
 /// lockup, where the wordmark "FORGE" is rendered with "TALENT CONNECTIONS"
@@ -21,8 +21,9 @@ void main() {
   test("every string naming the product uses the whole name", () {
     final List<String> offences = <String>[];
 
-    for (final FileSystemEntity entity
-        in Directory("lib").listSync(recursive: true)) {
+    for (final FileSystemEntity entity in Directory(
+      "lib",
+    ).listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith(".dart")) continue;
 
       final List<String> lines = entity.readAsLinesSync();
@@ -46,7 +47,8 @@ void main() {
     expect(
       offences,
       isEmpty,
-      reason: 'The product is named "FORGE Talent Connections" in full, or as '
+      reason:
+          'The product is named "FORGE Talent Connections" in full, or as '
           "the wordmark within a complete lockup. Found:\n"
           "${offences.join("\n")}",
     );
@@ -76,11 +78,18 @@ void main() {
       // A1 renders the wordmark as the brand's own lettering (artwork), so
       // the name is carried by semantics rather than a text run.
       await pump(tester, const A1Splash());
-      expect(find.bySemanticsLabel("FORGE"), findsOneWidget,
-          reason: "A1 shows the wordmark artwork");
-      expect(find.text("TALENT CONNECTIONS"), findsOneWidget,
-          reason: "A1 must complete the lockup — the wordmark never "
-              "stands alone");
+      expect(
+        find.bySemanticsLabel("FORGE"),
+        findsOneWidget,
+        reason: "A1 shows the wordmark artwork",
+      );
+      expect(
+        find.text("TALENT CONNECTIONS"),
+        findsOneWidget,
+        reason:
+            "A1 must complete the lockup - the wordmark never "
+            "stands alone",
+      );
     });
 
     for (final (String name, Widget screen) in <(String, Widget)>[
@@ -89,11 +98,18 @@ void main() {
     ]) {
       testWidgets(name, (WidgetTester tester) async {
         await pump(tester, screen);
-        expect(find.text("FORGE"), findsOneWidget,
-            reason: "$name shows the wordmark");
-        expect(find.text("TALENT CONNECTIONS"), findsOneWidget,
-            reason: "$name must complete the lockup — the wordmark never "
-                "stands alone");
+        expect(
+          find.text("FORGE"),
+          findsOneWidget,
+          reason: "$name shows the wordmark",
+        );
+        expect(
+          find.text("TALENT CONNECTIONS"),
+          findsOneWidget,
+          reason:
+              "$name must complete the lockup - the wordmark never "
+              "stands alone",
+        );
       });
     }
   });

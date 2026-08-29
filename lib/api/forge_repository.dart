@@ -4,7 +4,7 @@ import "../models/models.dart";
 ///
 /// Everything the app displays arrives through these interfaces. The UI decides
 /// nothing: it does not verify, match, score, or authorise a release. It asks,
-/// and renders the answer it is given — including refusals.
+/// and renders the answer it is given - including refusals.
 ///
 /// TODO(api): the production implementation lives behind this seam. Swapping
 /// the mock for an HTTP client that calls the backend should require no change

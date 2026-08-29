@@ -197,8 +197,11 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      Icon(Icons.celebration_outlined,
-                          size: 18, color: forge.gold),
+                      Icon(
+                        Icons.celebration_outlined,
+                        size: 18,
+                        color: forge.gold,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -217,7 +220,7 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                   Text(
                     "Your name now stands behind Maya's work. Reward "
                     "points for this vouch are awarded by the backend "
-                    "once the vouch verifies — never by the tap itself.",
+                    "once the vouch verifies - never by the tap itself.",
                     style: TextStyle(
                       fontFamily: ForgeType.bodyFamily,
                       fontSize: ForgeType.caption,
@@ -261,18 +264,46 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                   ),
                   (
                     "What a vouch attests",
-                    "The signed statements above — never a favor. The basis "
+                    "The signed statements above - never a favor. The basis "
                         "is disclosed on the vouch itself.",
                   ),
                   (
                     "How many",
-                    "Active vouches per member are limited, and the ledger "
+                    "You start with capacity for two access vouches. More "
+                        "is earned only after a verified project outcome, "
+                        "and capacity never rises above four. The ledger "
                         "of vouches you have given is public.",
                   ),
                   (
+                    "What cannot substitute",
+                    "Membership takes exactly two accountable human "
+                        "vouches from two different people. No credential, "
+                        "institution, algorithm, seal, patent application, "
+                        "prior project, or automated recommendation "
+                        "replaces either human, and nobody can vouch for "
+                        "themselves.",
+                  ),
+                  (
+                    "Two contexts are preferred",
+                    "Vouchers from two different contexts, such as a peer "
+                        "plus an instructor or a veteran peer plus a "
+                        "community partner, carry the most weight. The "
+                        "platform can help locate an eligible second "
+                        "reviewer, but both people decide for themselves. "
+                        "Nothing is ever auto-vouched.",
+                  ),
+                  (
                     "Misuse",
-                    "A vouch can be revoked; revocation is recorded. Abuse "
-                        "costs the voucher their own standing.",
+                    "A vouch can be corrected, revoked, or expired; every "
+                        "change is recorded, and abuse costs the voucher "
+                        "their own standing. A compromised account's "
+                        "vouches are frozen until a person reviews them.",
+                  ),
+                  (
+                    "Unusual patterns",
+                    "Reciprocal pairs, dense clusters, and duplicate "
+                        "identities go to private human review. Nobody is "
+                        "publicly accused by an algorithm.",
                   ),
                   (
                     "Appeals",
@@ -281,9 +312,12 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                   ),
                   (
                     "Your first vouch",
-                    "No network yet? A sealed verification counts as one "
-                        "vouch, and community partners can vouch for their "
-                        "own members.",
+                    "No network yet? A community partner such as faculty, "
+                        "program staff, or a veteran organization can "
+                        "review your sealed record and decide, or an "
+                        "observed work audition reaches two independent "
+                        "reviewers. Evidence informs their decisions; it "
+                        "never replaces either human.",
                   ),
                   (
                     "What outweighs what",

@@ -33,14 +33,18 @@ class B1Dashboard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 HeroBand(
-                  title: "Welcome Back, ${profile.displayName.split(" ").first}",
+                  title:
+                      "Welcome Back, ${profile.displayName.split(" ").first}",
                   subtitle: "Your collaborations await",
                   trailing: _BellChip(
                     onTap: () => context.go("/notifications"),
                   ),
                 ),
                 const SizedBox(height: ForgeSpacing.gapSection),
-                const Align(alignment: Alignment.centerLeft, child: DemoBadge()),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: DemoBadge(),
+                ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 ForgeCard(
                   child: Column(
@@ -90,7 +94,10 @@ class B1Dashboard extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          StatusChip(status: profile.serviceRecord, dense: true),
+                          StatusChip(
+                            status: profile.serviceRecord,
+                            dense: true,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -111,7 +118,7 @@ class B1Dashboard extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           // Recognition runs on verified events only: the ladder counts what
-          // passed a check, and the streak counts kept commitments — never
+          // passed a check, and the streak counts kept commitments - never
           // taps or opens.
           AsyncView<IntegrityStreak>(
             value: ref.watch(streakProvider),
@@ -160,6 +167,66 @@ class B1Dashboard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
+          // The first thing a new member meets is a person, a real project,
+          // and one small contribution they can make this week.
+          ForgeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    const CircleAvatar(
+                      radius: 16,
+                      backgroundImage: AssetImage("assets/heroes/hero_04.png"),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            "Maya Chen",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.name,
+                              fontWeight: FontWeight.bold,
+                              color: forge.text,
+                            ),
+                          ),
+                          Text(
+                            "Community partner · a person, in person",
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              color: forge.textSub,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "\"Glad you're in, Drew. Start small if you like: the "
+                  "seminar outline could use one more review pass this "
+                  "week, and the team would love the help.\"",
+                  style: TextStyle(
+                    fontFamily: ForgeType.bodyFamily,
+                    fontSize: ForgeType.body,
+                    height: 1.35,
+                    color: forge.text,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlineGoldButton(
+                  label: "Make Your First Contribution",
+                  onPressed: () => context.go("/project-space"),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
           // Rewards run on the same rule as everything else: verified
           // events only. The dashboard row is a teaser; the program screen
           // carries the rules.
@@ -172,8 +239,11 @@ class B1Dashboard extends ConsumerWidget {
               child: ForgeCard(
                 child: Row(
                   children: <Widget>[
-                    Icon(Icons.emoji_events_outlined,
-                        size: 22, color: forge.gold),
+                    Icon(
+                      Icons.emoji_events_outlined,
+                      size: 22,
+                      color: forge.gold,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -202,8 +272,7 @@ class B1Dashboard extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right,
-                        size: 20, color: forge.textSub),
+                    Icon(Icons.chevron_right, size: 20, color: forge.textSub),
                   ],
                 ),
               ),
@@ -218,15 +287,21 @@ class B1Dashboard extends ConsumerWidget {
                 children: <Widget>[
                   Expanded(
                     child: _GrowthStat(
-                        value: s.deliverables, label: "Verified deliverables"),
+                      value: s.deliverables,
+                      label: "Verified deliverables",
+                    ),
                   ),
                   Expanded(
                     child: _GrowthStat(
-                        value: s.credentials, label: "Sealed credentials"),
+                      value: s.credentials,
+                      label: "Sealed credentials",
+                    ),
                   ),
                   Expanded(
-                    child:
-                        _GrowthStat(value: s.vouches, label: "Vouches earned"),
+                    child: _GrowthStat(
+                      value: s.vouches,
+                      label: "Vouches earned",
+                    ),
                   ),
                 ],
               ),
@@ -294,11 +369,14 @@ class B1Dashboard extends ConsumerWidget {
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: forge.goldGradient),
-                        borderRadius:
-                            BorderRadius.circular(ForgeShape.pillRadius),
+                        borderRadius: BorderRadius.circular(
+                          ForgeShape.pillRadius,
+                        ),
                       ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       child: const Text(
                         "New",
                         style: TextStyle(
@@ -355,9 +433,13 @@ class B1Dashboard extends ConsumerWidget {
                                               VerificationStatus.verified)
                                             Padding(
                                               padding: const EdgeInsets.only(
-                                                  right: 5),
-                                              child: Icon(Icons.circle,
-                                                  size: 7, color: forge.green),
+                                                right: 5,
+                                              ),
+                                              child: Icon(
+                                                Icons.circle,
+                                                size: 7,
+                                                color: forge.green,
+                                              ),
                                             ),
                                           Flexible(
                                             child: Text(
@@ -376,8 +458,11 @@ class B1Dashboard extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.chevron_right,
-                                    size: 17, color: forge.textSub),
+                                Icon(
+                                  Icons.chevron_right,
+                                  size: 17,
+                                  color: forge.textSub,
+                                ),
                               ],
                             ),
                           ),

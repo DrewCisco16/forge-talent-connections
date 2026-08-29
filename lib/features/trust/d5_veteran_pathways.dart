@@ -30,6 +30,8 @@ class D5VeteranPathways extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 24),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
@@ -37,8 +39,7 @@ class D5VeteranPathways extends ConsumerWidget {
                 gradient: LinearGradient(colors: forge.goldGradient),
                 borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: const Text(
                 "VETERAN FIRST",
                 style: TextStyle(
@@ -96,14 +97,15 @@ class D5VeteranPathways extends ConsumerWidget {
                   builder: (List<PathwayMatch> matches) {
                     // Brute-force maximum over the served fit figures: a
                     // linear scan tracking the largest value's index. Pure
-                    // display ranking — the figures themselves are the
+                    // display ranking - the figures themselves are the
                     // backend's, and stay concept placeholders here.
                     final int? top = indexOfMax(
-                        matches, (PathwayMatch m) => m.fitPercent);
+                      matches,
+                      (PathwayMatch m) => m.fitPercent,
+                    );
                     return Column(
                       children: <Widget>[
-                        for (final (int i, PathwayMatch m)
-                            in matches.indexed)
+                        for (final (int i, PathwayMatch m) in matches.indexed)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Row(
@@ -123,16 +125,19 @@ class D5VeteranPathways extends ConsumerWidget {
                                 ),
                                 if (i == top)
                                   Container(
-                                    margin:
-                                        const EdgeInsets.only(right: 8),
+                                    margin: const EdgeInsets.only(right: 8),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                          colors: forge.goldGradient),
+                                        colors: forge.goldGradient,
+                                      ),
                                       borderRadius: BorderRadius.circular(
-                                          ForgeShape.pillRadius),
+                                        ForgeShape.pillRadius,
+                                      ),
                                     ),
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
                                     child: const Text(
                                       "Top match",
                                       style: TextStyle(
@@ -165,8 +170,7 @@ class D5VeteranPathways extends ConsumerWidget {
           const SizedBox(height: ForgeSpacing.gapCard),
           const BannerNote(
             tone: BannerTone.governance,
-            text:
-                "These fit figures are concept placeholders, not a real mapping. They will not ship until they come from a source that can be checked.",
+            text: "These fit figures are concept placeholders, not a real mapping. They will not ship until they come from a source that can be checked.",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           ForgeCard(
@@ -206,10 +210,13 @@ class D5VeteranPathways extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
-              label: "See My Pathways",
-              onPressed: () => demoNote(context,
-                  "Pathway matching runs on the backend. These results are "
-                  "concept fixtures.")),
+            label: "See My Pathways",
+            onPressed: () => demoNote(
+              context,
+              "Pathway matching runs on the backend. These results are "
+              "concept fixtures.",
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),

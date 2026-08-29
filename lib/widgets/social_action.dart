@@ -7,8 +7,8 @@ part "social_action.g.dart";
 
 /// Social action surfaces, and the only place the vibe gradient is painted.
 ///
-/// The design tokens reserve the vibe gradient for social actions — vouch,
-/// streak, share, and the viewer's own story ring — and bar it from forms and
+/// The design tokens reserve the vibe gradient for social actions - vouch,
+/// streak, share, and the viewer's own story ring - and bar it from forms and
 /// governance banners. That rule is enforced structurally here: the gradient is
 /// generated into `social_action.g.dart` as a library-private constant, so no
 /// other file in the package can reference it. Adding a new social action means
@@ -181,12 +181,21 @@ class HoldToSignVouch extends StatefulWidget {
 
 class _HoldToSignVouchState extends State<HoldToSignVouch>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: widget.holdDuration,
-  )..addStatusListener((AnimationStatus status) {
-      if (status == AnimationStatus.completed) widget.onCompleted();
-    });
+  // A signature is recorded exactly once: repeated presses, rebuilds, and
+  // reduced-motion completion all funnel through this latch.
+  bool _fired = false;
+
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: widget.holdDuration)
+        ..addStatusListener((AnimationStatus status) {
+          if (status == AnimationStatus.completed) _fire();
+        });
+
+  void _fire() {
+    if (_fired || !mounted) return;
+    _fired = true;
+    widget.onCompleted();
+  }
 
   @override
   void dispose() {
@@ -195,9 +204,10 @@ class _HoldToSignVouchState extends State<HoldToSignVouch>
   }
 
   void _start() {
+    if (_fired) return;
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
-      widget.onCompleted();
+      _fire();
       return;
     }
     _controller.forward();
@@ -255,7 +265,7 @@ class _HoldToSignVouchState extends State<HoldToSignVouch>
                         child: Text(
                           _controller.isCompleted
                               ? widget.label
-                              : "${widget.label} — hold",
+                              : "${widget.label} - hold",
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,

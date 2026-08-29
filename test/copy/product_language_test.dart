@@ -31,8 +31,9 @@ void main() {
   test("no recruiting vocabulary in user-facing copy", () {
     final List<String> offences = <String>[];
 
-    for (final FileSystemEntity entity
-        in Directory("lib").listSync(recursive: true)) {
+    for (final FileSystemEntity entity in Directory(
+      "lib",
+    ).listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith(".dart")) continue;
 
       final List<String> lines = entity.readAsLinesSync();
@@ -57,7 +58,8 @@ void main() {
     expect(
       offences,
       isEmpty,
-      reason: "FORGE is project collaboration, not hiring. Found:\n"
+      reason:
+          "FORGE is project collaboration, not hiring. Found:\n"
           "${offences.join("\n")}",
     );
   });

@@ -9,7 +9,7 @@ import "package:forge_talent_connections/theme/forge_theme.dart";
 /// The B2 search is a live linear search over the served project list.
 ///
 /// Multiple matches all render; a miss renders the explicit not-found
-/// state — never a silent blank.
+/// state - never a silent blank.
 void main() {
   Future<void> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(440, 2000);
@@ -42,8 +42,9 @@ void main() {
     expect(find.text("Employment Law Presentation"), findsOneWidget);
   });
 
-  testWidgets("a query narrows to its matches and reports the count",
-      (WidgetTester tester) async {
+  testWidgets("a query narrows to its matches and reports the count", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     await tester.enterText(find.byType(TextField), "law");
     await tester.pump(const Duration(milliseconds: 100));
@@ -52,15 +53,13 @@ void main() {
     expect(find.text("Business Analytics Capstone Dashboard"), findsNothing);
   });
 
-  testWidgets("no match renders the explicit not-found state",
-      (WidgetTester tester) async {
+  testWidgets("no match renders the explicit not-found state", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     await tester.enterText(find.byType(TextField), "zzz-nothing");
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("No projects matched your search"), findsOneWidget);
-    expect(
-      find.text("0 of ${kOpportunities.length} projects"),
-      findsOneWidget,
-    );
+    expect(find.text("0 of ${kOpportunities.length} projects"), findsOneWidget);
   });
 }

@@ -63,9 +63,12 @@ class A5ElevatorPitch extends ConsumerWidget {
                   children: <Widget>[
                     Expanded(
                       child: GoldButton(
-                          label: "Upload Video",
-                          onPressed: () => demoNote(context,
-                              "Video upload arrives with the backend.")),
+                        label: "Upload Video",
+                        onPressed: () => demoNote(
+                          context,
+                          "Video upload arrives with the backend.",
+                        ),
+                      ),
                     ),
                     const SizedBox(width: ForgeSpacing.gapCard),
                     Expanded(
@@ -86,7 +89,7 @@ class A5ElevatorPitch extends ConsumerWidget {
             "Generate an AI video pitch of yourself, drafted from your "
             "verified profile. On an app built on verifying who people are, "
             "a likeness is only generated when the backend is at least "
-            "95% confident it is really you — below the line, nothing is "
+            "95% confident it is really you - below the line, nothing is "
             "produced and you are told why.",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
@@ -100,8 +103,7 @@ class A5ElevatorPitch extends ConsumerWidget {
             value: ref.watch(pitchStudioProvider),
             pendingLabel: "Checking the studio",
             builder: (PitchStudio studio) {
-              final bool cleared =
-                  studio.status == VerificationStatus.verified;
+              final bool cleared = studio.status == VerificationStatus.verified;
               return ForgeCard(
                 borderColor: cleared ? forge.gold : forge.strokeSoft,
                 child: Column(
@@ -109,8 +111,7 @@ class A5ElevatorPitch extends ConsumerWidget {
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        Icon(Icons.auto_awesome,
-                            size: 17, color: forge.gold),
+                        Icon(Icons.auto_awesome, size: 17, color: forge.gold),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -152,19 +153,22 @@ class A5ElevatorPitch extends ConsumerWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: <Widget>[
-                        Icon(Icons.face_retouching_natural,
-                            size: 14, color: forge.gold),
+                        Icon(
+                          Icons.face_retouching_natural,
+                          size: 14,
+                          color: forge.gold,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             studio.likenessConfidencePercent == 0
                                 ? "Likeness confidence: checking · "
-                                    "${studio.requiredConfidencePercent} "
-                                    "required"
+                                      "${studio.requiredConfidencePercent} "
+                                      "required"
                                 : "Likeness confidence: "
-                                    "${studio.likenessConfidencePercent} of "
-                                    "${studio.requiredConfidencePercent} "
-                                    "required",
+                                      "${studio.likenessConfidencePercent} of "
+                                      "${studio.requiredConfidencePercent} "
+                                      "required",
                             style: TextStyle(
                               fontFamily: ForgeType.bodyFamily,
                               fontSize: ForgeType.caption,
@@ -181,8 +185,7 @@ class A5ElevatorPitch extends ConsumerWidget {
                     ConfidenceMeter(
                       value: studio.likenessConfidencePercent,
                       required_: studio.requiredConfidencePercent,
-                      pending:
-                          studio.status == VerificationStatus.pending,
+                      pending: studio.status == VerificationStatus.pending,
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -191,8 +194,7 @@ class A5ElevatorPitch extends ConsumerWidget {
                         fontFamily: ForgeType.bodyFamily,
                         fontSize: ForgeType.caption,
                         height: 1.35,
-                        color:
-                            cleared ? forge.textSub : forge.text,
+                        color: cleared ? forge.textSub : forge.text,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -204,10 +206,12 @@ class A5ElevatorPitch extends ConsumerWidget {
                       // check runs, there is no action that could appear to
                       // succeed.
                       onPressed: cleared
-                          ? () => demoNote(context,
+                          ? () => demoNote(
+                              context,
                               "Generation runs on the backend's AI video "
                               "partner and returns here with the "
-                              "AI-generated label.")
+                              "AI-generated label.",
+                            )
                           : null,
                     ),
                   ],
@@ -219,13 +223,11 @@ class A5ElevatorPitch extends ConsumerWidget {
           const BannerNote(
             tone: BannerTone.coach,
             title: "60-second structure that works",
-            text:
-                "Who you are 0-10s\nOne verified win with a number 10-35s\nWhat you want next 35-60s",
+            text: "Who you are 0-10s\nOne verified win with a number 10-35s\nWhat you want next 35-60s",
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           const BannerNote(
-            text:
-                "Using an AI presenter? It will carry a visible AI-generated label wherever it plays.",
+            text: "Using an AI presenter? It will carry a visible AI-generated label wherever it plays.",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
@@ -238,4 +240,3 @@ class A5ElevatorPitch extends ConsumerWidget {
     );
   }
 }
-

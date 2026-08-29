@@ -5,15 +5,20 @@ import "../support/harness.dart";
 
 void main() {
   group("ScoreRing", () {
-    testWidgets("counts up and settles on the value it was given",
-        (WidgetTester tester) async {
-      await pumpHarness(tester, const ScoreRing(value: 87, label: "Strong match"));
+    testWidgets("counts up and settles on the value it was given", (
+      WidgetTester tester,
+    ) async {
+      await pumpHarness(
+        tester,
+        const ScoreRing(value: 87, label: "Strong match"),
+      );
       expect(find.text("87"), findsOneWidget);
       expect(find.text("Strong match"), findsOneWidget);
     });
 
-    testWidgets("shows the final value immediately under reduced motion",
-        (WidgetTester tester) async {
+    testWidgets("shows the final value immediately under reduced motion", (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         harness(const ScoreRing(value: 87), disableAnimations: true),
       );
@@ -22,8 +27,9 @@ void main() {
       expect(find.text("87"), findsOneWidget);
     });
 
-    testWidgets("renders zero without painting an arc",
-        (WidgetTester tester) async {
+    testWidgets("renders zero without painting an arc", (
+      WidgetTester tester,
+    ) async {
       await pumpHarness(tester, const ScoreRing(value: 0));
       expect(find.text("0"), findsOneWidget);
     });

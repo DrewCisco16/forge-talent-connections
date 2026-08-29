@@ -10,8 +10,8 @@ import "package:forge_talent_connections/theme/forge_theme.dart";
 ///
 /// Points come only from verified events, pending points never count as
 /// paid, and an integrity hold freezes the account visibly instead of
-/// leaving a payout path that might appear to work. The fair-play rules —
-/// human-earned points only, audits before every award — ship on the screen
+/// leaving a payout path that might appear to work. The fair-play rules -
+/// human-earned points only, audits before every award - ship on the screen
 /// itself, not in a footnote.
 void main() {
   Future<void> pump(WidgetTester tester, DemoScenario scenario) async {
@@ -39,8 +39,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets("verified: active account with verified points and prizes",
-      (WidgetTester tester) async {
+  testWidgets("verified: active account with verified points and prizes", (
+    WidgetTester tester,
+  ) async {
     await pump(tester, DemoScenario.verified);
     expect(find.text("340"), findsOneWidget);
     expect(find.textContaining("Top 12% this quarter"), findsWidgets);
@@ -52,22 +53,21 @@ void main() {
     expect(find.textContaining("No purchase"), findsOneWidget);
   });
 
-  testWidgets("pending: waiting points are shown as pending, never as paid",
-      (WidgetTester tester) async {
+  testWidgets("pending: waiting points are shown as pending, never as paid", (
+    WidgetTester tester,
+  ) async {
     await pump(tester, DemoScenario.pending);
     expect(find.text("240"), findsOneWidget);
-    expect(
-      find.textContaining("100 pending verification"),
-      findsOneWidget,
-    );
+    expect(find.textContaining("100 pending verification"), findsOneWidget);
     expect(
       find.textContaining("count only when the checks pass"),
       findsOneWidget,
     );
   });
 
-  testWidgets("denied: the freeze is stated with the human-review path",
-      (WidgetTester tester) async {
+  testWidgets("denied: the freeze is stated with the human-review path", (
+    WidgetTester tester,
+  ) async {
     await pump(tester, DemoScenario.denied);
     expect(find.text("0"), findsOneWidget);
     expect(find.textContaining("Points frozen"), findsOneWidget);

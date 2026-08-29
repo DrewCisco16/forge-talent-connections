@@ -11,14 +11,14 @@ import "package:flutter_test/flutter_test.dart";
 /// checked by hand; this test makes the suite itself refuse them.
 ///
 /// The banned terms are stored base64-encoded and decoded only at runtime,
-/// because writing them literally here would put them in the repo — the exact
+/// because writing them literally here would put them in the repo - the exact
 /// thing this test exists to prevent. The encoded forms never match the
 /// decoded scan, so the test cannot flag itself.
 ///
 /// Publication numbers were removed from this list on Andrew's explicit
 /// override: published applications are public USPTO records, and the product
 /// now displays them as provenance on the Trust Technology screen. Internal
-/// system names stay barred — the override was for filings, not for engine
+/// system names stay barred - the override was for filings, not for engine
 /// vocabulary.
 ///
 /// The list also bars the prosecution and payment identifiers that appear on
@@ -44,8 +44,7 @@ final List<String> _banned = <String>[
 const List<String> _roots = <String>["lib", "test", "tool", "assets"];
 
 void main() {
-  test("no internal system names or filing numbers anywhere in the source",
-      () {
+  test("no internal system names or filing numbers anywhere in the source", () {
     final List<String> offences = <String>[];
 
     for (final String root in _roots) {
@@ -85,7 +84,8 @@ void main() {
     expect(
       offences,
       isEmpty,
-      reason: "This is the walled consumer UI. Internal names and filing "
+      reason:
+          "This is the walled consumer UI. Internal names and filing "
           "numbers must not appear in it:\n${offences.join("\n")}",
     );
   });

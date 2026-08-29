@@ -46,8 +46,11 @@ class SealCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: LinearGradient(colors: forge.goldGradient),
                 ),
-                child: const Icon(Icons.workspace_premium,
-                    size: 17, color: Colors.white),
+                child: const Icon(
+                  Icons.workspace_premium,
+                  size: 17,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(width: 10),
               if (title != null)

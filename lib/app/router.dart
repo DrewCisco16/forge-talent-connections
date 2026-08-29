@@ -102,16 +102,13 @@ GoRouter buildRouter() {
             path: "/opportunity/:id",
             name: "opportunity",
             builder: (BuildContext context, GoRouterState state) =>
-                B7OpportunityDetail(
-              opportunityId: state.pathParameters["id"]!,
-            ),
+                B7OpportunityDetail(opportunityId: state.pathParameters["id"]!),
           ),
           GoRoute(
             path: "/match/:id",
             name: "match",
-            builder: (BuildContext context, GoRouterState state) => B6AiMatch(
-              opportunityId: state.pathParameters["id"]!,
-            ),
+            builder: (BuildContext context, GoRouterState state) =>
+                B6AiMatch(opportunityId: state.pathParameters["id"]!),
           ),
           GoRoute(
             path: "/resume-builder",

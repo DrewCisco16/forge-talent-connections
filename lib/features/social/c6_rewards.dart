@@ -36,14 +36,12 @@ class C6Rewards extends ConsumerWidget {
         value: ref.watch(rewardsProvider),
         pendingLabel: "Loading rewards",
         builder: (RewardsProgram program) {
-          final bool frozen =
-              program.status == VerificationStatus.locked;
+          final bool frozen = program.status == VerificationStatus.locked;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               const SizedBox(height: ForgeSpacing.gapSection),
-              const Align(
-                  alignment: Alignment.centerRight, child: DemoBadge()),
+              const Align(alignment: Alignment.centerRight, child: DemoBadge()),
               const SizedBox(height: 8),
               const HeroBand(
                 title: "Rewards & Referrals",
@@ -95,8 +93,8 @@ class C6Rewards extends ConsumerWidget {
                             child: Text(
                               program.pointsPending > 0
                                   ? "verified points · "
-                                      "${program.pointsPending} pending "
-                                      "verification"
+                                        "${program.pointsPending} pending "
+                                        "verification"
                                   : "verified points",
                               style: TextStyle(
                                 fontFamily: ForgeType.bodyFamily,
@@ -151,8 +149,7 @@ class C6Rewards extends ConsumerWidget {
               const SizedBox(height: ForgeSpacing.gapCard),
               for (final RewardPrize prize in program.quarterlyPrizes)
                 Padding(
-                  padding:
-                      const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
+                  padding: const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
                   child: _PrizeCard(prize: prize, icon: Icons.card_giftcard),
                 ),
               _PrizeCard(
@@ -188,8 +185,11 @@ class C6Rewards extends ConsumerWidget {
                         padding: const EdgeInsets.only(bottom: 9),
                         child: Row(
                           children: <Widget>[
-                            Icon(Icons.bolt_outlined,
-                                size: 15, color: forge.gold),
+                            Icon(
+                              Icons.bolt_outlined,
+                              size: 15,
+                              color: forge.gold,
+                            ),
                             const SizedBox(width: 9),
                             Expanded(
                               child: Text(
@@ -261,7 +261,7 @@ class C6Rewards extends ConsumerWidget {
                     Text(
                       program.referralsPending > 0
                           ? "${program.referralsJoined} joined and verified "
-                              "· ${program.referralsPending} still verifying"
+                                "· ${program.referralsPending} still verifying"
                           : "${program.referralsJoined} joined and verified",
                       style: TextStyle(
                         fontFamily: ForgeType.bodyFamily,
@@ -274,9 +274,11 @@ class C6Rewards extends ConsumerWidget {
                       label: "Share My Code",
                       icon: Icons.ios_share,
                       fullWidth: true,
-                      onPressed: () => demoNote(context,
-                          "Sharing opens your device's share sheet with "
-                          "the backend attached."),
+                      onPressed: () => demoNote(
+                        context,
+                        "Sharing opens your device's share sheet with "
+                        "the backend attached.",
+                      ),
                     ),
                   ],
                 ),
@@ -314,9 +316,7 @@ class C6Rewards extends ConsumerWidget {
                                   fontFamily: ForgeType.displayFamily,
                                   fontSize: ForgeType.cardTitle,
                                   fontWeight: FontWeight.bold,
-                                  color: i == 0
-                                      ? forge.gold
-                                      : forge.textSub,
+                                  color: i == 0 ? forge.gold : forge.textSub,
                                 ),
                               ),
                             ),
@@ -329,10 +329,11 @@ class C6Rewards extends ConsumerWidget {
                             Expanded(
                               child: Text(
                                 e.name,
+                                // Names carry the largest weight in the row.
                                 style: TextStyle(
                                   fontFamily: ForgeType.bodyFamily,
-                                  fontSize: ForgeType.body,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: ForgeType.name,
+                                  fontWeight: FontWeight.bold,
                                   color: forge.text,
                                 ),
                               ),
@@ -351,8 +352,11 @@ class C6Rewards extends ConsumerWidget {
                       ),
                     Row(
                       children: <Widget>[
-                        Icon(Icons.person_outline,
-                            size: 15, color: forge.textSub),
+                        Icon(
+                          Icons.person_outline,
+                          size: 15,
+                          color: forge.textSub,
+                        ),
                         const SizedBox(width: 9),
                         Expanded(
                           child: Text(
@@ -385,8 +389,7 @@ class C6Rewards extends ConsumerWidget {
                           children: <Widget>[
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
                                   Text(
                                     e.label,
@@ -419,7 +422,7 @@ class C6Rewards extends ConsumerWidget {
               ),
 
               const SizedBox(height: ForgeSpacing.gapSection),
-              const SectionLabel("Fair play — the rules that keep it real"),
+              const SectionLabel("Fair play - the rules that keep it real"),
               const SizedBox(height: ForgeSpacing.gapCard),
               ForgeCard(
                 borderColor: forge.gold.withValues(alpha: 0.55),
@@ -427,7 +430,7 @@ class C6Rewards extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     for (final String rule in <String>[
-                      "Points must be earned by you, a person — never by a "
+                      "Points must be earned by you, a person - never by a "
                           "company, bot, script, AI agent, purchased "
                           "account, or anyone acting on your behalf.",
                       "One account per person. Pooling, trading, or "
@@ -436,8 +439,8 @@ class C6Rewards extends ConsumerWidget {
                           "points behind it.",
                       "Violations void the prize, forfeit the points, and "
                           "can end membership. Conduct that breaks the law "
-                          "— fraud, impersonation, unauthorized automation "
-                          "— can be referred to law enforcement.",
+                          "- fraud, impersonation, unauthorized automation "
+                          "- can be referred to law enforcement.",
                       "No purchase is ever necessary to earn points or "
                           "win. Void where prohibited by law.",
                       "The program is run from Florida under Florida law "
@@ -451,8 +454,11 @@ class C6Rewards extends ConsumerWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Icon(Icons.gavel_outlined,
-                                size: 14, color: forge.gold),
+                            Icon(
+                              Icons.gavel_outlined,
+                              size: 14,
+                              color: forge.gold,
+                            ),
                             const SizedBox(width: 9),
                             Expanded(
                               child: Text(
@@ -478,7 +484,8 @@ class C6Rewards extends ConsumerWidget {
               const SizedBox(height: ForgeSpacing.gapCard),
               const BannerNote(
                 tone: BannerTone.governance,
-                text: "Draft program rules for demonstration. Final prize "
+                text:
+                    "Draft program rules for demonstration. Final prize "
                     "rules are reviewed by licensed counsel for every place "
                     "the program runs before launch.",
               ),

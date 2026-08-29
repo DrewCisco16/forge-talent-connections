@@ -57,8 +57,9 @@ class BottomNav extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: ForgeType.bodyFamily,
                           fontSize: ForgeType.caption,
-                          fontWeight:
-                              tab == current ? FontWeight.w700 : FontWeight.w400,
+                          fontWeight: tab == current
+                              ? FontWeight.w700
+                              : FontWeight.w400,
                           color: tab == current ? forge.gold : forge.textSub,
                         ),
                       ),

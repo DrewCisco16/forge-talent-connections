@@ -22,10 +22,7 @@ Widget harness(
         body: Center(
           child: SizedBox(
             width: width,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: child,
-            ),
+            child: Padding(padding: const EdgeInsets.all(16), child: child),
           ),
         ),
       ),

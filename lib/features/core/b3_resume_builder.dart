@@ -79,10 +79,13 @@ class B3ResumeBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
-              label: "Generate Resume",
-              onPressed: () => demoNote(context,
-                  "The assistant's draft below is built from your verified "
-                  "record.")),
+            label: "Generate Resume",
+            onPressed: () => demoNote(
+              context,
+              "The assistant's draft below is built from your verified "
+              "record.",
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           const SectionLabel("Assistant draft"),
           const SizedBox(height: 6),
@@ -127,8 +130,11 @@ class B3ResumeBuilder extends ConsumerWidget {
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                  Icon(Icons.verified_outlined,
-                                      size: 13, color: forge.gold),
+                                  Icon(
+                                    Icons.verified_outlined,
+                                    size: 13,
+                                    color: forge.gold,
+                                  ),
                                   const SizedBox(width: 5),
                                   Expanded(
                                     child: Text(
@@ -158,8 +164,11 @@ class B3ResumeBuilder extends ConsumerWidget {
                       children: <Widget>[
                         Row(
                           children: <Widget>[
-                            Icon(Icons.do_not_disturb_on_outlined,
-                                size: 15, color: forge.textSub),
+                            Icon(
+                              Icons.do_not_disturb_on_outlined,
+                              size: 15,
+                              color: forge.textSub,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -187,9 +196,11 @@ class B3ResumeBuilder extends ConsumerWidget {
                         const SizedBox(height: 10),
                         OutlineGoldButton(
                           label: "Request Human Review",
-                          onPressed: () => demoNote(context,
-                              "Request recorded. A person will review this "
-                              "decision."),
+                          onPressed: () => demoNote(
+                            context,
+                            "Request recorded. A person will review this "
+                            "decision.",
+                          ),
                         ),
                       ],
                     ),
@@ -201,15 +212,13 @@ class B3ResumeBuilder extends ConsumerWidget {
           const SizedBox(height: ForgeSpacing.gapSection),
           // Required copy. Ships verbatim.
           const BannerNote(
-            text:
-                "Every AI draft passes an integrity check before it becomes real. If the check cannot pass, nothing is produced and you are told why.",
+            text: "Every AI draft passes an integrity check before it becomes real. If the check cannot pass, nothing is produced and you are told why.",
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           // Required copy. Ships verbatim.
           const BannerNote(
             tone: BannerTone.governance,
-            text:
-                "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+            text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
           ),
           const SizedBox(height: 24),
         ],

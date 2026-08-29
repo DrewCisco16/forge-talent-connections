@@ -9,7 +9,7 @@
 import "package:flutter/painting.dart";
 
 /// Version string of the token set these constants were generated from.
-const String kDesignTokenVersion = "v3-dark-2026-08-26";
+const String kDesignTokenVersion = "v4-dark-2026-08-28";
 
 /// Raw palette from the design system.
 ///
@@ -20,6 +20,7 @@ abstract final class ForgeColors {
   /// vertical, every screen background
   static const Color bgGradientTop = Color(0xFF0F1A33);
   static const Color bgGradientBottom = Color(0xFF060B16);
+
   /// page header band on form screens
   static const Color heroGradientTop = Color(0xFF1A2647);
   static const Color heroGradientBottom = Color(0xFF0D142B);
@@ -60,11 +61,13 @@ abstract final class ForgeSemantic {
 
 /// Type families and the fixed size scale.
 abstract final class ForgeType {
-  static const String displayFamily = "Space Grotesk";
-  static const String bodyFamily = "Inter";
+  static const String displayFamily = "Arial";
+  static const String bodyFamily = "Arial";
   static const double heroTitle = 30.0;
   static const double screenTitle = 26.0;
-  static const double wordmark = 52.0;
+  static const double wordmark = 44.0;
+  static const double lockupDescriptor = 18.0;
+  static const double name = 17.0;
   static const double cardTitle = 15.0;
   static const double body = 13.0;
   static const double caption = 11.0;
@@ -99,5 +102,6 @@ abstract final class ForgeMotionNotes {
   static const String verifiedStamp = "tick + scale-settle + haptic";
   static const String vouchTap = "particle burst on vibe gradient + haptic";
   static const String denial = "soft shake + denial haptic; never fake success";
-  static const String restraintNote = "Shipped MVP still under build-guide restraint rule unless Andrew revises; these specs are the concept target";
+  static const String restraintNote =
+      "Shipped MVP still under build-guide restraint rule unless Andrew revises; these specs are the concept target";
 }

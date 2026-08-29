@@ -59,8 +59,7 @@ class _A3ChooseAvatarState extends ConsumerState<A3ChooseAvatar> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: avatars.length,
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 4,
                 mainAxisSpacing: 14,
                 crossAxisSpacing: 14,
@@ -125,7 +124,7 @@ class _A3ChooseAvatarState extends ConsumerState<A3ChooseAvatar> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                "Skip for now — avatars are optional and can be changed "
+                "Skip for now - avatars are optional and can be changed "
                 "anytime",
                 textAlign: TextAlign.center,
                 style: TextStyle(

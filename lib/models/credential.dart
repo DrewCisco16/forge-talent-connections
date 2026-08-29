@@ -73,7 +73,7 @@ class Vouch {
   final String text;
   final String signedOn;
 
-  /// What the vouch rests on — a shared verified project outweighs
+  /// What the vouch rests on - a shared verified project outweighs
   /// acquaintance, and the basis is shown on the vouch itself.
   final String? basis;
   final VerificationStatus basisStatus;

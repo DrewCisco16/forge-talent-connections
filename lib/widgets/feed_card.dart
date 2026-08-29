@@ -84,10 +84,11 @@ class FeedCard extends StatelessWidget {
                           child: Text(
                             name,
                             overflow: TextOverflow.ellipsis,
+                            // Names carry the largest weight in the row.
                             style: TextStyle(
                               fontFamily: ForgeType.bodyFamily,
-                              fontSize: ForgeType.cardTitle,
-                              fontWeight: FontWeight.w700,
+                              fontSize: ForgeType.name,
+                              fontWeight: FontWeight.bold,
                               color: forge.text,
                             ),
                           ),
@@ -128,13 +129,21 @@ class FeedCard extends StatelessWidget {
               if (vouchCount != null) ...<Widget>[
                 Icon(Icons.verified_outlined, size: 14, color: forge.gold),
                 const SizedBox(width: 5),
-                Text(
-                  "$vouchCount",
-                  style: TextStyle(
-                    fontFamily: ForgeType.bodyFamily,
-                    fontSize: ForgeType.caption,
-                    fontWeight: FontWeight.w700,
-                    color: forge.gold,
+                // Context, never a popularity score: the number states how
+                // many people signed their name to this work. Flexible so
+                // the phrase truncates on narrow screens instead of
+                // overflowing.
+                Flexible(
+                  child: Text(
+                    "Work vouched · $vouchCount",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      fontWeight: FontWeight.w700,
+                      color: forge.gold,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),

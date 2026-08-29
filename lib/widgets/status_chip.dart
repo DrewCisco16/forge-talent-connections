@@ -17,28 +17,28 @@ class StatusChip extends StatelessWidget {
 
   /// The label shown for each state. These are the only five permitted.
   String get _label => switch (status) {
-        VerificationStatus.verified => "VERIFIED",
-        VerificationStatus.pending => "PENDING",
-        VerificationStatus.unverified => "UNVERIFIED",
-        VerificationStatus.failed => "FAILED",
-        VerificationStatus.locked => "LOCKED",
-      };
+    VerificationStatus.verified => "VERIFIED",
+    VerificationStatus.pending => "PENDING",
+    VerificationStatus.unverified => "UNVERIFIED",
+    VerificationStatus.failed => "FAILED",
+    VerificationStatus.locked => "LOCKED",
+  };
 
   IconData get _icon => switch (status) {
-        VerificationStatus.verified => Icons.check_circle,
-        VerificationStatus.pending => Icons.schedule,
-        VerificationStatus.unverified => Icons.remove_circle_outline,
-        VerificationStatus.failed => Icons.cancel,
-        VerificationStatus.locked => Icons.lock,
-      };
+    VerificationStatus.verified => Icons.check_circle,
+    VerificationStatus.pending => Icons.schedule,
+    VerificationStatus.unverified => Icons.remove_circle_outline,
+    VerificationStatus.failed => Icons.cancel,
+    VerificationStatus.locked => Icons.lock,
+  };
 
   Color _color(ForgeTheme forge) => switch (status) {
-        VerificationStatus.verified => forge.green,
-        VerificationStatus.pending => forge.textSub,
-        VerificationStatus.unverified => forge.textSub,
-        VerificationStatus.failed => forge.red,
-        VerificationStatus.locked => forge.red,
-      };
+    VerificationStatus.verified => forge.green,
+    VerificationStatus.pending => forge.textSub,
+    VerificationStatus.unverified => forge.textSub,
+    VerificationStatus.failed => forge.red,
+    VerificationStatus.locked => forge.red,
+  };
 
   @override
   Widget build(BuildContext context) {

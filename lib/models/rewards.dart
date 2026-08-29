@@ -1,6 +1,6 @@
 import "verification_status.dart";
 
-/// One points-earning event. Points attach only to verified actions — a
+/// One points-earning event. Points attach only to verified actions - a
 /// vouch that verified, a referred member who joined and verified, a sealed
 /// deliverable. The backend awards every point; the UI only reports it.
 class RewardEvent {
@@ -84,7 +84,7 @@ class RewardsProgram {
   /// Relative standing framed as a tier, e.g. "Top 12% this quarter".
   final String standingNote;
 
-  /// How many members earned points this quarter — the community norm.
+  /// How many members earned points this quarter - the community norm.
   final int membersEarning;
 
   final String referralCode;

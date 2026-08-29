@@ -25,6 +25,13 @@ class Opportunity {
     this.engagement,
     this.vouchLevel,
     this.evidence = const <String>[],
+    this.seatsOpen,
+    this.seatsTotal,
+    this.reviewerConfirmed,
+    this.scopeOnFile,
+    this.startWindow,
+    this.expiresOn,
+    this.qualified,
   });
 
   final String id;
@@ -51,6 +58,28 @@ class Opportunity {
 
   /// The portable proof a contributor can earn by completing this project.
   final List<String> evidence;
+
+  /// Resourced-seat facts, reported by the backend. Interest-only listings
+  /// carry none of these and are never counted as qualified supply.
+  final int? seatsOpen;
+  final int? seatsTotal;
+
+  /// Whether an accountable reviewer has confirmed capacity for this project.
+  final bool? reviewerConfirmed;
+
+  /// Whether a written scope is on file with the sponsor.
+  final bool? scopeOnFile;
+
+  /// The stated start window, e.g. "Sep to Oct 2026".
+  final String? startWindow;
+
+  /// When this listing expires and stops counting as supply.
+  final String? expiresOn;
+
+  /// The backend's own qualified-supply decision: verified sponsor, written
+  /// scope, confirmed reviewer, and at least one open seat. Never computed
+  /// client-side; the UI renders the served answer.
+  final bool? qualified;
 }
 
 /// Whether a reason supports or counts against a suggestion.

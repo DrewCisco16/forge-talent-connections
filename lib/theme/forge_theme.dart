@@ -35,29 +35,29 @@ class ForgeTheme extends ThemeExtension<ForgeTheme> {
 
   /// The palette exactly as delivered in the design tokens.
   const ForgeTheme.standard()
-      : bgGradient = const <Color>[
-          ForgeColors.bgGradientTop,
-          ForgeColors.bgGradientBottom,
-        ],
-        heroGradient = const <Color>[
-          ForgeColors.heroGradientTop,
-          ForgeColors.heroGradientBottom,
-        ],
-        surface = ForgeColors.surface,
-        surface2 = ForgeColors.surface2,
-        gold = ForgeColors.gold,
-        goldGradient = ForgeColors.goldGradient,
-        goldDeep = ForgeColors.goldDeep,
-        text = ForgeColors.text,
-        textSub = ForgeColors.textSub,
-        stroke = ForgeColors.stroke,
-        strokeSoft = ForgeColors.strokeSoft,
-        violet = ForgeColors.violet,
-        coral = ForgeColors.coral,
-        cyan = ForgeColors.cyan,
-        green = ForgeColors.green,
-        red = ForgeColors.red,
-        usmcScarlet = ForgeColors.usmcScarlet;
+    : bgGradient = const <Color>[
+        ForgeColors.bgGradientTop,
+        ForgeColors.bgGradientBottom,
+      ],
+      heroGradient = const <Color>[
+        ForgeColors.heroGradientTop,
+        ForgeColors.heroGradientBottom,
+      ],
+      surface = ForgeColors.surface,
+      surface2 = ForgeColors.surface2,
+      gold = ForgeColors.gold,
+      goldGradient = ForgeColors.goldGradient,
+      goldDeep = ForgeColors.goldDeep,
+      text = ForgeColors.text,
+      textSub = ForgeColors.textSub,
+      stroke = ForgeColors.stroke,
+      strokeSoft = ForgeColors.strokeSoft,
+      violet = ForgeColors.violet,
+      coral = ForgeColors.coral,
+      cyan = ForgeColors.cyan,
+      green = ForgeColors.green,
+      red = ForgeColors.red,
+      usmcScarlet = ForgeColors.usmcScarlet;
 
   final List<Color> bgGradient;
   final List<Color> heroGradient;
@@ -130,8 +130,8 @@ class ForgeTheme extends ThemeExtension<ForgeTheme> {
   ForgeTheme lerp(covariant ForgeTheme? other, double t) {
     if (other == null) return this;
     List<Color> lerpStops(List<Color> a, List<Color> b) => <Color>[
-          for (int i = 0; i < a.length; i++) Color.lerp(a[i], b[i], t)!,
-        ];
+      for (int i = 0; i < a.length; i++) Color.lerp(a[i], b[i], t)!,
+    ];
     return ForgeTheme(
       bgGradient: lerpStops(bgGradient, other.bgGradient),
       heroGradient: lerpStops(heroGradient, other.heroGradient),
@@ -167,17 +167,17 @@ ThemeData buildForgeTheme() {
   // TTFs are added to assets/ and registered in pubspec.yaml, Flutter falls back
   // to the platform default face. Sizes, weights and colours are already correct.
   TextStyle display(double size, FontWeight weight) => TextStyle(
-        fontFamily: ForgeType.displayFamily,
-        fontSize: size,
-        fontWeight: weight,
-        color: forge.text,
-      );
+    fontFamily: ForgeType.displayFamily,
+    fontSize: size,
+    fontWeight: weight,
+    color: forge.text,
+  );
   TextStyle body(double size, FontWeight weight, Color color) => TextStyle(
-        fontFamily: ForgeType.bodyFamily,
-        fontSize: size,
-        fontWeight: weight,
-        color: color,
-      );
+    fontFamily: ForgeType.bodyFamily,
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+  );
 
   return ThemeData(
     useMaterial3: true,

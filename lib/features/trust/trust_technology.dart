@@ -11,7 +11,7 @@ import "../../widgets/section_label.dart";
 /// capability.
 ///
 /// This is the consumer-safe surface for the protected technology portfolio.
-/// It describes what each technology does for the person using the app —
+/// It describes what each technology does for the person using the app -
 /// never how, never under what internal name, and never with claim language.
 /// The walled-UI rule still holds: everything described here is enforced by
 /// the backend; this screen only presents it.
@@ -27,6 +27,8 @@ class TrustTechnology extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           HeroBand(
             title: "How FORGE Talent Connections Protects You",
             subtitle: "Three technologies underneath every check",
@@ -54,13 +56,27 @@ class TrustTechnology extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          // Accurate status, always: applications, founder reported, and
+          // never implied to be granted patents or proof of outcomes.
+          Text(
+            "The protections below are innovations described in three "
+            "pending patent applications (founder reported). A pending "
+            "application is not a granted patent, and no filing is a "
+            "substitute for the checks themselves.",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           _TechCard(
             icon: Icons.psychology_outlined,
             accent: forge.cyan,
             title: "AI that can't overstep",
-            body:
-                "Every AI suggestion must clear a confidence bar before it is even considered. Anything uncertain goes to a person instead. A suggestion can never change your record — only verified actions by people do — and every decision is captured in a tamper-evident log.",
+            body: "Every AI suggestion must clear a confidence bar before it is even considered. Anything uncertain goes to a person instead. A suggestion can never change your record - only verified actions by people do - and every decision is captured in a tamper-evident log.",
             seeItLabel: "See it: AI Match",
             seeItRoute: "/match/employment-law-presentation",
             filing: "US Patent Application Publication 2026/0246640 A1",
@@ -70,8 +86,7 @@ class TrustTechnology extends StatelessWidget {
             icon: Icons.lock_outline,
             accent: forge.gold,
             title: "A record that can't be quietly changed",
-            body:
-                "Your verified record is locked by default. A change is staged, checked, and only becomes real once it passes — all at once, or not at all. The full history stays replayable, so what happened can always be shown.",
+            body: "Your verified record is locked by default. A change is staged, checked, and only becomes real once it passes - all at once, or not at all. The full history stays replayable, so what happened can always be shown.",
             seeItLabel: "See it: Trust Wallet",
             seeItRoute: "/trust-wallet",
             filing: "US Patent Application Publication 2026/0186826 A1",
@@ -81,8 +96,7 @@ class TrustTechnology extends StatelessWidget {
             icon: Icons.verified_outlined,
             accent: forge.green,
             title: "Exports that prove themselves",
-            body:
-                "Every file receives a standardized fingerprint when it is created. At the moment of export that fingerprint is checked again, and there is only one door out. If it does not match, it does not go out.",
+            body: "Every file receives a standardized fingerprint when it is created. At the moment of export that fingerprint is checked again, and there is only one door out. If it does not match, it does not go out.",
             seeItLabel: "See it: Export",
             seeItRoute: "/export",
             filing: "US Patent Application 19/546,587 (pending)",
@@ -139,7 +153,7 @@ class _TechCard extends StatelessWidget {
   ///
   /// Convention: cite the publication number once an application has published
   /// (it is the citable public record), and the application number while it is
-  /// still pending. Null where neither exists — a number is never shown unless
+  /// still pending. Null where neither exists - a number is never shown unless
   /// it does.
   final String? filing;
 
@@ -196,12 +210,14 @@ class _TechCard extends StatelessWidget {
                 border: Border.all(color: forge.strokeSoft),
                 borderRadius: BorderRadius.circular(8),
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               child: Row(
                 children: <Widget>[
-                  Icon(Icons.description_outlined,
-                      size: 12, color: forge.textSub),
+                  Icon(
+                    Icons.description_outlined,
+                    size: 12,
+                    color: forge.textSub,
+                  ),
                   const SizedBox(width: 7),
                   Flexible(
                     child: Text(
@@ -231,13 +247,13 @@ class _TechCard extends StatelessWidget {
                 // instead of running past the card edge.
                 Flexible(
                   child: Text(
-                  seeItLabel,
-                  style: TextStyle(
-                    fontFamily: ForgeType.bodyFamily,
-                    fontSize: ForgeType.caption,
-                    fontWeight: FontWeight.w700,
-                    color: accent,
-                  ),
+                    seeItLabel,
+                    style: TextStyle(
+                      fontFamily: ForgeType.bodyFamily,
+                      fontSize: ForgeType.caption,
+                      fontWeight: FontWeight.w700,
+                      color: accent,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),

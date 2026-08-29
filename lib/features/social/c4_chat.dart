@@ -43,10 +43,11 @@ class C4Chat extends ConsumerWidget {
                         thread.withName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        // Names carry the largest weight in the row.
                         style: TextStyle(
                           fontFamily: ForgeType.bodyFamily,
-                          fontSize: ForgeType.cardTitle,
-                          fontWeight: FontWeight.w700,
+                          fontSize: ForgeType.name,
+                          fontWeight: FontWeight.bold,
                           color: forge.text,
                         ),
                       ),
@@ -68,8 +69,9 @@ class C4Chat extends ConsumerWidget {
             const SizedBox(height: ForgeSpacing.gapSection),
             for (final ChatMessage m in thread.messages)
               Align(
-                alignment:
-                    m.fromMe ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: m.fromMe
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 260),
                   margin: const EdgeInsets.only(bottom: 10),
@@ -106,16 +108,21 @@ class C4Chat extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: forge.strokeSoft),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     for (int i = 0; i < 3; i++)
                       Padding(
                         padding: const EdgeInsets.only(right: 4),
-                        child: Icon(Icons.circle,
-                            size: 5, color: forge.textSub),
+                        child: Icon(
+                          Icons.circle,
+                          size: 5,
+                          color: forge.textSub,
+                        ),
                       ),
                   ],
                 ),
@@ -128,12 +135,15 @@ class C4Chat extends ConsumerWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       color: forge.surface2,
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.pillRadius),
+                      borderRadius: BorderRadius.circular(
+                        ForgeShape.pillRadius,
+                      ),
                       border: Border.all(color: forge.strokeSoft),
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 11),
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
                     child: Text(
                       "Message",
                       style: TextStyle(
@@ -178,8 +188,11 @@ class _FileShare extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            const Icon(Icons.insert_drive_file_outlined,
-                size: 17, color: Colors.white),
+            const Icon(
+              Icons.insert_drive_file_outlined,
+              size: 17,
+              color: Colors.white,
+            ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(

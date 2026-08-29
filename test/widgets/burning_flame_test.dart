@@ -6,8 +6,9 @@ import "../support/harness.dart";
 
 void main() {
   group("BurningFlame", () {
-    testWidgets("burns: frames keep scheduling while animating",
-        (WidgetTester tester) async {
+    testWidgets("burns: frames keep scheduling while animating", (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         harness(const BurningFlame(asset: "assets/brand/forge_flame.png")),
       );
@@ -21,8 +22,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets("respects reduced motion: no animation runs at all",
-        (WidgetTester tester) async {
+    testWidgets("respects reduced motion: no animation runs at all", (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         harness(
           const BurningFlame(asset: "assets/brand/forge_flame.png"),
@@ -30,14 +32,18 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.hasRunningAnimations, isFalse,
-          reason: "reduced motion must render a still flame");
+      expect(
+        tester.hasRunningAnimations,
+        isFalse,
+        reason: "reduced motion must render a still flame",
+      );
       expect(find.byType(Image), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets("the flame artwork is present in both modes",
-        (WidgetTester tester) async {
+    testWidgets("the flame artwork is present in both modes", (
+      WidgetTester tester,
+    ) async {
       for (final bool reduced in <bool>[true, false]) {
         await tester.pumpWidget(
           harness(
@@ -46,8 +52,11 @@ void main() {
           ),
         );
         await tester.pump(const Duration(milliseconds: 50));
-        expect(find.byType(Image), findsOneWidget,
-            reason: "the mark itself must render (reduced: $reduced)");
+        expect(
+          find.byType(Image),
+          findsOneWidget,
+          reason: "the mark itself must render (reduced: $reduced)",
+        );
       }
     });
   });

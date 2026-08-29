@@ -12,8 +12,8 @@ import "../../widgets/section_label.dart";
 /// The Terms of Use and Privacy Policy, presented at sign-up.
 ///
 /// This is a demonstration draft. It is written to cover the product
-/// comprehensively — identity, likeness consent, vouching, rewards, privacy,
-/// and disputes — and it says so honestly: final language for every
+/// comprehensively - identity, likeness consent, vouching, rewards, privacy,
+/// and disputes - and it says so honestly: final language for every
 /// jurisdiction is prepared and reviewed by licensed counsel before launch.
 /// The screen never pretends a draft is a finished legal instrument.
 class LegalTerms extends StatelessWidget {
@@ -37,8 +37,8 @@ class LegalTerms extends StatelessWidget {
     ),
     (
       "Eligibility and one account per person",
-      "You must have reached the age of majority where you live — 18 in "
-          "Florida — and you may hold exactly one account, created for "
+      "You must have reached the age of majority where you live - 18 in "
+          "Florida - and you may hold exactly one account, created for "
           "yourself, with your own true identity. Accounts created for "
           "someone else, shared, purchased, or operated by software are "
           "not permitted and can be closed.",
@@ -46,8 +46,8 @@ class LegalTerms extends StatelessWidget {
     (
       "Your identity, likeness, and consent",
       "Verification can involve checking your identity against records you "
-          "provide. Your likeness — photos, video, and any AI-generated "
-          "presenter of you — is used only with your recorded consent, "
+          "provide. Your likeness - photos, video, and any AI-generated "
+          "presenter of you - is used only with your recorded consent, "
           "which you can withdraw at any time. Anything AI-generated "
           "carries a visible AI-generated label wherever it appears. An "
           "AI likeness is only ever generated when the verification "
@@ -59,7 +59,7 @@ class LegalTerms extends StatelessWidget {
     (
       "Verification and seals",
       "Checks, seals, matches, and every other decision are made by our "
-          "systems and reviewed by people — never silently. You can request "
+          "systems and reviewed by people - never silently. You can request "
           "human review of any decision about you. A record that fails its "
           "check stays locked and is never presented as verified.",
     ),
@@ -79,7 +79,7 @@ class LegalTerms extends StatelessWidget {
           "non-human means are void. Every prize award is preceded by a "
           "human audit. Breaking these rules voids prizes, forfeits "
           "points, and can end your membership; conduct that also breaks "
-          "the law — fraud, impersonation, unauthorized automation — can "
+          "the law - fraud, impersonation, unauthorized automation - can "
           "be referred to law enforcement. No purchase is necessary to "
           "earn points or win, prizes are not exchangeable for cash "
           "unless the official rules say otherwise, winners are "
@@ -87,7 +87,7 @@ class LegalTerms extends StatelessWidget {
           "where prohibited by law. Each prize period is governed by "
           "official rules published before it starts. The program is "
           "operated from Florida as a competition of verified skill and "
-          "effort — winners are determined by audited points, never by "
+          "effort - winners are determined by audited points, never by "
           "chance. If any prize period instead qualifies as a game "
           "promotion under chapter 849 of the Florida Statutes, its "
           "official rules are filed with the State of Florida and the "
@@ -112,7 +112,7 @@ class LegalTerms extends StatelessWidget {
           "encrypted, and access inside the company is limited to what a "
           "task requires. No system is perfectly secure; if a breach "
           "affects you, you will be told what happened and what we are "
-          "doing about it within the time Florida law sets — no more "
+          "doing about it within the time Florida law sets - no more "
           "than 30 days.",
     ),
     (
@@ -126,13 +126,13 @@ class LegalTerms extends StatelessWidget {
     (
       "Disputes, governing law, and where claims go",
       "These terms are governed by the laws of the State of Florida, "
-          "and legal disputes belong in the courts located in Florida — "
+          "and legal disputes belong in the courts located in Florida - "
           "except where the law of your home jurisdiction gives you "
           "rights that cannot be limited. Most problems are fixed "
           "fastest through support and human review, so start there. "
           "The final terms name the specific venue and any dispute "
-          "process — including arbitration terms and your rights in "
-          "small claims court — in the language each jurisdiction "
+          "process - including arbitration terms and your rights in "
+          "small claims court - in the language each jurisdiction "
           "requires.",
     ),
     (
@@ -164,7 +164,8 @@ class LegalTerms extends StatelessWidget {
           // legal instrument.
           const BannerNote(
             tone: BannerTone.governance,
-            text: "Demonstration draft. Before launch, licensed counsel "
+            text:
+                "Demonstration draft. Before launch, licensed counsel "
                 "prepares and reviews the final terms for every "
                 "jurisdiction where FORGE Talent Connections operates.",
           ),

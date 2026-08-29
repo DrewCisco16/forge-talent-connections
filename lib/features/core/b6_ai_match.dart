@@ -94,7 +94,7 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
             // Exhaustive by construction: the suggestion shows every factor
             // it rests on, for and against, counted by a full scan.
             Text(
-              "All ${match.factors.length} factors shown — "
+              "All ${match.factors.length} factors shown - "
               "${countWhere(match.factors, (MatchFactor f) => f.kind == MatchFactorKind.supporting)} for, "
               "${countWhere(match.factors, (MatchFactor f) => f.kind == MatchFactorKind.against)} against. "
               "Nothing was hidden.",
@@ -147,16 +147,14 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
             const SizedBox(height: ForgeSpacing.gapSection),
             // Required copy. Ships verbatim.
             const BannerNote(
-              text:
-                  "Borderline factors go to a human reviewer. You will see who reviewed and when.",
+              text: "Borderline factors go to a human reviewer. You will see who reviewed and when.",
             ),
             const SizedBox(height: ForgeSpacing.gapSection),
             _Accordion(
               title: "What the suggestion used",
               expanded: _usedExpanded,
               onToggle: () => setState(() => _usedExpanded = !_usedExpanded),
-              body:
-                  "Verified deliverables, cleared credentials, stated availability, and the project's own requirements.",
+              body: "Verified deliverables, cleared credentials, stated availability, and the project's own requirements.",
             ),
             const SizedBox(height: ForgeSpacing.gapCard),
             _Accordion(
@@ -164,8 +162,7 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
               expanded: _neverExpanded,
               onToggle: () => setState(() => _neverExpanded = !_neverExpanded),
               // Required copy. Ships verbatim.
-              body:
-                  "It cannot accept, reject, pay, or publish anything. Suggestions never change your record. Only verified actions by people do.",
+              body: "It cannot accept, reject, pay, or publish anything. Suggestions never change your record. Only verified actions by people do.",
             ),
             const SizedBox(height: ForgeSpacing.gapSection),
             Row(
@@ -180,9 +177,8 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
                 Expanded(
                   child: GoldButton(
                     label: "Apply to Project",
-                    onPressed: () => context.go(
-                      "/opportunity/${match.opportunityId}",
-                    ),
+                    onPressed: () =>
+                        context.go("/opportunity/${match.opportunityId}"),
                   ),
                 ),
               ],

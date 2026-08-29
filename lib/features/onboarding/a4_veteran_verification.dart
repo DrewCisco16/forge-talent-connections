@@ -50,6 +50,8 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           HeroBand(
             title: "Veteran Verification",
             subtitle: "Seal your service record so it can be trusted anywhere",
@@ -115,24 +117,26 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
                     itemCount: branches.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 0.95,
-                    ),
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.95,
+                        ),
                     itemBuilder: (BuildContext context, int i) {
                       final ServiceBranch b = branches[i];
                       final bool selected = b.id == _selected;
                       return InkWell(
                         onTap: () => setState(() => _selected = b.id),
-                        borderRadius:
-                            BorderRadius.circular(ForgeShape.cardRadius),
+                        borderRadius: BorderRadius.circular(
+                          ForgeShape.cardRadius,
+                        ),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 160),
                           decoration: BoxDecoration(
                             color: forge.surface,
-                            borderRadius:
-                                BorderRadius.circular(ForgeShape.cardRadius),
+                            borderRadius: BorderRadius.circular(
+                              ForgeShape.cardRadius,
+                            ),
                             border: Border.all(
                               color: selected
                                   ? _branchColors[b.id]!
@@ -167,8 +171,7 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
           ),
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           const SealCard(
-            text:
-                "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
+            text: "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
@@ -186,7 +189,7 @@ class _A4VeteranVerificationState extends ConsumerState<A4VeteranVerification> {
 ///
 /// Shows the real flag artwork from `assets/flags/{id}.png` the moment the
 /// file exists. Until then it falls back to a block in the branch's authentic flag
-/// colour — never a themed or invented substitute. Flag colours are exempt
+/// colour - never a themed or invented substitute. Flag colours are exempt
 /// from theming.
 class _FlagBlock extends StatelessWidget {
   const _FlagBlock({required this.id, required this.height});

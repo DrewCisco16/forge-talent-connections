@@ -46,8 +46,7 @@ class _ForgeDeviceFrameState extends State<ForgeDeviceFrame> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final Size size = MediaQuery.sizeOf(context);
-    final bool isPhone =
-        size.shortestSide < ForgeDeviceFrame.tabletBreakpoint;
+    final bool isPhone = size.shortestSide < ForgeDeviceFrame.tabletBreakpoint;
     if (_lockedToPortrait == isPhone) return;
     _lockedToPortrait = isPhone;
     SystemChrome.setPreferredOrientations(
@@ -83,10 +82,7 @@ class _ForgeDeviceFrameState extends State<ForgeDeviceFrame> {
             // the glass outside the column, so they are dropped here; the
             // vertical ones still matter and are kept.
             data: media.copyWith(
-              size: Size(
-                ForgeDeviceFrame.maxContentWidth,
-                media.size.height,
-              ),
+              size: Size(ForgeDeviceFrame.maxContentWidth, media.size.height),
               padding: media.padding.copyWith(left: 0, right: 0),
               viewPadding: media.viewPadding.copyWith(left: 0, right: 0),
               viewInsets: media.viewInsets.copyWith(left: 0, right: 0),

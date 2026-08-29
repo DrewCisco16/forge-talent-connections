@@ -72,8 +72,9 @@ void main() {
     );
   });
 
-  testWidgets("social actions carry the vibe gradient",
-      (WidgetTester tester) async {
+  testWidgets("social actions carry the vibe gradient", (
+    WidgetTester tester,
+  ) async {
     await golden(
       tester,
       "social_actions",
@@ -117,8 +118,7 @@ void main() {
     );
   });
 
-  testWidgets("banners including the denial tone",
-      (WidgetTester tester) async {
+  testWidgets("banners including the denial tone", (WidgetTester tester) async {
     await golden(
       tester,
       "banners",
@@ -129,14 +129,12 @@ void main() {
           SizedBox(height: 10),
           BannerNote(
             tone: BannerTone.governance,
-            text:
-                "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+            text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
           ),
           SizedBox(height: 10),
           BannerNote(
             tone: BannerTone.denial,
-            text:
-                "1 file failed its check and stays locked. If it does not match, it does not go out.",
+            text: "1 file failed its check and stays locked. If it does not match, it does not go out.",
           ),
           SizedBox(height: 10),
           BannerNote(
@@ -182,8 +180,7 @@ void main() {
       "seal_card",
       const SealCard(
         title: "Integrity Certificate",
-        text:
-            "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
+        text: "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
         rows: <MapEntry<String, String>>[
           MapEntry("Status", "VERIFIED"),
           MapEntry("Fingerprint", "ab39...e2f1"),
@@ -192,8 +189,7 @@ void main() {
     );
   });
 
-  testWidgets("credential cards across states",
-      (WidgetTester tester) async {
+  testWidgets("credential cards across states", (WidgetTester tester) async {
     await golden(
       tester,
       "credential_cards",

@@ -13,10 +13,9 @@ void main() {
     });
 
     test("worst case position: a hit on the last element", () {
-      expect(
-        linearSearchAll(<int>[1, 2, 3, 4, 9], (int v) => v == 9),
-        <int>[4],
-      );
+      expect(linearSearchAll(<int>[1, 2, 3, 4, 9], (int v) => v == 9), <int>[
+        4,
+      ]);
     });
 
     test("multiple matches: every occurrence is returned, in order", () {
@@ -41,9 +40,18 @@ void main() {
       expect(indexOfMax(<int>[88, 100, 93], (int v) => v), 1);
     });
 
-    test("maximum at the end — the full N-1 comparison walk", () {
+    test("maximum at the end - the full N-1 comparison walk", () {
       final List<int> testScores = <int>[
-        88, 93, 75, 80, 67, 71, 92, 90, 83, 100,
+        88,
+        93,
+        75,
+        80,
+        67,
+        71,
+        92,
+        90,
+        83,
+        100,
       ];
       expect(indexOfMax(testScores, (int v) => v), 9);
       expect(testScores[indexOfMax(testScores, (int v) => v)!], 100);
@@ -73,7 +81,7 @@ void main() {
   });
 
   group("indexOfMin", () {
-    test("minimum at the end — the full walk", () {
+    test("minimum at the end - the full walk", () {
       expect(indexOfMin(<int>[93, 88, 75], (int v) => v), 2);
     });
 

@@ -48,7 +48,11 @@ class B4Credentials extends ConsumerWidget {
                   ForgeCard(
                     child: Row(
                       children: <Widget>[
-                        Icon(Icons.shield_outlined, size: 26, color: forge.gold),
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 26,
+                          color: forge.gold,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -76,7 +80,7 @@ class B4Credentials extends ConsumerWidget {
                               // Exhaustive by construction: every credential
                               // was examined, so the count can say so.
                               Text(
-                                "All ${credentials.length} were examined — "
+                                "All ${credentials.length} were examined - "
                                 "nothing was skipped.",
                                 style: TextStyle(
                                   fontFamily: ForgeType.bodyFamily,
@@ -93,14 +97,15 @@ class B4Credentials extends ConsumerWidget {
                   ),
                   // The first unverified credential, found by a linear scan;
                   // -1 means every credential already carries its proof.
-                  if (indexOfFirst(credentials,
-                          (Credential c) => !c.status.isProven) !=
+                  if (indexOfFirst(
+                        credentials,
+                        (Credential c) => !c.status.isProven,
+                      ) !=
                       -1) ...<Widget>[
                     const SizedBox(height: ForgeSpacing.gapCard),
                     Row(
                       children: <Widget>[
-                        Icon(Icons.flag_outlined,
-                            size: 14, color: forge.gold),
+                        Icon(Icons.flag_outlined, size: 14, color: forge.gold),
                         const SizedBox(width: 7),
                         Expanded(
                           child: Text(
@@ -120,9 +125,11 @@ class B4Credentials extends ConsumerWidget {
                   const SizedBox(height: ForgeSpacing.gapSection),
                   GoldButton(
                     label: "Verify All Credentials",
-                    onPressed: () => demoNote(context,
-                        "Verification runs on the backend. Switch scenarios "
-                        "in Settings to see each outcome."),
+                    onPressed: () => demoNote(
+                      context,
+                      "Verification runs on the backend. Switch scenarios "
+                      "in Settings to see each outcome.",
+                    ),
                   ),
                   const SizedBox(height: ForgeSpacing.gapSection),
                   for (final Credential c in credentials) ...<Widget>[
@@ -130,12 +137,16 @@ class B4Credentials extends ConsumerWidget {
                       title: c.title,
                       status: c.status,
                       meta: c.metaLine,
-                      actionLabel: c.status.isProven ? null : "Verify Credential",
+                      actionLabel: c.status.isProven
+                          ? null
+                          : "Verify Credential",
                       onAction: c.status.isProven
                           ? null
-                          : () => demoNote(context,
+                          : () => demoNote(
+                              context,
                               "Verification runs on the backend. Switch "
-                              "scenarios in Settings to see each outcome."),
+                              "scenarios in Settings to see each outcome.",
+                            ),
                     ),
                     const SizedBox(height: ForgeSpacing.gapCard),
                   ],

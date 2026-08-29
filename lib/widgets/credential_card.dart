@@ -74,10 +74,7 @@ class CredentialCard extends StatelessWidget {
           ],
           if (actionLabel != null) ...<Widget>[
             const SizedBox(height: ForgeSpacing.gapCard),
-            OutlineGoldButton(
-              label: actionLabel!,
-              onPressed: onAction,
-            ),
+            OutlineGoldButton(label: actionLabel!, onPressed: onAction),
           ],
         ],
       ),

@@ -23,8 +23,9 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets("displays the three technologies as features",
-      (WidgetTester tester) async {
+  testWidgets("displays the three technologies as features", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     expect(find.text("AI that can't overstep"), findsOneWidget);
     expect(find.text("A record that can't be quietly changed"), findsOneWidget);
@@ -32,8 +33,9 @@ void main() {
     expect(find.text("PATENT-PENDING TECHNOLOGY"), findsOneWidget);
   });
 
-  testWidgets("displays the published filings, and claims no number it lacks",
-      (WidgetTester tester) async {
+  testWidgets("displays the published filings, and claims no number it lacks", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     // Exactly as published by the USPTO.
     expect(
@@ -55,8 +57,9 @@ void main() {
     );
   });
 
-  testWidgets("each feature links to where it is visible in the app",
-      (WidgetTester tester) async {
+  testWidgets("each feature links to where it is visible in the app", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     expect(find.text("See it: AI Match"), findsOneWidget);
     expect(find.text("See it: Trust Wallet"), findsOneWidget);

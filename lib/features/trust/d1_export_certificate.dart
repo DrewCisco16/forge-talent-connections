@@ -41,8 +41,7 @@ class D1ExportCertificate extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               const SizedBox(height: 24),
-              const Align(
-                  alignment: Alignment.centerRight, child: DemoBadge()),
+              const Align(alignment: Alignment.centerRight, child: DemoBadge()),
               const SizedBox(height: 8),
               Text(
                 anyBlocked ? "Export blocked" : "Export ready",
@@ -70,16 +69,13 @@ class D1ExportCertificate extends ConsumerWidget {
                   title: "Integrity Certificate",
                   text: cert.filename,
                   rows: <MapEntry<String, String>>[
-                    MapEntry(
-                      "Status",
-                      switch (cert.status) {
-                        VerificationStatus.verified => "VERIFIED",
-                        VerificationStatus.pending => "PENDING",
-                        VerificationStatus.unverified => "UNVERIFIED",
-                        VerificationStatus.failed => "FAILED",
-                        VerificationStatus.locked => "LOCKED",
-                      },
-                    ),
+                    MapEntry("Status", switch (cert.status) {
+                      VerificationStatus.verified => "VERIFIED",
+                      VerificationStatus.pending => "PENDING",
+                      VerificationStatus.unverified => "UNVERIFIED",
+                      VerificationStatus.failed => "FAILED",
+                      VerificationStatus.locked => "LOCKED",
+                    }),
                     MapEntry("Checked", cert.checkedOn),
                     MapEntry("Fingerprint", cert.fingerprint),
                     MapEntry(
@@ -96,7 +92,7 @@ class D1ExportCertificate extends ConsumerWidget {
               // every file having been examined, and the line says so with
               // counts produced by a full scan of the served queue.
               Text(
-                "${queue.length} of ${queue.length} files examined — "
+                "${queue.length} of ${queue.length} files examined - "
                 "${countWhere(queue, (ExportItem e) => e.status == VerificationStatus.verified)} cleared, "
                 "${countWhere(queue, (ExportItem e) => e.status == VerificationStatus.pending)} still checking, "
                 "${countWhere(queue, (ExportItem e) => e.status.blocksRelease)} locked. Nothing was skipped.",
@@ -114,8 +110,7 @@ class D1ExportCertificate extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
                   decoration: BoxDecoration(
                     color: forge.surface,
-                    borderRadius:
-                        BorderRadius.circular(ForgeShape.cardRadius),
+                    borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
                     border: Border.all(
                       color: e.status.blocksRelease
                           ? forge.red
@@ -171,12 +166,13 @@ class D1ExportCertificate extends ConsumerWidget {
               const SizedBox(height: ForgeSpacing.gapCard),
               Row(
                 children: <Widget>[
-                  for (final (IconData icon, String label) in <(IconData, String)>[
-                    (Icons.work_outline, "LinkedIn"),
-                    (Icons.link, "Link"),
-                    (Icons.qr_code, "QR"),
-                    (Icons.picture_as_pdf_outlined, "PDF"),
-                  ])
+                  for (final (IconData icon, String label)
+                      in <(IconData, String)>[
+                        (Icons.work_outline, "LinkedIn"),
+                        (Icons.link, "Link"),
+                        (Icons.qr_code, "QR"),
+                        (Icons.picture_as_pdf_outlined, "PDF"),
+                      ])
                     Padding(
                       padding: const EdgeInsets.only(right: 14),
                       child: Column(
@@ -189,8 +185,7 @@ class D1ExportCertificate extends ConsumerWidget {
                                 border: Border.all(color: forge.strokeSoft),
                               ),
                               padding: const EdgeInsets.all(12),
-                              child:
-                                  Icon(icon, size: 18, color: forge.text),
+                              child: Icon(icon, size: 18, color: forge.text),
                             ),
                           ),
                           const SizedBox(height: 5),
@@ -226,8 +221,7 @@ class D1ExportCertificate extends ConsumerWidget {
                 value: ref.watch(certificateProvider),
                 pendingLabel: "Preparing the share",
                 builder: (IntegrityCertificate cert) {
-                  final bool ready =
-                      cert.status == VerificationStatus.verified;
+                  final bool ready = cert.status == VerificationStatus.verified;
                   return ForgeCard(
                     borderColor: ready ? forge.gold : forge.strokeSoft,
                     child: Column(
@@ -235,8 +229,11 @@ class D1ExportCertificate extends ConsumerWidget {
                       children: <Widget>[
                         Row(
                           children: <Widget>[
-                            Icon(Icons.workspace_premium,
-                                size: 18, color: forge.gold),
+                            Icon(
+                              Icons.workspace_premium,
+                              size: 18,
+                              color: forge.gold,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -300,9 +297,7 @@ class D1ExportCertificate extends ConsumerWidget {
               const SizedBox(height: ForgeSpacing.gapSection),
               // A blocked export offers no action that could appear to succeed.
               GoldButton(
-                label: anyBlocked
-                    ? "Export blocked"
-                    : "Export Verified Work",
+                label: anyBlocked ? "Export blocked" : "Export Verified Work",
                 onPressed: anyBlocked ? null : () {},
               ),
               const SizedBox(height: 8),

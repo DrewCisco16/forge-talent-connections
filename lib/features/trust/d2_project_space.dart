@@ -35,17 +35,15 @@ class D2ProjectSpace extends ConsumerWidget {
           final int approved = space.milestones
               .where((Milestone m) => m.status.isProven)
               .length;
-          final bool blocked = space.deliverables
-              .any((Deliverable d) => d.status.blocksRelease);
+          final bool blocked = space.deliverables.any(
+            (Deliverable d) => d.status.blocksRelease,
+          );
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               const SizedBox(height: ForgeSpacing.gapSection),
-              HeroBand(
-                title: space.projectName,
-                subtitle: space.organization,
-              ),
+              HeroBand(title: space.projectName, subtitle: space.organization),
               const SizedBox(height: ForgeSpacing.gapSection),
               const SectionLabel("Milestones"),
               const SizedBox(height: ForgeSpacing.gapCard),
@@ -58,8 +56,7 @@ class D2ProjectSpace extends ConsumerWidget {
                         value: approved / space.milestones.length,
                         minHeight: 6,
                         backgroundColor: forge.strokeSoft,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(forge.gold),
+                        valueColor: AlwaysStoppedAnimation<Color>(forge.gold),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -93,8 +90,7 @@ class D2ProjectSpace extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
                   decoration: BoxDecoration(
                     color: forge.surface,
-                    borderRadius:
-                        BorderRadius.circular(ForgeShape.cardRadius),
+                    borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
                     border: Border.all(
                       color: d.status.blocksRelease
                           ? forge.red
@@ -121,7 +117,8 @@ class D2ProjectSpace extends ConsumerWidget {
                           StatusChip(status: d.status, dense: true),
                         ],
                       ),
-                      if (d.submittedOn != null || d.failureReason != null) ...<Widget>[
+                      if (d.submittedOn != null ||
+                          d.failureReason != null) ...<Widget>[
                         const SizedBox(height: 6),
                         Text(
                           d.failureReason ?? "Submitted ${d.submittedOn}",
@@ -138,15 +135,17 @@ class D2ProjectSpace extends ConsumerWidget {
                   ),
                 ),
               DottedDropZone(
-                  onTap: () => demoNote(context,
-                      "Submitted files are checked by the backend. This demo "
-                      "renders the outcomes.")),
+                onTap: () => demoNote(
+                  context,
+                  "Submitted files are checked by the backend. This demo "
+                  "renders the outcomes.",
+                ),
+              ),
               if (blocked) ...<Widget>[
                 const SizedBox(height: ForgeSpacing.gapSection),
                 const BannerNote(
                   tone: BannerTone.denial,
-                  text:
-                      "A deliverable did not pass its check. Export stays blocked until it is resolved.",
+                  text: "A deliverable did not pass its check. Export stays blocked until it is resolved.",
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 InkWell(
@@ -198,8 +197,11 @@ class D2ProjectSpace extends ConsumerWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Icon(Icons.handshake_outlined,
-                                  size: 13, color: forge.gold),
+                              Icon(
+                                Icons.handshake_outlined,
+                                size: 13,
+                                color: forge.gold,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -224,8 +226,10 @@ class D2ProjectSpace extends ConsumerWidget {
               ],
               const SizedBox(height: ForgeSpacing.gapCard),
               InkWell(
-                onTap: () => demoNote(context,
-                    "Flag recorded privately. A person will follow up."),
+                onTap: () => demoNote(
+                  context,
+                  "Flag recorded privately. A person will follow up.",
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -233,7 +237,7 @@ class D2ProjectSpace extends ConsumerWidget {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        "Flag a concern — it goes to a person, quietly",
+                        "Flag a concern - it goes to a person, quietly",
                         maxLines: 2,
                         style: TextStyle(
                           fontFamily: ForgeType.bodyFamily,
@@ -257,7 +261,11 @@ class D2ProjectSpace extends ConsumerWidget {
                     children: <Widget>[
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: Icon(Icons.circle, size: 5, color: forge.textSub),
+                        child: Icon(
+                          Icons.circle,
+                          size: 5,
+                          color: forge.textSub,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -344,45 +352,45 @@ class _CheckInCardState extends State<_CheckInCard> {
               for (final (IconData icon, String label) in _options)
                 InkWell(
                   onTap: () => setState(() => _choice = label),
-                  borderRadius:
-                      BorderRadius.circular(ForgeShape.pillRadius),
+                  borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: _choice == label
-                          ? forge.goldDeep
-                          : forge.surface2,
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.pillRadius),
+                      color: _choice == label ? forge.goldDeep : forge.surface2,
+                      borderRadius: BorderRadius.circular(
+                        ForgeShape.pillRadius,
+                      ),
                       border: Border.all(
-                        color: _choice == label
-                            ? forge.gold
-                            : forge.strokeSoft,
+                        color: _choice == label ? forge.gold : forge.strokeSoft,
                       ),
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        Icon(icon,
-                            size: 14,
-                            color: _choice == label
-                                ? Colors.white
-                                : forge.textSub),
+                        Icon(
+                          icon,
+                          size: 14,
+                          color: _choice == label
+                              ? Colors.white
+                              : forge.textSub,
+                        ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: ForgeType.bodyFamily,
-                            fontSize: ForgeType.caption,
-                            fontWeight: FontWeight.w600,
-                            color: _choice == label
-                                ? Colors.white
-                                : forge.text,
-                          ),
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: ForgeType.bodyFamily,
+                              fontSize: ForgeType.caption,
+                              fontWeight: FontWeight.w600,
+                              color: _choice == label
+                                  ? Colors.white
+                                  : forge.text,
+                            ),
                           ),
                         ),
                       ],
@@ -428,8 +436,7 @@ class DottedDropZone extends StatelessWidget {
         child: Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 88),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -479,10 +486,7 @@ class _DashedBorderPainter extends CustomPainter {
     for (final PathMetric metric in path.computeMetrics()) {
       double distance = 0;
       while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dash),
-          paint,
-        );
+        canvas.drawPath(metric.extractPath(distance, distance + dash), paint);
         distance += dash + gap;
       }
     }

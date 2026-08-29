@@ -44,10 +44,10 @@
       align-items: center; justify-content: center;
       background: linear-gradient(#0F1A33, #060B16);
       transition: opacity 260ms ease-out;
-      font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-family: Arial, "Helvetica Neue", -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     /* The logo never moves; a small, subtle burn rides its crown (the mark's
-       tip sits at ~44% of the width) — clipped to the mark's own box so the
+       tip sits at ~44% of the width) - clipped to the mark's own box so the
        fire never spills past the design. */
     .mark { position: relative; width: 120px; overflow: hidden; }
     .mark img {
@@ -96,10 +96,14 @@
     @media (prefers-reduced-motion: reduce) {
       .mark .pyre, .mark .pyre2, .mark .pyre3, .mark .pyre4 { animation: none; }
     }
-    #forge-splash .wordmark-art { margin-top: 14px; width: 170px; height: auto; }
+    #forge-splash .wordmark-text {
+      margin-top: 14px; font-size: 44px; font-weight: 700; letter-spacing: 4px;
+      background: linear-gradient(#F2C759, #C79929);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
     #forge-splash .descriptor {
-      margin-top: 6px; font-size: 12px; font-weight: 600;
-      letter-spacing: 4px; color: #93A0BC;
+      margin-top: 6px; font-size: 18px; font-weight: 700;
+      letter-spacing: 3.4px; color: #F5F7FC;
     }
     #forge-splash .bar {
       margin-top: 26px; width: 120px; height: 2px;
@@ -127,7 +131,7 @@
       <div class="pyre4"></div>
       <img src="assets/assets/brand/forge_flame.png" alt="">
     </div>
-    <img class="wordmark-art" src="assets/assets/brand/forge_wordmark.png" alt="FORGE">
+    <div class="wordmark-text" role="img" aria-label="FORGE">FORGE</div>
     <div class="descriptor">TALENT CONNECTIONS</div>
     <div class="bar"></div>
   </div>

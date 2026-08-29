@@ -77,11 +77,14 @@ class B7OpportunityDetail extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: forge.surface2,
                       border: Border.all(color: forge.strokeSoft),
-                      borderRadius:
-                          BorderRadius.circular(ForgeShape.pillRadius),
+                      borderRadius: BorderRadius.circular(
+                        ForgeShape.pillRadius,
+                      ),
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 11, vertical: 5),
+                      horizontal: 11,
+                      vertical: 5,
+                    ),
                     child: Text(
                       p,
                       style: TextStyle(
@@ -115,8 +118,7 @@ class B7OpportunityDetail extends ConsumerWidget {
                   children: <Widget>[
                     Padding(
                       padding: const EdgeInsets.only(top: 5),
-                      child:
-                          Icon(Icons.circle, size: 6, color: forge.gold),
+                      child: Icon(Icons.circle, size: 6, color: forge.gold),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -133,7 +135,8 @@ class B7OpportunityDetail extends ConsumerWidget {
                   ],
                 ),
               ),
-            if (o.engagement != null || o.vouchLevel != null ||
+            if (o.engagement != null ||
+                o.vouchLevel != null ||
                 o.evidence.isNotEmpty) ...<Widget>[
               const SizedBox(height: ForgeSpacing.gapSection),
               const SectionLabel("The trust terms"),
@@ -154,6 +157,63 @@ class B7OpportunityDetail extends ConsumerWidget {
                         label: "To join",
                         value: o.vouchLevel!,
                       ),
+                    // Resourced-seat facts: a project is real supply only
+                    // when the seats, reviewer, scope, and window are.
+                    if (o.seatsOpen != null && o.seatsTotal != null)
+                      _TermRow(
+                        icon: Icons.event_seat_outlined,
+                        label: "Seats",
+                        value: "${o.seatsOpen} of ${o.seatsTotal} open",
+                      ),
+                    if (o.reviewerConfirmed != null)
+                      _TermRow(
+                        icon: Icons.fact_check_outlined,
+                        label: "Reviewer",
+                        value: o.reviewerConfirmed!
+                            ? "Capacity confirmed"
+                            : "Capacity not yet confirmed",
+                      ),
+                    if (o.scopeOnFile != null)
+                      _TermRow(
+                        icon: Icons.description_outlined,
+                        label: "Scope",
+                        value: o.scopeOnFile!
+                            ? "Written scope on file"
+                            : "No written scope yet",
+                      ),
+                    if (o.startWindow != null)
+                      _TermRow(
+                        icon: Icons.calendar_today_outlined,
+                        label: "Window",
+                        value: o.startWindow!,
+                      ),
+                    if (o.expiresOn != null)
+                      _TermRow(
+                        icon: Icons.timer_outlined,
+                        label: "Listing expires",
+                        value: o.expiresOn!,
+                      ),
+                    if (o.qualified != null) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        o.qualified!
+                            ? "Qualified supply: verified sponsor, written "
+                                  "scope, confirmed reviewer, open seats. "
+                                  "Invitations never exceed the open seats."
+                            : "Not yet qualified supply. This listing does "
+                                  "not count toward launch capacity until "
+                                  "its sponsor verification and reviewer "
+                                  "capacity are confirmed.",
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.caption,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                          color: o.qualified! ? forge.gold : forge.red,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     if (o.evidence.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 6),
                       Text(
@@ -172,8 +232,11 @@ class B7OpportunityDetail extends ConsumerWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Icon(Icons.workspace_premium,
-                                  size: 13, color: forge.gold),
+                              Icon(
+                                Icons.workspace_premium,
+                                size: 13,
+                                color: forge.gold,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -288,9 +351,12 @@ class B7OpportunityDetail extends ConsumerWidget {
               children: <Widget>[
                 Expanded(
                   child: OutlineGoldButton(
-                      label: "Save",
-                      onPressed: () => demoNote(context,
-                          "Saving arrives with your account on the backend.")),
+                    label: "Save",
+                    onPressed: () => demoNote(
+                      context,
+                      "Saving arrives with your account on the backend.",
+                    ),
+                  ),
                 ),
                 const SizedBox(width: ForgeSpacing.gapCard),
                 Expanded(
@@ -330,18 +396,22 @@ class _TermRow extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 15, color: forge.gold),
           const SizedBox(width: 9),
-          Text(
-            "$label: ",
-            style: TextStyle(
-              fontFamily: ForgeType.bodyFamily,
-              fontSize: ForgeType.caption,
-              fontWeight: FontWeight.w700,
-              color: forge.textSub,
-            ),
-          ),
+          // One paragraph so label and value wrap together at large
+          // accessibility text sizes instead of overflowing the row.
           Expanded(
-            child: Text(
-              value,
+            child: Text.rich(
+              TextSpan(
+                children: <InlineSpan>[
+                  TextSpan(
+                    text: "$label: ",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: forge.textSub,
+                    ),
+                  ),
+                  TextSpan(text: value),
+                ],
+              ),
               style: TextStyle(
                 fontFamily: ForgeType.bodyFamily,
                 fontSize: ForgeType.caption,

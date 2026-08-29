@@ -67,29 +67,41 @@ const String kWordmark = "assets/brand/forge_wordmark.png";
 /// Branches of service. Flag colours are authentic and exempt from theming.
 const List<ServiceBranch> kBranches = <ServiceBranch>[
   ServiceBranch(
-      id: "usmc",
-      name: "United States Marine Corps",
-      shortName: "USMC",
-      motto: "Semper Fidelis"),
+    id: "usmc",
+    name: "United States Marine Corps",
+    shortName: "USMC",
+    motto: "Semper Fidelis",
+  ),
   ServiceBranch(
-      id: "usa", name: "United States Army", shortName: "USA", motto: "This We'll Defend"),
+    id: "usa",
+    name: "United States Army",
+    shortName: "USA",
+    motto: "This We'll Defend",
+  ),
   ServiceBranch(
-      id: "usn", name: "United States Navy", shortName: "USN", motto: "Semper Fortis"),
+    id: "usn",
+    name: "United States Navy",
+    shortName: "USN",
+    motto: "Semper Fortis",
+  ),
   ServiceBranch(
-      id: "usaf",
-      name: "United States Air Force",
-      shortName: "USAF",
-      motto: "Aim High"),
+    id: "usaf",
+    name: "United States Air Force",
+    shortName: "USAF",
+    motto: "Aim High",
+  ),
   ServiceBranch(
-      id: "uscg",
-      name: "United States Coast Guard",
-      shortName: "USCG",
-      motto: "Semper Paratus"),
+    id: "uscg",
+    name: "United States Coast Guard",
+    shortName: "USCG",
+    motto: "Semper Paratus",
+  ),
   ServiceBranch(
-      id: "ussf",
-      name: "United States Space Force",
-      shortName: "USSF",
-      motto: "Semper Supra"),
+    id: "ussf",
+    name: "United States Space Force",
+    shortName: "USSF",
+    motto: "Semper Supra",
+  ),
 ];
 
 /// Opportunities shown on discovery. Fixture organisations.
@@ -100,8 +112,7 @@ const List<Opportunity> kOpportunities = <Opportunity>[
     organization: "FIU Business School",
     organizationKind: "University",
     organizationStatus: VerificationStatus.verified,
-    description:
-        "Build the slide deck and speaker materials for a graduate employment law seminar. Clear visuals, sourced citations, and a case-study walkthrough.",
+    description: "Build the slide deck and speaker materials for a graduate employment law seminar. Clear visuals, sourced citations, and a case-study walkthrough.",
     tags: <TechTag>[
       TechTag("Research", TechTagTone.violet),
       TechTag("Slides", TechTagTone.gold),
@@ -114,7 +125,14 @@ const List<Opportunity> kOpportunities = <Opportunity>[
       "One rehearsal session with the teaching team",
     ],
     engagement: "Academic credit",
-    vouchLevel: "1 vouch, or a sealed verification",
+    vouchLevel: "1 vouch, or a sealed record reviewed by the sponsor",
+    seatsOpen: 2,
+    seatsTotal: 3,
+    reviewerConfirmed: true,
+    scopeOnFile: true,
+    startWindow: "Sep to Oct 2026",
+    expiresOn: "15 Sep 2026",
+    qualified: true,
     evidence: <String>[
       "Sealed project completion",
       "Verified skills: research writing, slide design",
@@ -127,8 +145,7 @@ const List<Opportunity> kOpportunities = <Opportunity>[
     organization: "FIU Business School",
     organizationKind: "University",
     organizationStatus: VerificationStatus.verified,
-    description:
-        "Stand up the live dashboard for the analytics capstone cohort. Data engineering plus a clean reviewer view for faculty.",
+    description: "Stand up the live dashboard for the analytics capstone cohort. Data engineering plus a clean reviewer view for faculty.",
     tags: <TechTag>[
       TechTag("Flutter", TechTagTone.gold),
       TechTag("FastAPI", TechTagTone.green),
@@ -142,6 +159,13 @@ const List<Opportunity> kOpportunities = <Opportunity>[
     ],
     engagement: "Portfolio + faculty reference",
     vouchLevel: "2 vouches",
+    seatsOpen: 1,
+    seatsTotal: 4,
+    reviewerConfirmed: true,
+    scopeOnFile: true,
+    startWindow: "Fall semester 2026",
+    expiresOn: "1 Oct 2026",
+    qualified: true,
     evidence: <String>[
       "Sealed dashboard deliverables",
       "Verified skills: data engineering, dashboard design",
@@ -153,8 +177,7 @@ const List<Opportunity> kOpportunities = <Opportunity>[
     organization: "FIU Business School",
     organizationKind: "University",
     organizationStatus: VerificationStatus.pending,
-    description:
-        "Build the submission and judging portal for the spring pitch competition. Team registration, deliverable uploads, judge scoring.",
+    description: "Build the submission and judging portal for the spring pitch competition. Team registration, deliverable uploads, judge scoring.",
     tags: <TechTag>[
       TechTag("UX", TechTagTone.violet),
       TechTag("Figma", TechTagTone.gold),
@@ -166,7 +189,14 @@ const List<Opportunity> kOpportunities = <Opportunity>[
       "Judge scoring view with an audit trail",
     ],
     engagement: "Service + portfolio",
-    vouchLevel: "1 vouch, or a sealed verification",
+    vouchLevel: "1 vouch, or a sealed record reviewed by the sponsor",
+    seatsOpen: 3,
+    seatsTotal: 3,
+    reviewerConfirmed: false,
+    scopeOnFile: true,
+    startWindow: "Spring 2027",
+    expiresOn: "1 Dec 2026",
+    qualified: false,
     evidence: <String>[
       "Sealed portal deliverables",
       "Verified skills: UX design, web build",
@@ -176,7 +206,12 @@ const List<Opportunity> kOpportunities = <Opportunity>[
 
 /// Stories on the social feed.
 const List<Story> kStories = <Story>[
-  Story(id: "self", name: "You", avatar: "assets/heroes/hero_10.png", isSelf: true),
+  Story(
+    id: "self",
+    name: "You",
+    avatar: "assets/heroes/hero_10.png",
+    isSelf: true,
+  ),
   Story(id: "maya", name: "Maya", avatar: "assets/heroes/hero_04.png"),
   Story(id: "jordan", name: "Jordan", avatar: "assets/heroes/hero_12.png"),
   Story(id: "ana", name: "Ana", avatar: "assets/heroes/hero_06.png"),
@@ -191,8 +226,7 @@ const List<FeedPost> kFeed = <FeedPost>[
     authorAvatar: "assets/heroes/hero_04.png",
     authorStatus: VerificationStatus.verified,
     event: "sealed a project milestone",
-    body:
-        "Discovery on the Employment Law Presentation is sealed. Congratulations to the whole team — every file passed its check.",
+    body: "Discovery on the Employment Law Presentation is sealed. Congratulations to the whole team - every file passed its check.",
     vouchCount: 12,
   ),
   FeedPost(

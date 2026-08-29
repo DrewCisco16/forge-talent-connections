@@ -99,33 +99,33 @@ class _ScoreRingState extends State<ScoreRing>
             ),
             child: Center(
               // The ring is a fixed-diameter dial, so its figures cap their
-              // text scaling like any gauge — the full-size reading lives in
+              // text scaling like any gauge - the full-size reading lives in
               // the surrounding copy, which scales freely.
               child: MediaQuery.withClampedTextScaling(
                 maxScaleFactor: 1.45,
                 child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    "$shown",
-                    style: TextStyle(
-                      fontFamily: ForgeType.displayFamily,
-                      fontSize: widget.size * 0.29,
-                      fontWeight: FontWeight.bold,
-                      color: forge.text,
-                    ),
-                  ),
-                  if (widget.label != null)
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
                     Text(
-                      widget.label!,
-                      textAlign: TextAlign.center,
+                      "$shown",
                       style: TextStyle(
-                        fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.chip,
-                        color: forge.textSub,
+                        fontFamily: ForgeType.displayFamily,
+                        fontSize: widget.size * 0.29,
+                        fontWeight: FontWeight.bold,
+                        color: forge.text,
                       ),
                     ),
-                ],
+                    if (widget.label != null)
+                      Text(
+                        widget.label!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: ForgeType.bodyFamily,
+                          fontSize: ForgeType.chip,
+                          color: forge.textSub,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

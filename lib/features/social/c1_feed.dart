@@ -46,10 +46,10 @@ class C1Feed extends ConsumerWidget {
                       "TALENT CONNECTIONS",
                       style: TextStyle(
                         fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.chip,
-                        fontWeight: FontWeight.w600,
+                        fontSize: ForgeType.caption,
+                        fontWeight: FontWeight.bold,
                         letterSpacing: 2.4,
-                        color: forge.textSub,
+                        color: forge.text,
                       ),
                     ),
                   ],
@@ -64,8 +64,11 @@ class C1Feed extends ConsumerWidget {
                     width: 44,
                     height: 44,
                     alignment: Alignment.center,
-                    child: Icon(Icons.notifications_none,
-                        size: 21, color: forge.gold),
+                    child: Icon(
+                      Icons.notifications_none,
+                      size: 21,
+                      color: forge.gold,
+                    ),
                   ),
                 ),
               ),
@@ -78,7 +81,8 @@ class C1Feed extends ConsumerWidget {
             builder: (List<Story> stories) => SizedBox(
               // Ring (62) + gap + one label line; the label line grows with
               // the accessibility text setting so names never clip.
-              height: 74 +
+              height:
+                  74 +
                   MediaQuery.textScalerOf(context).scale(ForgeType.caption) *
                       1.6,
               child: ListView.separated(
@@ -102,8 +106,11 @@ class C1Feed extends ConsumerWidget {
             background: forge.violet.withValues(alpha: 0.09),
             child: Row(
               children: <Widget>[
-                Icon(Icons.local_fire_department,
-                    size: 22, color: forge.violet),
+                Icon(
+                  Icons.local_fire_department,
+                  size: 22,
+                  color: forge.violet,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

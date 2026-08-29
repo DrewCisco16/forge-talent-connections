@@ -25,10 +25,14 @@ String _color(String hex) {
 String _camel(String key) {
   final List<String> parts = key.split("_");
   return parts.first +
-      parts.skip(1).map((String p) => p[0].toUpperCase() + p.substring(1)).join();
+      parts
+          .skip(1)
+          .map((String p) => p[0].toUpperCase() + p.substring(1))
+          .join();
 }
 
-String _banner(String regenerate) => """
+String _banner(String regenerate) =>
+    """
 // GENERATED FILE - DO NOT EDIT BY HAND.
 //
 // Source: $_source
@@ -42,7 +46,9 @@ void main() {
   final File file = File(_source);
   if (!file.existsSync()) {
     stderr.writeln("Cannot find $_source.");
-    stderr.writeln("The design handoff package must be present locally to regenerate tokens.");
+    stderr.writeln(
+      "The design handoff package must be present locally to regenerate tokens.",
+    );
     exit(1);
   }
 
@@ -61,26 +67,41 @@ void main() {
     ..writeln(_banner("dart run tool/generate_tokens.dart"))
     ..writeln('import "package:flutter/painting.dart";')
     ..writeln()
-    ..writeln("/// Version string of the token set these constants were generated from.")
+    ..writeln(
+      "/// Version string of the token set these constants were generated from.",
+    )
     ..writeln('const String kDesignTokenVersion = "$version";')
     ..writeln()
     ..writeln("/// Raw palette from the design system.")
     ..writeln("///")
-    ..writeln("/// The vibe gradient is intentionally absent: it is library-private to")
-    ..writeln("/// the social action widgets so it cannot be painted onto forms or")
+    ..writeln(
+      "/// The vibe gradient is intentionally absent: it is library-private to",
+    )
+    ..writeln(
+      "/// the social action widgets so it cannot be painted onto forms or",
+    )
     ..writeln("/// governance surfaces.")
     ..writeln("abstract final class ForgeColors {");
 
   // Flat colors and the two-stop background/hero gradients.
   final Map<String, dynamic> bg = color["bg_gradient"] as Map<String, dynamic>;
-  final Map<String, dynamic> hero = color["hero_gradient"] as Map<String, dynamic>;
+  final Map<String, dynamic> hero =
+      color["hero_gradient"] as Map<String, dynamic>;
   b
     ..writeln("  /// ${bg["note"]}")
-    ..writeln("  static const Color bgGradientTop = ${_color(bg["top"] as String)};")
-    ..writeln("  static const Color bgGradientBottom = ${_color(bg["bottom"] as String)};")
+    ..writeln(
+      "  static const Color bgGradientTop = ${_color(bg["top"] as String)};",
+    )
+    ..writeln(
+      "  static const Color bgGradientBottom = ${_color(bg["bottom"] as String)};",
+    )
     ..writeln("  /// ${hero["note"]}")
-    ..writeln("  static const Color heroGradientTop = ${_color(hero["top"] as String)};")
-    ..writeln("  static const Color heroGradientBottom = ${_color(hero["bottom"] as String)};");
+    ..writeln(
+      "  static const Color heroGradientTop = ${_color(hero["top"] as String)};",
+    )
+    ..writeln(
+      "  static const Color heroGradientBottom = ${_color(hero["bottom"] as String)};",
+    );
 
   for (final MapEntry<String, dynamic> e in color.entries) {
     if (e.key == "bg_gradient" ||
@@ -90,31 +111,40 @@ void main() {
       continue;
     }
     if (e.value is String) {
-      b.writeln("  static const Color ${_camel(e.key)} = ${_color(e.value as String)};");
+      b.writeln(
+        "  static const Color ${_camel(e.key)} = ${_color(e.value as String)};",
+      );
     } else if (e.value is List) {
-      final List<String> stops =
-          (e.value as List<dynamic>).map((dynamic c) => _color(c as String)).toList();
+      final List<String> stops = (e.value as List<dynamic>)
+          .map((dynamic c) => _color(c as String))
+          .toList();
       b
         ..writeln("  static const List<Color> ${_camel(e.key)} = <Color>[")
         ..writeln("    ${stops.join(",\n    ")},")
         ..writeln("  ];");
     }
   }
-  b..writeln("}")..writeln();
+  b
+    ..writeln("}")
+    ..writeln();
 
   // Semantic mapping, kept as a comment block so the intent travels with the code.
-  final Map<String, dynamic> semantic = color["semantic"] as Map<String, dynamic>;
+  final Map<String, dynamic> semantic =
+      color["semantic"] as Map<String, dynamic>;
   b.writeln("/// Semantic colour assignments as stated in the token file.");
   for (final MapEntry<String, dynamic> e in semantic.entries) {
     b.writeln("/// - ${e.key}: ${e.value}");
   }
-  b..writeln("abstract final class ForgeSemantic {")
-   ..writeln("  static const Color verified = ForgeColors.green;")
-   ..writeln("  static const Color pending = ForgeColors.textSub;")
-   ..writeln("  static const Color failedOrLocked = ForgeColors.red;")
-   ..writeln("  static const List<Color> primaryCta = ForgeColors.goldGradient;")
-   ..writeln("}")
-   ..writeln();
+  b
+    ..writeln("abstract final class ForgeSemantic {")
+    ..writeln("  static const Color verified = ForgeColors.green;")
+    ..writeln("  static const Color pending = ForgeColors.textSub;")
+    ..writeln("  static const Color failedOrLocked = ForgeColors.red;")
+    ..writeln(
+      "  static const List<Color> primaryCta = ForgeColors.goldGradient;",
+    )
+    ..writeln("}")
+    ..writeln();
 
   // Typography.
   final Map<String, dynamic> display = type["display"] as Map<String, dynamic>;
@@ -125,9 +155,13 @@ void main() {
     ..writeln('  static const String displayFamily = "${display["family"]}";')
     ..writeln('  static const String bodyFamily = "${body["family"]}";');
   for (final MapEntry<String, dynamic> e in scale.entries) {
-    b.writeln("  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};");
+    b.writeln(
+      "  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};",
+    );
   }
-  b..writeln("}")..writeln();
+  b
+    ..writeln("}")
+    ..writeln();
 
   // Shape.
   b
@@ -139,25 +173,35 @@ void main() {
     ..writeln("  static const double phoneHeight = ${double.parse(phone[1])};");
   for (final MapEntry<String, dynamic> e in shape.entries) {
     if (e.key == "phone") continue;
-    b.writeln("  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};");
+    b.writeln(
+      "  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};",
+    );
   }
-  b..writeln("}")..writeln();
+  b
+    ..writeln("}")
+    ..writeln();
 
   // Spacing.
   b
     ..writeln("/// Layout spacing steps.")
     ..writeln("abstract final class ForgeSpacing {");
   for (final MapEntry<String, dynamic> e in spacing.entries) {
-    b.writeln("  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};");
+    b.writeln(
+      "  static const double ${_camel(e.key)} = ${(e.value as num).toDouble()};",
+    );
   }
-  b..writeln("}")..writeln();
+  b
+    ..writeln("}")
+    ..writeln();
 
   // Motion is prose in the token file. It is carried across verbatim as
   // documentation rather than invented durations; the motion pass lands in M4.
   b
     ..writeln("/// Motion intent, quoted from the token file.")
     ..writeln("///")
-    ..writeln("/// These are descriptions, not timings. No duration is invented here; the")
+    ..writeln(
+      "/// These are descriptions, not timings. No duration is invented here; the",
+    )
     ..writeln("/// motion pass implements them against these notes.")
     ..writeln("abstract final class ForgeMotionNotes {");
   for (final MapEntry<String, dynamic> e in motion.entries) {
@@ -182,6 +226,8 @@ void main() {
     ..writeln("];");
   File("lib/widgets/social_action.g.dart").writeAsStringSync(v.toString());
 
-  stdout.writeln("Generated lib/theme/tokens.dart and lib/widgets/social_action.g.dart");
+  stdout.writeln(
+    "Generated lib/theme/tokens.dart and lib/widgets/social_action.g.dart",
+  );
   stdout.writeln("Token set version: $version");
 }

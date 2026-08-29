@@ -39,10 +39,7 @@ class IntegrityCertificate {
 
 /// A milestone inside a project space.
 class Milestone {
-  const Milestone({
-    required this.name,
-    required this.status,
-  });
+  const Milestone({required this.name, required this.status});
 
   final String name;
   final VerificationStatus status;
@@ -77,12 +74,8 @@ class ProjectSpace {
 ///
 /// The fit figures are concept placeholders in this build, not model output.
 class PathwayMatch {
-  const PathwayMatch({
-    required this.role,
-    required this.fitPercent,
-  });
+  const PathwayMatch({required this.role, required this.fitPercent});
 
   final String role;
   final int fitPercent;
 }
-

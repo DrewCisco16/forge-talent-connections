@@ -1,9 +1,10 @@
 import "verification_status.dart";
 
-/// How the person stands against the two ways into the community.
+/// How the person stands against the access requirement.
 ///
-/// Joining takes two vouches — or one vouch plus a sealed verification, so
-/// people who arrive without a network can earn their way in on evidence.
+/// Joining takes exactly two accountable human vouches. Evidence such as a
+/// sealed record informs a reviewer's decision but never replaces either
+/// human, and an invitation starts the process without being a vouch.
 /// The backend decides whether the gate is open; this only reports it.
 class MembershipStatus {
   const MembershipStatus({
@@ -17,7 +18,8 @@ class MembershipStatus {
   final int vouchesReceived;
   final int vouchesRequired;
 
-  /// The evidence-based lane, e.g. "Sealed service record counts as a vouch".
+  /// The evidence lane: sealed records a reviewer can examine before
+  /// deciding. Evidence supports the two human decisions, never replaces one.
   final String earnedLaneLabel;
   final VerificationStatus earnedLaneStatus;
 
@@ -31,7 +33,7 @@ class DraftLine {
 
   final String text;
 
-  /// Where this line comes from — a seal, a vouch, a project outcome.
+  /// Where this line comes from - a seal, a vouch, a project outcome.
   final String sourceLabel;
 }
 

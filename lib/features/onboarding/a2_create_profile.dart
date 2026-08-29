@@ -61,9 +61,10 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                             child: GoldButton(
                               label: "Upload Photo",
                               onPressed: () => demoNote(
-                                  context,
-                                  "Photo upload arrives with the backend. "
-                                  "Pick an avatar for now."),
+                                context,
+                                "Photo upload arrives with the backend. "
+                                "Pick an avatar for now.",
+                              ),
                             ),
                           ),
                           const SizedBox(width: ForgeSpacing.gapCard),
@@ -82,36 +83,45 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                 FieldBox(
                   label: "Display name",
                   value: profile.displayName,
-                  onHelp: () => demoNote(context,
-                      "Shown on your profile and inside projects."),
+                  onHelp: () => demoNote(
+                    context,
+                    "Shown on your profile and inside projects.",
+                  ),
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 FieldBox(
                   label: "Skills",
                   value: profile.skills.join(", "),
-                  onHelp: () => demoNote(context,
-                      "How you describe yourself. Verified skills come from "
-                      "checked work and live on Credentials."),
+                  onHelp: () => demoNote(
+                    context,
+                    "How you describe yourself. Verified skills come from "
+                    "checked work and live on Credentials.",
+                  ),
                   maxLines: 2,
                 ),
                 const SizedBox(height: ForgeSpacing.gapCard),
                 FieldBox(
                   label: "About",
                   value: profile.about,
-                  onHelp: () => demoNote(context,
-                      "A short introduction collaborators see first."),
+                  onHelp: () => demoNote(
+                    context,
+                    "A short introduction collaborators see first.",
+                  ),
                   maxLines: 3,
                 ),
               ],
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
-          const SectionLabel("Two ways in"),
+          const SectionLabel("Two people let you in"),
           const SizedBox(height: 6),
           Text(
-            "Joining takes two vouches — or one vouch plus a sealed "
-            "verification, so you can earn your way in on evidence when you "
-            "arrive without a network.",
+            "Joining takes exactly two accountable human vouches. An "
+            "invitation can start the process, but an invitation is not a "
+            "vouch. Arriving without a network? A community partner can "
+            "review your sealed record, or an observed work audition "
+            "reaches two independent reviewers. Evidence informs their "
+            "decisions; nothing replaces either human.",
             style: TextStyle(
               fontFamily: ForgeType.bodyFamily,
               fontSize: ForgeType.caption,
@@ -138,9 +148,7 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                       const SizedBox(width: 9),
                       Expanded(
                         child: Text(
-                          m.gateOpen
-                              ? "Membership open"
-                              : "Membership pending",
+                          m.gateOpen ? "Membership open" : "Membership pending",
                           style: TextStyle(
                             fontFamily: ForgeType.bodyFamily,
                             fontSize: ForgeType.cardTitle,
@@ -154,8 +162,7 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                   const SizedBox(height: 10),
                   Row(
                     children: <Widget>[
-                      Icon(Icons.how_to_reg,
-                          size: 15, color: forge.gold),
+                      Icon(Icons.how_to_reg, size: 15, color: forge.gold),
                       const SizedBox(width: 9),
                       Expanded(
                         child: Text(
@@ -174,8 +181,11 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Icon(Icons.verified_outlined,
-                          size: 15, color: forge.gold),
+                      Icon(
+                        Icons.verified_outlined,
+                        size: 15,
+                        color: forge.gold,
+                      ),
                       const SizedBox(width: 9),
                       Expanded(
                         child: Text(
@@ -226,8 +236,11 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                   onTap: () => context.go("/legal"),
                   child: Row(
                     children: <Widget>[
-                      Icon(Icons.description_outlined,
-                          size: 17, color: forge.gold),
+                      Icon(
+                        Icons.description_outlined,
+                        size: 17,
+                        color: forge.gold,
+                      ),
                       const SizedBox(width: 9),
                       Expanded(
                         child: Text(
@@ -240,15 +253,13 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                           ),
                         ),
                       ),
-                      Icon(Icons.chevron_right,
-                          size: 18, color: forge.textSub),
+                      Icon(Icons.chevron_right, size: 18, color: forge.textSub),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
                 InkWell(
-                  onTap: () =>
-                      setState(() => _agreedToTerms = !_agreedToTerms),
+                  onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -257,8 +268,7 @@ class _A2CreateProfileState extends ConsumerState<A2CreateProfile> {
                             ? Icons.check_box
                             : Icons.check_box_outline_blank,
                         size: 20,
-                        color:
-                            _agreedToTerms ? forge.gold : forge.textSub,
+                        color: _agreedToTerms ? forge.gold : forge.textSub,
                       ),
                       const SizedBox(width: 9),
                       Expanded(
@@ -358,7 +368,9 @@ class _AvatarWithRing extends StatelessWidget {
                 image: asset == null
                     ? null
                     : DecorationImage(
-                        image: AssetImage(asset!), fit: BoxFit.cover),
+                        image: AssetImage(asset!),
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
           ),

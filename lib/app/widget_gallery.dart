@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "../models/verification_status.dart";
 import "../theme/forge_theme.dart";
 import "../theme/tokens.dart";
+import "../widgets/section_label.dart";
 import "../widgets/banner_note.dart";
 import "../widgets/bottom_nav.dart";
 import "../widgets/credential_card.dart";
@@ -36,23 +37,23 @@ class _WidgetGalleryState extends State<WidgetGallery> {
     final ForgeTheme forge = ForgeTheme.of(context);
 
     Widget section(String title, List<Widget> children) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const SizedBox(height: ForgeSpacing.gapSection + 6),
-            Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontFamily: ForgeType.bodyFamily,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
-                color: forge.gold,
-              ),
-            ),
-            const SizedBox(height: ForgeSpacing.gapCard),
-            ...children,
-          ],
-        );
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: ForgeSpacing.gapSection + 6),
+        Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            fontFamily: ForgeType.bodyFamily,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+            color: forge.gold,
+          ),
+        ),
+        const SizedBox(height: ForgeSpacing.gapCard),
+        ...children,
+      ],
+    );
 
     return PhoneScaffold(
       bottomNav: BottomNav(
@@ -63,6 +64,8 @@ class _WidgetGalleryState extends State<WidgetGallery> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const SizedBox(height: ForgeSpacing.gapSection),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 8),
           const HeroBand(
             title: "Design System",
             subtitle: "Every shared widget, every state",
@@ -128,14 +131,12 @@ class _WidgetGalleryState extends State<WidgetGallery> {
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(
               tone: BannerTone.governance,
-              text:
-                  "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
+              text: "Your resume only claims what is verified. No invented jobs, dates, or numbers, ever.",
             ),
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(
               tone: BannerTone.denial,
-              text:
-                  "1 file failed its check and stays locked. If it does not match, it does not go out.",
+              text: "1 file failed its check and stays locked. If it does not match, it does not go out.",
             ),
             const SizedBox(height: ForgeSpacing.gapCard),
             const BannerNote(
@@ -146,11 +147,7 @@ class _WidgetGalleryState extends State<WidgetGallery> {
           ]),
 
           section("Fields", <Widget>[
-            FieldBox(
-              label: "Display name",
-              value: "Drew Cisco",
-              onHelp: () {},
-            ),
+            FieldBox(label: "Display name", value: "Drew Cisco", onHelp: () {}),
             const SizedBox(height: ForgeSpacing.gapCard),
             const FieldBox(label: "About", hint: "Tell us about yourself"),
           ]),
@@ -158,8 +155,7 @@ class _WidgetGalleryState extends State<WidgetGallery> {
           section("Seal card", <Widget>[
             const SealCard(
               title: "Integrity Certificate",
-              text:
-                  "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
+              text: "Once verified, your service record is sealed and tamper-evident. Collaborators see the seal, never your documents.",
               rows: <MapEntry<String, String>>[
                 MapEntry("Status", "VERIFIED"),
                 MapEntry("Fingerprint", "ab39...e2f1"),

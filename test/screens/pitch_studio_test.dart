@@ -10,7 +10,7 @@ import "package:forge_talent_connections/theme/forge_theme.dart";
 ///
 /// A likeness is generated only when the backend reports at least the
 /// required confidence. Below the line, or while the check is running, the
-/// generate action must not exist in an enabled state — a locked control
+/// generate action must not exist in an enabled state - a locked control
 /// that could appear to work would be the exact dishonesty the product
 /// exists to prevent.
 void main() {
@@ -45,22 +45,21 @@ void main() {
     expect(find.text("Generation locked"), findsNothing);
   });
 
-  testWidgets("pending: locked while the likeness check runs",
-      (WidgetTester tester) async {
+  testWidgets("pending: locked while the likeness check runs", (
+    WidgetTester tester,
+  ) async {
     await pump(tester, DemoScenario.pending);
     expect(find.text("Generation locked"), findsOneWidget);
     expect(find.text("Generate My AI Pitch"), findsNothing);
   });
 
-  testWidgets("denied: below the required confidence nothing is offered",
-      (WidgetTester tester) async {
+  testWidgets("denied: below the required confidence nothing is offered", (
+    WidgetTester tester,
+  ) async {
     await pump(tester, DemoScenario.denied);
     expect(find.text("Generation locked"), findsOneWidget);
     expect(find.text("Generate My AI Pitch"), findsNothing);
     // The refusal explains itself with the real numbers.
-    expect(
-      find.textContaining("88 is below the required 95"),
-      findsOneWidget,
-    );
+    expect(find.textContaining("88 is below the required 95"), findsOneWidget);
   });
 }

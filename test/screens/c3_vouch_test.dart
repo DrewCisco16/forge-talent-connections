@@ -26,15 +26,17 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets("before signing there is no celebration",
-      (WidgetTester tester) async {
+  testWidgets("before signing there is no celebration", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     expect(find.textContaining("Sign My Vouch"), findsOneWidget);
     expect(find.text("Your vouch is sealed"), findsNothing);
   });
 
-  testWidgets("signing seals the vouch and links to rewards",
-      (WidgetTester tester) async {
+  testWidgets("signing seals the vouch and links to rewards", (
+    WidgetTester tester,
+  ) async {
     await pump(tester);
     // Reduced motion completes the hold on a single press.
     await tester.tap(find.textContaining("Sign My Vouch"));
@@ -42,9 +44,6 @@ void main() {
     expect(find.text("Your vouch is sealed"), findsOneWidget);
     expect(find.text("View Rewards & Referrals"), findsOneWidget);
     // The honest caveat ships with the celebration.
-    expect(
-      find.textContaining("never by the tap itself"),
-      findsOneWidget,
-    );
+    expect(find.textContaining("never by the tap itself"), findsOneWidget);
   });
 }
