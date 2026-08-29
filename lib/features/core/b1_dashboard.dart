@@ -8,6 +8,7 @@ import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
 import "../../widgets/gold_button.dart";
+import "../../widgets/internal_fire.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -123,9 +124,8 @@ class B1Dashboard extends ConsumerWidget {
           AsyncView<IntegrityStreak>(
             value: ref.watch(streakProvider),
             pendingLabel: "Loading your record",
-            builder: (IntegrityStreak streak) => ForgeCard(
-              borderColor: streak.active ? forge.gold : forge.strokeSoft,
-              child: Row(
+            builder: (IntegrityStreak streak) {
+              final Widget content = Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Icon(
@@ -163,8 +163,19 @@ class B1Dashboard extends ConsumerWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
+              );
+              if (!streak.active) {
+                return ForgeCard(borderColor: forge.strokeSoft, child: content);
+              }
+              // A living streak burns inside its own card bounds; the fire
+              // is clipped to the card and goes still under reduced motion.
+              return ForgeInternalFireContainer(
+                child: Padding(
+                  padding: const EdgeInsets.all(ForgeSpacing.cardPad),
+                  child: content,
+                ),
+              );
+            },
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
           // The first thing a new member meets is a person, a real project,

@@ -63,11 +63,13 @@ abstract final class ForgeSemantic {
 abstract final class ForgeType {
   static const String displayFamily = "Arial";
   static const String bodyFamily = "Arial";
+  static const double metric = 48.0;
   static const double heroTitle = 30.0;
   static const double screenTitle = 26.0;
   static const double wordmark = 44.0;
   static const double lockupDescriptor = 18.0;
   static const double name = 17.0;
+  static const double input = 16.0;
   static const double cardTitle = 15.0;
   static const double body = 13.0;
   static const double caption = 11.0;

@@ -10,6 +10,7 @@ import "../../widgets/async_view.dart";
 import "../../widgets/banner_note.dart";
 import "../../widgets/demo_note.dart";
 import "../../widgets/gold_button.dart";
+import "../../widgets/internal_fire.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -51,7 +52,11 @@ class C6Rewards extends ConsumerWidget {
 
               // The person's standing. Fail-closed: a hold shows the freeze
               // and the human-review path, never a payout that might work.
-              ForgeCard(
+              // Verified points earn the internal fire; a frozen or pending
+              // account keeps the plain card, because celebration is never
+              // painted over a hold.
+              _PointsSurface(
+                fire: program.status == VerificationStatus.verified,
                 borderColor: frozen ? forge.red : forge.gold,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,10 +83,13 @@ class C6Rewards extends ConsumerWidget {
                       children: <Widget>[
                         Text(
                           "${program.pointsVerified}",
+                          // The one number the screen exists for gets the
+                          // metric display size.
                           style: TextStyle(
                             fontFamily: ForgeType.displayFamily,
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
+                            fontSize: ForgeType.metric,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1,
                             height: 1,
                             color: frozen ? forge.textSub : forge.gold,
                           ),
@@ -557,6 +565,33 @@ class _PrizeCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The points card surface: internal fire for a verified account, the
+/// plain bordered card for every other state.
+class _PointsSurface extends StatelessWidget {
+  const _PointsSurface({
+    required this.fire,
+    required this.borderColor,
+    required this.child,
+  });
+
+  final bool fire;
+  final Color borderColor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!fire) {
+      return ForgeCard(borderColor: borderColor, child: child);
+    }
+    return ForgeInternalFireContainer(
+      child: Padding(
+        padding: const EdgeInsets.all(ForgeSpacing.cardPad),
+        child: child,
       ),
     );
   }

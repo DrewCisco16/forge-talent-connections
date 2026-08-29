@@ -77,15 +77,18 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                       isDense: true,
                       border: InputBorder.none,
                       hintText: "Search projects",
+                      // 16 is the floor at which mobile browsers stop
+                      // auto-zooming a focused field; smaller sizes make
+                      // the web demo jump when the keyboard opens.
                       hintStyle: TextStyle(
                         fontFamily: ForgeType.bodyFamily,
-                        fontSize: ForgeType.body,
+                        fontSize: ForgeType.input,
                         color: forge.textSub,
                       ),
                     ),
                     style: TextStyle(
                       fontFamily: ForgeType.bodyFamily,
-                      fontSize: ForgeType.body,
+                      fontSize: ForgeType.input,
                       color: forge.text,
                     ),
                   ),
