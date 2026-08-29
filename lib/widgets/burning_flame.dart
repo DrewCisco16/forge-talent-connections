@@ -537,11 +537,16 @@ class _LineFirePainter extends CustomPainter {
       }
     }
 
-    // Keep only what falls inside the lines of the flame.
+    // Keep only what falls inside the lines of the flame. The mask is drawn
+    // one pixel larger than the fire it multiplies: a dstIn draw leaves the
+    // uncovered fraction of its own anti-aliased boundary pixels unmasked,
+    // which showed as a hairline of glow at the widget's right edge. With
+    // the mask's border columns tapered to zero, the overdraw is invisible
+    // and every fire pixel gets the full multiplication.
     canvas.drawImageRect(
       mask,
       Rect.fromLTWH(0, 0, mask.width.toDouble(), mask.height.toDouble()),
-      rect,
+      rect.inflate(1.5),
       Paint()..blendMode = BlendMode.dstIn,
     );
 
