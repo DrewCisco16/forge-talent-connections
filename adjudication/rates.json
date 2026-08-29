@@ -43,8 +43,8 @@
       ]
     ],
     "_note_tiers_source": "From this entry's own _note: standard tier at or below 200k input tokens, $4.00/$18.00 above it.",
-    "output_multiplier": 2.5,
-    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 1.23x on a live canary at production caps; set to 2.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+    "output_multiplier": 6.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. MEASURED TWICE AND THE SECOND FIGURE BROKE THE FIRST BOUND: 1.23x on an early canary, then 2.9x on the first five-round run, whose round-one prompt is longer. At 2.5 that call billed $0.1475 against $0.1289 authorised and the overrun halt correctly stopped the run two calls in. Set to 6.0, keeping this file's own convention of roughly doubling the largest measurement for headroom. This seat needs the most of any: Gemini bills thinking tokens that max_output_tokens does not bound, and the OpenAI-compatibility layer silently ignores parameters it does not list, so the cap is a request rather than a limit."
   },
   "seat_3": {
     "_vendor": "Mistral",
@@ -79,8 +79,8 @@
       ]
     ],
     "_note_tiers_source": "From this entry's own _note: standard tier below 200k input tokens, $4.00/$12.00 above it.",
-    "output_multiplier": 4.5,
-    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 2.62x on a live canary at production caps; set to 4.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+    "output_multiplier": 7.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 2.62x on a live canary at production caps. Raised from 4.5 to 7.0 -- NOT because this seat overran, but because 4.5 left only 1.7x headroom over its own measurement, the thinnest on the panel after seat_2, and seat_2 is the one that just halted a five-round run on call three. Grok bills reasoning tokens separately from the completion, so the same unbounded-thinking argument applies here as there."
   },
   "seat_5": {
     "_vendor": "Anthropic",
