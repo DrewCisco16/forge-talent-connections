@@ -62,7 +62,9 @@ class D3SignIn extends StatelessWidget {
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
             label: "Sign In",
-            onPressed: () => context.go("/dashboard"),
+            // Every sign-in continues through the Mission statement first,
+            // so nobody lands in the product unsure of what it is.
+            onPressed: () => context.go("/mission?next=%2Fdashboard"),
           ),
           const SizedBox(height: 8),
           Center(
@@ -118,7 +120,7 @@ class D3SignIn extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: ForgeSpacing.gapCard),
               child: OutlineGoldButton(
                 label: "Continue with $provider",
-                onPressed: () => context.go("/dashboard"),
+                onPressed: () => context.go("/mission?next=%2Fdashboard"),
               ),
             ),
           const OutlineGoldButton(

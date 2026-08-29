@@ -68,13 +68,21 @@ class _A1SplashState extends State<A1Splash> {
                 const SizedBox(height: ForgeSpacing.gapSection),
                 // Each role continues to its own surface: a collaborator
                 // builds a profile, a project sponsor goes to projects, a
-                // veteran starts with the service seal. One door, three paths.
+                // veteran starts with the service seal. One door, three
+                // paths, and every path passes the Mission statement first.
                 _Continue(
-                  onTap: () => context.go(switch (_role) {
-                    ForgeRole.talent => "/create-profile",
-                    ForgeRole.opportunity => "/opportunities",
-                    ForgeRole.veteran => "/veteran-verification",
-                  }),
+                  onTap: () => context.go(
+                    Uri(
+                      path: "/mission",
+                      queryParameters: <String, String>{
+                        "next": switch (_role) {
+                          ForgeRole.talent => "/create-profile",
+                          ForgeRole.opportunity => "/opportunities",
+                          ForgeRole.veteran => "/veteran-verification",
+                        },
+                      },
+                    ).toString(),
+                  ),
                 ),
               ],
             ),

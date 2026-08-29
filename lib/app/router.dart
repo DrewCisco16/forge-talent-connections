@@ -14,6 +14,7 @@ import "../features/onboarding/a3_choose_avatar.dart";
 import "../features/onboarding/a4_veteran_verification.dart";
 import "../features/onboarding/a5_elevator_pitch.dart";
 import "../features/onboarding/legal_terms.dart";
+import "../features/onboarding/mission.dart";
 import "../features/social/c1_feed.dart";
 import "../features/social/c2_video_pitch.dart";
 import "../features/social/c3_vouch_flow.dart";
@@ -71,6 +72,16 @@ GoRouter buildRouter() {
         path: "/legal",
         name: "legal",
         builder: (_, __) => const LegalTerms(),
+      ),
+      // The Mission and Purpose statement: the stop after the door pages.
+      // Sign-in and the role screen both continue through here; "next"
+      // carries the destination the visitor was headed to.
+      GoRoute(
+        path: "/mission",
+        name: "mission",
+        builder: (BuildContext context, GoRouterState state) => MissionScreen(
+          next: state.uri.queryParameters["next"] ?? "/dashboard",
+        ),
       ),
       GoRoute(
         path: "/video-pitch",

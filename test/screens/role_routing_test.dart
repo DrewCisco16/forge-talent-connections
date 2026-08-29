@@ -34,6 +34,11 @@ void main() {
     await tester.tap(find.text("Continue"));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
+    // Every path passes the Mission statement before its destination.
+    expect(find.text("Our Mission"), findsOneWidget);
+    await tester.tap(find.text("Continue to FORGE Talent Connections"));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
   }
 
   testWidgets("Talent continues to profile creation", (

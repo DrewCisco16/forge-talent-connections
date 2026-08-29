@@ -12,6 +12,7 @@ import "package:forge_talent_connections/features/onboarding/a3_choose_avatar.da
 import "package:forge_talent_connections/features/onboarding/a4_veteran_verification.dart";
 import "package:forge_talent_connections/features/onboarding/a5_elevator_pitch.dart";
 import "package:forge_talent_connections/features/onboarding/legal_terms.dart";
+import "package:forge_talent_connections/features/onboarding/mission.dart";
 import "package:forge_talent_connections/features/social/c1_feed.dart";
 import "package:forge_talent_connections/features/social/c2_video_pitch.dart";
 import "package:forge_talent_connections/features/social/c3_vouch_flow.dart";
@@ -36,6 +37,7 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "A3 Choose Avatar": const A3ChooseAvatar(),
   "A4 Veteran Verification": const A4VeteranVerification(),
   "A5 Elevator Pitch": const A5ElevatorPitch(),
+  "Mission": const MissionScreen(),
   "B1 Dashboard": const B1Dashboard(),
   "B2 Find Opportunities": const B2FindOpportunities(),
   "B3 Resume Builder": const B3ResumeBuilder(),
