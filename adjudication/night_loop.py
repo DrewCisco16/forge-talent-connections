@@ -52,6 +52,9 @@ from adjudication_orchestrator import (
     Orchestrator,
     line_claim_extractor,
 )
+from convergence import analyse
+from convergence import divergence as seat_divergence
+from convergence import render as render_convergence
 from option_set import (
     Option,
     TooManyOptions,
@@ -65,7 +68,7 @@ from option_set import (
     silent_seats,
     unexamined,
 )
-from predicate import Ruling, adjudicate, parse_challenges
+from predicate import Ruling, adjudicate, parse_challenges, refuted_commitment
 from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
@@ -82,6 +85,27 @@ class Round:
     name: str
     lens: str
     invents: bool = False
+    eliminates: bool = True
+    """Whether this round may remove an option.
+
+    SOP v1.2 section 2.3 is explicit and this code contradicted it: "five
+    passes, FOUR OF WHICH CAN ELIMINATE. The fifth calibrates confidence and
+    CANNOT RULE ANYTHING OUT." Section 8.4 repeats it, and the worked example
+    in 2.4 prints "PASS 5 Bayesian + MCMC  calibration only, eliminates
+    nothing".
+
+    Round five was written with the lens "Kill options that require numbers
+    nobody can derive" and `eliminate()` ran on it like any other round, so
+    the calibration pass could and would remove an answer. That is not a
+    stricter reading of the manual, it is a different instrument: a pass whose
+    job is to say HOW SURE we are was deciding WHAT SURVIVES.
+
+    A commitment refuted in a calibration round is not discarded. It is ruled,
+    recorded, and reported as a caveat against the surviving answer -- so the
+    finding lowers confidence in the survivor instead of removing it. That is
+    the same fail-closed direction the rest of the design takes: fail closed
+    on the conclusion, never on the candidate.
+    """
 
 
 ROUNDS: tuple[Round, ...] = (
@@ -100,8 +124,11 @@ ROUNDS: tuple[Round, ...] = (
           "create, and what does its framing exclude? Kill options that "
           "compromise instead of resolving."),
     Round(5, "Bayesian + MCMC",
-          "For each surviving option: what would move belief, and by how "
-          "much? Kill options that require numbers nobody can derive."),
+          "For each surviving option: what would move belief about it, and by "
+          "how much? State the figure your confidence rests on, the formula "
+          "behind it, and the numbers going in. This round removes nothing -- "
+          "it measures how sure anyone may be about what is left.",
+          eliminates=False),
 )
 
 CLOSER_SYSTEM_PROMPT = os.path.join(
@@ -523,11 +550,32 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
             "knock it down. An option nobody could disprove is not an option, "
             "it is a preference.\n"
         )
-    else:
+    elif r.eliminates:
         parts.append(
             "## The working answer so far\n"
             + wrap_untrusted(merged or "(nothing yet)")
             + "\n\nDo not invent new options. This round only eliminates.\n"
+        )
+    else:
+        # THE CALIBRATION ROUND, AND THE SEATS ARE TOLD SO.
+        #
+        # It was given the same "this round only eliminates" line as rounds
+        # two to four while its lens said "Kill options" -- so the pass the
+        # manual defines as unable to rule anything out was asking five models
+        # to rule things out. Telling them the truth about what this round
+        # does is not a courtesy: a seat that believes it is eliminating
+        # writes to eliminate, and what it writes is what gets recomputed.
+        parts.append(
+            "## The working answer so far\n"
+            + wrap_untrusted(merged or "(nothing yet)")
+            + "\n\nDo not invent new options, and do not try to remove one. "
+            "THIS ROUND REMOVES NOTHING. Whatever is standing now is what the "
+            "run reports. Your job is to say how much confidence each "
+            "surviving answer has earned and what the remaining doubt rests "
+            "on. If you find something wrong with a surviving answer, state "
+            "it as a commitment with its formula and inputs anyway: it will "
+            "be recomputed and recorded against that answer as a caveat, "
+            "which is what lowers confidence in it.\n"
         )
     parts.append(claim_contract(invents=r.invents))
     return "\n".join(parts)
@@ -756,6 +804,11 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
 class RoundResult:
     n: int
     name: str
+    eliminative: bool = True
+    """Whether this round was allowed to remove an option (SOP 2.3).
+
+    Read by the decay fit, which must not count a calibration round as a round
+    that found nothing: it is a round that could not look."""
     thinkers_ok: list[str] = field(default_factory=list)
     thinkers_failed: dict[str, str] = field(default_factory=dict)
     claims: int = 0
@@ -783,10 +836,35 @@ class RoundResult:
     """
     challenges: int = 0
     challenges_ruled: int = 0
+    calibration_findings: list[str] = field(default_factory=list)
+    """Commitments refuted in a round that is not allowed to remove anything.
+
+    SOP 2.3 makes pass five calibration-only. A refutation landed there is a
+    real finding about a surviving answer and must not vanish because the pass
+    that found it cannot act on it -- so it is carried here and printed as a
+    caveat against the survivor."""
     rulings: dict[str, Ruling] = field(default_factory=dict)
     """What every commitment was ruled, with the arithmetic behind it."""
     silent_seats: list[str] = field(default_factory=list)
     """Seats that answered but declared no option. A permanent hole."""
+    challenges_by_seat: dict[str, list[str]] = field(default_factory=dict)
+    """seat_id -> commitment ids that seat challenged this round.
+
+    SOP 6.2 needs to know WHO caught WHAT: f1 counts errors found by exactly
+    one seat, f2 by exactly two. A bare challenge count cannot produce either.
+    """
+    divergence: float | None = None
+    """Mean pairwise Jaccard over seat claim sets, compared on (kind, warrant).
+
+    SOP 6.5. None means it could not be measured -- fewer than two seats
+    answered -- which is not the same as zero."""
+    unanimous: bool = False
+    all_seats_silent: bool = False
+    collapse_warning: str | None = None
+    """Set only when the seats were unanimous AND not all silent (SOP 6.5).
+
+    "Silence is not collapse": an empty claim set from every seat is trivially
+    identical, and that is the marginal-yield signal, not a monoculture one."""
     """Surviving options no claim was ever attached to.
 
     They survived because nothing tested them, which is a completely different
@@ -939,7 +1017,7 @@ def run_night(
     for r in rounds:
         rd = os.path.join(out_dir, f"round-{r.n}")
         os.makedirs(rd, exist_ok=True)
-        res = RoundResult(r.n, r.name)
+        res = RoundResult(r.n, r.name, eliminative=r.eliminates)
         emit(f"ROUND {r.n}/{len(rounds)}  {r.name}")
 
         # 1-4: the thinkers, each in isolation
@@ -1043,8 +1121,14 @@ def run_night(
         # that creates the commitments.
         standing = [pr for o in options if o.alive for pr in o.predicates]
         challenges: list[tuple[str, Mapping[str, Fraction]]] = []
-        for raw in texts.values():
-            challenges.extend(parse_challenges(raw))
+        for seat_id, raw in texts.items():
+            mine = parse_challenges(raw)
+            challenges.extend(mine)
+            # WHO challenged WHAT, not merely how many (SOP 6.2). f1 counts
+            # errors found by exactly one seat and f2 by exactly two, and
+            # neither is recoverable from a total.
+            if mine:
+                res.challenges_by_seat[seat_id] = [pid for pid, _ in mine]
         # ACCUMULATED ACROSS ROUNDS, NOT RECOMPUTED FROM SCRATCH.
         #
         # A commitment settled in round two was forgotten by round three, so
@@ -1067,10 +1151,31 @@ def run_night(
         if challenges:
             emit(f"  {len(challenges)} challenge(s), "
                  f"{res.challenges_ruled} naming a commitment that exists")
-        removed = eliminate(options, rulings, r.n)
-        res.options_removed = [o.id for o in removed]
-        if removed:
-            emit(f"  removed {len(removed)} option(s) on refuted commitments")
+        if r.eliminates:
+            removed = eliminate(options, rulings, r.n)
+            res.options_removed = [o.id for o in removed]
+            if removed:
+                emit(f"  removed {len(removed)} option(s) on refuted "
+                     f"commitments")
+        else:
+            # THE CALIBRATION ROUND RULES, AND RULES NOTHING OUT (SOP 2.3).
+            #
+            # `refuted_commitment` is a pure query -- `eliminate` is what
+            # mutates -- so the finding is still computed in full and still
+            # recorded. It just does not take the answer with it. A refutation
+            # landed here lowers confidence in a survivor instead of removing
+            # it, which is the only reading that leaves this pass calibrating
+            # rather than deciding.
+            res.calibration_findings = [
+                f"{o.id}: {rul.detail}"
+                for o in options if o.alive
+                for rul in [refuted_commitment(o, rulings)] if rul is not None
+            ]
+            if res.calibration_findings:
+                emit(f"  {len(res.calibration_findings)} refutation(s) in the "
+                     f"calibration round -- RECORDED AGAINST the surviving "
+                     f"answer, not removed (SOP 2.3: this pass cannot rule "
+                     f"anything out)")
         # RECORDED HERE, BEFORE THE CLOSER IS ASKED ANYTHING.
         #
         # The bookkeeping sat after the merge, so a closer that raised took
@@ -1095,6 +1200,14 @@ def run_night(
         # fail together" is not grounds for confidence.
         rho, rho_note = measure_rho(seat_claims, orch.verdicts)
         res.rho, res.rho_note = rho, rho_note
+        # SOP 6.5, measured every round rather than never. Unanimity is an
+        # ALARM, not a result: independently-failing seats do not produce
+        # identical claim sets, and if they do the panel is worth roughly one
+        # effective seat. Silence is exempt -- see convergence.divergence.
+        (res.divergence, res.unanimous, res.all_seats_silent,
+         res.collapse_warning) = seat_divergence(seat_claims)
+        if res.collapse_warning:
+            emit(f"  COLLAPSE FLAG: {res.collapse_warning}")
         repeat_note = (f", {rec.repeats} already ruled in an earlier round"
                        if rec.repeats else "")
         emit(f"  checked {res.claims} claim(s): {res.passed} pass, "
@@ -2016,6 +2129,21 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
         caveats.append(
             f"THE CLOSER WROTE CLAIM-LIKE PROSE THAT PARSED TO NOTHING, in "
             f"round(s) {', '.join(str(n) for n in unparsed)}.")
+    # A REFUTATION THE CALIBRATION PASS WAS NOT ALLOWED TO ACT ON.
+    #
+    # SOP 2.3 forbids pass five from ruling anything out, so a commitment it
+    # refutes cannot remove the answer that made it. Dropping the finding on
+    # that ground would be the worst of both: the pass may not act, so nobody
+    # hears about it. It is a caveat -- which is exactly what lowering
+    # confidence in a survivor means.
+    calibration = [(r.n, f) for r in results for f in r.calibration_findings]
+    if calibration:
+        caveats.append(
+            f"{len(calibration)} COMMITMENT(S) OF A SURVIVING ANSWER WERE "
+            f"REFUTED IN THE CALIBRATION ROUND, which under SOP 2.3 cannot "
+            f"rule anything out -- so the answer stands and the refutation "
+            f"stands with it. Read these before acting on any survivor: "
+            + "; ".join(f"round {n}: {f}" for n, f in calibration))
     degraded = [r.n for r in results if r.degraded]
     if degraded:
         caveats.append(
@@ -2184,6 +2312,16 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
                   "largely not addressing the same points, so whether they fail",
                   "together is unknown -- and agreement between seats that have",
                   "not been shown to fail differently is not corroboration."]
+
+    # SOP 9.1 steps 9 and 10 tell the operator to read the residual, the
+    # singleton fraction and the per-pass divergence BEFORE committing, and
+    # 9.3 makes the holes part of the answer. None of it was reachable from
+    # this engine, so a packet could report a survivor while the manual's own
+    # stop rule said DO NOT COMMIT and nothing on the page said so.
+    if rounds_run:
+        conv = analyse(rounds_run,
+                       escalations_pending=len(orch.escalation_queue))
+        lines += ["", *render_convergence(conv)]
 
     lines += ["", "---", "",
               "BLOCKED means a check could not be performed -- a paywall, a",
