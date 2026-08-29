@@ -112,7 +112,7 @@ class _BurningFlameState extends State<BurningFlame>
           // Full sweep, end to end: the outermost anchors sit under the
           // thin channels at the far left and far right of the mark, so
           // fire travels through every line, not just the middle ones.
-          (0.115, 0.8, 0.7),
+          (0.115, 0.82, 0.85),
           (0.16, 0.88, 0.8),
           (0.24, 0.92, 0.9),
           (0.34, 0.99, 1.1),
@@ -123,9 +123,11 @@ class _BurningFlameState extends State<BurningFlame>
           (0.84, 0.86, 0.9),
           (0.92, 0.8, 0.85),
           // The far right channel opens at mid-height, off the rising path
-          // of the 0.92 tongue: this one sits directly beneath its mouth so
-          // fire always climbs through the very end of the mark.
-          (0.955, 0.72, 0.85),
+          // of the 0.92 tongue: these sit directly beneath its mouth so
+          // full flame shapes - not a thin line - climb through the very
+          // end of the mark and lick out through the mask's escape plume.
+          (0.955, 0.7, 1.0),
+          (0.98, 0.66, 0.75),
         ];
     _lineTongues = <_Tongue>[
       for (final (double ax, double ay, double sz) in lineAnchors)
