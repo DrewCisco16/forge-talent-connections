@@ -109,7 +109,7 @@ class MissionScreen extends StatelessWidget {
                   ),
                   (
                     "Veteran",
-                    "Service, sealed and honored, with pathways built for "
+                    "Service, sealed and honored, with roads built for "
                         "what comes next.",
                   ),
                 ]) ...<Widget>[

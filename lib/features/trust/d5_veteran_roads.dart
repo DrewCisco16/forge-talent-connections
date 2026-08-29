@@ -13,13 +13,13 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 
-/// D5 Veteran pathways.
+/// D5 Veteran roads.
 ///
 /// A post-MVP concept screen. The fit figures are placeholder concept data, not
 /// the output of any model, and the screen says so rather than implying a
 /// precision it does not have.
-class D5VeteranPathways extends ConsumerWidget {
-  const D5VeteranPathways({super.key});
+class D5VeteranRoads extends ConsumerWidget {
+  const D5VeteranRoads({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -91,21 +91,21 @@ class D5VeteranPathways extends ConsumerWidget {
                 const SizedBox(height: 14),
                 Divider(color: forge.strokeSoft, height: 1),
                 const SizedBox(height: 14),
-                AsyncView<List<PathwayMatch>>(
-                  value: ref.watch(pathwaysProvider),
+                AsyncView<List<RoadMatch>>(
+                  value: ref.watch(roadsProvider),
                   pendingLabel: "Translating your role",
-                  builder: (List<PathwayMatch> matches) {
+                  builder: (List<RoadMatch> matches) {
                     // Brute-force maximum over the served fit figures: a
                     // linear scan tracking the largest value's index. Pure
                     // display ranking - the figures themselves are the
                     // backend's, and stay concept placeholders here.
                     final int? top = indexOfMax(
                       matches,
-                      (PathwayMatch m) => m.fitPercent,
+                      (RoadMatch m) => m.fitPercent,
                     );
                     return Column(
                       children: <Widget>[
-                        for (final (int i, PathwayMatch m) in matches.indexed)
+                        for (final (int i, RoadMatch m) in matches.indexed)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Row(
@@ -210,10 +210,10 @@ class D5VeteranPathways extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           GoldButton(
-            label: "See My Pathways",
+            label: "See My Roads",
             onPressed: () => demoNote(
               context,
-              "Pathway matching runs on the backend. These results are "
+              "Road matching runs on the backend. These results are "
               "concept fixtures.",
             ),
           ),

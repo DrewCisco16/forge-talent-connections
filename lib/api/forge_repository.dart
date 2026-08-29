@@ -55,9 +55,9 @@ abstract interface class ExportRepository {
   Future<IntegrityCertificate> loadCertificate();
 }
 
-/// Reads the veteran pathway concept data.
-abstract interface class PathwayRepository {
-  Future<List<PathwayMatch>> loadPathways(String occupationCode);
+/// Reads the veteran road concept data.
+abstract interface class RoadRepository {
+  Future<List<RoadMatch>> loadRoads(String occupationCode);
 }
 
 /// Reads membership standing, growth signals, and the decisions the system
@@ -89,5 +89,5 @@ abstract interface class ForgeRepository
         TrustRepository,
         SocialRepository,
         ExportRepository,
-        PathwayRepository,
+        RoadRepository,
         GrowthRepository {}

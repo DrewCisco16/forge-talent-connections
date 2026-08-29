@@ -73,8 +73,8 @@ class ProjectSpace {
 /// A suggested civilian role for a military occupation.
 ///
 /// The fit figures are concept placeholders in this build, not model output.
-class PathwayMatch {
-  const PathwayMatch({required this.role, required this.fitPercent});
+class RoadMatch {
+  const RoadMatch({required this.role, required this.fitPercent});
 
   final String role;
   final int fitPercent;

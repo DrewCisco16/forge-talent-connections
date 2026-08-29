@@ -116,9 +116,9 @@ final FutureProvider<IntegrityCertificate> certificateProvider =
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadCertificate(),
     );
 
-final FutureProvider<List<PathwayMatch>> pathwaysProvider =
-    FutureProvider<List<PathwayMatch>>(
-      (Ref ref) => ref.watch(forgeRepositoryProvider).loadPathways("0651"),
+final FutureProvider<List<RoadMatch>> roadsProvider =
+    FutureProvider<List<RoadMatch>>(
+      (Ref ref) => ref.watch(forgeRepositoryProvider).loadRoads("0651"),
     );
 
 final FutureProvider<MembershipStatus> membershipProvider =

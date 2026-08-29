@@ -292,9 +292,9 @@ const List<Vouch> kVouches = <Vouch>[
   ),
 ];
 
-/// Concept pathway data. Fit figures are placeholders, not model output.
-const List<PathwayMatch> kPathways = <PathwayMatch>[
-  PathwayMatch(role: "Network Engineer", fitPercent: 94),
-  PathwayMatch(role: "Cloud Support Specialist", fitPercent: 88),
-  PathwayMatch(role: "IT Operations Analyst", fitPercent: 82),
+/// Concept road data. Fit figures are placeholders, not model output.
+const List<RoadMatch> kRoads = <RoadMatch>[
+  RoadMatch(role: "Network Engineer", fitPercent: 94),
+  RoadMatch(role: "Cloud Support Specialist", fitPercent: 88),
+  RoadMatch(role: "IT Operations Analyst", fitPercent: 82),
 ];

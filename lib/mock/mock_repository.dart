@@ -356,8 +356,7 @@ class MockForgeRepository implements ForgeRepository {
   );
 
   @override
-  Future<List<PathwayMatch>> loadPathways(String occupationCode) =>
-      _serve(kPathways);
+  Future<List<RoadMatch>> loadRoads(String occupationCode) => _serve(kRoads);
 
   @override
   Future<MembershipStatus> loadMembership() => _serve(

@@ -389,9 +389,9 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           _Row(label: "Data & downloads", onTap: () => context.go("/export")),
           const SizedBox(height: ForgeSpacing.gapSection),
           _Row(
-            label: "Veteran pathways",
+            label: "Veteran roads",
             trailing: "Concept",
-            onTap: () => context.go("/pathways"),
+            onTap: () => context.go("/roads"),
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           InkWell(
