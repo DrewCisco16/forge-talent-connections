@@ -1581,6 +1581,13 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
               "disputes": list(v.disputes)}
              for k, v in sorted(r.rulings.items())],
          "silent_seats": r.silent_seats,
+         # THE CHALLENGE COUNTS WERE NEVER DURABLE. The field existed on the
+         # round and reached the progress line, and status.md -- the file a
+         # later reader actually has -- carried no trace of whether any seat
+         # had disputed anything. A round that produced no challenges and a
+         # round nobody recorded looked identical afterwards.
+         "challenges": r.challenges,
+         "challenges_ruled": r.challenges_ruled,
          "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
