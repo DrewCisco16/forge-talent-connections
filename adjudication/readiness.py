@@ -119,7 +119,14 @@ def _compliance() -> tuple[int, int]:
     # complied with a contract that did not exist -- counting them put a
     # fully compliant panel at 15/32 and reported a passing check as failing.
     latest: list[str] = []
-    for pattern, leaf in ((os.path.join(HERE, "runs", "canary-*"),
+    # THE FULL RUN COUNTS, AND IT IS THE BEST EVIDENCE THERE IS. This looked
+    # only at canaries and probes, so a completed five-round run -- the one
+    # that exercises the contract under the real prompt lengths, with personas
+    # assigned and a working answer in front of the seats -- contributed
+    # nothing to the compliance figure.
+    for pattern, leaf in ((os.path.join(HERE, "runs", "full-*"),
+                           os.path.join("round-1", "thinker-*.md")),
+                          (os.path.join(HERE, "runs", "canary-*"),
                            os.path.join("round-1", "thinker-*.md")),
                           (os.path.join(HERE, "runs", "probe-*"), "seat_*.md")):
         dirs = sorted(glob.glob(pattern))
@@ -145,10 +152,13 @@ def _challenges_seen() -> int:
     that produced the first one, so the file has no trace of it. The replies
     are the primary evidence and they are on disk either way.
     """
-    return sum(
-        len(re.findall(r"(?mi)^\s*CHALLENGE\s*\|", open(f, encoding="utf-8").read()))
-        for f in glob.glob(os.path.join(HERE, "runs", "canary-*", "round-*",
-                                        "thinker-*.md")))
+    total = 0
+    for pattern in ("canary-*", "full-*"):
+        for f in glob.glob(os.path.join(HERE, "runs", pattern, "round-*",
+                                        "thinker-*.md")):
+            with open(f, encoding="utf-8") as fh:
+                total += len(re.findall(r"(?mi)^\s*CHALLENGE\s*\|", fh.read()))
+    return total
 
 
 def _corroborated_removals() -> int:
@@ -308,7 +318,14 @@ def main() -> int:
         print(f"            {c.detail}")
         print(f"            evidence: {c.evidence}")
     print("-" * 72)
-    print(f"  {earned}% of {total}% established by evidence on disk")
+    # NORMALISED, because the weights are not guaranteed to sum to 100 and
+    # were not: adding the three SOP-conformance checks took the total to 120
+    # and this printed "120% of 120%", which reads as a broken meter rather
+    # than a finished build. The weights say how much each check MATTERS
+    # relative to the others; the percentage is their share.
+    pct = (100.0 * earned / total) if total else 0.0
+    print(f"  {pct:.0f}% established by evidence on disk "
+          f"({earned} of {total} weighted points)")
     print()
     print("  THIS IS NOT A CONFIDENCE THAT ANY ANSWER IS CORRECT.")
     print("  It says how much of the machinery has been shown to work.")
