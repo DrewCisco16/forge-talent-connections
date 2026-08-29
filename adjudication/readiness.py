@@ -177,6 +177,64 @@ def _corroborated_removals() -> int:
     return n
 
 
+def _calibration_pass_is_inert() -> tuple[bool, str]:
+    """SOP 2.3: the fifth pass calibrates and CANNOT RULE ANYTHING OUT.
+
+    Read from the two engines rather than from memory, and read from BOTH,
+    because the defect this replaces was the two disagreeing: the orchestrator
+    had `Pass(eliminative=False)` from the start and the live engine ran
+    `eliminate()` on round five like any other round.
+    """
+    from adjudication_orchestrator import DEFAULT_PASSES
+    from night_loop import ROUNDS, thinker_prompt
+    live = [r.eliminates for r in ROUNDS]
+    other = [p.eliminative for p in DEFAULT_PASSES]
+    prompt = thinker_prompt(ROUNDS[4], "x", "working")
+    agree = live == other == [True, True, True, True, False]
+    honest = "CAN REMOVE AN ANSWER" not in prompt and "REMOVES NOTHING" in prompt
+    return agree and honest, (
+        f"both engines: {sum(live)}/5 eliminative"
+        + ("" if agree else "  -- THE TWO ENGINES DISAGREE")
+        + ("" if honest else "  -- the prompt still asks seats to remove"))
+
+
+def _stop_rule_reaches_a_live_run() -> tuple[bool, str]:
+    """SOP 6.3 and 9.3, applied to the engine that spends money.
+
+    Every estimator existed and was tested; none was reachable from
+    `night_loop`, so a packet could report a survivor while the manual's own
+    stop rule said DO NOT COMMIT and nothing on the page said so.
+    """
+    import inspect
+
+    import convergence
+    from night_loop import write_verifier_packet
+    src = inspect.getsource(write_verifier_packet)
+    wired = "render_convergence" in src or "analyse" in src
+    has = all(hasattr(convergence, n)
+              for n in ("analyse", "render", "divergence", "detections_by_seat"))
+    return wired and has, (
+        "the packet carries the residual, the singleton fraction, the "
+        "per-pass divergence and the holes"
+        if wired and has else "the live engine still cannot reach them")
+
+
+def _holes_name_their_remedy() -> tuple[bool, str]:
+    """SOP 9.3: "a hole you cannot act on is a disclaimer"."""
+    import convergence
+    from night_loop import RoundResult
+
+    r = RoundResult(1, "r", eliminative=True)
+    r.options_observed = True
+    r.options_alive = ["a", "b"]
+    r.options_unexamined = ["b"]
+    r.thinkers_failed = {"seat_3": "timeout"}
+    c = convergence.analyse([r], escalations_pending=1)
+    named = [h for h in c.holes if h.remedy.strip()]
+    return bool(c.holes) and len(named) == len(c.holes), (
+        f"{len(named)}/{len(c.holes)} holes name what would close them")
+
+
 def checks() -> list[Check]:
     rounds = _live_runs()
     eliminated = sum(r.removed for r in rounds)
@@ -187,6 +245,9 @@ def checks() -> list[Check]:
     seen_ch = _challenges_seen()
     corroborated = _corroborated_removals()
     passed, failed = _suite()
+    calib_ok, calib_detail = _calibration_pass_is_inert()
+    stop_ok, stop_detail = _stop_rule_reaches_a_live_run()
+    holes_ok, holes_detail = _holes_name_their_remedy()
 
     return [
         Check("offline suite", 15,
@@ -220,6 +281,17 @@ def checks() -> list[Check]:
         Check("all five rounds run", 5,
               f"deepest round reached live: {deepest}",
               deepest >= 5, "live run"),
+        # -- SOP v1.2 conformance, added after a full audit of the manual
+        # against the engine that actually spends money. These were scope
+        # from the first day; they were simply never measured here, and a
+        # tracker that omits a specified behaviour reports a build as more
+        # finished than it is.
+        Check("the calibration pass cannot eliminate", 8,
+              calib_detail, calib_ok, "SOP 2.3, read from both engines"),
+        Check("the manual's stop rule reaches a live run", 7,
+              stop_detail, stop_ok, "SOP 6.2, 6.3, 6.5, 9.1 steps 9-11"),
+        Check("every hole names what would close it", 5,
+              holes_detail, holes_ok, "SOP 9.3, computed from a real hole set"),
     ]
 
 
