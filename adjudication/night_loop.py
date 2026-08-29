@@ -197,6 +197,50 @@ def wrap_untrusted(text: str) -> str:
     return UNTRUSTED_OPEN + text + UNTRUSTED_CLOSE
 
 
+CALIBRATION_CHALLENGE_CONTRACT = """
+
+THE LINE TO WRITE IF ONE OF THE NUMBERS IS WRONG:
+
+    CHALLENGE | <paste a commitment id from the list above> | per_round = 9
+
+IT WILL NOT REMOVE ANYTHING, AND THAT IS NOT A REASON TO SKIP IT. This is the
+calibration round. Whatever is standing now is what the run reports, and no
+line you can write changes that -- the panel decided what survives in the
+earlier rounds.
+
+WHAT YOUR LINE DOES DO. It is recomputed exactly as it would be in any other
+round: your value goes into the answer's own formula, and if that no longer
+produces the figure the answer committed to, the finding is RECORDED AGAINST
+THAT ANSWER and printed beside it in the deliverable. A reader then has the
+surviving answer and, in the same place, the arithmetic that does not support
+it. That is what lowering confidence in an answer means here, and it is the
+whole job of this round.
+
+The same rule about standing applies. Your figure has no more standing than
+the proposer's, and it is AGREEMENT between seats writing blind that carries
+weight -- so write the number you actually believe rather than the one you
+think will land.
+
+If none of the numbers is wrong, write no CHALLENGE line. Saying so is a
+result, and on this round in particular it is the result that matters: an
+answer nobody could fault after four rounds of attack is what the run exists
+to find.
+"""
+"""The challenge contract for a round that may not remove anything (SOP 2.3).
+
+THE PROBLEM THIS FIXES, CAUGHT IN PRE-FLIGHT AND NOT BY ANY TEST. The ordinary
+contract opens "THE ONE LINE THAT CAN REMOVE AN ANSWER THIS ROUND" and closes
+"the answer goes if it no longer produces what it committed to". Both are
+false in a calibration round, and it was being issued there verbatim -- so the
+pass the manual says cannot rule anything out was telling five models exactly
+how to rule something out.
+
+Telling seats the truth about what a round does is not a courtesy. A seat that
+believes it is eliminating writes to eliminate, and what it writes is what
+gets recomputed.
+"""
+
+
 CHALLENGE_CONTRACT = """
 THE ONE LINE THAT CAN REMOVE AN ANSWER THIS ROUND:
 
@@ -388,7 +432,8 @@ pushes everything else toward a kind that a gate can rule on unattended.
 
 def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
                    max_judgment: int = MAX_JUDGMENT_CLAIMS,
-                   invents: bool = False) -> str:
+                   invents: bool = False,
+                   eliminates: bool = True) -> str:
     """The claim contract with its ceilings filled in.
 
     OPTIONS RIDE IN THE SAME BLOCK AS CLAIMS DELIBERATELY. On a live canary
@@ -401,7 +446,9 @@ def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
     return CLAIM_CONTRACT.format(
         max_claims=max_claims, max_judgment=max_judgment,
         options=OPTION_CONTRACT if invents else "",
-        challenges="" if invents else CHALLENGE_CONTRACT)
+        challenges=("" if invents
+                    else CHALLENGE_CONTRACT if eliminates
+                    else CALIBRATION_CHALLENGE_CONTRACT))
 
 
 # --------------------------------------------------------------------------
@@ -572,12 +619,14 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
             "THIS ROUND REMOVES NOTHING. Whatever is standing now is what the "
             "run reports. Your job is to say how much confidence each "
             "surviving answer has earned and what the remaining doubt rests "
-            "on. If you find something wrong with a surviving answer, state "
-            "it as a commitment with its formula and inputs anyway: it will "
-            "be recomputed and recorded against that answer as a caveat, "
-            "which is what lowers confidence in it.\n"
+            "on. If one of the numbers a surviving answer rests on is wrong, "
+            "write the CHALLENGE line described below anyway: it is "
+            "recomputed exactly as in any other round, and what it produces "
+            "here is a finding recorded against that answer rather than a "
+            "removal.\n"
         )
-    parts.append(claim_contract(invents=r.invents))
+    parts.append(claim_contract(invents=r.invents,
+                                eliminates=r.eliminates))
     return "\n".join(parts)
 
 
@@ -1717,7 +1766,19 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
-         "closer_unparsed": r.closer_unparsed}
+         "closer_unparsed": r.closer_unparsed,
+         # SOP 6.5 AND 6.2, ON DISK. The divergence and the collapse flag are
+         # computed every round and were reaching only the progress line; a
+         # later reader had no way to tell a panel that agreed exactly from
+         # one that did not. `challenges_by_seat` is what makes f1 and f2
+         # recoverable at all -- a total cannot say who caught what.
+         "eliminative": r.eliminative,
+         "divergence": r.divergence,
+         "unanimous": r.unanimous,
+         "all_seats_silent": r.all_seats_silent,
+         "collapse_warning": r.collapse_warning,
+         "challenges_by_seat": r.challenges_by_seat,
+         "calibration_findings": r.calibration_findings}
         for r in results
     ]
     tmp = os.path.join(out_dir, "status.md.tmp")

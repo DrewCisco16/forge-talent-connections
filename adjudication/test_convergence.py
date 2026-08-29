@@ -103,6 +103,37 @@ class TestTheCalibrationPassCannotEliminate:
         for r in NL.ROUNDS[1:4]:
             assert "only eliminates" in NL.thinker_prompt(r, "ask", "merged")
 
+    def test_the_calibration_round_is_not_handed_the_removal_contract(self):
+        """CAUGHT IN PRE-FLIGHT, NOT BY ANY TEST, which is why the pre-flight
+        exists. The ordinary challenge contract opens "THE ONE LINE THAT CAN
+        REMOVE AN ANSWER THIS ROUND" and closes "the answer goes if it no
+        longer produces what it committed to". Both are FALSE in a calibration
+        round, and it was being issued there verbatim -- so the pass the
+        manual says cannot rule anything out was telling five models exactly
+        how to rule something out."""
+        p = NL.thinker_prompt(NL.ROUNDS[4], "x", "working")
+        assert "CAN REMOVE AN ANSWER" not in p
+        assert "the answer goes if" not in p
+        assert "WILL NOT REMOVE ANYTHING" in p
+
+    def test_the_eliminative_rounds_keep_the_removal_contract(self):
+        """The fix must not disarm rounds two to four, where a corroborated
+        challenge genuinely does remove an answer."""
+        for r in NL.ROUNDS[1:4]:
+            p = NL.thinker_prompt(r, "x", "working")
+            assert "CAN REMOVE AN ANSWER" in p
+            assert "WILL NOT REMOVE ANYTHING" not in p
+
+    def test_the_calibration_round_still_teaches_the_challenge_syntax(self):
+        """A finding must have somewhere to go. The first version of this
+        prompt told seats to "state it as a commitment with its formula and
+        inputs" -- but the PREDICATE contract is only issued in round one, so
+        that was an instruction no seat could follow. CHALLENGE is the channel
+        that exists, and it is the one the calibration code actually reads."""
+        p = NL.thinker_prompt(NL.ROUNDS[4], "x", "working")
+        assert "CHALLENGE | <paste a commitment id" in p
+        assert "formula and inputs anyway" not in p
+
     def test_the_two_engines_agree_about_which_pass_calibrates(self):
         """The drift this file exists to stop. `Pass.eliminative` in the other
         engine and `Round.eliminates` here are one rule in two places; if they
