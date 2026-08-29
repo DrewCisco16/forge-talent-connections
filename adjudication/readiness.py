@@ -151,6 +151,32 @@ def _challenges_seen() -> int:
                                         "thinker-*.md")))
 
 
+def _corroborated_removals() -> int:
+    """Removals that happened because seats AGREED, counted from the record.
+
+    HARDCODED FALSE UNTIL NOW, so this check could never flip however many
+    runs happened -- a tracker with a square that cannot be ticked reports
+    progress that has been made as progress still owed.
+
+    The ruling detail carries the phrase when corroboration decided it, and
+    status.md carries the rulings, so the fact is on disk rather than in
+    anyone's memory.
+    """
+    n = 0
+    for path in glob.glob(os.path.join(HERE, "runs", "*", "status.md")):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                blob = fh.read().split("```json")[1].split("```")[0]
+            for rnd in json.loads(blob):
+                for ruling in rnd.get("rulings") or []:
+                    if (ruling.get("status") == "fail"
+                            and "agreed by" in (ruling.get("detail") or "")):
+                        n += 1
+        except (OSError, IndexError, json.JSONDecodeError):
+            continue
+    return n
+
+
 def checks() -> list[Check]:
     rounds = _live_runs()
     eliminated = sum(r.removed for r in rounds)
@@ -159,6 +185,7 @@ def checks() -> list[Check]:
     created = sum(r.created for r in rounds)
     full, seen = _compliance()
     seen_ch = _challenges_seen()
+    corroborated = _corroborated_removals()
     passed, failed = _suite()
 
     return [
@@ -187,8 +214,9 @@ def checks() -> list[Check]:
               f"{challenged} recorded in status",
               seen_ch > 0, "the round-two replies themselves"),
         Check("a corroborated dispute removes an option", 10,
-              "two seats agreeing on an input, live",
-              False, "NOT YET SEEN LIVE"),
+              f"{corroborated} live removal(s) carrying 'agreed by N seats'",
+              corroborated > 0,
+              "the ruling detail recorded in status.md"),
         Check("all five rounds run", 5,
               f"deepest round reached live: {deepest}",
               deepest >= 5, "live run"),
