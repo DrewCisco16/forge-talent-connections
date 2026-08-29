@@ -22,6 +22,16 @@ import adjudication_orchestrator as AO
 import calibrate as CB
 from correctness_matrix import SHARED_DETECTION
 
+
+def _arith(lhs: str) -> int:
+    """Evaluate an item's left-hand side without reusing the module under
+    test, so a bug in build_items cannot validate itself."""
+    for sym, fn in (("*", lambda x, y: x * y), ("+", lambda x, y: x + y)):
+        if sym in lhs:
+            a, _, b = lhs.partition(sym)
+            return fn(int(a.strip()), int(b.strip()))
+    raise AssertionError(f"unrecognised expression: {lhs!r}")
+
 # ---------------------------------------------------------------------------
 # the item set
 # ---------------------------------------------------------------------------
@@ -36,11 +46,34 @@ class TestTheItemSetIsBalancedAndReproducible:
     def test_the_truth_flag_matches_the_actual_arithmetic(self):
         """The flag is the answer key. If it ever disagreed with the
         expression, every score computed from it would be wrong in a way no
-        gate could catch -- the gate would be right and the key wrong."""
-        for it in CB.build_items(40, seed=7):
+        gate could catch -- the gate would be right and the key wrong.
+
+        Evaluated generically rather than by splitting on '+', so that adding
+        an operator to build_items cannot quietly stop this from checking the
+        items it was meant to check."""
+        for it in CB.build_items(60, seed=7):
             lhs, _, rhs = it.expression.rpartition("=")
-            a, _, b = lhs.partition("+")
-            assert (int(a) + int(b) == int(rhs)) is it.is_true, it
+            assert (_arith(lhs) == int(rhs)) is it.is_true, it
+
+    def test_the_answer_key_agrees_with_the_gate_that_scores_it(self):
+        """The independent check: this module's is_true and the gate's verdict
+        are computed by different code, and the whole measurement is void if
+        they ever disagree."""
+        gate = AO.ArithmeticGate()
+        for it in CB.build_items(30, seed=13):
+            res = gate.check(AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
+                                      text=it.expression,
+                                      warrant=it.expression))
+            ruled_true = res.status is AO.GateStatus.PASS
+            assert ruled_true is it.is_true, (it, res.status, res.detail)
+
+    def test_the_probe_is_not_only_addition(self):
+        """Three-digit addition alone produced NO variation between real-model
+        seats, so rho came back NaN and the run measured nothing. The mix is
+        the fix, and this pins it."""
+        ops = {("*" if "*" in i.expression else "+")
+               for i in CB.build_items(24, seed=7)}
+        assert ops == {"+", "*"}
 
     def test_the_same_seed_gives_the_same_items(self):
         assert CB.build_items(12, seed=99) == CB.build_items(12, seed=99)
@@ -56,8 +89,7 @@ class TestTheItemSetIsBalancedAndReproducible:
             if it.is_true:
                 continue
             lhs, _, rhs = it.expression.rpartition("=")
-            a, _, b = lhs.partition("+")
-            assert 0 < abs((int(a) + int(b)) - int(rhs)) <= 2
+            assert 0 < abs(_arith(lhs) - int(rhs)) <= 9
 
     def test_an_odd_item_count_is_refused(self):
         with pytest.raises(ValueError, match="even"):
@@ -262,7 +294,62 @@ class TestTheVerdictSaysWhatToDo:
         would let a run that measured nothing justify a spending decision."""
         line = CB.verdict_line(None, 5)
         assert "NO VERDICT" in line
-        assert "KEEP" not in line and "CUT" not in line
+        assert "KEEP FIVE" not in line and "CUT SEATS" not in line
+
+    def test_a_nan_rho_yields_no_recommendation(self):
+        """THE BUG THIS CLASS EXISTS FOR. NaN fails every comparison, so the
+        threshold ladder fell through to its last branch and a run that
+        measured NOTHING printed 'CUT SEATS ... the seats mostly fail
+        together'. Wrong, expensive, and in the confident direction."""
+        line = CB.verdict_line(float("nan"), 5)
+        assert "NO VERDICT" in line
+        assert "CUT SEATS" not in line
+
+    def test_nan_is_recognised_as_an_absent_measurement(self):
+        assert CB.rho_undefined(float("nan")) is True
+        assert CB.rho_undefined(None) is True
+        assert CB.rho_undefined(0.0) is False
+        assert CB.rho_undefined(1.0) is False
+
+
+class TestSeatsThatAllScoreIdenticallyAreNotCalledCollapsed:
+    """The most likely shape of a first live run: the probe turns out easy
+    enough that every seat gets everything right. Nothing is measured, and
+    that must not read as a finding in either direction."""
+
+    def _perfect_panel(self):
+        items = CB.build_items(24, seed=11)
+        return items, {f"seat_{i}": CB._demo_seat(items, set())
+                       for i in range(1, 6)}
+
+    def test_the_verdict_refuses_rather_than_recommending_cuts(self):
+        items, seats = self._perfect_panel()
+        text = CB.render_calibration(CB.run_calibration(seats, items))
+        assert "NO VERDICT" in text
+        assert "CUT SEATS" not in text
+
+    def test_rho_is_shown_as_undefined_not_as_nan(self):
+        items, seats = self._perfect_panel()
+        text = CB.render_calibration(CB.run_calibration(seats, items))
+        assert "nan" not in text.lower()
+        assert "undefined" in text
+
+    def test_the_operator_is_told_the_probe_was_too_easy(self):
+        """Without this the operator has a failed run and no next step."""
+        items, seats = self._perfect_panel()
+        text = CB.render_calibration(CB.run_calibration(seats, items))
+        assert "too easy" in text
+        assert "--n-items" in text
+
+    def test_it_does_not_exit_zero(self, monkeypatch):
+        """Exit 0 is what the phone-triggered workflow reads as 'calibrated'.
+        correctness_matrix reports measurable=True here -- the matrix WAS
+        built -- so the exit code cannot be derived from that flag alone."""
+        monkeypatch.setattr(
+            CB, "_demo_seats",
+            lambda its: {f"seat_{i}": CB._demo_seat(its, set())
+                         for i in range(1, 6)})
+        assert CB.main(["--demo", "--n-items", "24", "--seed", "11"]) == 1
 
 
 # ---------------------------------------------------------------------------

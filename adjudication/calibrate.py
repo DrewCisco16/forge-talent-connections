@@ -68,11 +68,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeGuard
 
 import adjudication_orchestrator as AO
 from adjudication_orchestrator import (
@@ -118,9 +119,9 @@ def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item
     correctness. The false items are what make confirming everything cost
     something.
 
-    False items are wrong by a SMALL margin. An answer off by one is a
-    plausible slip a model may actually make; one off by an order of magnitude
-    is caught by inspection and measures nothing.
+    See the inline notes below for the two other design constraints: the
+    margin false items are wrong by, and the operator mix that keeps the probe
+    hard enough to separate the seats at all.
     """
     if n < 2:
         raise ValueError(f"need at least 2 items to measure anything, got {n}")
@@ -140,13 +141,33 @@ def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item
     rng = random.Random(seed)  # nosec B311
     items: list[Item] = []
     for k in range(n):
-        a = rng.randint(112, 989)
-        b = rng.randint(113, 987)
         truth = k % 2 == 0
-        # A false item is off by +/- a small amount, never zero, so the
-        # statement is genuinely false but not obviously so.
-        result = a + b if truth else a + b + rng.choice([-2, -1, 1, 2])
-        items.append(Item(f"S{k + 1:02d}", f"{a} + {b} = {result}", truth))
+        # THE PROBE MUST BE HARD ENOUGH TO SEPARATE THE SEATS.
+        #
+        # This was three-digit addition alone, and that is a measurement
+        # design error rather than a coding one: current models essentially
+        # never get it wrong, so all five seats score identically, no seat
+        # pair varies, and rho comes back NaN. A probe nobody fails cannot
+        # rank anybody -- it yields the absence of a measurement, dressed as
+        # a completed run.
+        #
+        # Multiplication of three-digit operands is where models actually
+        # slip, so two thirds of the set is multiplication and the addition
+        # is widened to six digits. The gate evaluates both through the same
+        # operator table, so nothing about the answer key changes.
+        if k % 3 == 0:
+            a, b = rng.randint(100_000, 999_999), rng.randint(100_000, 999_999)
+            true_result, expr_op = a + b, "+"
+        else:
+            a, b = rng.randint(114, 989), rng.randint(113, 987)
+            true_result, expr_op = a * b, "*"
+        # A false item is off by a small amount, never zero, so the statement
+        # is genuinely false but not obviously so. An answer off by an order
+        # of magnitude is caught by inspection and measures nothing.
+        result = true_result if truth else true_result + rng.choice(
+            [-9, -6, -3, -2, -1, 1, 2, 3, 6, 9])
+        items.append(
+            Item(f"S{k + 1:02d}", f"{a} {expr_op} {b} = {result}", truth))
     return items
 
 
@@ -279,6 +300,37 @@ def run_calibration(
 # reporting
 # ---------------------------------------------------------------------------
 
+def rho_measured(rho: float | None) -> TypeGuard[float]:
+    """True only when rho is a real number that can be compared.
+
+    A TypeGuard so the threshold ladder below narrows to `float` and the type
+    checker enforces that no comparison happens on the unmeasured path. The
+    NaN rule lives here alone; rho_undefined is its inverse rather than a
+    second copy, because two hand-written copies of this rule are exactly how
+    the ladder came to fall through in the first place.
+    """
+    return rho is not None and not math.isnan(rho)
+
+
+def rho_undefined(rho: float | None) -> bool:
+    """
+    NaN IS AN ABSENT MEASUREMENT, NOT A LARGE ONE.
+
+    seat_independence returns NaN when no seat pair varied in its errors --
+    every seat scored identically, so there is nothing to correlate. That is
+    the single most likely outcome of a first live run, because the probe is
+    arithmetic and current models are good at it.
+
+    NaN fails EVERY comparison, so a threshold ladder written as `if rho <=
+    0.2 ... elif rho <= 0.5 ... else` falls all the way through to the last
+    branch. This function existed only after that happened here: five
+    identical, perfectly-scoring seats produced "CUT SEATS. rho=nan means the
+    seats mostly fail together" -- an absent measurement converted into
+    confident, expensive advice, in the wrong direction.
+    """
+    return not rho_measured(rho)
+
+
 def verdict_line(rho: float | None, n_seats: int) -> str:
     """
     What the operator should DO about this number.
@@ -288,9 +340,17 @@ def verdict_line(rho: float | None, n_seats: int) -> str:
     conventions, not derived. An operator who wants a different cutoff should
     set one; this refuses to imply a precision it does not have.
     """
-    if rho is None:
-        return ("NO VERDICT: rho was not produced. Read the blockers above; "
-                "nothing here justifies keeping or cutting a seat.")
+    if not rho_measured(rho):
+        return (
+            "NO VERDICT: rho was not produced, so nothing here justifies "
+            "keeping or cutting a seat.\n"
+            "If the seats all scored identically, the probe was too easy to "
+            "separate them -- that is the absence of a measurement, NOT "
+            "evidence of independence.\n"
+            "Re-run harder: raise --n-items, change --seed, and prefer a set "
+            "the seats actually disagree on. A panel that never errs on the "
+            "probe cannot be measured by it."
+        )
     if rho <= 0.2:
         return (f"KEEP FIVE SEATS. rho={rho:.3f} is at or below the ~0.2 "
                 f"convention, so the seats are erring largely independently "
@@ -363,9 +423,9 @@ def render_calibration(res: CalibrationResult) -> str:
     out.append("RESULT")
     out.append("-" * 72)
     out.append(f"  error correlation (rho) : "
-               f"{'undefined' if rho is None else f'{rho:.3f}'}")
+               f"{'undefined' if rho_undefined(rho) else f'{rho:.3f}'}")
     out.append(f"  effective seats         : "
-               f"{'undefined' if n_eff is None else f'{n_eff:.2f}'} "
+               f"{'undefined' if n_eff is None or math.isnan(n_eff) else f'{n_eff:.2f}'} "
                f"of {len(res.seats)} paid for")
     out.append("")
     reading = res.report.get("reading")
@@ -500,7 +560,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # A run that produced no number is not a success: a caller that treats
     # exit 0 as "calibrated" must not get one from a run that measured nothing.
-    return 0 if res.report.get("measurable") else 1
+    #
+    # `measurable` is TRUE for a NaN rho -- the matrix was built and scored,
+    # there was simply no variation to correlate. That distinction matters
+    # inside correctness_matrix and not at all to a phone-triggered workflow
+    # reading an exit code, so both are non-zero here.
+    if not res.report.get("measurable") or rho_undefined(res.rho):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
