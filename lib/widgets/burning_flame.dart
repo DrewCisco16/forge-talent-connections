@@ -109,12 +109,18 @@ class _BurningFlameState extends State<BurningFlame>
     final math.Random lineRandom = math.Random(11);
     const List<(double, double, double)> lineAnchors =
         <(double, double, double)>[
-          (0.24, 0.92, 0.85),
+          // Full sweep, end to end: the outermost anchors sit under the
+          // thin channels at the far left and far right of the mark, so
+          // fire travels through every line, not just the middle ones.
+          (0.16, 0.88, 0.8),
+          (0.24, 0.92, 0.9),
           (0.34, 0.99, 1.1),
           (0.44, 1.0, 1.25),
           (0.54, 1.0, 1.15),
           (0.64, 0.97, 1.0),
-          (0.74, 0.92, 0.9),
+          (0.74, 0.92, 0.95),
+          (0.84, 0.86, 0.9),
+          (0.92, 0.8, 0.75),
         ];
     _lineTongues = <_Tongue>[
       for (final (double ax, double ay, double sz) in lineAnchors)
