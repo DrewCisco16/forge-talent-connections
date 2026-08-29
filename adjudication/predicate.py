@@ -602,18 +602,22 @@ def parse_challenges(text: str) -> list[tuple[str, dict[str, Fraction]]]:
     A binding that cannot be read is dropped. A challenge left with no
     readable binding names no dispute and is discarded.
     """
+    # FENCES ARE NOT SKIPPED HERE, AND THAT IS DELIBERATE.
+    #
+    # They are skipped for OPTION and PREDICATE, where a fenced example would
+    # invent a candidate or a commitment out of the contract's own sample
+    # text. A challenge cannot do that: it must name a commitment that
+    # already exists, and an echoed example names the literal placeholder
+    # "<paste a commitment id from the list above>", which adjudicate()
+    # discards along with every other unknown id.
+    #
+    # So the fence rule bought nothing here and cost real work. Measured live:
+    # a seat wrote a correct challenge, put it in a fenced block the way a
+    # model formats anything code-shaped, and it was dropped in silence. Two
+    # of three challenges that round survived; the third was as valid as the
+    # others and simply better formatted.
     out: list[tuple[str, dict[str, Fraction]]] = []
-    fenced = False
     for line in (text or "").splitlines():
-        if _FENCE.match(line):
-            fenced = not fenced
-            continue
-        if fenced or _INDENTED_EXAMPLE.match(line):
-            # WHAT IS INSIDE A FENCE IS AN EXAMPLE. The contract shows seats a
-            # sample CHALLENGE line, and a seat quoting it back -- in a fence
-            # or indented as a code block, which is how the contract itself
-            # prints it -- had that sample executed as a real objection.
-            continue
         m = _CHALLENGE_LINE.match(line)
         if m is None:
             continue

@@ -2285,14 +2285,41 @@ class TestNothingIsLostWithoutSayingSo:
         could never be checked and never removed -- a hole, not a refusal."""
         assert P._quantity(written) == (value, unit)
 
-    def test_a_fenced_example_is_not_an_objection(self):
-        """The contract shows seats a sample CHALLENGE line. A seat quoting it
-        back had the sample executed as a real objection."""
-        assert P.parse_challenges("```\nCHALLENGE | pred_x | a = 1\n```") == []
+    def test_a_fenced_challenge_is_read(self):
+        """CORRECTED BY A LIVE RUN. Fences are skipped for OPTION and
+        PREDICATE, where an echoed example would invent a candidate or a
+        commitment out of the contract's own sample text. A challenge cannot
+        do that -- it must name a commitment that already exists.
 
-    def test_an_indented_example_is_not_an_objection(self):
-        """Which is how the contract itself prints it."""
-        assert P.parse_challenges("    CHALLENGE | pred_x | a = 1") == []
+        Skipping them here bought nothing and cost real work: a seat wrote a
+        correct challenge, put it in a fenced block the way a model formats
+        anything code-shaped, and it was dropped in silence."""
+        assert P.parse_challenges("```\nCHALLENGE | pred_x | a = 1\n```") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_an_indented_challenge_is_read(self):
+        assert P.parse_challenges("    CHALLENGE | pred_x | a = 1") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_the_contracts_own_example_still_settles_nothing(self):
+        """What the fence rule was protecting against, handled where it
+        belongs: the placeholder names no commitment, so adjudicate discards
+        it with every other unknown id."""
+        pred = P.Predicate(
+            option_id="o", subject="cost", relation="=", value=Fraction(30),
+            unit="", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+        echoed = P.parse_challenges(
+            "```\nCHALLENGE | <paste a commitment id from the list above> "
+            "| per_round = 9\n```") * 3
+        assert echoed, "it parses"
+        assert P.adjudicate([pred], echoed)[pred.id].status == "pass"
+
+    def test_a_fenced_predicate_is_still_not_a_commitment(self):
+        """The protection that DOES matter stays: a fenced PREDICATE would
+        mint a commitment out of quoted sample text."""
+        assert P.parse_predicates(
+            "o", "```\nPREDICATE | q | = | 4\nFORMULA | 2 + 2\n```") == []
 
     def test_a_real_challenge_still_lands(self):
         assert P.parse_challenges("CHALLENGE | pred_x | a = 1") == [
