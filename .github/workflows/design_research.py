@@ -10,16 +10,16 @@ import urllib.request
 MAILTO = "research@example.org"
 
 QUERIES = [
-    ("microint", "microinteraction user experience interface"),
-    ("ui_anim", "animation user interface engagement mobile"),
-    ("aesthetics", "visual aesthetics mobile application user trust"),
-    ("typography", "typography readability legibility screen font"),
-    ("darkmode", "dark mode display visual fatigue smartphone"),
-    ("onboard", "mobile application onboarding first use retention"),
-    ("genz_ux", "Generation Z user experience design preferences"),
-    ("credibility", "visual design first impression credibility website"),
-    ("textscale", "font size accessibility mobile text scaling"),
-    ("consistency", "design consistency user interface perception"),
+    ("aest_usab", "interface aesthetics perceived usability"),
+    ("first_impr", "first impressions visual appeal website users"),
+    ("load_anim", "loading animation perceived waiting time"),
+    ("anim_feedback", "animated feedback interface user perception"),
+    ("font_read", "font size reading performance smartphone screen"),
+    ("legibility", "typeface legibility digital reading"),
+    ("darkmode2", "dark mode light mode reading performance"),
+    ("visual_complex", "visual complexity webpage user preference"),
+    ("eye_ui", "eye tracking user interface attention design"),
+    ("aesth_trust", "aesthetics trust perception e-commerce interface"),
 ]
 
 
