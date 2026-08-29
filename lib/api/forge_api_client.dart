@@ -144,10 +144,30 @@ class ForgeApiClient {
       );
     }
 
-    if (response.statusCode >= 400 || decoded["status"] == "denied") {
+    // Strict success window: only 2xx counts. A 1xx or 3xx carrying JSON is
+    // a transport anomaly, never a success (audit finding, 2026-08-29).
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        decoded["status"] == "denied") {
       throw ForgeDenial.fromBody(response.statusCode, decoded);
     }
     return decoded;
+  }
+
+  /// Extracts a typed field from a response body; a missing or wrongly
+  /// typed field is a controlled denial, never a raw runtime error.
+  T _field<T>(Map<String, dynamic> body, String key) {
+    final dynamic v = body[key];
+    if (v is T) return v;
+    throw ForgeDenial(
+      code: "RESPONSE_NOT_UNDERSTOOD",
+      message:
+          "We received a response we could not confirm. "
+          "Nothing was changed.",
+      nextStep: "Please try again.",
+      retryable: false,
+      httpStatus: 200,
+    );
   }
 
   /// Health, for the live-connection banner. Any failure is simply false.
@@ -174,7 +194,7 @@ class ForgeApiClient {
       "/api/v1/evaluate",
       <String, dynamic>{"target_key": targetKey, "payload": payload},
     );
-    return body["token"] as Map<String, dynamic>;
+    return _field<Map<String, dynamic>>(body, "token");
   }
 
   /// The whole documented write path in one call.
@@ -194,8 +214,8 @@ class ForgeApiClient {
       },
     );
     return GovernedWriteResult(
-      correlationId: body["correlation_id"] as String,
-      recordKey: body["record_key"] as String,
+      correlationId: _field<String>(body, "correlation_id"),
+      recordKey: _field<String>(body, "record_key"),
     );
   }
 

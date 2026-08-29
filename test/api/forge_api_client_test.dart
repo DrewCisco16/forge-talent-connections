@@ -136,4 +136,49 @@ void main() {
     // no address, no live claims anywhere.
     expect(forgeApiConfigured, isFalse);
   });
+
+  test("a 3xx response with JSON is a denial, never a success", () async {
+    final ForgeApiClient client = clientWith(
+      MockClient(
+        (http.Request req) async => http.Response(
+          jsonEncode(<String, String>{
+            "correlation_id": "c",
+            "record_key": "r",
+          }),
+          302,
+        ),
+      ),
+    );
+    await expectLater(
+      client.governedWrite(
+        requestedBy: "drew",
+        purpose: "demo",
+        targetKey: "k",
+        payload: <String, dynamic>{},
+      ),
+      throwsA(isA<ForgeDenial>()),
+    );
+  });
+
+  test(
+    "a 200 with missing fields is a controlled denial, not a crash",
+    () async {
+      final ForgeApiClient client = clientWith(
+        MockClient(
+          (http.Request req) async =>
+              http.Response(jsonEncode(<String, int>{"unexpected": 1}), 200),
+        ),
+      );
+      await expectLater(
+        client.evaluate(targetKey: "k", payload: <String, dynamic>{}),
+        throwsA(
+          isA<ForgeDenial>().having(
+            (ForgeDenial d) => d.code,
+            "code",
+            "RESPONSE_NOT_UNDERSTOOD",
+          ),
+        ),
+      );
+    },
+  );
 }
