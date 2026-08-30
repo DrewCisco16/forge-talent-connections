@@ -276,6 +276,40 @@ def _the_queue_can_be_worked() -> tuple[bool, str]:
         + ("unmeasurable" if folded.rho is None else f"{folded.rho:.4f}"))
 
 
+def _the_accuracy_experiment_is_reachable() -> tuple[bool, str]:
+    """SOP 8.4's seeded-truth run: built, wired, and refusing to spend blind.
+
+    A BUILD CHECK, NOT A RESULT. Whether the panel is accurate is a
+    measurement nobody has taken; whether the thing that would take it exists
+    and works is a fact about the build, and it is the fact that was missing.
+    Every gap in this project has been a capability that existed and could not
+    be reached, so reachability is what this tests: the scorer decides the
+    three outcomes correctly and the runner refuses to spend without an
+    explicit confirmation.
+    """
+    try:
+        import accuracy as AC
+        from stage_zero import Question
+        q = Question(id="q", question="which?", answer="alpha")
+        cases = [
+            (["alpha"], AC.RESOLVED_CORRECT),
+            (["beta"], AC.RESOLVED_WRONG),
+            ([], AC.NOT_RESOLVED),
+            (["alpha", "beta"], AC.NOT_RESOLVED),   # a tie is never broken
+        ]
+        wrong = [f"{s}->{AC.judge(s, q)[0]}" for s, want in cases
+                 if AC.judge(s, q)[0] != want]
+        guarded = AC.CONFIRM != "yes"
+    except Exception as exc:                          # noqa: BLE001
+        return False, f"accuracy.py is not usable: {exc}"
+    return not wrong and guarded, (
+        "the seeded-truth run is wired and refuses to spend unconfirmed; "
+        "UNRUN -- it needs the operator's questions"
+        if not wrong and guarded
+        else f"scorer disagreed on {wrong}" if wrong
+        else "it would spend without confirmation")
+
+
 def checks() -> list[Check]:
     rounds = _live_runs()
     eliminated = sum(r.removed for r in rounds)
@@ -290,6 +324,7 @@ def checks() -> list[Check]:
     stop_ok, stop_detail = _stop_rule_reaches_a_live_run()
     holes_ok, holes_detail = _holes_name_their_remedy()
     queue_ok, queue_detail = _the_queue_can_be_worked()
+    acc_ok, acc_detail = _the_accuracy_experiment_is_reachable()
 
     return [
         Check("offline suite", 15,
@@ -337,6 +372,9 @@ def checks() -> list[Check]:
         Check("the judgment queue can be worked", 10,
               queue_detail, queue_ok,
               "SOP 9.1 steps 7-8, by replaying the most recent full run"),
+        Check("the accuracy experiment is built and wired", 10,
+              acc_detail, acc_ok,
+              "SOP 8.4, by scoring the three outcomes it must distinguish"),
     ]
 
 
@@ -388,13 +426,26 @@ def main() -> int:
     the real cost of the number being asked for, and it should be known
     before it is committed to.
 
-    validation_harness.py already does exactly this against SYNTHETIC seats,
-    and its own docstring says what is missing: "that requires wiring
-    BlindedSeatRunner to actual seat callables and re-running against defects
-    seeded in real work."
+    THE EXPERIMENT IS NOW BUILT AND UNRUN, which is a different state from
+    the one this section described for months. accuracy.py puts each question
+    to the whole five-round panel and scores the SURVIVOR against the key,
+    reusing stage_zero's question set so one file measures both the panel and
+    the single model it has to beat. What it still needs is the questions,
+    and those are the operator's -- see stage_zero.py for why they cannot be
+    generated.
 
-  Until that runs, the honest report on any single answer is the one the
-  packet already prints: what was checked, what was refuted, and what nobody
+    It reports THREE outcomes, not two: resolved-correct, resolved-wrong, and
+    NOT RESOLVED. The third is what the only real five-round run produced --
+    twelve answers standing, none chosen -- and it is neither a right answer
+    nor a wrong one. An accuracy figure that folded it into either would
+    misdescribe the instrument.
+
+    validation_harness.py remains SYNTHETIC and remains useful for exactly
+    what it claims: exercising the machinery against known ground truth. It
+    is not this.
+
+  Until accuracy.py runs, the honest report on any single answer is the one
+  the packet already prints: what was checked, what was refuted, and what nobody
   could check.
 """)
     return 0

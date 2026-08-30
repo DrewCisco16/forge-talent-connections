@@ -874,6 +874,15 @@ class RoundResult:
     options_removed: list[str] = field(default_factory=list)
     options_alive: list[str] = field(default_factory=list)
     options_unexamined: list[str] = field(default_factory=list)
+    option_text: dict[str, str] = field(default_factory=dict)
+    """option id -> the answer it stands for.
+
+    options_alive carried IDS ONLY, so what survived was machine-readable as a
+    hash and human-readable only by finding it again in the rendered record.
+    Anything measuring whether the survivor was RIGHT -- which is the one
+    experiment that can produce an accuracy figure -- needs the text, and
+    parsing it back out of prose is the kind of fragile round-trip this
+    codebase has been bitten by twice."""
     options_observed: bool = False
     """Whether option state was actually READ this round.
 
@@ -1269,6 +1278,7 @@ def run_night(
             res.options_alive = [o.id for o in options if o.alive]
             res.options_unexamined = [
                 o.id for o in unexamined(options, rulings)]
+            res.option_text = {o.id: o.text for o in options}
             res.rulings = dict(rulings)
             res.options_observed = True
 
@@ -1455,6 +1465,7 @@ def run_night(
         # recording the state it produced.
         res.options_alive = [o.id for o in options if o.alive]
         res.options_unexamined = [o.id for o in unexamined(options, rulings)]
+        res.option_text = {o.id: o.text for o in options}
         res.rulings = dict(rulings)
         res.options_observed = True
 
@@ -1776,6 +1787,7 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "options_removed": r.options_removed,
          "options_alive": r.options_alive,
          "options_unexamined": r.options_unexamined,
+         "option_text": r.option_text,
          # THE RULINGS THEMSELVES, not only the counts. status.md carried
          # how many commitments were ruled and never what any of them said,
          # so a run could not be audited after the fact: an operator reading
