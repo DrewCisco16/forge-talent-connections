@@ -18,9 +18,10 @@ and the generator refuses to write one that does — verified by planting a
 seats, or cut to three.
 
 A defect here **does not crash**. It produces a plausible number that a
-spending decision then rests on. That is the whole review problem. Two
-defects of exactly that shape have already been found in this module, both
-after it was "working", and both are described below.
+spending decision then rests on. That is the whole review problem. **Nine**
+defects of exactly that shape have already been found in this module, every
+one of them after it was "working, tested and green", and all nine are
+described below with how they were reproduced.
 
 ---
 
@@ -28,8 +29,8 @@ after it was "working", and both are described below.
 
 | File | Role |
 |---|---|
-| `calibrate.py` | The measurement. ~219 statements |
-| `test_calibrate.py` | 38 tests |
+| `calibrate.py` | The measurement. ~290 statements |
+| `test_calibrate.py` | 61 tests |
 | `.github/workflows/calibrate.yml` | Manual-only, phone-triggerable run |
 | `CALIBRATING.md` | Operator instructions |
 
@@ -40,7 +41,11 @@ after it was "working", and both are described below.
 2. All statements go into **one artifact**, shown identically to all five
    seats. One API call per seat, five total.
 3. Each seat emits one claim line per statement it judges **correct**. Silence
-   means "incorrect" and is recorded as its decision.
+   means "incorrect" and is recorded as its decision — but a seat that emits
+   NOTHING at all, or that raised, is excluded rather than scored, because
+   that is an absence and not a judgement.
+   `calibration_extractor` snaps each line's wording onto the canonical item
+   so spelling differences cannot split one item into several.
 4. `ArithmeticGate` recomputes each confirmed expression. **That is the answer
    key** — no human and no model decides truth.
 5. `correctness_matrix.build_correctness_matrix` scores
@@ -68,7 +73,13 @@ force this and only this shape:
 
 ---
 
-## Two defects already found here — the review should assume there are more
+## Nine defects already found here — the review should assume there are more
+
+The first two were found before the module shipped. The other seven came out
+of an **Inversion Analysis** run against it afterwards — assume it is wrong,
+enumerate how — and every one of them was verified by running it, not by
+reading it. That the pass found seven more after the module was "done, tested
+and green" is itself the most useful thing to know about it.
 
 ### Defect 1: the silent sample collapse
 
@@ -118,15 +129,83 @@ that no comparison happens on the unmeasured path; and the probe was made
 harder — two thirds three-digit **multiplication**, one third six-digit
 addition — so real seats have something to actually disagree on.
 
+### Defects 3-9: found by the Inversion Analysis pass
+
+Each was reproduced before it was fixed.
+
+**3. One flaky seat voided the entire run.** `correctness_matrix._errored_passes`
+drops every claim first adjudicated in a pass where ANY seat raised. That is
+right for a five-pass run — an errored seat's silence in one pass is
+uninterpretable — and catastrophic for a one-pass calibration, because no
+other pass carries the items. Measured: one errored seat out of five gave a
+**zero-item matrix**, `measurable=False`, and a wasted paid run. Worse, the
+report *claimed* "rho is computed over the seats that answered", which was
+simply false — nothing was computed. Excluded seats are now dropped from the
+panel and the run measures the rest; the report states how many seats the
+number actually describes.
+
+**4. An empty reply was scored as "every statement is false".** A refusal, a
+safety filter, or an empty body behind a 200 all arrive as `""`. That produced
+a decisive all-false row rather than an absence, putting a fabricated opinion
+into the correlation. Zero usable claims is now an exclusion.
+
+**5. Formatting variance manufactured disagreement.** `content_claim_id` hashes
+the warrant verbatim, so `463*785 = 363455` and `463 * 785 = 363455` produce
+**different claim ids** — verified. The two spellings became two one-seat
+items, each seat scored as having MISSED the other's, so a purely typographic
+difference made the panel look *more independent than it is*. The flattering
+direction.
+
+**6. A bullet or bold marker made the line vanish.** Measured against
+`line_claim_extractor`: `- CLAIM | ...` and `**CLAIM** | ...` both yield **zero
+claims**, silently, and the seat then looks like it judged everything false.
+Code fences, blockquotes and preambles were already tolerated; these two were
+not.
+
+**7. A thousands separator escalated the item.** `363,455` is the same number,
+but the gate cannot parse it and rules INAPPLICABLE — which drops the item from
+the matrix without a word. Same silent-shrinkage class as defect 1.
+
+Fixes 5-7 are one mechanism: `calibration_extractor` strips leading decoration
+and snaps a seat's wording onto the canonical item expression, so every
+plausible spelling collides on one id. It normalises **spelling only** — a
+statement outside the item set is never snapped, so the extractor cannot
+repair a seat's arithmetic.
+
+**8. Saturation was indistinguishable from collapse.** Both give `rho = 1.0`
+and they mean opposite things: seats sharing a blind spot score *well* and fail
+together on a few items; seats drowning in too hard a probe fail nearly
+everything, which also correlates perfectly but says nothing about
+independence. Verified: two synthetic panels, both `rho = 1.000`, mean accuracy
+**91%** vs **17%**. The first now reads CUT SEATS, the second refuses a verdict.
+
+**9. "Cut seats" was unactionable.** The operator was told to drop two of five
+and given nothing to choose by. Per-seat accuracy and confirmation counts are
+now reported, read off the same X the correlation uses. The confirmation count
+also exposes truncation — a seat cut off mid-reply and a seat that judged the
+rest false are identical from the text alone.
+
+Plus one hardening with no observed failure: item operand pairs are now
+guaranteed unique. Two items sharing a left-hand side would collapse into one
+claim id, scoring fewer items than reported, and if one were true and the other
+false that id would carry two contradictory answer-key entries. Measured: no
+collision below n=1000, which is exactly why it is enforced rather than
+assumed.
+
 ---
 
 ## What I verified, with numbers
 
-- **1,167 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
+- **1,190 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
   files, `bandit` exit 0, `pip-audit` clean.
-- **Coverage 81.92%** against the 80 floor; `calibrate.py` at **99%** (the one
+- **Coverage 82.11%** against the 80 floor; `calibrate.py` at **99%** (the one
   uncovered line is `if __name__ == "__main__"`).
-- **Eleven mutations planted, all eleven caught.** Reverting the claim format;
+- **Twenty mutations planted, all twenty caught** — and two of them SURVIVED
+  on the first attempt, which is the useful part. Removing the snapping
+  extractor from `run_calibration` changed no test, because every format test
+  called the extractor directly and none asserted the wiring; and the
+  uniqueness guard was untestable at n=24 because collisions do not occur below
+  n=1000. Both tests were rewritten until the mutation failed them. Reverting the claim format;
   declaring `OPEN_ENDED` instead of `SHARED_DETECTION`; swallowing seat
   errors; never flagging unmatched claims; loosening the keep-five threshold
   to 0.9; exiting 0 on an unmeasurable run; making false items wrong by 200;
@@ -146,69 +225,64 @@ addition — so real seats have something to actually disagree on.
 
 ## What I am NOT confident about — attack these first
 
-These are ordered by how much damage a defect would do. **I have not run this
+Ordered by how much damage a defect would do. **I have still not run this
 against a single real model**, so everything below is reasoning, not evidence.
+Three items from the first version of this brief were closed by the Inversion
+pass and are gone; what remains is what remains.
 
 ### 1. The effective sample is data-dependent and may be far smaller than `n`
 
 Only claims **at least one seat asserts** become matrix items. A false
 statement nobody falls for produces no claim, no item, and contributes
-nothing.
-
-So if the seats are good, the matrix collapses toward "the true items only" —
-and measuring only *misses* is precisely the flaw the false items were added
-to fix. With `--n-items 24` I observed 17 items (mixed demo seats) and **12**
-(perfect seats).
+nothing. If the seats are good, the matrix collapses toward "the true items
+only" — and measuring only *misses* is precisely the flaw the false items were
+added to fix. Observed at `--n-items 24`: **17** items (mixed seats), **12**
+(perfect seats), **16** (one seat excluded).
 
 **Question for Codex:** is `rho` over ~12 items across 5 seats meaningful at
-all? There is **no confidence interval anywhere in this module.** Should
-there be, and what would it take to compute one honestly here?
+all? There is **no confidence interval anywhere in this module**. Should there
+be, and what would it take to compute one honestly here?
 
-### 2. Probe difficulty is guesswork
+### 2. Probe difficulty is still guesswork
 
-I changed the probe from three-digit addition to mostly three-digit
-multiplication because I reasoned models slip there. **I have not measured
-that.** If it is still too easy, every run returns "NO VERDICT". If it is far
-too hard, all five seats fail everything and `rho` goes to 1.0 — reading as
-*collapse* when it is really *saturation*.
+Three-digit multiplication was chosen because I reasoned models slip there.
+**Unmeasured.** Too easy and every run returns NO VERDICT (NaN); too hard and
+`rho` goes to 1.0 from saturation. The saturation guard now catches the second
+case — but its threshold is the next item.
 
-**I do not currently distinguish saturation from collapse.** That looks like
-a real gap. A panel that gets everything wrong together and a panel that
-shares a blind spot produce the same `rho = 1.0`.
+### 3. I invented the saturation threshold
 
-### 3. `_norm` duplicates the engine's normalisation
-
-`calibrate._norm` does casefold + whitespace collapse to decide whether a
-seat's confirmation matches a known item. `content_claim_id` normalises
-*similarly but not identically* — it also strips surrounding punctuation.
-
-If they drift, `unmatched_claims` reports wrongly: either false alarms, or —
-worse — silence about a seat whose claims genuinely did not collide.
-**This is duplicated logic across a module boundary and I am not comfortable
-with it.** Is there a public normaliser that should be reused instead?
+`mean_accuracy < 0.6 and rho > 0.5` decides between "CUT SEATS" and "PROBE
+SATURATED". **0.6 is a number I chose**, not one I derived. It is doing real
+work: it is the only thing standing between a saturated probe and a
+recommendation to retire paid seats. Both this and the `0.2` / `0.5` rho
+thresholds drive spending and are conventions, not analysis.
 
 ### 4. Single sample per seat
 
 One call per seat, one shot. Model outputs vary between calls. `rho` from a
-single sample per seat has unquantified variance, and re-running with the same
-seed will *not* reproduce it (the items are identical; the answers may not
-be). Nothing in the module says this.
+single sample has unquantified variance, and re-running with the same seed
+gives identical *questions* but not identical *answers*. Nothing in the module
+says this.
 
-### 5. Prompt compliance is unmeasured
+### 5. Snapping could in principle over-reach
 
-The instruction says "repeat the statement in both fields, character for
-character." Real models may add commentary, reword, or use markdown. I detect
-non-matching claims and warn — and that warning biases `rho` **downward**
-(more independent-looking, the flattering direction). But if compliance is
-poor the whole run is wasted money.
+`calibration_extractor` rewrites a seat's wording to the canonical item when
+the canonical key matches. Keys drop whitespace, commas and underscores, then
+casefold. I believe no two distinct statements in a set can share a key —
+operand pairs are unique and the full expression including both operands must
+match — but **this is the one place the module edits what a seat said**, and it
+deserves a hostile read. Can you construct two item expressions, or a seat
+utterance and an item, that collide on `_canonical_key` while asserting
+different propositions?
 
-**Is `line_claim_extractor` tolerant enough** of a model that wraps output in
-a code fence or adds a preamble?
+### 6. Truncation is reported, not detected
 
-### 6. Thresholds drive spending and are conventions, not derived
-
-`0.2` and `0.5` come from a discussion, not from an analysis. They are
-labelled as conventions in the code, but they still produce "CUT SEATS".
+A seat cut off mid-reply and a seat that judged the rest false are identical
+from the content. The confirmation count exposes the difference to a human
+reading the table; nothing detects it automatically. `HttpSeat` raises on
+`stop_reason == max_tokens` **only when the text is empty** — a partial reply
+passes through silently.
 
 ### 7. Known interaction: `temperature` is rejected by current Claude models
 
@@ -216,9 +290,9 @@ labelled as conventions in the code, but they still produce "CUT SEATS".
 five seat blocks. Current Anthropic models (Fable 5, Opus 5, Sonnet 5, and the
 4.6/4.7/4.8 family) **removed** `temperature`, `top_p` and `top_k` — sending
 them returns HTTP 400. Calibration inherits this path. It fails loudly
-(`HTTP 400 from <vendor>`), not silently, but it fails.
-
-The settings checker does not catch it — it only looks for `FILL-IN` markers.
+(`HTTP 400 from <vendor>`), not silently, and that seat is now excluded rather
+than scored — but the run then measures four seats, not five. The settings
+checker does not catch it; it only looks for `FILL-IN`.
 
 ### 8. The workflow uses `eval`
 
@@ -232,9 +306,8 @@ written with `printf` from the environment rather than passed as arguments
 
 `HttpSeat.est_input_tokens` defaults to 3000; the real calibration prompt is
 roughly 700 tokens. The ledger therefore over-estimates, which is the safe
-direction for a ceiling — but confirm the ceiling cannot be *under*-estimated
-on this path. Only `--max-cost` (per-run) is exposed; per-stage and per-day
-are not.
+direction for a ceiling — but confirm it cannot *under*-estimate on this path.
+Only `--max-cost` (per-run) is exposed; per-stage and per-day are not.
 
 ---
 
@@ -244,12 +317,16 @@ are not.
    one route and it is now pinned. Are there others — a seat error dropping a
    whole pass, a duplicate-claim path, a gate returning `BLOCKED`?
 2. **Find a way for two seats confirming the same statement to produce
-   different claim ids.** Unicode, whitespace, a trailing period, a
-   full-width digit.
+   different claim ids**, now that `calibration_extractor` snaps wording.
+   Unicode digits, a full-width asterisk, a minus sign that is not
+   HYPHEN-MINUS, an expression split across two lines, `x` for `*`.
+   Then the inverse: make the snapper collapse two DIFFERENT propositions
+   onto one item.
 3. **Find a way to make the panel look more independent than it is.** That is
    the direction that argues for keeping five paid seats.
-4. **Distinguish saturation from collapse** — both give `rho = 1.0`. Propose a
-   check.
+4. **Break the saturation guard.** It now distinguishes the two, but on a
+   threshold I invented (`mean_accuracy < 0.6`). Construct a panel that is
+   genuinely collapsed yet scores below it, or genuinely saturated yet above.
 5. **Attack the answer key.** Can `Item.is_true` ever disagree with what
    `ArithmeticGate` computes? Consider integer overflow bounds, `Fraction`
    coercion, unit-splitting (`_split_unit`), and expressions the AST evaluator
@@ -257,7 +334,13 @@ are not.
 6. **Confirm no operator material reaches a vendor on this path.** The quiz is
    generated arithmetic and should carry no artifact text at all.
 7. **Name any test that would still pass if the behaviour it names were
-   deleted.** Name the test and name the deletion.
+   deleted.** Name the test and name the deletion. Two were found that way
+   here — one that tested a component while the wiring could be removed
+   freely, and one whose property could not fail at the size it ran at — so
+   assume more remain.
+8. **Attack seat exclusion.** A seat is now dropped when it raises or returns
+   nothing usable. Find an input where a seat that DID answer gets excluded,
+   or where a seat that answered nothing usable still reaches the matrix.
 
 A reply saying "this looks solid" is worth nothing. Assume there is a defect
 and go find it.

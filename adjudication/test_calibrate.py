@@ -204,13 +204,17 @@ class TestFailuresAreReportedRatherThanAbsorbed:
         assert "seat_3" in res.seat_errors
         assert "connection reset" in res.seat_errors["seat_3"]
 
-    def test_the_report_says_a_failed_seat_changes_what_was_measured(self):
+    def test_the_report_says_how_many_seats_the_number_describes(self):
+        """The old text claimed rho was "computed over the seats that
+        answered". It was not: one errored seat voided the whole run and
+        nothing was computed at all. The report must state the size of the
+        panel actually measured."""
         items = CB.build_items(12, seed=4)
         seats = dict(CB._demo_seats(items))
         seats["seat_2"] = lambda _p: (_ for _ in ()).throw(RuntimeError("429"))
         text = CB.render_calibration(CB.run_calibration(seats, items))
-        assert "SEAT ERRORS" in text
-        assert "not of the five you intended" in text
+        assert "SEATS EXCLUDED FROM THE MEASUREMENT (1 of 5)" in text
+        assert "describes 4 seat(s), NOT the 5 you are paying for" in text
 
     def test_a_paraphrasing_seat_is_flagged_not_scored_as_silence(self):
         """A seat that reworded the statement made a claim the matrix cannot
@@ -223,6 +227,47 @@ class TestFailuresAreReportedRatherThanAbsorbed:
         res = CB.run_calibration(seats, items)
         assert "seat_4" in res.unmatched_claims
         assert "UNDERSTATES" in CB.render_calibration(res)
+
+    def test_one_flaky_seat_does_not_void_the_whole_run(self):
+        """THE EXPENSIVE ONE. correctness_matrix drops every claim first
+        adjudicated in a pass where ANY seat errored -- correct for a
+        five-pass run, catastrophic for a one-pass calibration, because no
+        other pass carries the items. One flaky seat produced a zero-item
+        matrix and a wasted paid run."""
+        items = CB.build_items(24, seed=11)
+        seats = dict(CB._demo_seats(items))
+        seats["seat_3"] = lambda _p: (_ for _ in ()).throw(RuntimeError("reset"))
+        res = CB.run_calibration(seats, items)
+        assert res.report["measurable"] is True
+        assert res.report["coverage"].n_items >= 12
+        assert res.rho is not None
+        assert len(res.scored_seats) == 4
+
+    def test_an_empty_reply_is_an_absence_not_an_all_false_verdict(self):
+        """A refusal, a safety filter, or an empty body behind a 200 all
+        arrive as "". Scoring that as "this seat judged every statement false"
+        puts a fabricated decisive row into the correlation."""
+        items = CB.build_items(24, seed=11)
+        seats = dict(CB._demo_seats(items))
+        seats["seat_4"] = lambda _p: ""
+        res = CB.run_calibration(seats, items)
+        assert "seat_4" in res.excluded_seats
+        assert "seat_4" not in res.scored_seats
+        assert len(res.scored_seats) == 4
+        assert res.rho is not None
+
+    def test_the_confirmation_count_is_reported_for_every_seat(self):
+        """A truncated reply and a decisive one are identical from the text.
+        The count is the only thing that exposes the difference."""
+        items = CB.build_items(24, seed=11)
+        seats = dict(CB._demo_seats(items))
+        truncated = items[:2]
+        seats["seat_5"] = lambda _p: "\n".join(
+            f"CLAIM | arithmetic | {i.expression} | {i.expression}"
+            for i in truncated if i.is_true)
+        res = CB.run_calibration(seats, items)
+        assert res.confirmations["seat_5"] < res.confirmations["seat_1"]
+        assert "cut off mid-reply" in CB.render_calibration(res)
 
     def test_a_run_that_measured_nothing_is_not_reported_as_a_number(self):
         items = CB.build_items(12, seed=4)
@@ -387,3 +432,176 @@ class TestTheCommandFailsClosed:
         assert payload["seed"] == 4321
         assert payload["n_items"] == 12
         assert payload["measurable"] is True
+
+
+# ---------------------------------------------------------------------------
+# real models do not reproduce a format character for character
+# ---------------------------------------------------------------------------
+
+class TestSeatWordingIsSnappedToTheCanonicalItem:
+    """Measured against line_claim_extractor before this existed: a leading
+    bullet or bold marker made the line vanish entirely (0 claims, scored as
+    the seat judging every statement false); dropping the spaces around '*'
+    produced a DIFFERENT claim id, so the two spellings became two one-seat
+    items and a purely typographical difference manufactured disagreement in
+    both directions; and a thousands separator made the gate rule
+    INAPPLICABLE, dropping the item from the matrix without a word."""
+
+    def _item(self):
+        return CB.build_items(24, seed=11)[1]
+
+    def _id_for(self, raw):
+        items = CB.build_items(24, seed=11)
+        claims = CB.calibration_extractor(items)(raw, "seat_1", "calib")
+        return claims[0].id if claims else None
+
+    @pytest.mark.parametrize("decorate", [
+        lambda e: f"CLAIM | arithmetic | {e} | {e}",
+        lambda e: f"- CLAIM | arithmetic | {e} | {e}",
+        lambda e: f"* CLAIM | arithmetic | {e} | {e}",
+        lambda e: f"**CLAIM** | arithmetic | {e} | {e}",
+        lambda e: f"> CLAIM | arithmetic | {e} | {e}",
+        lambda e: f"```\nCLAIM | arithmetic | {e} | {e}\n```",
+        lambda e: f"Here are my answers:\n\nCLAIM | arithmetic | {e} | {e}",
+        lambda e: "CLAIM | arithmetic | {0} | {0}".format(e.replace(" ", "")),
+        lambda e: f"CLAIM|arithmetic|{e}|{e}",
+    ])
+    def test_every_plausible_wording_yields_the_same_claim_id(self, decorate):
+        e = self._item().expression
+        canonical = self._id_for(f"CLAIM | arithmetic | {e} | {e}")
+        assert canonical is not None
+        assert self._id_for(decorate(e)) == canonical
+
+    def test_a_thousands_separator_still_reaches_the_gate(self):
+        """'363,455' is the same number, but the gate cannot parse it and
+        rules INAPPLICABLE -- which escalates the item out of the matrix."""
+        it = self._item()
+        lhs, _, rhs = it.expression.rpartition("= ")
+        with_comma = f"{lhs}= {int(rhs):,}"
+        assert "," in with_comma
+        assert self._id_for(
+            f"CLAIM | arithmetic | {with_comma} | {with_comma}"
+        ) == self._id_for(f"CLAIM | arithmetic | {it.expression} | {it.expression}")
+
+    def test_a_statement_outside_the_set_is_never_snapped(self):
+        """Snapping must normalise spelling, never repair arithmetic."""
+        items = CB.build_items(24, seed=11)
+        claims = CB.calibration_extractor(items)(
+            "CLAIM | arithmetic | 2 + 2 = 5 | 2 + 2 = 5", "seat_1", "calib")
+        assert claims[0].warrant == "2 + 2 = 5"
+
+    def test_an_asterisk_inside_the_expression_survives_undecoration(self):
+        """Leading decoration is stripped; the multiplication sign is not."""
+        e = self._item().expression
+        assert "*" in e
+        out = CB._undecorate(f"- CLAIM | arithmetic | {e} | {e}")
+        assert out.startswith("CLAIM |")
+        assert e in out
+
+
+class TestSaturationIsNotReportedAsCollapse:
+    """Both produce rho = 1.0 and they mean opposite things. Seats sharing a
+    blind spot score WELL and fail together on a few items -- cutting seats is
+    right. Seats drowning in a probe too hard for them fail nearly everything,
+    which also correlates perfectly but says nothing about independence."""
+
+    def _panel(self, wrong_ids):
+        items = CB.build_items(24, seed=11)
+        return items, {f"seat_{k + 1}": CB._demo_seat(items, wrong_ids)
+                       for k in range(5)}
+
+    def test_a_few_shared_errors_reads_as_collapse(self):
+        items = CB.build_items(24, seed=11)
+        ids = {i.item_id for i in items[:3]}
+        _, seats = self._panel(ids)
+        res = CB.run_calibration(seats, items)
+        assert res.rho == pytest.approx(1.0)
+        assert res.mean_accuracy > 0.6
+        assert "CUT SEATS" in CB.verdict_line(
+            res.rho, len(res.scored_seats), res.mean_accuracy)
+
+    def test_failing_nearly_everything_refuses_a_verdict(self):
+        items = CB.build_items(24, seed=11)
+        ids = {i.item_id for i in items[:20]}
+        _, seats = self._panel(ids)
+        res = CB.run_calibration(seats, items)
+        line = CB.verdict_line(res.rho, len(res.scored_seats), res.mean_accuracy)
+        assert res.rho == pytest.approx(1.0)
+        assert res.mean_accuracy < 0.6
+        assert "SATURATED" in line
+        assert "CUT SEATS" not in line
+
+    def test_accuracy_is_read_off_the_same_matrix_as_rho(self):
+        """If the per-seat figures and rho came from different matrices they
+        could describe different panels and nobody would notice."""
+        items = CB.build_items(24, seed=11)
+        res = CB.run_calibration(CB._demo_seats(items), items)
+        assert set(res.seat_accuracy) == set(res.report["coverage"].seats)
+
+    def test_the_report_names_which_seats_are_weakest(self):
+        """'Cut seats' is unactionable without saying which."""
+        items = CB.build_items(24, seed=11)
+        text = CB.render_calibration(
+            CB.run_calibration(CB._demo_seats(items), items))
+        assert "PER SEAT" in text
+        assert "accuracy" in text
+
+
+class TestTheItemSetCannotCollideWithItself:
+
+    def test_no_two_items_share_a_left_hand_side(self):
+        """Two items with the same operands collapse into ONE claim id, so the
+        run scores fewer items than it asked about while still reporting n --
+        and if one were true and the other false, that single id would carry
+        two contradictory answer-key entries."""
+        for seed in (1, 7, 11, 4321):
+            items = CB.build_items(60, seed=seed)
+            lhs = [i.expression.rpartition("=")[0].strip() for i in items]
+            assert len(lhs) == len(set(lhs)), seed
+
+    def test_no_two_items_share_a_canonical_key(self):
+        for seed in (1, 7, 11, 4321):
+            keys = [CB._canonical_key(i.expression)
+                    for i in CB.build_items(60, seed=seed)]
+            assert len(keys) == len(set(keys)), seed
+
+    def test_uniqueness_holds_at_a_scale_where_chance_would_break_it(self):
+        """AT n=24 THIS PROVES NOTHING. Removing the uniqueness guard changes
+        no outcome for small sets -- measured: zero collisions at n up to 600,
+        so a test at that size passes with the guard deleted and is worth
+        nothing. Collisions first appear at n=1000, which is where the guard
+        has to be tested if the test is to have any force at all."""
+        for seed in (1, 7, 11, 4321):
+            lhs = [CB._canonical_key(i.expression.rpartition("=")[0])
+                   for i in CB.build_items(1000, seed=seed)]
+            assert len(lhs) == len(set(lhs)), seed
+
+    def test_run_calibration_actually_uses_the_snapping_extractor(self):
+        """WIRING, NOT COMPONENT. Every other test in this class calls
+        calibration_extractor directly, so all of them still passed when the
+        extractor was removed from run_calibration and the tolerance silently
+        vanished from the real path. Caught by mutation, pinned here.
+
+        Two seats confirm the same statements in different wordings. Snapped,
+        that is one item with two seats; unsnapped it is two one-seat items,
+        and the panel looks more independent than it is."""
+        items = CB.build_items(24, seed=11)
+        true_items = [i for i in items if i.is_true]
+
+        def plain(_p):
+            return "\n".join(
+                f"CLAIM | arithmetic | {i.expression} | {i.expression}"
+                for i in true_items)
+
+        def decorated(_p):
+            return "\n".join(
+                "- **CLAIM** | arithmetic | {0} | {0}".format(
+                    i.expression.replace(" ", ""))
+                for i in true_items)
+
+        res = CB.run_calibration({"seat_a": plain, "seat_b": decorated}, items)
+        cov = res.report["coverage"]
+        assert cov.n_items == len(true_items), (
+            "wordings did not collide: the extractor is not wired in")
+        assert not res.unmatched_claims
+        assert res.seat_accuracy["seat_a"] == res.seat_accuracy["seat_b"] == 1.0
