@@ -76,6 +76,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeGuard
 
+import numpy as np
+
 import adjudication_orchestrator as AO
 import seat_independence as si
 from adjudication_orchestrator import (
@@ -95,6 +97,8 @@ from correctness_matrix import (
 
 DEFAULT_N_ITEMS = 60
 DEFAULT_SEED = 20260829
+DEFAULT_DRAWS = 2000
+CREDIBLE_MASS = 0.90
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +326,18 @@ class CalibrationResult:
     single verdict is issued. A tie broken by anything other than evidence is
     the vote this design exists to avoid.
     """
+    rho_ci: tuple[float, float] | None
+    """90% interval for rho, by resampling items. See rho_interval.
+
+    THE VERDICT IS DECIDED BY THIS, NOT BY THE POINT ESTIMATE. rho=0.19 and
+    rho=0.21 are the same measurement when the interval spans 0.1 to 0.3, and
+    letting a threshold crossing between them flip a spending recommendation
+    reads a precision the run does not have.
+    """
+    seat_accuracy_ci: dict[str, tuple[float, float]]
+    """seat_id -> 90% Beta posterior interval on its accuracy. Two seats a few
+    points apart over 60 items are not distinguishable, and "cut the lowest"
+    needs to know that."""
     n_unanimous_items: int
     """Items every scored seat answered identically -- correlated by
     construction, contributing no information about independence."""
@@ -453,6 +469,8 @@ def calibration_extractor(
 def run_calibration(
     seat_fns: Mapping[str, Callable[[str], str]],
     items: Sequence[Item] | None = None,
+    draws: int = DEFAULT_DRAWS,
+    seed: int = DEFAULT_SEED,
 ) -> CalibrationResult:
     """
     One pass, five seats, a fixed answer key, and the resulting rho.
@@ -547,10 +565,166 @@ def run_calibration(
         unmatched_claims=unmatched,
         confirmations=confirmations,
         seat_accuracy=_seat_accuracy(matrix),
+        rho_ci=rho_interval(matrix, draws=draws, seed=seed),
+        seat_accuracy_ci=seat_accuracy_interval(matrix),
         band_accuracy=_band_accuracy(matrix, chosen),
         rho_discriminating=_discriminating_rho(matrix),
         n_unanimous_items=_n_unanimous(matrix),
     )
+
+
+def rho_interval(
+    matrix: CorrectnessMatrix,
+    draws: int = DEFAULT_DRAWS,
+    seed: int = DEFAULT_SEED,
+) -> tuple[float, float] | None:
+    """A 90% interval for rho, by resampling ITEMS with replacement.
+
+    WHY THIS EXISTS. Every earlier version reported rho as a bare number and
+    let a spending decision rest on which side of 0.2 or 0.5 it fell. With 60
+    items and 5 seats that is a point estimate carrying unstated sampling
+    error, and seat_independence's own reading line already said as much --
+    "a small number of items makes rho unstable regardless of its value" --
+    while nothing in the pipeline did anything about it. This is the interval
+    that line was asking for.
+
+    WHAT IT IS AND IS NOT. This is Monte Carlo resampling -- a bootstrap over
+    the item axis -- NOT Markov-chain Monte Carlo. Nothing here needs a chain:
+    draws are independent and the statistic is cheap, so a sampler with
+    burn-in and convergence diagnostics would add machinery and no accuracy.
+    Calling it MCMC would overstate what was done, which is the failure this
+    codebase exists to refuse.
+
+    Items are the resampling unit because items are what the run has many of
+    and what the correlation is computed across. Seats are not resampled:
+    there are five, they are the population rather than a sample of one, and
+    resampling them would answer a question nobody asked.
+
+    Seeded, so a replay reproduces the interval exactly (global rule 4).
+    Returns None when fewer than three draws yield a defined rho -- an
+    interval computed from almost nothing is worse than no interval.
+    """
+    if matrix.X.size == 0 or matrix.X.shape[0] < 2 or len(matrix.seats) < 2:
+        return None
+    rng = np.random.default_rng(seed)
+    n_rows = matrix.X.shape[0]
+    got: list[float] = []
+    for _ in range(max(1, draws)):
+        idx = rng.integers(0, n_rows, n_rows)
+        value = si.mean_error_correlation(matrix.X[idx])
+        if not math.isnan(value):
+            got.append(float(value))
+    if len(got) < 3:
+        return None
+    tail = (1.0 - CREDIBLE_MASS) / 2.0 * 100.0
+    arr = np.asarray(got)
+    return (float(np.percentile(arr, tail)),
+            float(np.percentile(arr, 100.0 - tail)))
+
+
+def seat_accuracy_interval(
+    matrix: CorrectnessMatrix,
+) -> dict[str, tuple[float, float]]:
+    """Per-seat accuracy as a Beta posterior interval, not a bare percentage.
+
+    Conjugate and exact: a Jeffreys prior Beta(0.5, 0.5) updated by the seat's
+    correct and incorrect counts. No sampling is involved, because for a
+    binomial likelihood the posterior has a closed form and drawing from it
+    would only add noise to a number already known exactly.
+
+    The point of it is the decision it feeds. "Cut the lowest-accuracy seats"
+    ranks five numbers that each carry sampling error, and two seats a few
+    points apart over 60 items are not distinguishable. The interval is what
+    says whether a gap between two seats is real.
+    """
+    if matrix.X.size == 0 or not matrix.seats:
+        return {}
+    out: dict[str, tuple[float, float]] = {}
+    n_rows = matrix.X.shape[0]
+    for i, seat in enumerate(matrix.seats):
+        correct = int(matrix.X[:, i].sum())
+        alpha, beta_ = 0.5 + correct, 0.5 + (n_rows - correct)
+        tail = (1.0 - CREDIBLE_MASS) / 2.0
+        out[seat] = (float(_beta_quantile(alpha, beta_, tail)),
+                     float(_beta_quantile(alpha, beta_, 1.0 - tail)))
+    return out
+
+
+def _beta_quantile(alpha: float, beta_: float, q: float) -> float:
+    """Beta inverse CDF by bisection on the regularised incomplete beta.
+
+    Hand-rolled rather than pulled from scipy: scipy is not a dependency of
+    this project and adding one for a single quantile would be a poor trade.
+    Bisection on a monotone CDF over [0, 1] converges to well past the
+    precision anything downstream displays.
+    """
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if _beta_cdf(mid, alpha, beta_) < q:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def _beta_cdf(x: float, alpha: float, beta_: float) -> float:
+    """Regularised incomplete beta via its continued fraction."""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    log_front = (alpha * math.log(x) + beta_ * math.log1p(-x)
+                 + math.lgamma(alpha + beta_)
+                 - math.lgamma(alpha) - math.lgamma(beta_))
+    front = math.exp(log_front)
+    if x < (alpha + 1.0) / (alpha + beta_ + 2.0):
+        return front * _beta_cf(x, alpha, beta_) / alpha
+    return 1.0 - front * _beta_cf(1.0 - x, beta_, alpha) / beta_
+
+
+def _beta_cf(x: float, alpha: float, beta_: float) -> float:
+    """Continued fraction for the incomplete beta, by modified Lentz.
+
+    This is the Numerical Recipes `betacf` recurrence, kept faithful to it
+    rather than rewritten as a generic Lentz loop. The generic form was tried
+    first and was WRONG: it returned f - 1, dropping the leading term this
+    particular fraction does not carry, and Beta(1, 1) -- which is exactly
+    Uniform(0, 1) -- returned a 5th percentile of 0.0528 instead of 0.0500.
+    Caught by checking against closed forms rather than by inspection.
+    """
+    tiny = 1e-300
+    qab, qap, qam = alpha + beta_, alpha + 1.0, alpha - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < tiny:
+        d = tiny
+    d = 1.0 / d
+    h = d
+    for m in range(1, 300):
+        m2 = 2 * m
+        aa = m * (beta_ - m) * x / ((qam + m2) * (alpha + m2))
+        d = 1.0 + aa * d
+        if abs(d) < tiny:
+            d = tiny
+        c = 1.0 + aa / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        h *= d * c
+        aa = -(alpha + m) * (qab + m) * x / ((alpha + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        if abs(d) < tiny:
+            d = tiny
+        c = 1.0 + aa / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-14:
+            break
+    return h
 
 
 def _unanimous_mask(matrix: CorrectnessMatrix) -> Any:
@@ -662,6 +836,39 @@ def rho_undefined(rho: float | None) -> bool:
     return not rho_measured(rho)
 
 
+def _items_to_resolve(rho: float, ci: tuple[float, float],
+                      edge: float, n_items: int) -> int | None:
+    """Roughly how many items would pull the interval clear of a threshold.
+
+    A bootstrap interval narrows about as 1/sqrt(n), so to shrink the current
+    half-width to the distance between the estimate and the threshold needs
+    n * (half_width / distance)^2 items. Stated as an estimate because that
+    scaling is asymptotic and the true rate depends on the panel; it is the
+    difference between "re-run with more" and "re-run with roughly this
+    many", which is the difference between advice and a shrug.
+    """
+    if n_items <= 0:
+        return None
+    half = (ci[1] - ci[0]) / 2.0
+    distance = abs(rho - edge)
+    if half <= 0 or distance <= 1e-9:
+        return None
+    needed = math.ceil(n_items * (half / distance) ** 2)
+    period = 2 * len(BANDS)
+    needed = ((needed + period - 1) // period) * period
+    # A CAP, BECAUSE AN IMPRACTICAL NUMBER IS NOT ADVICE.
+    #
+    # When the estimate sits almost exactly on the threshold the distance
+    # goes to zero and this explodes -- 12,618 items for rho=0.190 against a
+    # 0.2 edge. That figure is arithmetically right and useless: it reads as
+    # a plan and is not one, and the honest reading is that the true value
+    # may BE the threshold, which no sample size resolves. Ten times the
+    # default is the largest that still rides in one call per seat.
+    if needed > DEFAULT_N_ITEMS * 10:
+        return None
+    return needed if needed > n_items else None
+
+
 def _decision_band(rho: float) -> str:
     """Which recommendation a rho maps to. The thresholds live here once, so
     the conflict check and the verdict cannot drift apart."""
@@ -670,75 +877,134 @@ def _decision_band(rho: float) -> str:
     return "marginal" if rho <= 0.5 else "cut"
 
 
-def verdict_line(rho: float | None, n_seats: int,
-                 mean_accuracy: float | None = None,
-                 rho_discriminating: float | None = None) -> str:
-    """
-    What the operator should DO about this number.
+@dataclass(frozen=True)
+class RhoReading:
+    """Everything the verdict depends on, in one value.
 
-    The thresholds are the ones already stated in the PR and SOP discussion --
-    five seats are justified only at rho <= ~0.2 -- and they are named as
-    conventions, not derived. An operator who wants a different cutoff should
-    set one; this refuses to imply a precision it does not have.
+    Collected into an object because the argument list had grown to six
+    scalars and the linter was right to object: a verdict that depends on six
+    loose numbers is one where a caller can silently pass them in the wrong
+    order. `of()` builds it from a result so the report cannot disagree with
+    what was measured.
     """
-    if not rho_measured(rho):
-        return (
-            "NO VERDICT: rho was not produced, so nothing here justifies "
-            "keeping or cutting a seat.\n"
-            "If the seats all scored identically, the probe was too easy to "
-            "separate them -- that is the absence of a measurement, NOT "
-            "evidence of independence.\n"
-            "Re-run harder: raise --n-items, change --seed, and prefer a set "
-            "the seats actually disagree on. A panel that never errs on the "
-            "probe cannot be measured by it."
+    rho: float | None
+    n_seats: int
+    mean_accuracy: float | None = None
+    rho_discriminating: float | None = None
+    rho_ci: tuple[float, float] | None = None
+    n_items: int = 0
+
+    @classmethod
+    def of(cls, res: CalibrationResult) -> RhoReading:
+        return cls(
+            rho=res.rho,
+            n_seats=len(res.scored_seats),
+            mean_accuracy=res.mean_accuracy,
+            rho_discriminating=res.rho_discriminating,
+            rho_ci=res.rho_ci,
+            n_items=res.report.get("coverage").n_items  # type: ignore[union-attr]
+            if res.report.get("coverage") is not None else 0,
         )
-    # SATURATION AND COLLAPSE BOTH PRODUCE A HIGH rho AND MEAN OPPOSITE THINGS.
-    #
-    # Seats sharing a blind spot score WELL and fail together on a few items:
-    # that is collapse, and cutting seats is the right response. Seats drowning
-    # in a probe too hard for them fail nearly everything together, which also
-    # correlates perfectly -- but says nothing about independence, only that
-    # the questions were too hard. Recommending a cut there would retire seats
-    # on the strength of a broken measurement.
-    if mean_accuracy is not None and mean_accuracy < 0.6 and rho > 0.5:
+
+
+NO_RHO = (
+    "NO VERDICT: rho was not produced, so nothing here justifies keeping or "
+    "cutting a seat.\n"
+    "If the seats all scored identically, the probe was too easy to separate "
+    "them -- that is the absence of a measurement, NOT evidence of "
+    "independence.\n"
+    "Re-run harder: raise --n-items, change --seed, and prefer a set the "
+    "seats actually disagree on. A panel that never errs on the probe cannot "
+    "be measured by it."
+)
+
+
+def _saturated(r: RhoReading) -> str | None:
+    """Seats failing nearly everything correlate perfectly without sharing a
+    blind spot. Recommending a cut there retires seats on a broken probe."""
+    if r.rho is None or r.mean_accuracy is None:
+        return None
+    if r.mean_accuracy < 0.6 and r.rho > 0.5:
         return (
-            f"NO VERDICT -- PROBE SATURATED. rho={rho:.3f} is high, but the "
-            f"seats averaged only {mean_accuracy:.0%} correct.\n"
+            f"NO VERDICT -- PROBE SATURATED. rho={r.rho:.3f} is high, but the "
+            f"seats averaged only {r.mean_accuracy:.0%} correct.\n"
             f"Seats that fail nearly everything correlate perfectly without "
             f"that meaning they share a blind spot, so this cannot tell "
             f"collapse from questions that were simply too hard.\n"
             f"Re-run with an easier set (change --seed) before cutting "
             f"anything."
         )
-    # THE TWO READINGS CONFLICT ONLY IF THEY IMPLY DIFFERENT DECISIONS.
-    #
-    # This first compared the raw gap, and that was wrong: on the shipped demo
-    # the two readings were -0.034 and -0.250 -- a gap of 0.216, and both
-    # squarely "keep five". Refusing a verdict there manufactures a conflict
-    # out of two numbers that agree about everything the operator has to
-    # decide, and an alarm that fires when nothing is wrong is an alarm that
-    # gets ignored when something is.
-    #
-    # What matters is whether the headline and the discriminating reading fall
-    # on opposite sides of a threshold. When they do, the headline is being
-    # driven by items every seat answered alike -- correlated by construction
-    # -- and picking one of the two would be breaking a tie by preference
-    # rather than by evidence.
-    if (rho_discriminating is not None
-            and _decision_band(rho) != _decision_band(rho_discriminating)):
-        return (
-            f"NO SINGLE VERDICT -- THE TWO READINGS DISAGREE.\n"
-            f"  Over ALL items          rho={rho:.3f}  "
-            f"(do they fail together on this probe?)\n"
-            f"  Over discriminating     rho={rho_discriminating:.3f}  "
-            f"(do they fail together where they could differ?)\n"
-            f"The gap means items every seat answered alike are driving the "
-            f"headline; those correlate by construction and say nothing about "
-            f"independence.\n"
-            f"Read the difficulty table: a band at 0% or 100% contributed "
-            f"nothing. Re-run with the probe centred on the band that "
-            f"discriminated, then decide."
-        )
+    return None
+
+
+def _readings_conflict(r: RhoReading) -> str | None:
+    """Two legitimate answers to different questions. Picking one would be
+    breaking a tie by preference rather than by evidence."""
+    if r.rho is None or r.rho_discriminating is None:
+        return None
+    if _decision_band(r.rho) == _decision_band(r.rho_discriminating):
+        return None
+    return (
+        f"NO SINGLE VERDICT -- THE TWO READINGS DISAGREE.\n"
+        f"  Over ALL items          rho={r.rho:.3f}  "
+        f"(do they fail together on this probe?)\n"
+        f"  Over discriminating     rho={r.rho_discriminating:.3f}  "
+        f"(do they fail together where they could differ?)\n"
+        f"The gap means items every seat answered alike are driving the "
+        f"headline; those correlate by construction and say nothing about "
+        f"independence.\n"
+        f"Read the difficulty table: a band at 0% or 100% contributed "
+        f"nothing. Re-run with the probe centred on the band that "
+        f"discriminated, then decide."
+    )
+
+
+def _interval_straddles(r: RhoReading) -> str | None:
+    """The interval decides, not the point estimate."""
+    if r.rho is None or r.rho_ci is None:
+        return None
+    lo, hi = r.rho_ci
+    if _decision_band(lo) == _decision_band(hi):
+        return None
+    edge = 0.2 if hi <= 0.5 else 0.5
+    needed = _items_to_resolve(r.rho, r.rho_ci, edge, r.n_items)
+    if needed is None:
+        more = ("\nNo practical item count resolves this: the estimate sits "
+                "essentially ON the threshold, and the true value may be the "
+                "threshold. Treat the panel as borderline and decide on cost, "
+                "not on this number.")
+    else:
+        more = (f"\nAbout {needed} items would likely resolve it (interval "
+                f"width scales with 1/sqrt(n); an estimate, not a guarantee).")
+    return (
+        f"NOT RESOLVED AT THIS SAMPLE SIZE. rho={r.rho:.3f}, but the "
+        f"{int(CREDIBLE_MASS * 100)}% interval runs [{lo:.3f}, {hi:.3f}] "
+        f"and crosses the {edge} threshold.\n"
+        f"The point estimate and the interval disagree about which "
+        f"recommendation applies, so the run cannot support either.{more}"
+    )
+
+
+def verdict_line(reading: RhoReading) -> str:
+    """
+    What the operator should DO about this measurement.
+
+    The thresholds are conventions -- five seats are justified only at
+    rho <= ~0.2 -- named as such rather than derived. Every refusal below
+    comes before them, because a threshold applied to a number that does not
+    support it is worse than no threshold at all.
+    """
+    # Bound to a local BEFORE the guard so the TypeGuard narrows it. Calling
+    # rho_measured(reading.rho) narrows nothing -- a type checker cannot
+    # assume an attribute is unchanged between two reads -- and the fix for
+    # that is not an assert, which bandit flags in production code.
+    rho = reading.rho
+    if not rho_measured(rho):
+        return NO_RHO
+    for check in (_saturated, _readings_conflict, _interval_straddles):
+        refusal = check(reading)
+        if refusal is not None:
+            return refusal
     if rho <= 0.2:
         return (f"KEEP FIVE SEATS. rho={rho:.3f} is at or below the ~0.2 "
                 f"convention, so the seats are erring largely independently "
@@ -748,9 +1014,9 @@ def verdict_line(rho: float | None, n_seats: int,
                 f"seats share a meaningful part of their errors. Three seats "
                 f"chosen for spread will likely buy most of what five buy.")
     return (f"CUT SEATS. rho={rho:.3f} means the seats mostly fail together. "
-            f"You are paying {n_seats} times for close to one opinion. "
-            f"Cut the lowest-accuracy seats in the table above, and replace "
-            f"them with more different ones rather than adding more.")
+            f"You are paying {reading.n_seats} times for close to one "
+            f"opinion. Cut the lowest-accuracy seats in the table above, and "
+            f"replace them with more different ones rather than adding more.")
 
 
 def render_calibration(res: CalibrationResult) -> str:
@@ -803,7 +1069,7 @@ def render_calibration(res: CalibrationResult) -> str:
             out.append(f"  - {b}")
         out.append("")
         out.append("=" * 72)
-        out.append(verdict_line(None, len(res.seats)))
+        out.append(NO_RHO)
         out.append("=" * 72)
         return "\n".join(out)
 
@@ -817,6 +1083,11 @@ def render_calibration(res: CalibrationResult) -> str:
     out.append("-" * 72)
     out.append(f"  error correlation (rho) : "
                f"{'undefined' if rho_undefined(rho) else f'{rho:.3f}'}")
+    if res.rho_ci is not None:
+        lo, hi = res.rho_ci
+        out.append(f"  {int(CREDIBLE_MASS * 100)}% interval          : "
+                   f"[{lo:.3f}, {hi:.3f}]  <- the verdict is decided by this,"
+                   f" not the point estimate")
     if res.rho_discriminating is not None:
         out.append(f"  rho, discriminating only: "
                    f"{res.rho_discriminating:.3f} "
@@ -851,20 +1122,25 @@ def render_calibration(res: CalibrationResult) -> str:
         out.append("-" * 72)
         out.append("PER SEAT -- which ones to keep if you cut")
         out.append("-" * 72)
-        out.append(f"  {'seat':<16}{'confirmed':>11}{'accuracy':>11}")
+        out.append(f"  {'seat':<14}{'confirmed':>10}{'accuracy':>10}"
+                   f"{'  90% interval':>16}")
         for seat in sorted(res.seat_accuracy,
                            key=lambda s: -res.seat_accuracy[s]):
-            out.append(f"  {seat:<16}{res.confirmations.get(seat, 0):>11}"
-                       f"{res.seat_accuracy[seat]:>10.0%}")
+            ci = res.seat_accuracy_ci.get(seat)
+            span = f"  [{ci[0]:.0%}, {ci[1]:.0%}]" if ci else ""
+            out.append(f"  {seat:<14}{res.confirmations.get(seat, 0):>10}"
+                       f"{res.seat_accuracy[seat]:>9.0%}{span:>16}")
         out.append("")
+        out.append("  Two seats whose intervals OVERLAP are not")
+        out.append("  distinguishable at this sample size -- do not cut one")
+        out.append("  and keep the other on the strength of the gap.")
         out.append("  A seat that confirmed far fewer than the others may have")
         out.append("  been cut off mid-reply rather than judging the rest")
         out.append("  false -- from the text alone those look identical.")
         out.append("")
 
     out.append("=" * 72)
-    out.append(verdict_line(rho, len(res.scored_seats), res.mean_accuracy,
-                            res.rho_discriminating))
+    out.append(verdict_line(RhoReading.of(res)))
     out.append("=" * 72)
     out.append("")
     # WHOSE QUESTION IS THIS REPORT ANSWERING?

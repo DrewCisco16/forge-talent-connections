@@ -19,9 +19,9 @@ seats, or cut to three.
 
 A defect here **does not crash**. It produces a plausible number that a
 spending decision then rests on. That is the whole review problem.
-**Fourteen** defects of exactly that shape have already been found in this
+**Seventeen** defects of exactly that shape have already been found in this
 module, every one of them after it was "working, tested and green", and all
-fourteen are described below with how they were reproduced.
+seventeen are described below with how they were reproduced.
 
 ---
 
@@ -29,8 +29,8 @@ fourteen are described below with how they were reproduced.
 
 | File | Role |
 |---|---|
-| `calibrate.py` | The measurement. ~397 statements |
-| `test_calibrate.py` | 101 tests |
+| `calibrate.py` | The measurement. ~540 statements |
+| `test_calibrate.py` | 128 tests |
 | `.github/workflows/calibrate.yml` | Manual-only, phone-triggerable run |
 | `CALIBRATING.md` | Operator instructions |
 
@@ -73,18 +73,19 @@ force this and only this shape:
 
 ---
 
-## Fourteen defects already found here — the review should assume there are more
+## Seventeen defects already found here — the review should assume there are more
 
 Two were found before the module shipped. Seven more came out of an
-**Inversion Analysis** run against it afterwards — assume it is wrong,
-enumerate how. Five more came out of a **Critical Systems Thinking + TRIZ**
-pass after that, asking instead what the measurement excludes and whose
-perspective it privileges. Every one was verified by running it, not by
-reading it.
+**Inversion Analysis** — assume it is wrong, enumerate how. Five more came out
+of a **Critical Systems Thinking + TRIZ** pass, asking what the measurement
+excludes and whose perspective it privileges. Three more came out of a
+**Bayesian** pass, asking what the numbers' uncertainty actually is. Every one
+was verified by running it, not by reading it.
 
-That three successive passes each found defects in a module that was already
-"done, tested and green" is the most useful thing to know about it. Assume a
-fourth pass would find more, and that you are that pass.
+That four successive passes each found defects in a module already "done,
+tested and green" — 2, then 7, then 5, then 3 — is the most useful thing to
+know about it. Assume a fifth pass would find more, and that you are that
+pass.
 
 ### Defect 1: the silent sample collapse
 
@@ -201,11 +202,11 @@ assumed.
 
 ## What I verified, with numbers
 
-- **1,212 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
+- **1,230 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
   files, `bandit` exit 0, `pip-audit` clean.
-- **Coverage 82.45%** against the 80 floor; `calibrate.py` at **99%** (the one
+- **Coverage 82.81%** against the 80 floor; `calibrate.py` at **98%** (the one
   uncovered line is `if __name__ == "__main__"`).
-- **Twenty-seven mutations planted, all twenty-seven caught** — and FIVE of
+- **Thirty-two mutations planted, all thirty-two caught** — and FIVE of
   them survived on the first attempt, which is the useful part:
   removing the snapping extractor changed no test (every format test called
   the extractor directly; none asserted the wiring); the uniqueness guard was
@@ -243,13 +244,15 @@ against a single real model**, so everything below is reasoning, not evidence.
 Three items from the first version of this brief were closed by the Inversion
 pass and are gone; what remains is what remains.
 
-### 1. There is still no confidence interval
+### 1. The interval's own assumptions are unchecked
 
-The sample is no longer data-dependent — every item is seeded, so the matrix
-is always `n` rows — but `rho` over 60 items and 5 seats is still a point
-estimate with **no interval anywhere in this module**. Should there be, and
-what would it take to compute one honestly on binary error indicators with
-this much structure?
+There is an interval now, but a bootstrap over items assumes items are
+exchangeable draws from a population. They are not quite: they are generated
+in balanced bands with fixed polarity, so resampling with replacement can
+produce a draw whose band or true/false balance differs from the design. I
+believe that is conservative — it widens rather than narrows — but I have not
+proved it, and a stratified resample within bands would be the stricter
+construction. Is the unstratified version defensible here?
 
 ### 2. The band boundaries are guesses
 
@@ -378,6 +381,39 @@ in the previous brief; it is now caught before any call is made.
 
 ---
 
+## Defects 15-17: found by the Bayesian pass
+
+**15. `rho` was a point estimate driving a spending decision.** No interval
+anywhere, while `seat_independence`'s own reading line already said "a small
+number of items makes rho unstable regardless of its value" and nothing acted
+on it. There is now a 90% interval from resampling items, and **the interval
+decides the verdict, not the point estimate**: when it straddles a threshold
+the run refuses a recommendation and estimates how many more items would
+settle it.
+
+**16. The first estimate of "how many more items" was arithmetically right and
+useless.** For rho=0.190 against a 0.2 edge it returned **12,618 items** —
+which reads as a plan and is not one. When the estimate sits essentially on
+the threshold, the true value may BE the threshold and no sample size resolves
+it. Capped at ten times the default; above that it says so plainly instead.
+
+**17. The Beta quantile was wrong, and closed forms caught it.** The per-seat
+posterior needed an incomplete-beta inverse, and scipy is not a dependency, so
+it is hand-rolled. The first version used a generic Lentz loop returning
+`f - 1`, which drops a leading term this particular continued fraction does
+not carry. **Beta(1,1) is exactly Uniform(0,1), and it returned a 5th
+percentile of 0.0528 instead of 0.0500.** Now the Numerical Recipes recurrence,
+checked against four closed forms.
+
+**On the name.** The pass is "Bayesian + MCMC" and what is implemented is
+Monte Carlo resampling plus **conjugate** Bayesian posteriors. There is no
+Markov chain, and there should not be: draws here are independent and the
+binomial posterior has a closed form, so a sampler with burn-in and
+convergence diagnostics would add machinery and no accuracy. Calling it MCMC
+would overstate what was done. Challenge that judgement if you disagree.
+
+---
+
 ## Specific asks for Codex
 
 1. **Find another way for items to leave the matrix silently.** Escalation is
@@ -391,21 +427,25 @@ in the previous brief; it is now caught before any call is made.
    onto one item.
 3. **Find a way to make the panel look more independent than it is.** That is
    the direction that argues for keeping five paid seats.
-4. **Break the saturation guard.** It now distinguishes the two, but on a
+4. **Attack the interval.** It is a bootstrap over items, unstratified.
+   Construct a panel where it is anticonservative — where the true sampling
+   error is wider than the reported 90% interval. Then attack the
+   `_items_to_resolve` estimate, which assumes 1/sqrt(n) scaling.
+5. **Break the saturation guard.** It now distinguishes the two, but on a
    threshold I invented (`mean_accuracy < 0.6`). Construct a panel that is
    genuinely collapsed yet scores below it, or genuinely saturated yet above.
-5. **Attack the answer key.** Can `Item.is_true` ever disagree with what
+6. **Attack the answer key.** Can `Item.is_true` ever disagree with what
    `ArithmeticGate` computes? Consider integer overflow bounds, `Fraction`
    coercion, unit-splitting (`_split_unit`), and expressions the AST evaluator
    treats differently than Python would.
-6. **Confirm no operator material reaches a vendor on this path.** The quiz is
+7. **Confirm no operator material reaches a vendor on this path.** The quiz is
    generated arithmetic and should carry no artifact text at all.
-7. **Name any test that would still pass if the behaviour it names were
+8. **Name any test that would still pass if the behaviour it names were
    deleted.** Name the test and name the deletion. Two were found that way
    here — one that tested a component while the wiring could be removed
    freely, and one whose property could not fail at the size it ran at — so
    assume more remain.
-8. **Attack seat exclusion.** A seat is now dropped when it raises or returns
+9. **Attack seat exclusion.** A seat is now dropped when it raises or returns
    nothing usable. Find an input where a seat that DID answer gets excluded,
    or where a seat that answered nothing usable still reaches the matrix.
 

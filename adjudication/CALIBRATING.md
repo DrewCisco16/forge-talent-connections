@@ -19,7 +19,13 @@ and separates nobody; pitched too hard it is failed by everyone, which looks
 identical to a shared blind spot. Spanning the range means that whatever your
 panel's ability, some band sits at it, and the report shows you which.
 
-The score is called `rho`.
+The score is called `rho`. It comes with a **90% interval**, and the interval
+is what decides — not the single number. A `rho` of 0.19 and one of 0.21 are
+the same measurement when the interval runs from 0.05 to 0.34, and letting a
+threshold crossing between them flip a spending decision reads a precision
+sixty questions cannot give you. When the interval straddles a threshold the
+tool says the sample cannot settle it, and estimates how many more questions
+would.
 
 | `rho` | What it means | What to do |
 |---|---|---|
@@ -164,6 +170,18 @@ separated them, and decide then.
 **`SEATS EXCLUDED FROM THE MEASUREMENT`** — a seat that errored, or returned
 nothing usable, is left out rather than scored. The report tells you how many
 seats the number actually describes. Fix the seat and re-run before deciding.
+
+**`NOT RESOLVED AT THIS SAMPLE SIZE`** — the number landed on one side of a
+threshold but its interval crosses it. The run genuinely cannot tell you which
+recommendation applies. It will either name roughly how many questions would
+settle it, or tell you that no practical number would — which happens when the
+estimate sits essentially *on* the threshold, and means the honest answer is
+"borderline, decide on cost."
+
+**Per-seat `90% interval`** — shown beside each seat's accuracy. **Two seats
+whose intervals overlap are not distinguishable.** Do not cut one and keep the
+other because one shows 91% and the other 88%; over sixty questions that gap
+may be nothing.
 
 **`BACKWARD-LOOKING IMPLICATION`** — shown when `rho` is high. It matters
 because everything else in the report is about what to buy next, and a high

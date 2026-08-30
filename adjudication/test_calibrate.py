@@ -362,18 +362,18 @@ class TestCalibrationDoesNotBreakBlinding:
 class TestTheVerdictSaysWhatToDo:
 
     def test_low_correlation_says_keep_five(self):
-        assert "KEEP FIVE" in CB.verdict_line(0.05, 5)
+        assert "KEEP FIVE" in CB.verdict_line(CB.RhoReading(rho=0.05, n_seats=5))
 
     def test_high_correlation_says_cut(self):
-        assert "CUT SEATS" in CB.verdict_line(0.9, 5)
+        assert "CUT SEATS" in CB.verdict_line(CB.RhoReading(rho=0.9, n_seats=5))
 
     def test_the_middle_is_called_marginal_rather_than_rounded(self):
-        assert "MARGINAL" in CB.verdict_line(0.35, 5)
+        assert "MARGINAL" in CB.verdict_line(CB.RhoReading(rho=0.35, n_seats=5))
 
     def test_no_rho_yields_no_recommendation(self):
         """A missing measurement must not become advice. Defaulting either way
         would let a run that measured nothing justify a spending decision."""
-        line = CB.verdict_line(None, 5)
+        line = CB.verdict_line(CB.RhoReading(rho=None, n_seats=5))
         assert "NO VERDICT" in line
         assert "KEEP FIVE" not in line and "CUT SEATS" not in line
 
@@ -382,7 +382,7 @@ class TestTheVerdictSaysWhatToDo:
         threshold ladder fell through to its last branch and a run that
         measured NOTHING printed 'CUT SEATS ... the seats mostly fail
         together'. Wrong, expensive, and in the confident direction."""
-        line = CB.verdict_line(float("nan"), 5)
+        line = CB.verdict_line(CB.RhoReading(rho=float("nan"), n_seats=5))
         assert "NO VERDICT" in line
         assert "CUT SEATS" not in line
 
@@ -553,15 +553,14 @@ class TestSaturationIsNotReportedAsCollapse:
         res = CB.run_calibration(seats, items)
         assert res.rho == pytest.approx(1.0)
         assert res.mean_accuracy > 0.6
-        assert "CUT SEATS" in CB.verdict_line(
-            res.rho, len(res.scored_seats), res.mean_accuracy)
+        assert "CUT SEATS" in CB.verdict_line(CB.RhoReading.of(res))
 
     def test_failing_nearly_everything_refuses_a_verdict(self):
         items = CB.build_items(24, seed=11)
         ids = {i.item_id for i in items[:20]}
         _, seats = self._panel(ids)
         res = CB.run_calibration(seats, items)
-        line = CB.verdict_line(res.rho, len(res.scored_seats), res.mean_accuracy)
+        line = CB.verdict_line(CB.RhoReading.of(res))
         assert res.rho == pytest.approx(1.0)
         assert res.mean_accuracy < 0.6
         assert "SATURATED" in line
@@ -728,8 +727,7 @@ class TestTheTwoReadingsAreNotCollapsedIntoOne:
     def test_no_single_verdict_when_the_two_readings_disagree(self):
         items, seats = self._bracketed_panel()
         res = CB.run_calibration(seats, items)
-        line = CB.verdict_line(res.rho, len(res.scored_seats),
-                               res.mean_accuracy, res.rho_discriminating)
+        line = CB.verdict_line(CB.RhoReading.of(res))
         assert "NO SINGLE VERDICT" in line
         assert "CUT SEATS" not in line
         assert "KEEP FIVE" not in line
@@ -737,7 +735,7 @@ class TestTheTwoReadingsAreNotCollapsedIntoOne:
     def test_agreeing_readings_still_produce_a_verdict(self):
         """The refusal must fire on disagreement, not on the mere presence of
         a second number."""
-        line = CB.verdict_line(0.05, 5, 0.9, 0.06)
+        line = CB.verdict_line(CB.RhoReading(rho=0.05, n_seats=5, mean_accuracy=0.9, rho_discriminating=0.06))
         assert "KEEP FIVE" in line
 
     def test_a_wide_gap_that_changes_no_decision_is_not_a_conflict(self):
@@ -747,23 +745,21 @@ class TestTheTwoReadingsAreNotCollapsedIntoOne:
         numbers that agree about everything the operator must decide, and an
         alarm that fires when nothing is wrong gets ignored when something
         is."""
-        line = CB.verdict_line(-0.034, 5, 0.9, -0.250)
+        line = CB.verdict_line(CB.RhoReading(rho=-0.034, n_seats=5, mean_accuracy=0.9, rho_discriminating=-0.250))
         assert "KEEP FIVE" in line
         assert "NO SINGLE VERDICT" not in line
 
     def test_a_narrow_gap_across_a_threshold_is_a_conflict(self):
         """The mirror image: a small numeric difference that lands the two
         readings on opposite sides of a recommendation IS a conflict."""
-        line = CB.verdict_line(0.55, 5, 0.9, 0.45)
+        line = CB.verdict_line(CB.RhoReading(rho=0.55, n_seats=5, mean_accuracy=0.9, rho_discriminating=0.45))
         assert "NO SINGLE VERDICT" in line
 
     def test_the_demo_panel_still_yields_a_verdict(self):
         """End to end, on the exact panel an operator meets first."""
         items = CB.build_items(60, seed=11)
         res = CB.run_calibration(CB._demo_seats(items), items)
-        assert "KEEP FIVE" in CB.verdict_line(
-            res.rho, len(res.scored_seats), res.mean_accuracy,
-            res.rho_discriminating)
+        assert "KEEP FIVE" in CB.verdict_line(CB.RhoReading.of(res))
 
     def test_too_few_discriminating_items_yields_no_second_reading(self):
         """A correlation over one or two rows is not a measurement, and
@@ -866,3 +862,153 @@ class TestTheReportSpeaksToBothReaders:
         text = CB.render_calibration(
             CB.run_calibration(CB._demo_seats(items), items))
         assert "BACKWARD-LOOKING IMPLICATION" not in text
+
+
+class TestTheIntervalNotThePointEstimateDecides:
+    """rho was a bare number and a spending decision rested on which side of
+    0.2 or 0.5 it fell. With 60 items and 5 seats that is a point estimate
+    carrying unstated sampling error -- seat_independence's own reading line
+    said so ("a small number of items makes rho unstable regardless of its
+    value") while nothing in the pipeline did anything about it."""
+
+    def test_a_straddling_interval_refuses_rather_than_recommending(self):
+        line = CB.verdict_line(CB.RhoReading(
+            rho=0.19, n_seats=5, mean_accuracy=0.9,
+            rho_ci=(0.05, 0.34), n_items=60))
+        assert "NOT RESOLVED AT THIS SAMPLE SIZE" in line
+        assert "KEEP FIVE" not in line
+        assert "CUT SEATS" not in line
+
+    def test_an_interval_wholly_one_side_still_decides(self):
+        line = CB.verdict_line(CB.RhoReading(
+            rho=0.02, n_seats=5, mean_accuracy=0.9,
+            rho_ci=(-0.05, 0.12), n_items=60))
+        assert "KEEP FIVE" in line
+
+    def test_an_impractical_sample_size_is_not_offered_as_advice(self):
+        """rho=0.190 against a 0.2 edge wanted 12,618 items. That figure is
+        arithmetically right and useless: it reads as a plan and is not one.
+        The honest reading is that the true value may BE the threshold."""
+        line = CB.verdict_line(CB.RhoReading(
+            rho=0.199, n_seats=5, mean_accuracy=0.9,
+            rho_ci=(0.05, 0.35), n_items=60))
+        assert "No practical item count" in line
+        assert "12618" not in line
+
+    def test_a_reachable_sample_size_is_named(self):
+        line = CB.verdict_line(CB.RhoReading(
+            rho=0.10, n_seats=5, mean_accuracy=0.9,
+            rho_ci=(0.02, 0.26), n_items=60))
+        assert "would likely resolve it" in line
+
+    def test_the_suggested_count_is_a_legal_item_count(self):
+        """Advice to run a count build_items would refuse is not advice."""
+        got = CB._items_to_resolve(0.10, (0.02, 0.26), 0.2, 60)
+        assert got is not None
+        assert got % (2 * len(CB.BANDS)) == 0
+        CB.build_items(got, seed=1)
+
+    def test_the_interval_is_reported_beside_the_estimate(self):
+        items = CB.build_items(60, seed=11)
+        text = CB.render_calibration(
+            CB.run_calibration(CB._demo_seats(items), items, draws=200))
+        assert "90% interval" in text
+        assert "not the point estimate" in text
+
+
+class TestTheIntervalIsReproducibleAndHonest:
+
+    def _matrix(self, seats=None, seed=11):
+        items = CB.build_items(60, seed=seed)
+        res = CB.run_calibration(seats or CB._demo_seats(items), items,
+                                 draws=400)
+        return res
+
+    def test_the_same_seed_reproduces_the_same_interval(self):
+        """Global rule 4 blocks nondeterminism in replay. An interval that
+        moved between runs of identical data would make replay meaningless."""
+        a = self._matrix().rho_ci
+        b = self._matrix().rho_ci
+        assert a == b
+
+    def test_the_interval_brackets_the_point_estimate(self):
+        res = self._matrix()
+        lo, hi = res.rho_ci
+        assert lo <= res.rho <= hi
+
+    def test_more_items_do_not_widen_the_interval(self):
+        """Sampling error shrinks with n. If it did not, the interval is not
+        measuring what it claims to."""
+        narrow = CB.run_calibration(
+            CB._demo_seats(CB.build_items(120, seed=11)),
+            CB.build_items(120, seed=11), draws=400)
+        wide = CB.run_calibration(
+            CB._demo_seats(CB.build_items(24, seed=11)),
+            CB.build_items(24, seed=11), draws=400)
+        w_narrow = narrow.rho_ci[1] - narrow.rho_ci[0]
+        w_wide = wide.rho_ci[1] - wide.rho_ci[0]
+        assert w_narrow < w_wide
+
+    def test_no_interval_when_there_is_nothing_to_resample(self):
+        items = CB.build_items(12, seed=4)
+        one = {"seat_1": CB._demo_seats(items)["seat_1"]}
+        assert CB.run_calibration(one, items, draws=100).rho_ci is None
+
+
+class TestTheBetaPosteriorMatchesClosedForms:
+    """Hand-rolled because scipy is not a dependency. A quantile nobody
+    checked would put a wrong interval beside every seat, and the first
+    implementation WAS wrong -- a generic Lentz loop that returned f - 1,
+    giving Beta(1,1) a 5th percentile of 0.0528 instead of 0.0500."""
+
+    def test_beta_one_one_is_uniform(self):
+        for q in (0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99):
+            assert CB._beta_quantile(1.0, 1.0, q) == pytest.approx(q, abs=1e-9)
+
+    def test_beta_two_one_is_sqrt(self):
+        import math
+        for q in (0.1, 0.5, 0.9):
+            assert CB._beta_quantile(2.0, 1.0, q) == pytest.approx(
+                math.sqrt(q), abs=1e-9)
+
+    def test_beta_one_two_closed_form(self):
+        import math
+        for q in (0.1, 0.5, 0.9):
+            assert CB._beta_quantile(1.0, 2.0, q) == pytest.approx(
+                1 - math.sqrt(1 - q), abs=1e-9)
+
+    def test_a_symmetric_beta_has_median_one_half(self):
+        for a in (0.5, 2.0, 7.5, 40.0):
+            assert CB._beta_quantile(a, a, 0.5) == pytest.approx(0.5, abs=1e-9)
+
+    def test_the_cdf_runs_monotonically_from_zero_to_one(self):
+        for a, b in ((0.5, 0.5), (3, 7), (60, 5)):
+            xs = [i / 40 for i in range(41)]
+            cs = [CB._beta_cdf(x, a, b) for x in xs]
+            assert cs == sorted(cs), (a, b)
+            assert cs[0] == pytest.approx(0.0, abs=1e-12)
+            assert cs[-1] == pytest.approx(1.0, abs=1e-9)
+
+
+class TestSeatIntervalsGuardTheCutDecision:
+
+    def test_every_scored_seat_gets_an_interval(self):
+        items = CB.build_items(60, seed=11)
+        res = CB.run_calibration(CB._demo_seats(items), items, draws=200)
+        assert set(res.seat_accuracy_ci) == set(res.seat_accuracy)
+
+    def test_each_interval_contains_its_point_estimate(self):
+        items = CB.build_items(60, seed=11)
+        res = CB.run_calibration(CB._demo_seats(items), items, draws=200)
+        for seat, acc in res.seat_accuracy.items():
+            lo, hi = res.seat_accuracy_ci[seat]
+            assert lo <= acc <= hi, seat
+
+    def test_the_report_warns_against_cutting_on_overlapping_intervals(self):
+        """'Cut the lowest-accuracy seats' ranks five numbers that each carry
+        sampling error. Two seats a few points apart over 60 items are not
+        distinguishable."""
+        items = CB.build_items(60, seed=11)
+        text = CB.render_calibration(
+            CB.run_calibration(CB._demo_seats(items), items, draws=200))
+        assert "intervals OVERLAP" in text
