@@ -13,6 +13,12 @@ believes are correct. The answer key is computed by the arithmetic gate, so no
 human and no model decides what is true. Then the scoring asks a single
 question: **do they get things wrong together, or separately?**
 
+The questions come in three difficulty bands — easy, medium, hard — rather than
+one level. That is deliberate. A quiz pitched too easy is passed by everyone
+and separates nobody; pitched too hard it is failed by everyone, which looks
+identical to a shared blind spot. Spanning the range means that whatever your
+panel's ability, some band sits at it, and the report shows you which.
+
 The score is called `rho`.
 
 | `rho` | What it means | What to do |
@@ -53,9 +59,15 @@ involved.
 python calibrate.py --profiles profiles.json --max-cost 1.00
 ```
 
-Costs **five API calls total** — one per seat. Every item is in a single
-prompt, so twenty-four questions cost the same as one. Keep `--max-cost`; it
-is a hard ceiling and the run stops rather than exceed it.
+Costs **five API calls total** — one per seat. Every item rides in a single
+prompt, so sixty questions cost essentially the same as one. Keep
+`--max-cost`; it is a hard ceiling and the run stops rather than exceed it.
+
+Before any call is made, a **preflight** check reads your settings file and
+refuses to start if it finds something that would fail after you had paid for
+it — currently, sampling parameters (`temperature`, `top_p`, `top_k`) sent to
+an Anthropic endpoint, which current Claude models reject with HTTP 400.
+`--ignore-preflight` overrides it if you are certain.
 
 ---
 
@@ -110,7 +122,7 @@ Four boxes:
 
 | Box | Meaning |
 |---|---|
-| `n_items` | How many questions. Must be even. `24` is a sensible default |
+| `n_items` | How many questions. Must be a multiple of 6 so each band gets equal true and false. `60` is the default |
 | `seed` | Which questions. The same seed gives the same quiz, so two runs are comparable |
 | `max_cost_usd` | Hard ceiling. The run stops rather than exceed it |
 | `confirm` | Type **`SPEND`**. Anything else and the run refuses |
@@ -132,10 +144,6 @@ a run that spent money and then broke is exactly the one whose output you want.
 
 ## What to watch for in the report
 
-**`SEAT ERRORS`** — a seat that failed contributes no answers. `rho` is then a
-measurement of the seats that *did* answer, not of the five you intended. Fix
-the seat and re-run before trusting the number.
-
 **`CONFIRMATIONS THAT MATCHED NO ITEM ID`** — a seat reworded the statements
 instead of copying them, so its agreement couldn't be matched to the others.
 That biases `rho` **downward**, making the panel look *more* independent than
@@ -144,6 +152,24 @@ Re-run before believing a good score that carries this warning.
 
 **`NOT MEASURABLE`** — no number was produced, and the report says why. Exit
 code is non-zero so an automated caller can't mistake it for success.
+
+**`NO SINGLE VERDICT — THE TWO READINGS DISAGREE`** — you get two `rho` values
+and no recommendation. That is the tool refusing to break a tie. The headline
+number counts every question; the second counts only the questions your seats
+actually differed on. When a whole band is answered identically by everyone —
+all right or all wrong — those questions agree *by construction* and drag the
+headline. Look at the difficulty table, re-run centred on the band that
+separated them, and decide then.
+
+**`SEATS EXCLUDED FROM THE MEASUREMENT`** — a seat that errored, or returned
+nothing usable, is left out rather than scored. The report tells you how many
+seats the number actually describes. Fix the seat and re-run before deciding.
+
+**`BACKWARD-LOOKING IMPLICATION`** — shown when `rho` is high. It matters
+because everything else in the report is about what to buy next, and a high
+`rho` also says something about the past: runs you have *already* completed
+with this panel converged less meaningfully than they appeared to. Cutting
+seats does not undo that.
 
 ## Honest limits
 

@@ -16,6 +16,8 @@ crash, but a number that is still produced after most of the evidence has
 silently fallen out.
 """
 
+from unittest import mock
+
 import pytest
 
 import adjudication_orchestrator as AO
@@ -85,19 +87,53 @@ class TestTheItemSetIsBalancedAndReproducible:
         """An answer off by an order of magnitude is caught by inspection and
         measures nothing. The probe only has signal if the wrong answers are
         plausible."""
-        for it in CB.build_items(40, seed=3):
+        for it in CB.build_items(42, seed=3):
             if it.is_true:
                 continue
             lhs, _, rhs = it.expression.rpartition("=")
             assert 0 < abs(_arith(lhs) - int(rhs)) <= 9
 
-    def test_an_odd_item_count_is_refused(self):
-        with pytest.raises(ValueError, match="even"):
-            CB.build_items(7)
+    def test_a_count_that_would_unbalance_a_band_is_refused(self):
+        """With three bands, n must be a multiple of six or some band ends up
+        with more true items than false -- and a band whose polarity is skewed
+        rewards guessing in one direction."""
+        with pytest.raises(ValueError, match="multiple of 6"):
+            CB.build_items(20)
 
-    def test_too_few_items_is_refused(self):
-        with pytest.raises(ValueError, match="at least 2"):
-            CB.build_items(0)
+    def test_too_few_items_to_fill_the_bands_is_refused(self):
+        with pytest.raises(ValueError, match="at least 6"):
+            CB.build_items(4)
+
+    def test_every_band_gets_both_polarities_equally(self):
+        items = CB.build_items(60, seed=5)
+        for band in CB.BANDS:
+            in_band = [i for i in items if i.band == band]
+            assert len(in_band) == 20, band
+            assert sum(1 for i in in_band if i.is_true) == 10, band
+
+    def test_the_polarity_rule_does_not_depend_on_the_band_count(self):
+        """Truth alternates by CYCLE, not by index, and the difference is
+        invisible at three bands -- index parity balances there because three
+        is odd. It is a coincidence, not an equivalence: at four bands index
+        parity pins band 0 to true and band 1 to false permanently, and a band
+        with fixed polarity rewards guessing in one direction.
+
+        Exercised against build_items itself with a FOUR-band set, because at
+        three bands the two rules are behaviourally identical and a test at
+        that size cannot fail whichever is implemented. Caught by mutation."""
+        four = ("easy", "medium", "hard", "harder")
+        with mock.patch.object(CB, "BANDS", four):
+            items = CB.build_items(8 * len(four), seed=5)
+        for band in four:
+            in_band = [i for i in items if i.band == band]
+            assert in_band, band
+            n_true = sum(1 for i in in_band if i.is_true)
+            assert n_true * 2 == len(in_band), (band, n_true, len(in_band))
+
+    def test_the_probe_spans_a_range_rather_than_picking_one_difficulty(self):
+        """A single difficulty can only be wrong in one of two directions and
+        cannot tell you which. Both earlier sets failed that way."""
+        assert {i.band for i in CB.build_items(60, seed=5)} == set(CB.BANDS)
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +609,7 @@ class TestTheItemSetCannotCollideWithItself:
         has to be tested if the test is to have any force at all."""
         for seed in (1, 7, 11, 4321):
             lhs = [CB._canonical_key(i.expression.rpartition("=")[0])
-                   for i in CB.build_items(1000, seed=seed)]
+                   for i in CB.build_items(1002, seed=seed)]
             assert len(lhs) == len(set(lhs)), seed
 
     def test_run_calibration_actually_uses_the_snapping_extractor(self):
@@ -600,8 +636,233 @@ class TestTheItemSetCannotCollideWithItself:
                 for i in true_items)
 
         res = CB.run_calibration({"seat_a": plain, "seat_b": decorated}, items)
-        cov = res.report["coverage"]
-        assert cov.n_items == len(true_items), (
-            "wordings did not collide: the extractor is not wired in")
+        # The signal is per-seat accuracy, not the item count: every item is
+        # seeded into the matrix now, so n_items is n either way. Unwired, the
+        # decorated seat's claims land on ids nobody else uses -- it is scored
+        # as having confirmed none of the true items and drops to ~50%.
+        assert res.seat_accuracy["seat_a"] == 1.0
+        assert res.seat_accuracy["seat_b"] == 1.0, (
+            "the decorated seat scored differently from the plain one: "
+            "wordings did not collide, so the extractor is not wired in")
         assert not res.unmatched_claims
-        assert res.seat_accuracy["seat_a"] == res.seat_accuracy["seat_b"] == 1.0
+
+
+class TestASharedMissIsVisible:
+    """THE MOST DANGEROUS BLIND SPOT WAS THE ONE THAT LEFT NO TRACE.
+
+    build_correctness_matrix builds rows from the verdicts, and a statement
+    nobody proposed is never gated and never becomes a row. So when all five
+    seats MISSED the same true statement -- everyone failing to spot a real
+    defect, which is precisely what this tool exists to detect -- the item
+    vanished and the run reported nothing. The visible half of the same
+    behaviour, all five wrongly ASSERTING a false statement, registered fine.
+    calibrate now seeds every item so both halves are measurable."""
+
+    def _panel_missing(self, items, missed_ids):
+        return {f"seat_{k + 1}": CB._demo_seat(items, missed_ids)
+                for k in range(5)}
+
+    def test_every_item_reaches_the_matrix_even_if_no_seat_spoke_of_it(self):
+        """Two seats each confirm ONE item. The other 23 were never proposed
+        by anybody -- and before seeding, those 23 simply did not exist as far
+        as the measurement was concerned."""
+        items = CB.build_items(24, seed=11)
+        first = next(i for i in items if i.is_true)
+        line = f"CLAIM | arithmetic | {first.expression} | {first.expression}"
+        res = CB.run_calibration(
+            {"seat_a": lambda _p: line, "seat_b": lambda _p: line}, items)
+        assert res.report["coverage"].n_items == len(items)
+        assert res.report["coverage"].n_items_from_gates == len(items)
+
+    def test_five_seats_missing_the_same_true_items_is_detected(self):
+        items = CB.build_items(24, seed=11)
+        missed = {i.item_id for i in items if i.is_true}
+        missed = set(list(missed)[:3])
+        res = CB.run_calibration(self._panel_missing(items, missed), items)
+        assert res.report["coverage"].n_items == len(items)
+        assert res.rho == pytest.approx(1.0), (
+            "a shared miss produced no signal: items nobody asserted are "
+            "missing from the matrix again")
+
+    def test_a_shared_miss_and_a_shared_false_assertion_both_register(self):
+        """They are the two halves of one behaviour and must not be measured
+        differently."""
+        items = CB.build_items(24, seed=11)
+        missed = {i.item_id for i in items if i.is_true}
+        asserted = {i.item_id for i in items if not i.is_true}
+        a = CB.run_calibration(
+            self._panel_missing(items, set(list(missed)[:3])), items)
+        b = CB.run_calibration(
+            self._panel_missing(items, set(list(asserted)[:3])), items)
+        assert a.rho == pytest.approx(1.0)
+        assert b.rho == pytest.approx(1.0)
+        assert a.report["coverage"].n_items == b.report["coverage"].n_items
+
+
+class TestTheTwoReadingsAreNotCollapsedIntoOne:
+    """seat_independence guards a zero-variance SEAT but not a zero-variance
+    ITEM. A band every seat fails enters the correlation as perfect agreement
+    by construction and drags the headline up. Measured: a panel genuinely
+    independent on the band that discriminated it scored rho 0.768 and was
+    told to CUT SEATS, because ten hard items nobody got right counted as ten
+    instances of failing together."""
+
+    def _bracketed_panel(self):
+        items = CB.build_items(60, seed=11)
+        hard = {i.item_id for i in items if i.band == "hard"}
+        med = [i for i in items if i.band == "medium"]
+        seats = {
+            f"seat_{k + 1}": CB._demo_seat(
+                items, hard | {med[k].item_id, med[(k + 3) % len(med)].item_id})
+            for k in range(5)
+        }
+        return items, seats
+
+    def test_the_discriminating_reading_is_computed_separately(self):
+        items, seats = self._bracketed_panel()
+        res = CB.run_calibration(seats, items)
+        assert res.rho_discriminating is not None
+        assert res.n_unanimous_items > 0
+        assert res.rho > res.rho_discriminating
+
+    def test_no_single_verdict_when_the_two_readings_disagree(self):
+        items, seats = self._bracketed_panel()
+        res = CB.run_calibration(seats, items)
+        line = CB.verdict_line(res.rho, len(res.scored_seats),
+                               res.mean_accuracy, res.rho_discriminating)
+        assert "NO SINGLE VERDICT" in line
+        assert "CUT SEATS" not in line
+        assert "KEEP FIVE" not in line
+
+    def test_agreeing_readings_still_produce_a_verdict(self):
+        """The refusal must fire on disagreement, not on the mere presence of
+        a second number."""
+        line = CB.verdict_line(0.05, 5, 0.9, 0.06)
+        assert "KEEP FIVE" in line
+
+    def test_a_wide_gap_that_changes_no_decision_is_not_a_conflict(self):
+        """This first compared the raw gap and got it wrong. On the shipped
+        demo the readings were -0.034 and -0.250 -- a gap of 0.216, and both
+        squarely 'keep five'. Refusing there invents a conflict out of two
+        numbers that agree about everything the operator must decide, and an
+        alarm that fires when nothing is wrong gets ignored when something
+        is."""
+        line = CB.verdict_line(-0.034, 5, 0.9, -0.250)
+        assert "KEEP FIVE" in line
+        assert "NO SINGLE VERDICT" not in line
+
+    def test_a_narrow_gap_across_a_threshold_is_a_conflict(self):
+        """The mirror image: a small numeric difference that lands the two
+        readings on opposite sides of a recommendation IS a conflict."""
+        line = CB.verdict_line(0.55, 5, 0.9, 0.45)
+        assert "NO SINGLE VERDICT" in line
+
+    def test_the_demo_panel_still_yields_a_verdict(self):
+        """End to end, on the exact panel an operator meets first."""
+        items = CB.build_items(60, seed=11)
+        res = CB.run_calibration(CB._demo_seats(items), items)
+        assert "KEEP FIVE" in CB.verdict_line(
+            res.rho, len(res.scored_seats), res.mean_accuracy,
+            res.rho_discriminating)
+
+    def test_too_few_discriminating_items_yields_no_second_reading(self):
+        """A correlation over one or two rows is not a measurement, and
+        printing it beside the headline would lend it equal weight.
+
+        Built with EXACTLY TWO discriminating rows, and built so those rows
+        still carry column variance:
+        seat_1 is wrong on one of them and seat_2 on the other. A panel where
+        the odd seat is wrong on BOTH leaves every column constant, the
+        correlation comes back NaN, and None is returned whatever the
+        threshold says -- so that construction cannot test the guard either.
+        Both dead ends were found by mutation."""
+        items = CB.build_items(24, seed=11)
+        seats = {f"seat_{k + 1}": CB._demo_seat(items, set())
+                 for k in range(5)}
+        seats["seat_1"] = CB._demo_seat(items, {items[0].item_id})
+        seats["seat_2"] = CB._demo_seat(items, {items[1].item_id})
+        res = CB.run_calibration(seats, items)
+        assert res.n_unanimous_items == len(items) - 2
+        assert res.rho_discriminating is None
+
+
+class TestTheDifficultyTableMakesTheProbeLegible:
+
+    def test_a_bracketed_panel_shows_the_gradient(self):
+        items = CB.build_items(60, seed=11)
+        hard = {i.item_id for i in items if i.band == "hard"}
+        seats = {f"seat_{k + 1}": CB._demo_seat(items, hard) for k in range(5)}
+        res = CB.run_calibration(seats, items)
+        assert res.band_accuracy["easy"][1] == 1.0
+        assert res.band_accuracy["hard"][1] < 0.5
+        text = CB.render_calibration(res)
+        assert "BY DIFFICULTY" in text
+
+    def test_band_accuracy_is_keyed_by_claim_id_not_expression(self):
+        """matrix.item_ids holds content-addressed hashes. Keying the lookup
+        by expression silently matched nothing and produced an empty table."""
+        items = CB.build_items(24, seed=11)
+        res = CB.run_calibration(CB._demo_seats(items), items)
+        assert set(res.band_accuracy) == set(CB.BANDS)
+
+
+class TestPreflightPreventsPaidDiscovery:
+
+    def _settings(self, tmp_path, body):
+        import json
+        p = tmp_path / "profiles.json"
+        p.write_text(json.dumps({"seat_5": {
+            "name": "Claude",
+            "endpoint": "https://api.anthropic.com/v1/messages",
+            "auth_header": "x-api-key", "auth_template": "{key}",
+            "body": body, "text_path": ["content", 0, "text"]}}))
+        return str(p)
+
+    def test_sampling_params_on_an_anthropic_endpoint_are_caught(self, tmp_path):
+        path = self._settings(tmp_path, {"model": "{{model}}",
+                                         "temperature": "{{temperature}}"})
+        problems = CB.preflight_settings(path)
+        assert len(problems) == 1
+        assert "temperature" in problems[0]
+
+    def test_a_clean_settings_file_passes(self, tmp_path):
+        path = self._settings(tmp_path, {"model": "{{model}}",
+                                         "max_tokens": "{{max_tokens}}"})
+        assert CB.preflight_settings(path) == []
+
+    def test_the_same_key_on_another_vendor_is_not_flagged(self, tmp_path):
+        """Only Anthropic endpoints reject these. Flagging every vendor would
+        train the operator to ignore the warning."""
+        import json
+        p = tmp_path / "profiles.json"
+        p.write_text(json.dumps({"seat_1": {
+            "endpoint": "https://api.example-vendor.invalid/v1/chat",
+            "body": {"temperature": "{{temperature}}"}}}))
+        assert CB.preflight_settings(str(p)) == []
+
+    def test_the_run_refuses_rather_than_spending(self, tmp_path):
+        path = self._settings(tmp_path, {"temperature": "{{temperature}}"})
+        assert CB.main(["--profiles", path]) == 2
+
+    def test_an_unreadable_settings_file_is_a_problem_not_a_pass(self, tmp_path):
+        assert CB.preflight_settings(str(tmp_path / "nope.json"))
+
+
+class TestTheReportSpeaksToBothReaders:
+
+    def test_a_high_rho_states_the_backward_looking_implication(self):
+        """The report is framed for the budget-holder throughout. That framing
+        hides the other reader: whoever relies on an answer this panel already
+        produced. Nothing else in the system will tell them."""
+        items = CB.build_items(60, seed=11)
+        ids = {i.item_id for i in items[:6]}
+        seats = {f"seat_{k + 1}": CB._demo_seat(items, ids) for k in range(5)}
+        text = CB.render_calibration(CB.run_calibration(seats, items))
+        assert "BACKWARD-LOOKING IMPLICATION" in text
+        assert "ALREADY COMPLETED" in text
+
+    def test_a_low_rho_does_not_raise_a_false_alarm(self):
+        items = CB.build_items(60, seed=11)
+        text = CB.render_calibration(
+            CB.run_calibration(CB._demo_seats(items), items))
+        assert "BACKWARD-LOOKING IMPLICATION" not in text

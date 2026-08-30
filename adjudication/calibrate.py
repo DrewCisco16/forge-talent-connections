@@ -77,6 +77,7 @@ from dataclasses import dataclass
 from typing import Any, TypeGuard
 
 import adjudication_orchestrator as AO
+import seat_independence as si
 from adjudication_orchestrator import (
     ArithmeticGate,
     BlindedSeatRunner,
@@ -92,13 +93,32 @@ from correctness_matrix import (
     diagnose_run,
 )
 
-DEFAULT_N_ITEMS = 24
+DEFAULT_N_ITEMS = 60
 DEFAULT_SEED = 20260829
 
 
 # ---------------------------------------------------------------------------
 # the item set
 # ---------------------------------------------------------------------------
+
+BANDS = ("easy", "medium", "hard")
+"""Difficulty bands, spanned rather than averaged.
+
+THE PROBE HAS TO BE EASY ENOUGH TO ANSWER AND HARD ENOUGH TO SEPARATE, and
+picking one difficulty is a compromise between those, which is the wrong move:
+it can only be wrong in one of the two directions and cannot tell you which.
+Both earlier item sets failed that way. Three-digit addition was too easy --
+every seat scored identically, no pair varied, rho came back NaN. Guessing
+harder fixes nothing in principle: too hard and every seat fails everything,
+which correlates perfectly and reads as collapse.
+
+Spanning the range separates the two requirements instead of trading them off.
+Whatever the panel's ability, some band sits at it, and the per-band table
+shows WHERE that is rather than leaving a single ambiguous number. A run where
+easy is 100% and hard is 0% is legible; the same panel measured on one middle
+difficulty is not.
+"""
+
 
 @dataclass(frozen=True)
 class Item:
@@ -111,11 +131,24 @@ class Item:
     item_id: str
     expression: str
     is_true: bool
+    band: str = "medium"
+
+
+def _draw(band: str, rng: random.Random) -> tuple[int, int, str, int]:
+    """One operand pair for a band. Returns (a, b, operator, true result)."""
+    if band == "easy":
+        a, b = rng.randint(11, 89), rng.randint(11, 89)
+        return a, b, "+", a + b
+    if band == "medium":
+        a, b = rng.randint(114, 989), rng.randint(113, 987)
+        return a, b, "*", a * b
+    a, b = rng.randint(1104, 9897), rng.randint(114, 989)
+    return a, b, "*", a * b
 
 
 def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item]:
     """
-    A reproducible mixed set: half true, half false.
+    A reproducible set: half true, half false, spread evenly across BANDS.
 
     BOTH POLARITIES ARE REQUIRED, and this is the whole reason the set is not
     just validation_harness.SEEDED. Every seeded defect there is TRUE
@@ -125,15 +158,26 @@ def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item
     correctness. The false items are what make confirming everything cost
     something.
 
-    See the inline notes below for the two other design constraints: the
-    margin false items are wrong by, and the operator mix that keeps the probe
-    hard enough to separate the seats at all.
+    Truth alternates by CYCLE rather than by index, so each band gets the same
+    number of true and false items FOR ANY NUMBER OF BANDS.
+
+    Index parity (`truth = k % 2 == 0`) happens to balance at three bands,
+    because three is odd and each band therefore sees alternating parities.
+    It is not equivalent, it is coincidentally equal here: at four bands it
+    pins band 0 to true and band 1 to false permanently, and a band whose
+    polarity is fixed rewards guessing in one direction. Verified by
+    enumeration at nb=3 (balanced) and nb=4 (8/0 split). The cycle form does
+    not depend on that coincidence.
     """
-    if n < 2:
-        raise ValueError(f"need at least 2 items to measure anything, got {n}")
-    if n % 2:
+    period = 2 * len(BANDS)
+    if n < period:
         raise ValueError(
-            f"n_items must be even so true and false items balance, got {n}")
+            f"need at least {period} items to fill every band with both "
+            f"polarities, got {n}")
+    if n % period:
+        raise ValueError(
+            f"n_items must be a multiple of {period} so every band gets an "
+            f"equal number of true and false items, got {n}")
 
     # REPRODUCIBILITY IS THE REQUIREMENT HERE, NOT UNPREDICTABILITY.
     #
@@ -152,33 +196,15 @@ def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item
     # identity is content-addressed -- so the run would score fewer items than
     # it asked about while still reporting n. Worse, if one of the pair were
     # true and the other false, the same id would carry two contradictory
-    # answer-key entries. No collision appears in the first 300 seeds at
-    # n=24, which is exactly why this is enforced rather than relied upon:
-    # the failure is silent and only shows up at larger n.
+    # answer-key entries. No collision appears below n=1000, which is exactly
+    # why this is enforced rather than relied upon: the failure is silent and
+    # only shows up at scale.
     seen_operands: set[tuple[int, int, str]] = set()
     for k in range(n):
-        truth = k % 2 == 0
-        # THE PROBE MUST BE HARD ENOUGH TO SEPARATE THE SEATS.
-        #
-        # This was three-digit addition alone, and that is a measurement
-        # design error rather than a coding one: current models essentially
-        # never get it wrong, so all five seats score identically, no seat
-        # pair varies, and rho comes back NaN. A probe nobody fails cannot
-        # rank anybody -- it yields the absence of a measurement, dressed as
-        # a completed run.
-        #
-        # Multiplication of three-digit operands is where models actually
-        # slip, so two thirds of the set is multiplication and the addition
-        # is widened to six digits. The gate evaluates both through the same
-        # operator table, so nothing about the answer key changes.
+        band = BANDS[k % len(BANDS)]
+        truth = (k // len(BANDS)) % 2 == 0
         while True:
-            if k % 3 == 0:
-                a = rng.randint(100_000, 999_999)
-                b = rng.randint(100_000, 999_999)
-                true_result, expr_op = a + b, "+"
-            else:
-                a, b = rng.randint(114, 989), rng.randint(113, 987)
-                true_result, expr_op = a * b, "*"
+            a, b, expr_op, true_result = _draw(band, rng)
             if (a, b, expr_op) not in seen_operands:
                 seen_operands.add((a, b, expr_op))
                 break
@@ -187,8 +213,8 @@ def build_items(n: int = DEFAULT_N_ITEMS, seed: int = DEFAULT_SEED) -> list[Item
         # of magnitude is caught by inspection and measures nothing.
         result = true_result if truth else true_result + rng.choice(
             [-9, -6, -3, -2, -1, 1, 2, 3, 6, 9])
-        items.append(
-            Item(f"S{k + 1:02d}", f"{a} {expr_op} {b} = {result}", truth))
+        items.append(Item(f"S{k + 1:02d}", f"{a} {expr_op} {b} = {result}",
+                          truth, band))
     return items
 
 
@@ -269,6 +295,40 @@ class CalibrationResult:
     others confirmed less than it was asked to -- a truncated reply looks
     exactly like a decisive one from the content alone, so the count is
     reported and left for the operator to read."""
+    rho_discriminating: float | None
+    """rho recomputed over only the items the seats did NOT all answer alike.
+
+    THE HEADLINE rho AND THIS ONE ANSWER DIFFERENT QUESTIONS, and collapsing
+    them into one number is what produced a wrong recommendation.
+
+    seat_independence guards against a zero-variance SEAT (a column that is
+    constant) but not a zero-variance ITEM (a row that is). A band every seat
+    fails enters the correlation as perfect agreement, by construction, and
+    drags rho up. Measured: a panel that was genuinely independent on the band
+    that discriminated it -- each seat slipping on a different medium item --
+    scored rho 0.768 and was told to CUT SEATS, because ten hard items nobody
+    got right were counted as ten instances of failing together.
+
+    Both readings are legitimate and they are answers to different questions:
+
+      headline rho  -- "do these seats fail together on this probe?"  Five
+                       seats missing the same item IS shared failure, and
+                       excluding it would hide the finding.
+      this one      -- "on the items that could tell them apart, do they fail
+                       together?"  That is the question a decision to drop a
+                       seat actually rests on.
+
+    They are reported side by side and, when they disagree materially, no
+    single verdict is issued. A tie broken by anything other than evidence is
+    the vote this design exists to avoid.
+    """
+    n_unanimous_items: int
+    """Items every scored seat answered identically -- correlated by
+    construction, contributing no information about independence."""
+    band_accuracy: dict[str, tuple[int, float]]
+    """band -> (items scored, mean accuracy). See _band_accuracy: this is what
+    tells a saturated probe from a collapsed panel, and where to set the
+    difficulty next time."""
     seat_accuracy: dict[str, float]
     """seat_id -> share of matrix items it got right. This is what makes
     "cut seats" actionable: without it the operator is told to drop two of
@@ -440,12 +500,37 @@ def run_calibration(
     usable = [r for r in responses if r.seat_id not in excluded]
     claims: list[AO.Claim] = [c for r in usable for c in r.claims]
 
-    record = orch.run_pass(CALIBRATION_PASS, [], claims)
+    # ADJUDICATE EVERY ITEM, NOT ONLY THE ONES A SEAT SPOKE ABOUT.
+    #
+    # build_correctness_matrix builds its rows from the VERDICTS, and a
+    # statement nobody proposed is never gated and never becomes a row. That
+    # silently deletes the most dangerous finding this tool exists to catch:
+    # when all five seats MISS the same true statement, no seat asserts it, no
+    # verdict exists, and the shared blind spot leaves no trace at all.
+    # Measured: five seats all missing three true items produced a 9-row
+    # matrix and rho = NaN. Five seats all asserting three FALSE items -- the
+    # visible half of the same behaviour -- produced 15 rows and rho = 1.0.
+    #
+    # Seeding the full item set fixes it without crediting anyone: the seat
+    # that asserted a claim is read from the RESPONSES, not from the claims
+    # passed here, so an item nobody spoke about scores every seat as silent,
+    # which for a true item is exactly the miss it was.
+    seeded = [
+        AO.Claim(
+            AO.content_claim_id(AO.ClaimKind.ARITHMETIC,
+                                it.expression, it.expression),
+            it.expression, AO.ClaimKind.ARITHMETIC, it.expression,
+            CALIBRATION_PASS.id, "",
+        )
+        for it in chosen
+    ]
+    record = orch.run_pass(CALIBRATION_PASS, [], claims + seeded)
     result = SequentialPassResult(
         CALIBRATION_PASS.id, CALIBRATION_PASS.name, record,
         measure_divergence(CALIBRATION_PASS, usable), usable,
     )
 
+    matrix = build_correctness_matrix([result], orch.verdicts)
     report = diagnose_run(
         [result],
         orch.verdicts,
@@ -461,9 +546,72 @@ def run_calibration(
         excluded_seats=excluded,
         unmatched_claims=unmatched,
         confirmations=confirmations,
-        seat_accuracy=_seat_accuracy(
-            build_correctness_matrix([result], orch.verdicts)),
+        seat_accuracy=_seat_accuracy(matrix),
+        band_accuracy=_band_accuracy(matrix, chosen),
+        rho_discriminating=_discriminating_rho(matrix),
+        n_unanimous_items=_n_unanimous(matrix),
     )
+
+
+def _unanimous_mask(matrix: CorrectnessMatrix) -> Any:
+    """Rows where every scored seat gave the same answer."""
+    if matrix.X.size == 0 or len(matrix.seats) < 2:
+        return None
+    return matrix.X.min(axis=1) == matrix.X.max(axis=1)
+
+
+def _n_unanimous(matrix: CorrectnessMatrix) -> int:
+    mask = _unanimous_mask(matrix)
+    return 0 if mask is None else int(mask.sum())
+
+
+def _discriminating_rho(matrix: CorrectnessMatrix) -> float | None:
+    """rho over the items that actually separated the seats.
+
+    Returns None when there are none, or too few to mean anything -- a
+    correlation over one or two rows is not a measurement, and reporting it
+    beside the headline would lend it equal weight.
+    """
+    mask = _unanimous_mask(matrix)
+    if mask is None:
+        return None
+    keep = matrix.X[~mask]
+    if keep.shape[0] < 3:
+        return None
+    rho = si.mean_error_correlation(keep)
+    return None if math.isnan(rho) else float(rho)
+
+
+def _band_accuracy(matrix: CorrectnessMatrix,
+                   items: Sequence[Item]) -> dict[str, tuple[int, float]]:
+    """band -> (items scored, mean accuracy across all seats).
+
+    THIS IS WHAT MAKES A BAD NUMBER DIAGNOSABLE. rho alone cannot say whether
+    a panel failed because it shares a blind spot or because the questions
+    were beyond it; "easy 100%, hard 0%" says which, and says where to set the
+    probe next time. It also exposes the case a single difficulty hides
+    entirely: a band with no variation contributed nothing to the
+    correlation, however many items it held.
+    """
+    if not matrix.seats or matrix.X.size == 0:
+        return {}
+    # Keyed by CLAIM ID, not by expression: matrix.item_ids holds the
+    # content-addressed hashes, and the id is computed the same way the
+    # snapping extractor computes it so the two cannot drift apart.
+    band_of = {
+        AO.content_claim_id(AO.ClaimKind.ARITHMETIC,
+                            it.expression, it.expression): it.band
+        for it in items
+    }
+    rows: dict[str, list[float]] = {}
+    for row, claim_id in enumerate(matrix.item_ids):
+        band = band_of.get(claim_id)
+        if band is None:
+            continue
+        rows.setdefault(band, []).extend(
+            float(v) for v in matrix.X[row, :])
+    return {b: (len(v) // len(matrix.seats), sum(v) / len(v))
+            for b, v in rows.items() if v}
 
 
 def _seat_accuracy(matrix: CorrectnessMatrix) -> dict[str, float]:
@@ -514,8 +662,17 @@ def rho_undefined(rho: float | None) -> bool:
     return not rho_measured(rho)
 
 
+def _decision_band(rho: float) -> str:
+    """Which recommendation a rho maps to. The thresholds live here once, so
+    the conflict check and the verdict cannot drift apart."""
+    if rho <= 0.2:
+        return "keep"
+    return "marginal" if rho <= 0.5 else "cut"
+
+
 def verdict_line(rho: float | None, n_seats: int,
-                 mean_accuracy: float | None = None) -> str:
+                 mean_accuracy: float | None = None,
+                 rho_discriminating: float | None = None) -> str:
     """
     What the operator should DO about this number.
 
@@ -552,6 +709,35 @@ def verdict_line(rho: float | None, n_seats: int,
             f"collapse from questions that were simply too hard.\n"
             f"Re-run with an easier set (change --seed) before cutting "
             f"anything."
+        )
+    # THE TWO READINGS CONFLICT ONLY IF THEY IMPLY DIFFERENT DECISIONS.
+    #
+    # This first compared the raw gap, and that was wrong: on the shipped demo
+    # the two readings were -0.034 and -0.250 -- a gap of 0.216, and both
+    # squarely "keep five". Refusing a verdict there manufactures a conflict
+    # out of two numbers that agree about everything the operator has to
+    # decide, and an alarm that fires when nothing is wrong is an alarm that
+    # gets ignored when something is.
+    #
+    # What matters is whether the headline and the discriminating reading fall
+    # on opposite sides of a threshold. When they do, the headline is being
+    # driven by items every seat answered alike -- correlated by construction
+    # -- and picking one of the two would be breaking a tie by preference
+    # rather than by evidence.
+    if (rho_discriminating is not None
+            and _decision_band(rho) != _decision_band(rho_discriminating)):
+        return (
+            f"NO SINGLE VERDICT -- THE TWO READINGS DISAGREE.\n"
+            f"  Over ALL items          rho={rho:.3f}  "
+            f"(do they fail together on this probe?)\n"
+            f"  Over discriminating     rho={rho_discriminating:.3f}  "
+            f"(do they fail together where they could differ?)\n"
+            f"The gap means items every seat answered alike are driving the "
+            f"headline; those correlate by construction and say nothing about "
+            f"independence.\n"
+            f"Read the difficulty table: a band at 0% or 100% contributed "
+            f"nothing. Re-run with the probe centred on the band that "
+            f"discriminated, then decide."
         )
     if rho <= 0.2:
         return (f"KEEP FIVE SEATS. rho={rho:.3f} is at or below the ~0.2 "
@@ -631,6 +817,10 @@ def render_calibration(res: CalibrationResult) -> str:
     out.append("-" * 72)
     out.append(f"  error correlation (rho) : "
                f"{'undefined' if rho_undefined(rho) else f'{rho:.3f}'}")
+    if res.rho_discriminating is not None:
+        out.append(f"  rho, discriminating only: "
+                   f"{res.rho_discriminating:.3f} "
+                   f"({res.n_unanimous_items} item(s) excluded as unanimous)")
     out.append(f"  effective seats         : "
                f"{'undefined' if n_eff is None or math.isnan(n_eff) else f'{n_eff:.2f}'} "
                f"of {len(res.seats)} paid for")
@@ -639,6 +829,23 @@ def render_calibration(res: CalibrationResult) -> str:
     if reading:
         out.append("  " + reading)
     out.append("")
+
+    if res.band_accuracy:
+        out.append("-" * 72)
+        out.append("BY DIFFICULTY -- where this panel's ability actually sits")
+        out.append("-" * 72)
+        out.append(f"  {'band':<10}{'items':>8}{'accuracy':>11}")
+        for band in BANDS:
+            if band not in res.band_accuracy:
+                continue
+            n_items, acc = res.band_accuracy[band]
+            out.append(f"  {band:<10}{n_items:>8}{acc:>10.0%}")
+        out.append("")
+        out.append("  A band every seat got right, or every seat got wrong,")
+        out.append("  contributed nothing to the correlation. If the easy band")
+        out.append("  is 100% and the hard band 0%, the probe bracketed this")
+        out.append("  panel and the middle band carried the measurement.")
+        out.append("")
 
     if res.seat_accuracy:
         out.append("-" * 72)
@@ -656,9 +863,29 @@ def render_calibration(res: CalibrationResult) -> str:
         out.append("")
 
     out.append("=" * 72)
-    out.append(verdict_line(rho, len(res.scored_seats), res.mean_accuracy))
+    out.append(verdict_line(rho, len(res.scored_seats), res.mean_accuracy,
+                            res.rho_discriminating))
     out.append("=" * 72)
     out.append("")
+    # WHOSE QUESTION IS THIS REPORT ANSWERING?
+    #
+    # Everything above is framed for the budget-holder: how many seats to pay
+    # for next time. That framing hides the other reader entirely -- whoever
+    # relies on an answer this panel already produced. A high rho is not only
+    # a forward-looking spending signal; it says the agreement in runs ALREADY
+    # COMPLETED was worth less than it looked, and nothing else in the system
+    # will ever tell them so.
+    if rho_measured(rho) and rho > 0.5:
+        out.append("-" * 72)
+        out.append("BACKWARD-LOOKING IMPLICATION -- read this before cutting")
+        out.append("-" * 72)
+        out.append(f"  rho={rho:.3f} does not only bear on what to buy next.")
+        out.append("  Convergence in runs ALREADY COMPLETED with this panel")
+        out.append("  was worth less than it appeared: seats agreeing while")
+        out.append("  sharing errors is what this number measures.")
+        out.append("  Re-examine any conclusion whose confidence rested on")
+        out.append("  those seats agreeing. Cutting seats does not undo it.")
+        out.append("")
     out.append("SCOPE: this measures agreement on ARITHMETIC only. A panel")
     out.append("independent here may still share a blind spot on domain")
     out.append("reasoning. Re-run when a vendor ships a new model.")
@@ -700,6 +927,58 @@ def _collapsed_demo_seats(items: Sequence[Item]) -> dict[str, Callable[[str], st
 
 
 # ---------------------------------------------------------------------------
+# preflight -- prevention rather than detection
+# ---------------------------------------------------------------------------
+
+REJECTED_SAMPLING_KEYS = ("temperature", "top_p", "top_k")
+
+def preflight_settings(path: str) -> list[str]:
+    """Problems that would cost money to discover. Empty list means clear.
+
+    DETECTING A FAILURE AFTER PAYING FOR IT IS NOT THE SAME AS PREVENTING IT.
+    The rest of this module reports what went wrong once the calls are made;
+    this runs before any of them.
+
+    The case it exists for: profiles.example.json templates
+    "temperature": "{{temperature}}" in all five seat blocks, and the current
+    Claude models -- Fable 5, Opus 5, Sonnet 5 and the 4.6/4.7/4.8 family --
+    REMOVED the sampling parameters. Sending one returns HTTP 400. The seat is
+    then excluded and the run measures four seats instead of five, which is a
+    degraded measurement the operator has already paid for. The settings
+    checker does not catch it: it only looks for FILL-IN markers.
+
+    Returns strings rather than raising, so the caller decides whether a
+    finding blocks the run or is merely printed.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return [f"settings file could not be read: {exc}"]
+    if not isinstance(cfg, dict):
+        return ["settings file is not a JSON object"]
+
+    problems: list[str] = []
+    for seat_id, block in sorted(cfg.items()):
+        if seat_id.startswith("_") or not isinstance(block, dict):
+            continue
+        endpoint = str(block.get("endpoint", ""))
+        body = block.get("body")
+        if not isinstance(body, dict) or "anthropic" not in endpoint.lower():
+            continue
+        present = [k for k in REJECTED_SAMPLING_KEYS if k in body]
+        if present:
+            problems.append(
+                f"seat {seat_id!r} sends {', '.join(present)} to an Anthropic "
+                f"endpoint. Current Claude models removed the sampling "
+                f"parameters and return HTTP 400 for them. Take "
+                f"{'those keys' if len(present) > 1 else 'that key'} out of "
+                f"this seat's body block."
+            )
+    return problems
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -712,7 +991,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--env", metavar="PATH",
                     help="path to the .env holding the seat credentials")
     ap.add_argument("--n-items", type=int, default=DEFAULT_N_ITEMS,
-                    help=f"how many propositions, even (default {DEFAULT_N_ITEMS})")
+                    help=f"how many propositions; multiple of {2 * len(BANDS)} "
+                         f"(default {DEFAULT_N_ITEMS})")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED,
                     help="item-set seed; the same seed gives the same items")
     ap.add_argument("--max-cost", type=float, metavar="USD",
@@ -721,6 +1001,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     default="external")
     ap.add_argument("--json", metavar="PATH",
                     help="also write the raw report as JSON")
+    ap.add_argument("--ignore-preflight", action="store_true",
+                    help="run even if preflight objects (it refuses by "
+                         "default, because the alternative is finding out "
+                         "by spending)")
     ap.add_argument("--demo", action="store_true",
                     help="synthetic seats: no network, no spend")
     ap.add_argument("--demo-collapsed", action="store_true",
@@ -749,6 +1033,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ledger = None
         if args.max_cost is not None:
             ledger = RA.build_ledger(args.max_cost, None, None)
+        blocking = preflight_settings(args.profiles)
+        if blocking and not args.ignore_preflight:
+            print("CALIBRATION NOT STARTED -- preflight found problems that "
+                  "would cost money to discover:", file=sys.stderr)
+            for p in blocking:
+                print(f"  - {p}", file=sys.stderr)
+            print("Nothing was sent and nothing was spent. Fix these, or pass "
+                  "--ignore-preflight if you are certain.", file=sys.stderr)
+            return 2
+
         try:
             RA.load_env_file(args.env)
             seats = RA.live_seats(

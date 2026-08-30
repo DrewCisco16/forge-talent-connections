@@ -18,10 +18,10 @@ and the generator refuses to write one that does — verified by planting a
 seats, or cut to three.
 
 A defect here **does not crash**. It produces a plausible number that a
-spending decision then rests on. That is the whole review problem. **Nine**
-defects of exactly that shape have already been found in this module, every
-one of them after it was "working, tested and green", and all nine are
-described below with how they were reproduced.
+spending decision then rests on. That is the whole review problem.
+**Fourteen** defects of exactly that shape have already been found in this
+module, every one of them after it was "working, tested and green", and all
+fourteen are described below with how they were reproduced.
 
 ---
 
@@ -29,8 +29,8 @@ described below with how they were reproduced.
 
 | File | Role |
 |---|---|
-| `calibrate.py` | The measurement. ~290 statements |
-| `test_calibrate.py` | 61 tests |
+| `calibrate.py` | The measurement. ~397 statements |
+| `test_calibrate.py` | 101 tests |
 | `.github/workflows/calibrate.yml` | Manual-only, phone-triggerable run |
 | `CALIBRATING.md` | Operator instructions |
 
@@ -73,13 +73,18 @@ force this and only this shape:
 
 ---
 
-## Nine defects already found here — the review should assume there are more
+## Fourteen defects already found here — the review should assume there are more
 
-The first two were found before the module shipped. The other seven came out
-of an **Inversion Analysis** run against it afterwards — assume it is wrong,
-enumerate how — and every one of them was verified by running it, not by
-reading it. That the pass found seven more after the module was "done, tested
-and green" is itself the most useful thing to know about it.
+Two were found before the module shipped. Seven more came out of an
+**Inversion Analysis** run against it afterwards — assume it is wrong,
+enumerate how. Five more came out of a **Critical Systems Thinking + TRIZ**
+pass after that, asking instead what the measurement excludes and whose
+perspective it privileges. Every one was verified by running it, not by
+reading it.
+
+That three successive passes each found defects in a module that was already
+"done, tested and green" is the most useful thing to know about it. Assume a
+fourth pass would find more, and that you are that pass.
 
 ### Defect 1: the silent sample collapse
 
@@ -196,16 +201,24 @@ assumed.
 
 ## What I verified, with numbers
 
-- **1,190 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
+- **1,212 tests pass.** `ruff` clean, `mypy --strict` clean across 23 source
   files, `bandit` exit 0, `pip-audit` clean.
-- **Coverage 82.11%** against the 80 floor; `calibrate.py` at **99%** (the one
+- **Coverage 82.45%** against the 80 floor; `calibrate.py` at **99%** (the one
   uncovered line is `if __name__ == "__main__"`).
-- **Twenty mutations planted, all twenty caught** — and two of them SURVIVED
-  on the first attempt, which is the useful part. Removing the snapping
-  extractor from `run_calibration` changed no test, because every format test
-  called the extractor directly and none asserted the wiring; and the
-  uniqueness guard was untestable at n=24 because collisions do not occur below
-  n=1000. Both tests were rewritten until the mutation failed them. Reverting the claim format;
+- **Twenty-seven mutations planted, all twenty-seven caught** — and FIVE of
+  them survived on the first attempt, which is the useful part:
+  removing the snapping extractor changed no test (every format test called
+  the extractor directly; none asserted the wiring); the uniqueness guard was
+  untestable at n=24 because collisions do not occur below n=1000; the
+  discriminating-rho threshold could be deleted freely because the panel it
+  was tested on returned NaN either way; and the truth-alternation rule is
+  genuinely EQUIVALENT at three bands, so it had to be exercised at four.
+  Each test was rewritten until the mutation failed it.
+- **One factual error in my own comments, caught by mutation.** I had written
+  that alternating truth by index "would have pinned band 0 to true every
+  time". Enumeration says otherwise: at three bands it balances, because three
+  is odd. It collapses at four. The comment is corrected and the test now
+  asserts the rule at four bands rather than restating a false claim. Reverting the claim format;
   declaring `OPEN_ENDED` instead of `SHARED_DETECTION`; swallowing seat
   errors; never flagging unmatched claims; loosening the keep-five threshold
   to 0.9; exiting 0 on an unmeasurable run; making false items wrong by 200;
@@ -230,25 +243,21 @@ against a single real model**, so everything below is reasoning, not evidence.
 Three items from the first version of this brief were closed by the Inversion
 pass and are gone; what remains is what remains.
 
-### 1. The effective sample is data-dependent and may be far smaller than `n`
+### 1. There is still no confidence interval
 
-Only claims **at least one seat asserts** become matrix items. A false
-statement nobody falls for produces no claim, no item, and contributes
-nothing. If the seats are good, the matrix collapses toward "the true items
-only" — and measuring only *misses* is precisely the flaw the false items were
-added to fix. Observed at `--n-items 24`: **17** items (mixed seats), **12**
-(perfect seats), **16** (one seat excluded).
+The sample is no longer data-dependent — every item is seeded, so the matrix
+is always `n` rows — but `rho` over 60 items and 5 seats is still a point
+estimate with **no interval anywhere in this module**. Should there be, and
+what would it take to compute one honestly on binary error indicators with
+this much structure?
 
-**Question for Codex:** is `rho` over ~12 items across 5 seats meaningful at
-all? There is **no confidence interval anywhere in this module**. Should there
-be, and what would it take to compute one honestly here?
+### 2. The band boundaries are guesses
 
-### 2. Probe difficulty is still guesswork
-
-Three-digit multiplication was chosen because I reasoned models slip there.
-**Unmeasured.** Too easy and every run returns NO VERDICT (NaN); too hard and
-`rho` goes to 1.0 from saturation. The saturation guard now catches the second
-case — but its threshold is the next item.
+Easy is two-digit addition, medium three-digit multiplication, hard
+four-by-three-digit multiplication. Those were chosen by reasoning about where
+models slip, and **not one of them has been checked against a real model**.
+If all three bands land above or below the panel's ability the span buys
+nothing, and I would not know until a live run.
 
 ### 3. I invented the saturation threshold
 
@@ -284,15 +293,14 @@ reading the table; nothing detects it automatically. `HttpSeat` raises on
 `stop_reason == max_tokens` **only when the text is empty** — a partial reply
 passes through silently.
 
-### 7. Known interaction: `temperature` is rejected by current Claude models
+### 7. The preflight gate is a heuristic
 
-`profiles.example.json` templates `"temperature": "{{temperature}}"` in all
-five seat blocks. Current Anthropic models (Fable 5, Opus 5, Sonnet 5, and the
-4.6/4.7/4.8 family) **removed** `temperature`, `top_p` and `top_k` — sending
-them returns HTTP 400. Calibration inherits this path. It fails loudly
-(`HTTP 400 from <vendor>`), not silently, and that seat is now excluded rather
-than scored — but the run then measures four seats, not five. The settings
-checker does not catch it; it only looks for `FILL-IN`.
+`preflight_settings` refuses to start when a settings block sends
+`temperature`, `top_p` or `top_k` to an endpoint whose URL contains
+"anthropic". Both halves are heuristics: the substring match will miss a
+gateway or proxy URL that fronts the same models, and it assumes every
+Anthropic-hosted endpoint rejects those keys. Attack both directions — a
+configuration it wrongly blocks, and one it wrongly allows through.
 
 ### 8. The workflow uses `eval`
 
@@ -308,6 +316,65 @@ written with `printf` from the environment rather than passed as arguments
 roughly 700 tokens. The ledger therefore over-estimates, which is the safe
 direction for a ceiling — but confirm it cannot *under*-estimate on this path.
 Only `--max-cost` (per-run) is exposed; per-stage and per-day are not.
+
+---
+
+## Defects 10-14: found by the Critical Systems Thinking + TRIZ pass
+
+Run after the Inversion pass, asking different questions: what does this
+measurement include and exclude, whose perspective does its framing privilege,
+and which of its constraints are real contradictions versus false ones.
+
+**10. A shared MISS left no trace — the most dangerous blind spot was
+invisible.** `build_correctness_matrix` builds rows from the verdicts, and a
+statement nobody proposed is never gated and never becomes a row. So when all
+five seats FAILED TO SPOT the same true statement — everyone missing a real
+defect, which is precisely what this tool exists to detect — the item vanished
+from the measurement entirely. Measured: five seats all missing three true
+items gave a **9-row matrix and rho = NaN**; the visible half of the identical
+behaviour, all five wrongly asserting three false statements, gave 15 rows and
+rho = 1.0. The same panel pathology, one half measured and one half erased.
+Fixed by seeding every item into the pass so all get adjudicated; the seat
+credited with a claim is read from the RESPONSES, so seeding attributes
+nothing to anyone. This also closes the "effective sample is data-dependent"
+uncertainty from the previous brief: the matrix is now always `n` rows.
+
+**11. Zero-variance ITEMS inflate the headline rho.** `seat_independence`
+guards against a zero-variance SEAT (a constant column) but not a
+zero-variance ITEM (a constant row). A difficulty band every seat fails enters
+the correlation as perfect agreement, by construction. Measured: a panel that
+was genuinely independent on the band that discriminated it — each seat
+slipping on a different medium item — scored **rho 0.871 and was told to CUT
+SEATS**, because hard items nobody got right counted as instances of failing
+together. Now reported as two readings side by side, with no single verdict
+when they imply different decisions. Both are legitimate answers to different
+questions and collapsing them is what produced the wrong recommendation.
+
+**12. The probe was a compromise where it should have been a span.** One
+difficulty can only be wrong in one of two directions and cannot tell you
+which — too easy gives NaN, too hard gives a false collapse. Items now span
+easy / medium / hard and the report shows accuracy per band, so the panel's
+ability level is visible rather than inferred. This is the TRIZ move:
+separation instead of trade-off.
+
+**13. "Cheap versus statistically stable" was a false contradiction.** The
+default was 24 items because more felt more expensive. Measured: 24 items is
+179 prompt tokens, 120 items is 811 — and all of it is still **five calls**.
+Items were priced as though they were calls. Default raised to 60.
+
+**14. The report spoke to only one of its two readers.** Every line was framed
+for the budget-holder: how many seats to pay for next time. That framing hides
+the other reader entirely — whoever relies on an answer this panel has already
+produced. A high rho does not only bear on future spending; it says
+convergence in COMPLETED runs was worth less than it looked, and nothing else
+in the system will ever tell them. The report now says so when rho is high.
+
+Plus one preventive gate, on Zero-Defects grounds — the module detected
+problems well and prevented none. `preflight_settings` reads the settings file
+and refuses to start when it finds something that would only be discovered by
+paying for it: currently sampling parameters sent to an Anthropic endpoint,
+which current Claude models reject with HTTP 400. That was open uncertainty #7
+in the previous brief; it is now caught before any call is made.
 
 ---
 
