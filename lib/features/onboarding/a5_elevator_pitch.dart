@@ -17,12 +17,22 @@ import "../../widgets/section_label.dart";
 import "../../widgets/status_chip.dart";
 import "../../widgets/pitch_video_player.dart";
 
+import "package:video_player/video_player.dart";
+
 /// A5 Elevator pitch.
-class A5ElevatorPitch extends ConsumerWidget {
+class A5ElevatorPitch extends ConsumerStatefulWidget {
   const A5ElevatorPitch({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<A5ElevatorPitch> createState() => _A5ElevatorPitchState();
+}
+
+class _A5ElevatorPitchState extends ConsumerState<A5ElevatorPitch> {
+  VideoPlayerController? _adController;
+
+  @override
+  Widget build(BuildContext context) {
+    final WidgetRef ref = this.ref;
     final ForgeTheme forge = ForgeTheme.of(context);
 
     return PhoneScaffold(
@@ -47,7 +57,14 @@ class A5ElevatorPitch extends ConsumerWidget {
                 PitchVideoPlayer(
                   videoAsset: pitch.videoAsset,
                   showAiLabel: pitch.isAiPresented,
+                  onControllerCreated: (VideoPlayerController c) =>
+                      setState(() => _adController = c),
                 ),
+                const SizedBox(height: ForgeSpacing.gapCard),
+                // The ad's embedded on-screen text is limited by the source
+                // video's resolution, so its message is restated here in
+                // sharp native type, synchronized to playback.
+                _AdTextBand(controller: _adController),
                 const SizedBox(height: 6),
                 Text(
                   "Marketing advertisement · made in FORGE Talent Connections",
@@ -237,6 +254,93 @@ class A5ElevatorPitch extends ConsumerWidget {
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+/// The ad's on-screen text, restated in sharp native type and synchronized
+/// to playback. When the player is idle or unavailable, the opening line
+/// shows, so the band never renders empty.
+class _AdTextBand extends StatelessWidget {
+  const _AdTextBand({required this.controller});
+
+  final VideoPlayerController? controller;
+
+  /// (start second, caption). Timed to the ad's own text moments; the one
+  /// adjustment from the embedded wording is noted in the PR: the closing
+  /// integrity line is restated with the product's approved language.
+  static const List<(double, String)> schedule = <(double, String)>[
+    (0, "FORGE Talent Connections. Provable trust for every connection."),
+    (6, "Senior Creative Director"),
+    (12, "Your work becomes proof that travels with you."),
+    (27, "Veteran · Student · Apprentice · Professor"),
+    (35, "Trust is earned through human vouches."),
+    (44, "The sealed record."),
+    (52, "Seal earned."),
+    (66, "Status: Verified. Digital signature validated."),
+    (74, "Join FORGE Talent Connections."),
+  ];
+
+  static String captionAt(Duration position) {
+    final double t = position.inMilliseconds / 1000.0;
+    String current = schedule.first.$2;
+    for (final (double start, String text) in schedule) {
+      if (t >= start) current = text;
+    }
+    return current;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    final VideoPlayerController? c = controller;
+
+    Widget band(String caption) => Container(
+      decoration: BoxDecoration(
+        color: forge.surface,
+        border: Border.all(color: forge.gold.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: const BoxConstraints(minHeight: 64),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            "AD TEXT · RESTATED FOR CLARITY",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.chip,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: forge.gold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: Text(
+              caption,
+              key: ValueKey<String>(caption),
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.cardTitle,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+                color: forge.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (c == null) return band(schedule.first.$2);
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: c,
+      builder: (BuildContext context, VideoPlayerValue v, Widget? _) =>
+          band(captionAt(v.position)),
     );
   }
 }

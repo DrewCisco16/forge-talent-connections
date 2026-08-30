@@ -21,8 +21,13 @@ class PitchVideoPlayer extends StatefulWidget {
     required this.showAiLabel,
     this.width = 210,
     this.height = 300,
+    this.onControllerCreated,
     super.key,
   });
+
+  /// Hands the controller to the caller (for synchronized captions).
+  /// The player still owns the controller's lifecycle.
+  final ValueChanged<VideoPlayerController>? onControllerCreated;
 
   /// Bundled asset path, or null for the empty state.
   final String? videoAsset;
@@ -58,6 +63,13 @@ class _PitchVideoPlayerState extends State<PitchVideoPlayer> {
     }
     final VideoPlayerController controller = VideoPlayerController.asset(asset);
     _controller = controller;
+    // Deferred one frame: the player is often created mid-build, and the
+    // caller may respond with setState.
+    if (widget.onControllerCreated != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onControllerCreated!.call(controller);
+      });
+    }
     controller.setLooping(true);
     controller
         .initialize()
