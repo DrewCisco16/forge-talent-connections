@@ -245,6 +245,37 @@ def _holes_name_their_remedy() -> tuple[bool, str]:
         f"{len(named)}/{len(c.holes)} holes name what would close them")
 
 
+def _the_queue_can_be_worked() -> tuple[bool, str]:
+    """SOP 9.1 steps 7-8, and SOP 10 makes it a do-not-build condition.
+
+    Measured by REPLAYING the most recent full run rather than by importing
+    the module: a queue surface that cannot read a real run is not a queue
+    surface, and every earlier gap in this project was a thing that existed
+    and could not be reached from the engine that spends money.
+    """
+    runs = sorted(glob.glob(os.path.join(HERE, "runs", "full-*")))
+    if not runs:
+        return False, "no full run on disk to work a queue from"
+    try:
+        import judgment_queue as JQ
+        from run_adjudication import _default_gates
+        # THE OFFLINE GATES, NOT NONE. With no gates nothing is ever settled,
+        # so every claim reads as open and this reported 143 where the run
+        # itself had 136 -- a readiness figure describing a run that did not
+        # happen. Not night_gates() either: those reach Crossref and doi.org,
+        # and a readiness report that needs the network cannot be trusted to
+        # run when the network is what is broken.
+        rep = JQ.replay(runs[-1], gates=_default_gates())
+        items = JQ.open_items(rep)
+        folded = JQ.fold(rep, {c.id: True for c in items})
+    except Exception as exc:                      # noqa: BLE001
+        return False, f"replaying {os.path.basename(runs[-1])} failed: {exc}"
+    return bool(items) and folded.rho is not None, (
+        f"{len(items)} open item(s) in {os.path.basename(runs[-1])}; "
+        f"worked, they yield rho = "
+        + ("unmeasurable" if folded.rho is None else f"{folded.rho:.4f}"))
+
+
 def checks() -> list[Check]:
     rounds = _live_runs()
     eliminated = sum(r.removed for r in rounds)
@@ -258,6 +289,7 @@ def checks() -> list[Check]:
     calib_ok, calib_detail = _calibration_pass_is_inert()
     stop_ok, stop_detail = _stop_rule_reaches_a_live_run()
     holes_ok, holes_detail = _holes_name_their_remedy()
+    queue_ok, queue_detail = _the_queue_can_be_worked()
 
     return [
         Check("offline suite", 15,
@@ -302,6 +334,9 @@ def checks() -> list[Check]:
               stop_detail, stop_ok, "SOP 6.2, 6.3, 6.5, 9.1 steps 9-11"),
         Check("every hole names what would close it", 5,
               holes_detail, holes_ok, "SOP 9.3, computed from a real hole set"),
+        Check("the judgment queue can be worked", 10,
+              queue_detail, queue_ok,
+              "SOP 9.1 steps 7-8, by replaying the most recent full run"),
     ]
 
 

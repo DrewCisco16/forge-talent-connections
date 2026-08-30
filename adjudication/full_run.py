@@ -158,6 +158,21 @@ def main() -> int:
         if conv.holes:
             print(f"    - {len(conv.holes)} hole(s) open")
 
+    # THE NEXT STEP, NAMED, WITH THE COMMAND. SOP 9.1 step 7 is "work your
+    # escalation queue" and step 8 folds it back in; until today neither was
+    # reachable, and a run that ends by listing holes without saying how to
+    # close the biggest one leaves the operator to reinvent the route.
+    if conv.holes or conv.blockers:
+        print("\n" + "=" * 72)
+        print("5. WHAT TO DO NEXT  (SOP 9.1 steps 7-8)")
+        print("=" * 72)
+        print("  Work the judgment queue. It is the largest hole above, it is")
+        print("  what makes rho measurable, and SOP 6.3 cannot be satisfied")
+        print("  while any item is open:")
+        print(f"\n    .venv/bin/python judgment_queue.py --open {out}")
+        print("    (fill in queue.json in a text editor, then)")
+        print(f"    .venv/bin/python judgment_queue.py --apply {out}")
+
     print(f"\n  full record:     {out}")
     print(f"  verifier packet: {os.path.join(out, 'VERIFIER-PACKET.md')}")
     return 0 if resolved else 1
