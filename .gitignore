@@ -1,0 +1,30 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# Secrets and config: never commit. Config is supplied via --dart-define.
+.env
+.env.*
+*.env
+env/
+config/secrets*.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Design handoff package: kept local as build input, never committed.
+# SCREENS_SPEC.md contains engine names barred from this repo by the build rules,
+# and design_tokens.json / figma_node_map.md carry the Figma file key and URL.
+design_handoff/
+
+# The web demo build is committed so Cloudflare Pages can serve it, but the
+# CanvasKit renderer is not: this build fetches it from Google's CDN, so the
+# locally emitted copy is 37MB of dead weight.
+demo/canvaskit/
+test/goldens/failures/

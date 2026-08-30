@@ -1,0 +1,232 @@
+import "package:flutter/material.dart";
+import "package:go_router/go_router.dart";
+
+import "../../mock/fixtures.dart";
+import "../../models/models.dart";
+import "../../theme/forge_theme.dart";
+import "../../theme/tokens.dart";
+import "../../widgets/brand_lockup.dart";
+import "../../widgets/burning_flame.dart";
+import "../../widgets/operator_footer.dart";
+import "../../widgets/phone_scaffold.dart";
+import "../../widgets/section_label.dart";
+
+/// A1 Splash and role select.
+class A1Splash extends StatefulWidget {
+  const A1Splash({super.key});
+
+  @override
+  State<A1Splash> createState() => _A1SplashState();
+}
+
+class _A1SplashState extends State<A1Splash> {
+  ForgeRole _role = ForgeRole.talent;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+
+    return PhoneScaffold(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const SizedBox(height: 20),
+          const Align(alignment: Alignment.centerRight, child: DemoBadge()),
+          const SizedBox(height: 10),
+          // The flame burns: spec A1 motion, "flame flicker loop". Static under
+          // reduced motion.
+          const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
+          const SizedBox(height: 8),
+          // The lockup is one even block, like the marketing sticker:
+          // FORGE and TALENT CONNECTIONS fitted to the same width, the gold
+          // rule spanning the same measure, all on the mark's own axis.
+          const Center(child: BrandLockup(width: 264)),
+          const SizedBox(height: 26),
+          ForgeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  "I am ...",
+                  style: TextStyle(
+                    fontFamily: ForgeType.displayFamily,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                    color: forge.text,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final ForgeRole role in ForgeRole.values) ...<Widget>[
+                  _RolePill(
+                    role: role,
+                    selected: role == _role,
+                    onTap: () => setState(() => _role = role),
+                  ),
+                  if (role != ForgeRole.values.last)
+                    const SizedBox(height: ForgeSpacing.gapCard),
+                ],
+                const SizedBox(height: ForgeSpacing.gapSection),
+                // Each role continues to its own surface: a collaborator
+                // builds a profile, a project sponsor goes to projects, a
+                // veteran starts with the service seal. One door, three
+                // paths, and every path passes the Mission statement first.
+                _Continue(
+                  onTap: () => context.go(
+                    Uri(
+                      path: "/mission",
+                      queryParameters: <String, String>{
+                        "next": switch (_role) {
+                          ForgeRole.talent => "/create-profile",
+                          ForgeRole.opportunity => "/opportunities",
+                          ForgeRole.veteran => "/veteran-verification",
+                        },
+                      },
+                    ).toString(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 26),
+          Text(
+            "Connecting Talent with Opportunity",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.body,
+              fontWeight: FontWeight.w600,
+              color: forge.text,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Provable trust for every connection",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // The category, said plainly, so a first-time visitor never reads
+          // this as one more job board.
+          Text(
+            "Build proof. Earn trust. Collaborate by invitation.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              fontWeight: FontWeight.w700,
+              color: forge.gold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "An invite-only project collaboration network. It complements "
+            "LinkedIn and Handshake - it is not a job board.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.caption,
+              height: 1.35,
+              color: forge.textSub,
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapSection + 4),
+          // The operating company, small at the foot of the first page.
+          const OperatorFooter(),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _RolePill extends StatelessWidget {
+  const _RolePill({
+    required this.role,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ForgeRole role;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ForgeShape.ctaRadius),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(colors: forge.goldGradient)
+              : null,
+          border: selected ? null : Border.all(color: forge.gold, width: 1.4),
+          borderRadius: BorderRadius.circular(ForgeShape.ctaRadius),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              role.label,
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.cardTitle,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : forge.gold,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              role.blurb,
+              style: TextStyle(
+                fontFamily: ForgeType.bodyFamily,
+                fontSize: ForgeType.caption,
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.9)
+                    : forge.textSub,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Continue extends StatelessWidget {
+  const _Continue({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ForgeTheme forge = ForgeTheme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            "Continue",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.body,
+              fontWeight: FontWeight.w700,
+              color: forge.gold,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(Icons.arrow_forward, size: 15, color: forge.gold),
+        ],
+      ),
+    );
+  }
+}

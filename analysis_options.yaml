@@ -1,0 +1,15 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Zero analyzer warnings is a milestone gate; warnings are treated as errors.
+    todo: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
