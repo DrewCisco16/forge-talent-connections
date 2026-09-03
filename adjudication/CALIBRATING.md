@@ -62,7 +62,8 @@ involved.
 ## Running it for real, from your Mac
 
 ```
-python calibrate.py --profiles profiles.json --max-cost 1.00
+python calibrate.py --profiles profiles.json --max-cost 1.00 \
+  --transcript calibration-transcript.json
 ```
 
 Costs **five API calls total** — one per seat. Every item rides in a single
@@ -74,6 +75,38 @@ refuses to start if it finds something that would fail after you had paid for
 it — currently, sampling parameters (`temperature`, `top_p`, `top_k`) sent to
 an Anthropic endpoint, which current Claude models reject with HTTP 400.
 `--ignore-preflight` overrides it if you are certain.
+
+## Keep the replies — a paid run is worth scoring twice
+
+`--transcript` saves what each seat actually wrote. Nothing else does: the
+moment a reply is parsed, the text is gone.
+
+That matters because the warnings below are all cases where the score is
+suspect but the report still looks perfectly well formed.
+`CONFIRMATIONS THAT MATCHED NO ITEM ID` means a seat reworded the statements
+instead of copying them, and it biases `rho` in the flattering direction.
+Without the transcript, the only way to look into it is to pay five vendors
+again. With it:
+
+```
+python calibrate.py --rescore calibration-transcript.json
+```
+
+No network, no credentials, no cost. You can read exactly what each model
+said, and the score is recomputed through the same code the paid run used —
+not a second implementation that might quietly disagree with it.
+
+It is also written **when the run dies**. If the cost ceiling stops the panel
+half way through, the seats that already answered were already paid for, and
+they are on disk rather than gone.
+
+Two things the file will not do. It refuses to load if its questions are not
+the ones its seed produces, because scoring real replies against a different
+quiz would hand you a confident, wrong number. And editing the `is_true` flags
+inside it changes nothing: the arithmetic gate recomputes every expression
+during scoring, so the answer key is never read from the file.
+
+Keep it out of the repository — it is a run record, not source.
 
 ---
 
@@ -144,9 +177,17 @@ when you decide it runs.
 
 The job prints the full report in its log. It also attaches
 **calibration-report** at the bottom of the run page, containing
-`calibration.txt` (the readable report) and `calibration.json` (the raw
-numbers). Both are kept 30 days and are uploaded **even if the run fails** —
-a run that spent money and then broke is exactly the one whose output you want.
+`calibration.txt` (the readable report), `calibration.json` (the raw numbers),
+and `calibration-transcript.json` (what each seat actually wrote). All three
+are kept 30 days and are uploaded **even if the run fails** — a run that spent
+money and then broke is exactly the one whose output you want.
+
+Download the transcript if anything about the score looks off, and re-score it
+on your Mac for nothing:
+
+```
+python calibrate.py --rescore calibration-transcript.json
+```
 
 ## What to watch for in the report
 

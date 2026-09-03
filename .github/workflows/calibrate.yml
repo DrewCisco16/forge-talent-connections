@@ -129,11 +129,19 @@ jobs:
             --seed "${{ inputs.seed }}" \
             --max-cost "${{ inputs.max_cost_usd }}" \
             --json calibration.json \
+            --transcript calibration-transcript.json \
             | tee calibration.txt
 
       # ALWAYS, INCLUDING ON FAILURE. A run that spent money and then failed is
       # exactly the run whose partial output is worth reading; discarding it
       # means paying again to learn the same thing.
+      #
+      # calibration-transcript.json carries the seats' raw replies, so a score
+      # that looks wrong -- a seat that reworded the statements, a seat cut off
+      # mid-reply -- can be re-examined and re-scored on a laptop for nothing:
+      #     python calibrate.py --rescore calibration-transcript.json
+      # It holds generated arithmetic and the models' answers to it. No claim
+      # text, no artifact, no credential.
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -142,6 +150,7 @@ jobs:
           path: |
             adjudication/calibration.txt
             adjudication/calibration.json
+            adjudication/calibration-transcript.json
           if-no-files-found: warn
           retention-days: 30
 
