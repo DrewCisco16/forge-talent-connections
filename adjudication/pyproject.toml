@@ -1,0 +1,180 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# BLE001 stays ENABLED. The blind excepts in this package are the fail-closed
+# handlers required by SOP Manual v1.1 -- every one carries a local noqa naming
+# the reason, so a new unjustified one is still reported.
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "RUF", "FURB", "PLR", "SIM", "C4"]
+ignore = [
+    "E501",     # line length is handled by the formatter
+    "PLR2004",  # magic values in tests are the expected values under test
+    "PLR0912",  # branch count: the gate router is deliberately explicit
+    "PLR0915",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_suite.py" = ["PLR0913", "B011"]
+# Property tests intentionally reach into module internals and use
+# broad strategies; the assertions are the contract, not the style.
+"test_properties.py" = ["PLR0913", "B011", "PLR2004", "PLC0415"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# strict was turned on after the modules were written, not before, and it
+# found four things worth having: an untyped operator table whose arity was
+# enforced by CPython's grammar rather than by the table, an untyped tuple
+# that made the residual -- the convergence number the stop rule reads -- an
+# Any, a body template that could fill to a non-object and be posted anyway,
+# and an unannotated aggregator in the leave-one-seat-out diagnostic.
+strict = true
+# DISCOVERY, NOT A LIST. This named twenty files, and option_set.py -- added
+# two commits after the list was last touched, and holding the survivor-set
+# logic the whole design now rests on -- was checked by nobody. A new module
+# has to be type-checked by default or the gate only covers the code that
+# happened to predate it.
+files = ["."]
+exclude = [
+    '^\.venv/',
+    # Tests are checked by running them; type-checking pytest fixtures adds
+    # noise without adding a guarantee.
+    '^test_.*\.py$',
+    # Operator scripts run by hand against a live panel, not imported by
+    # anything and not part of the engine.
+    '^diagnose-.*\.py$',
+    '^make_review_bundles\.py$',
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+
+# DISCOVERY, NOT A LIST. This was a hardcoded pair of filenames, which meant a
+# new test file was collected by nobody: test_night_loop.py existed, passed
+# when invoked directly, and contributed nothing to `pytest` -- 40 tests that
+# read as coverage while never running in the gate. A file that is silently
+# skipped is worse than a file that does not exist, because its absence is
+# invisible. Discovery by pattern cannot forget a file.
+#
+# .venv is excluded by pytest's default norecursedirs, which skips dotted
+# directories.
+testpaths = ["."]
+python_files = ["test_*.py"]
+
+# --- deliberate exemptions, each with its reason -------------------------
+[tool.ruff.lint.extend-per-file-ignores]
+"adjudication_orchestrator.py" = [
+    "UP042",    # (str, Enum) is the existing contract; StrEnum changes str() output
+                # and the audit records serialise these values
+    "PLR0911",  # classify_source is a classifier: one explicit return per class
+                # beats a clever lookup that hides the fail-closed default
+]
+"seat_adapter.py" = [
+    "PLR0913",  # HttpSeat's constructor is keyword-only configuration; collapsing
+                # it into a config object would hide which knobs exist
+]
+"seat_profiles.py" = [
+    "PLR0911",  # _substitute returns one branch per placeholder type. The
+                # explicit branches are what make the native-typing rule
+                # readable; a lookup table would hide that "{{max_tokens}}"
+                # alone returns an int while an embedded one returns a string.
+]
+"run_adjudication.py" = [
+    "PLR0911",  # main() is a CLI: one early return per operator error, each
+                # with the message that names the fix. Collapsing them costs
+                # the specific diagnosis, which is the whole value.
+    "PLR0913", "PLR0917",  # run_adjudication and collect_holes take the run's
+                # inputs one per parameter. Bundling them into a config object
+                # would hide which of them are optional and which are the
+                # fail-closed ones, and this is the operator-facing entry point
+                # where that has to be legible at the call site.
+]
+"quote_gate.py" = [
+    "PLR0913", "PLR0917",  # redirect_request's signature is urllib's, not
+                # ours -- it must match HTTPRedirectHandler exactly or the
+                # override is silently not called and redirects resume being
+                # followed with the credential attached.
+    "PLR0911",  # check() returns one verdict per distinct outcome -- unreachable,
+                # 404, paywall, rate limit, client-rendered stub, exact match,
+                # case-folded match, absent. Each is a different fact with a
+                # different remedy; a lookup would hide which are BLOCKED and
+                # which are findings, and that distinction is the gate's point.
+]
+"citation_gate.py" = [
+    "PLR0911",  # one return per named failure: WRONG_PAPER, AUTHOR_MISMATCH,
+                # YEAR_MISMATCH, and three BLOCKED cases. The names are what an
+                # operator acts on.
+]
+"night_loop.py" = [
+    "PLR0913", "PLR0917",  # run_night and live_night take the round's inputs
+                # one per parameter -- ask, thinkers, closer, orchestrator,
+                # output directory. Bundling them would hide that the closer is
+                # a SEPARATE argument from the thinkers, which is the whole
+                # architecture.
+]
+"seat_conduct.py" = [
+    "UP042",    # (str, Enum) matches ClaimKind and GateStatus. These values are
+                # serialised into the audit chain; StrEnum changes str() output
+                # and would silently alter records already written.
+]
+"diagnose-seats.py" = [
+    "PLR0913", "PLR0917",  # redirect_request's signature is urllib's; it must
+                # match exactly or the override is never called and redirects
+                # resume being followed with the credential attached.
+]
+"seat_independence.py" = [
+    "PLR0913", "PLR0917",  # diagnose() takes six optional data sources by design
+    "SIM108",   # the chao1 f2>0 branch is clearer as if/else than as a ternary
+    "FURB110",  # the explicit ternary documents the intentional falsy-zero path
+]
+
+[tool.bandit]
+# Scans every production module. CI previously named eight files, so anything
+# added since was scanned by nobody -- see the workflow comment.
+#
+# Test files are excluded by PATTERN, not by name, so a new one is excluded
+# too. They are excluded for a specific reason and not for convenience:
+# pytest's entire assertion mechanism is the bare `assert` statement, which
+# B101 flags on sight. Scanning them buries the production findings under
+# roughly 1,250 hits on the one construct pytest requires -- and a scan whose
+# output nobody can read is a scan nobody runs.
+#
+# Anything a test does that would be a genuine finding in production -- a
+# subprocess, a network call, a temp path -- is still caught, because the
+# module it exercises is scanned.
+exclude_dirs = [".venv", "*/test_*.py"]
+# The pattern, not a list of filenames: a test file added tomorrow is excluded
+# without anyone remembering to add it, and -- verified by dropping a file
+# with a real finding into the tree under each name -- a PRODUCTION module
+# added tomorrow is still scanned.
+
+# ---------------------------------------------------------------------------
+# Coverage: source everything, omit deliberately, say why.
+#
+# CI previously named seven modules with --cov. A module added afterwards was
+# unmeasured BY DEFAULT, which is the wrong default for a gate -- night_loop.py
+# and cost_ledger.py both ran on a live paid panel without ever appearing in
+# the coverage report. Sourcing "." inverts that: new code counts unless an
+# entry below gives a reason it should not.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["."]
+omit = [
+    ".venv/*",
+    # Tests measure the code; measuring the tests measures nothing and
+    # inflates the total with thousands of trivially-executed lines.
+    "test_*.py",
+    # Operator scripts, run by hand against a live panel. They exist to
+    # reproduce a failure once, not to be exercised by CI, and covering them
+    # would mean mocking a vendor to test a diagnostic for that vendor.
+    "diagnose-*.py",
+    "make_review_bundles.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

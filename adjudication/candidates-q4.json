@@ -1,0 +1,53 @@
+[
+  {
+    "id": "c_memo_as_written",
+    "content": "The draft memo's figures are correct as written: $665,000 revenue, $592,600 margin, $634,600 contribution, target beaten by $34,600.",
+    "claims": [
+      {"kind": "arithmetic", "text": "placement revenue is 665000", "warrant": "35 * 18500 = 665000"},
+      {"kind": "arithmetic", "text": "recruiting cost is 72400", "warrant": "4 * 6200 * 3 = 72400"},
+      {"kind": "arithmetic", "text": "gross margin is 592600", "warrant": "35 * 18500 - 4 * 6200 * 3 = 592600"},
+      {"kind": "arithmetic", "text": "total contribution is 634600", "warrant": "(35 * 18500 - 4 * 6200 * 3) + 14 * 3000 = 634600"},
+      {"kind": "arithmetic", "text": "target beaten by 34600", "warrant": "((35 * 18500 - 4 * 6200 * 3) + 14 * 3000) - 600000 = 34600"}
+    ]
+  },
+  {
+    "id": "c_corrected",
+    "content": "Recomputed: $647,500 revenue, $74,400 recruiting cost, $573,100 margin, $615,100 contribution, target beaten by $15,100.",
+    "claims": [
+      {"kind": "arithmetic", "text": "placements total 35", "warrant": "14 + 9 + 12 = 35"},
+      {"kind": "arithmetic", "text": "placement revenue is 647500", "warrant": "35 * 18500 = 647500"},
+      {"kind": "arithmetic", "text": "recruiting cost is 74400", "warrant": "4 * 6200 * 3 = 74400"},
+      {"kind": "arithmetic", "text": "gross margin is 573100", "warrant": "35 * 18500 - 4 * 6200 * 3 = 573100"},
+      {"kind": "arithmetic", "text": "conversions total 14", "warrant": "35 * 0.4 = 14"},
+      {"kind": "arithmetic", "text": "conversion uplift is 42000", "warrant": "14 * 3000 = 42000"},
+      {"kind": "arithmetic", "text": "total contribution is 615100", "warrant": "(35 * 18500 - 4 * 6200 * 3) + 14 * 3000 = 615100"},
+      {"kind": "arithmetic", "text": "target beaten by 15100", "warrant": "((35 * 18500 - 4 * 6200 * 3) + 14 * 3000) - 600000 = 15100"},
+      {"kind": "arithmetic", "text": "cost per placement is 2125.71", "warrant": "4 * 6200 * 3 / 35 = 2125.714285714286"}
+    ]
+  },
+  {
+    "id": "c_revenue_right_rest_wrong",
+    "content": "Revenue was $647,500, but the memo's cost line stands, so contribution is still $634,600.",
+    "claims": [
+      {"kind": "arithmetic", "text": "placement revenue is 647500", "warrant": "35 * 18500 = 647500"},
+      {"kind": "arithmetic", "text": "recruiting cost is 72400", "warrant": "4 * 6200 * 3 = 72400"},
+      {"kind": "arithmetic", "text": "total contribution is 634600", "warrant": "(35 * 18500 - 4 * 6200 * 3) + 14 * 3000 = 634600"}
+    ]
+  },
+  {
+    "id": "c_target_missed",
+    "content": "Once the arithmetic is corrected the quarter fell short of the $600,000 target.",
+    "claims": [
+      {"kind": "arithmetic", "text": "placement revenue is 647500", "warrant": "35 * 18500 = 647500"},
+      {"kind": "arithmetic", "text": "contribution falls 15100 short of target", "warrant": "600000 - ((35 * 18500 - 4 * 6200 * 3) + 14 * 3000) = 15100"}
+    ]
+  },
+  {
+    "id": "c_capacity_61",
+    "content": "Adding 3 recruiters gives straight-line capacity of 61 placements next quarter.",
+    "claims": [
+      {"kind": "arithmetic", "text": "placements total 35", "warrant": "14 + 9 + 12 = 35"},
+      {"kind": "arithmetic", "text": "straight-line Q1 capacity is 61", "warrant": "35 / 4 * 7 = 61"}
+    ]
+  }
+]

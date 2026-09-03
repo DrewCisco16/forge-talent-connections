@@ -1,0 +1,26 @@
+
+# never commit real credentials
+.env
+adjudication/.env
+adjudication/profiles.json
+
+# Run artifacts: audit logs are the operator's tamper-evident records of a
+# specific run, not repository content, and may quote the adjudicated artifact.
+adjudication/run-*.jsonl
+adjudication/run-*.jsonl.head
+
+# Run folders are the operator working set: artifacts, candidates, audit logs.
+# Not repository content.
+adjudication/runs/
+
+# Operator-approved command list and canary questions are local policy,
+# not repository content.
+adjudication/approved-commands.json
+adjudication/canaries.json
+
+# Accumulated daily spend is per-machine runtime state the runner rewrites on
+# every run, not repository content. Tracking it dirtied the tree on each run
+# and pushed the operator's real spend figures; worse, a merge of two machines'
+# copies could resolve the day's total DOWNWARD, which silently raises the
+# effective ceiling. A missing file already reads as zero spent.
+adjudication/.spend-by-day.json

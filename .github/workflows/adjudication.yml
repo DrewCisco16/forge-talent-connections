@@ -1,0 +1,158 @@
+name: adjudication
+
+# The Cloudflare Pages check publishes the static site; it does not run this
+# suite. Without this workflow the tests gate nothing on push.
+on:
+  # Feature branches are covered by the pull_request trigger. Listing "**" here
+  # too ran the whole job twice on the same SHA -- observed on e6afa9c, run
+  # numbers 1 and 2, both green, both paid for.
+  push:
+    branches: [main]
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+  pull_request:
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+
+# A new push supersedes an in-flight run on the same ref.
+concurrency:
+  group: adjudication-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: adjudication
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: adjudication/requirements-dev.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # SOP Manual v1.1 section 8.4: the non-AI verification layer. These fail
+      # independently of the models, which is the entire point of running them.
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy
+
+      # DISCOVERY, NOT A LIST, on both axes.
+      #
+      # This step named two test files and seven covered modules. Both lists
+      # drifted: test_night_loop.py and test_cost_ledger.py were never run
+      # here, and night_loop.py -- the engine implementing the round design --
+      # was never measured. A new module was excluded from this gate BY
+      # DEFAULT, which is the wrong default for a gate: the green light kept
+      # its meaning only for the code that happened to predate it.
+      #
+      # pytest now discovers test files by pattern (see pyproject testpaths),
+      # and coverage sources everything with explicit, reasoned omissions in
+      # [tool.coverage.run]. New code is measured unless someone says why not.
+      #
+      # THE FLOOR MOVED FROM 90 TO 80, AND THAT IS A TIGHTENING, NOT A
+      # LOOSENING. The old 90 was computed over seven hand-picked modules and
+      # excluded night_loop.py, cost_ledger.py and every gate -- it measured
+      # the covered code and called the result coverage. The new 80 is over
+      # everything.
+      #
+      # It is depressed almost entirely by console.py and intake.py, 480
+      # statements of interactive terminal prompting that are untested.
+      # Excluding the engines, those two, gates, ledger and watcher stand at
+      # 92%. This floor is a ratchet: raise it as console and intake are
+      # covered, never lower it to accommodate new uncovered code.
+      - name: Tests with coverage
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=80
+
+      # SOP 8.4 non-AI verification layer. These fail independently of the
+      # models, which is the whole reason for running them.
+      # Same reasoning as above: eight named files meant every module added
+      # since was scanned by nobody. Configured exclusions live in
+      # [tool.bandit] so a new module is scanned by default.
+      - name: Security scan
+        run: bandit -q -c pyproject.toml -r .
+
+      - name: Dependency audit
+        run: |
+          pip-audit -r requirements.txt --progress-spinner off
+          pip-audit -r requirements-dev.txt --progress-spinner off
+
+      - name: Module demos execute
+        run: |
+          python seat_independence.py > /dev/null
+          python adjudication_orchestrator.py > /dev/null
+          python validation_harness.py > /dev/null
+          python audit_log.py > /dev/null
+          python correctness_matrix.py > /dev/null
+          # The demo exits 1 by design (an escalated claim remains), so
+          # assert the ANSWER rather than the exit code -- "|| true"
+          # would swallow a crash just as happily as a hole.
+          # THE DEMO EXITS 1 BY DESIGN -- an escalated claim remains, which is
+          # the honest outcome. Under GitHub's bash defaults (-e -o pipefail)
+          # the pipeline therefore returns 1 and this step FAILED on the
+          # demo's intended result. Without pipefail it would instead pass
+          # whenever the sentinel had been printed before a crash.
+          #
+          # Capture the output and the status separately, then assert all
+          # three things that matter: the expected status, the sentinel, and
+          # the absence of a traceback.
+          set +e
+          demo_out=$(python run_adjudication.py --demo 2>&1)
+          demo_rc=$?
+          set -e
+          echo "$demo_out"
+          if [ "$demo_rc" -ne 1 ]; then
+            echo "expected the demo to exit 1 (a hole remains); got $demo_rc"
+            exit 1
+          fi
+          echo "$demo_out" | grep -q "SURVIVOR: c_true" || {
+            echo "the demo did not eliminate down to c_true"; exit 1; }
+          echo "$demo_out" | grep -qi "traceback" && {
+            echo "the demo printed a traceback"; exit 1; }
+          # The shipped template MUST fail validation while unfilled.
+          # It validating clean is the fail-open this layer exists to stop.
+          # `cmd && exit 1 || true` succeeds on ANY nonzero status, so a
+          # crash in the profile checker -- a traceback, an import error --
+          # passed this step exactly as a clean validation failure did. The
+          # expected exit code is asserted explicitly instead.
+          # The status alone is not enough: an unhandled Python exception
+          # also exits 1, so a traceback would satisfy an exit-code check as
+          # happily as a clean validation failure. Assert BOTH the nonzero
+          # status and the message that only the real refusal produces.
+          set +e
+          out=$(python run_adjudication.py --check-profiles profiles.example.json 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          if [ "$rc" -eq 0 ]; then
+            echo "the unfilled template validated clean; that is the fail-open this step exists to stop"
+            exit 1
+          fi
+          echo "$out" | grep -q "PROFILES NOT USABLE" || {
+            echo "expected a validation refusal; got a different failure (a crash?)"
+            exit 1
+          }
+
+      # A permissive resolver silently converts the whole system back into an
+      # unverified ensemble. SOP 8.3 calls this the most common build failure.
+      - name: Resolver probe self-check
+        run: |
+          python -c "
+          import sys
+          from adjudication_orchestrator import probe_resolver, GateStatus
+          assert probe_resolver(lambda i: True).status is GateStatus.FAIL, 'probe failed to catch a permissive resolver'
+          assert probe_resolver(lambda i: False).status is GateStatus.PASS
+          print('resolver probe behaves correctly')
+          "

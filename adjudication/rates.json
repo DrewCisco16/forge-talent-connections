@@ -1,0 +1,99 @@
+{
+  "_README": [
+    "Per-million-token prices, each stamped with the date it was read off the",
+    "vendor's own pricing page. cost_ledger.Rate.is_stale() flags anything older",
+    "than the configured window, because a ceiling computed from unchecked prices",
+    "does not bound anything.",
+    "",
+    "These are STANDARD tier, prompts under 200k tokens. Batch, flex, and priority",
+    "tiers differ; so does long-context pricing above 200k. If a run ever sends a",
+    "prompt over 200k tokens these numbers are wrong and the ceiling is too loose.",
+    "",
+    "Re-check every 90 days. Vendors change prices without notice."
+  ],
+  "seat_1": {
+    "_vendor": "OpenAI",
+    "_model": "gpt-5.6-sol",
+    "_source": "https://developers.openai.com/api/docs/models",
+    "input_per_mtok": 4.0,
+    "output_per_mtok": 20.0,
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 0.24x on a live canary at production caps; set to 2.0 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+  },
+  "seat_2": {
+    "_vendor": "Google",
+    "_model": "gemini-3.1-pro-preview",
+    "_source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "_note": "standard tier, prompts <= 200k. Above 200k it is $4.00/$18.00.",
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 12.0,
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "tiers": [
+      [
+        200000,
+        4.0,
+        18.0
+      ]
+    ],
+    "_note_tiers_source": "From this entry's own _note: standard tier at or below 200k input tokens, $4.00/$18.00 above it.",
+    "output_multiplier": 2.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 1.23x on a live canary at production caps; set to 2.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+  },
+  "seat_3": {
+    "_vendor": "Mistral",
+    "_model": "mistral-medium-latest",
+    "_source": "https://docs.mistral.ai/inference/pricing",
+    "_note": "Mistral Medium 3.5, standard regional inference tier.",
+    "input_per_mtok": 1.5,
+    "output_per_mtok": 7.5,
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.0,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 0.53x on a live canary at production caps; set to 2.0 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+  },
+  "seat_4": {
+    "_vendor": "xAI",
+    "_model": "grok-4.6",
+    "_source": "https://docs.x.ai/docs/models",
+    "_note": "prompts under 200k. Above 200k it is $4.00/$12.00.",
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 6.0,
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "tiers": [
+      [
+        200000,
+        4.0,
+        12.0
+      ]
+    ],
+    "_note_tiers_source": "From this entry's own _note: standard tier below 200k input tokens, $4.00/$12.00 above it.",
+    "output_multiplier": 4.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 2.62x on a live canary at production caps; set to 4.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+  },
+  "seat_5": {
+    "_vendor": "Anthropic",
+    "_model": "claude-opus-5",
+    "_source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "_note": "base input / output. Cache reads are 0.1x input if caching is ever enabled.",
+    "input_per_mtok": 5.0,
+    "output_per_mtok": 25.0,
+    "verified_on": "2026-08-25",
+    "max_input_tokens": null,
+    "_note_max_input_tokens": "Largest request this price was checked for, from the vendor's own documentation. null means unchecked: a larger request is still authorised and the report says so. Fill it in yourself; a guessed limit is a guessed ceiling.",
+    "_note_tiers": "Optional [[min_input_tokens, input_per_mtok, output_per_mtok], ...] for providers that charge more above a context threshold. Without it every call is priced at the standard tier, which under-charges the ones that cross it.",
+    "output_multiplier": 2.5,
+    "_note_output_multiplier": "Billed output as a multiple of max_tokens. Measured 1.21x on a live canary at production caps; set to 2.5 for headroom. A call that bills more than it was authorised for halts the run, so an optimistic value is caught on first use rather than at the end of the bill. Raise it if you see an overrun; lower it once you have runs of your own to calibrate against."
+  }
+}

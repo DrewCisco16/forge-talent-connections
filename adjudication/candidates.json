@@ -1,0 +1,16 @@
+[
+  {
+    "id": "c_total_4",
+    "content": "The quarter-to-date total is 4 units.",
+    "claims": [
+      {"kind": "arithmetic", "text": "the total is 4", "warrant": "3 + 1 = 4"}
+    ]
+  },
+  {
+    "id": "c_total_5",
+    "content": "The quarter-to-date total is 5 units, as the note states.",
+    "claims": [
+      {"kind": "arithmetic", "text": "the total is 5", "warrant": "3 + 1 = 5"}
+    ]
+  }
+]
