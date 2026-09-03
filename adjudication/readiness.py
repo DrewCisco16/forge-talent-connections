@@ -267,13 +267,19 @@ def _the_queue_can_be_worked() -> tuple[bool, str]:
         # run when the network is what is broken.
         rep = JQ.replay(runs[-1], gates=_default_gates())
         items = JQ.open_items(rep)
+        # EVERY ITEM MARKED TRUE. This is a PIPELINE TEST, not a measurement:
+        # nobody has decided these claims, and the rho it produces describes a
+        # panel in which every open claim happened to be correct. It proves
+        # the path from a worked queue to a correlation exists, which is the
+        # thing that was missing. It is not evidence about these seats.
         folded = JQ.fold(rep, {c.id: True for c in items})
     except Exception as exc:                      # noqa: BLE001
         return False, f"replaying {os.path.basename(runs[-1])} failed: {exc}"
     return bool(items) and folded.rho is not None, (
-        f"{len(items)} open item(s) in {os.path.basename(runs[-1])}; "
-        f"worked, they yield rho = "
-        + ("unmeasurable" if folded.rho is None else f"{folded.rho:.4f}"))
+        f"{len(items)} open item(s) in {os.path.basename(runs[-1])}; the path "
+        f"from a worked queue to rho runs end to end "
+        f"(pipeline test on placeholder decisions, NOT a measured rho -- "
+        f"nobody has decided these {len(items)} claims)")
 
 
 def _the_accuracy_experiment_is_reachable() -> tuple[bool, str]:
