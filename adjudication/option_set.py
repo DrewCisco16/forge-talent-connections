@@ -398,7 +398,8 @@ def eliminate(options: Sequence[Option],
     return removed
 
 
-def render_working(options: Sequence[Option]) -> str:
+def render_working(options: Sequence[Option],
+                   invite_challenges: bool = True) -> str:
     """What carries into the next round: LIVING OPTIONS ONLY.
 
     render() used to include a "## Removed" section with each elimination
@@ -451,6 +452,17 @@ def render_working(options: Sequence[Option]) -> str:
             lines.append(f"   -- also proposed as [{other.id}] {other.text}")
             for pred in other.predicates:
                 lines.append(f"      {pred.render()}")
+    if not invite_challenges:
+        # ONE SEAT CANNOT BE HANDED THE PANEL'S INSTRUCTIONS.
+        #
+        # Everything below invites a CHALLENGE and explains that agreement
+        # between seats is what carries weight. With a single seat there is no
+        # second observer, so the block describes a mechanism that cannot
+        # operate -- and one_model.py's own report says so two sections later.
+        # A deliverable that contradicts itself between section 3 and section 4
+        # is the same defect as the calibration round being handed the removal
+        # contract, and it was found the same way: by reading the output.
+        return "\n".join(lines)
     lines += [
         "",
         "Each commitment shows its figure, the formula that produces it, and",
@@ -479,9 +491,10 @@ def render_working(options: Sequence[Option]) -> str:
     return "\n".join(lines)
 
 
-def render_record(options: Sequence[Option]) -> str:
+def render_record(options: Sequence[Option],
+                  invite_challenges: bool = True) -> str:
     """The full picture for the audit trail and the operator's packet."""
-    lines = [render_working(options)]
+    lines = [render_working(options, invite_challenges=invite_challenges)]
     gone = [o for o in options if not o.alive]
     if gone:
         lines += ["", "## Removed", ""]

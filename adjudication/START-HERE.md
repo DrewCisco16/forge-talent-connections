@@ -74,8 +74,20 @@ python3 -m venv .venv
 .venv/bin/python run_adjudication.py --demo
 ```
 
-✅ **You'll know it worked:** you see a report ending in
-`SURVIVOR: c_true` and a `HOLES` section.
+✅ **You'll know it worked:** you see a `HOLES` section listing what the run
+could not close, each with what would close it, and a final line reading
+`NOT RESOLVED -- see holes above`. The command exits **1**, not 0.
+
+⚠️ **That is success, not failure.** The demo deliberately leaves judgment
+items open, and the tool exits non-zero while any hole remains — a lone
+surviving answer with an unworked queue is a shortlist, not a conclusion. A
+run that printed a clean verdict here would be the thing this tool exists to
+prevent.
+
+*(Earlier versions of this guide said to look for `SURVIVOR: c_true`. That
+was true of a much older build. Prose claims no longer eliminate candidates —
+removal now requires a candidate's own declared arithmetic to fail — so no
+demo run reports a single survivor any more.)*
 
 That was a pretend run with fake AI seats. It proves the machinery works
 before you spend a cent.
