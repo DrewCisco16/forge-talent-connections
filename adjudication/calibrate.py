@@ -372,25 +372,13 @@ class CalibrationResult:
         return sum(self.seat_accuracy.values()) / len(self.seat_accuracy)
 
 
-_DECORATION = re.compile(r"^[\s>*\-+•`|]+")
-_EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
-
-
-def _undecorate(line: str) -> str:
-    """Strip markdown decoration from a claim line without touching its fields.
-
-    Leading bullets and emphasis are removed, and emphasis characters are also
-    dropped from the CLAIM token itself -- "**CLAIM**" survives the leading
-    strip as "CLAIM**", which still fails the line pattern. Only the segment
-    BEFORE the first pipe is touched, so an asterisk inside a multiplication
-    expression is never disturbed.
-    """
-    stripped = _DECORATION.sub("", line)
-    head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
-    if not head:
-        return stripped
-    cleaned = re.sub(r"[*`_]", "", head.group(1))
-    return cleaned + stripped[head.end():]
+# ONE IMPLEMENTATION, NOT TWO. This started here, because calibration was
+# where real-model formatting was first measured. The main adjudication path
+# needed exactly the same treatment and now has it, so the definition moved to
+# the orchestrator and this is an alias. Two copies would drift, and the copy
+# that fell behind would be the one deciding whether a paid run's evidence
+# survived parsing.
+_undecorate = AO.undecorate_claim_line
 
 
 def _canonical_key(s: str) -> str:

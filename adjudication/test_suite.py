@@ -1006,6 +1006,123 @@ class TestFivePassFramework:
         ]
 
 
+class TestAClaimSurvivesHowAModelActuallyWritesIt:
+    """The extractor only ever looked at lines STARTING with "CLAIM", and a
+    model asked for a list of findings writes a list.
+
+    Measured before this was fixed, on the four commonest list shapes: all
+    four lost the claim ENTIRELY. Not escalated, not counted, not flagged --
+    skipped above the fail-closed branch that was supposed to make silent
+    loss impossible. The run then reported confidently over whatever happened
+    to be left.
+
+    Calibration had already been hardened against exactly this, because that
+    is where real-model formatting was first measured. The main adjudication
+    path -- the one an operator actually runs -- had none of it.
+    """
+
+    GOOD = "CLAIM | arithmetic | 12 + 35 = 47 | the total is 47"
+
+    @pytest.mark.parametrize("shape", [
+        "{c}",
+        "- {c}",
+        "* {c}",
+        "+ {c}",
+        "1. {c}",
+        "2) {c}",
+        "**{c}**",
+        "- **{c}**",
+        "   - {c}",
+        "> {c}",
+        "`{c}`",
+        "  {c}  ",
+    ])
+    def test_the_claim_parses_however_the_model_decorated_it(self, shape):
+        raw = shape.format(c=self.GOOD)
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1, f"claim lost from {raw!r}"
+        assert claims[0].kind is AO.ClaimKind.ARITHMETIC
+        assert claims[0].warrant == "12 + 35 = 47"
+        assert claims[0].text == "the total is 47"
+
+    def test_an_asterisk_inside_the_expression_is_not_stripped(self):
+        """The negative control, and the risk the fix had to avoid. Emphasis
+        markers and the multiplication operator are the same character. Strip
+        too eagerly and every multiplication warrant is corrupted into
+        something the arithmetic gate cannot recompute -- trading a silent
+        loss for a silent wrong answer, which is worse."""
+        raw = "- **CLAIM | arithmetic | 463*785 = 363455 | the product**"
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].warrant == "463*785 = 363455"
+
+    def test_underscores_and_backticks_inside_the_expression_survive(self):
+        raw = "- CLAIM | arithmetic | 2 + 2 = 4 | value of `total_sum`"
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].text == "value of `total_sum`"
+
+    def test_the_same_finding_hashes_the_same_however_it_was_decorated(self):
+        """The reason decoration matters at all, and the sharper half of it.
+
+        content_claim_id hashes the claim TEXT. Leading decoration was the
+        obvious problem; the closing marker is the subtle one, because the
+        line still parses and nothing looks wrong -- the text simply carries
+        "**" on the end. Two seats reporting the identical finding, one of
+        them bolding it, then produce two different claim ids: the run counts
+        them as separate claims, the seats read as disagreeing when they
+        agree, and every downstream measure of convergence is wrong in the
+        direction that looks like healthy independence.
+
+        The ordered-list case is here because it was missed once: "1. **...**"
+        opens with a digit, so a check for a leading emphasis marker run
+        against the raw line found none, and the closing "**" survived.
+        """
+        shapes = [
+            "{c}",
+            "- {c}",
+            "**{c}**",
+            "1. **{c}**",
+            "2) `{c}`",
+            "   - **{c}**",
+        ]
+        ids = {
+            AO.line_claim_extractor(s.format(c=self.GOOD), "s1", "p1")[0].id
+            for s in shapes
+        }
+        assert len(ids) == 1, (
+            f"the same finding split into {len(ids)} claims on decoration alone")
+
+    def test_a_decorated_but_malformed_claim_still_fails_closed(self):
+        """Undecorating must not turn a silent drop into a silent pass. A line
+        that says CLAIM and does not parse still becomes a JUDGMENT with no
+        warrant, so it escalates to a human instead of slipping through."""
+        claims = AO.line_claim_extractor(
+            "- **CLAIM -- arithmetic -- 2 + 2 = 5**", "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].kind is AO.ClaimKind.JUDGMENT
+        assert claims[0].warrant is None
+
+    def test_a_line_that_is_not_a_claim_is_still_ignored(self):
+        """Undecoration widens what parses; it must not invent claims out of
+        ordinary prose."""
+        prose = "- The artifact makes a strong claim about growth.\n"
+        prose += "Here are my findings:\n"
+        prose += "1. The framing is neutral."
+        assert AO.line_claim_extractor(prose, "s1", "p1") == []
+
+    def test_a_decorated_claim_reaches_the_gate_and_gets_ruled(self):
+        """End to end: the point is not that a string parses, but that the
+        evidence reaches a gate and changes the run."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("- **CLAIM | arithmetic | 2 + 2 = 5 | the sum is 5**"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner, carry_forward=False)
+        assert o.history[0].auto_rejected == 1, (
+            "a decorated false claim must be refuted, not skipped")
+
+
 class TestBlinding:
     def test_prompt_builder_accepts_no_history_parameter(self):
         """The blinding holds because there is no argument through which a

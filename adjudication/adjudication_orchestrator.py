@@ -1556,6 +1556,63 @@ opt_abc123 | the claim". Optional, and only meaningful in a round where
 options exist -- round one creates them, so nothing there can name one."""
 
 
+_DECORATION = re.compile(r"^[\s>*\-+\u2022`|]+")
+_EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
+_ORDERED_MARKER = re.compile(r"^\s*\d+[.)]\s+")
+_TRAILING_EMPHASIS = re.compile(r"[*`]+\s*$")
+_LEADING_EMPHASIS = re.compile(r"^\s*(?:[>\-+\u2022]\s*)*[*`]")
+
+
+def undecorate_claim_line(line: str) -> str:
+    """Strip list and emphasis decoration from a claim line, fields untouched.
+
+    WHY THE REAL PATH NEEDS THIS. The extractor below only considers a line
+    that STARTS WITH "CLAIM". A model that writes its findings as a markdown
+    list -- which is what a model asked for a list of findings does -- produces
+    "- CLAIM | ..." or "**CLAIM | ...**" or "1. CLAIM | ...", none of which
+    start with CLAIM. Those lines were not malformed-and-escalated; they were
+    skipped before the fail-closed branch could see them, and the claim
+    vanished with nothing counted and nothing raised. Measured on the four
+    commonest list shapes, all four lost the claim entirely.
+
+    Only the segment BEFORE the first pipe is de-emphasised, so an asterisk
+    inside a multiplication expression is never disturbed. Ordered-list markers
+    are removed separately because a leading digit is not decoration in
+    general -- only when it is followed by "." or ")" and a space.
+    """
+    # Ordered-list marker first, and the opener test below runs against the
+    # RESULT of this rather than the original line: "1. **CLAIM | ... |
+    # text**" opens with a digit, so testing the raw line found no emphasis,
+    # left the closing "**" on the last field, and split the claim id from the
+    # identical finding written without a number.
+    after_marker = _ORDERED_MARKER.sub("", line)
+    stripped = _DECORATION.sub("", after_marker)
+
+    # TRAILING EMPHASIS, BUT ONLY WHEN IT CLOSES SOMETHING THIS LINE OPENED.
+    #
+    # Why it must be stripped at all: "**CLAIM | ... | the total is 47**"
+    # strips at the front and leaves the asterisks on the LAST field, so the
+    # text becomes "the total is 47**". content_claim_id hashes that text, so
+    # a seat that bolded its finding and a seat that did not produce DIFFERENT
+    # claim ids for the same finding, and the run reads two agreeing seats as
+    # two disagreeing ones.
+    #
+    # Why it must be conditional: a trailing marker is not always decoration.
+    # "CLAIM | ... | value of `total_sum`" ends in a backtick that CLOSES an
+    # inline code span and belongs to the text. Stripping unconditionally
+    # corrupted it to "value of `total_sum" -- trading one text-mangling bug
+    # for another. Decoration wraps: strip the closer only when this line
+    # opened with an emphasis marker.
+    if _LEADING_EMPHASIS.match(after_marker):
+        stripped = _TRAILING_EMPHASIS.sub("", stripped)
+
+    head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
+    if not head:
+        return stripped
+    cleaned = re.sub(r"[*`_]", "", head.group(1))
+    return cleaned + stripped[head.end():]
+
+
 def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     """
     Reference extractor for the documented output format.
@@ -1565,9 +1622,18 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     warrant. JUDGMENT has no applicable gate, so it escalates to a human. A
     malformed claim is never silently dropped -- dropping it would let a model
     smuggle an unverified assertion past the gates by writing it badly.
+
+    Each line is undecorated first (see undecorate_claim_line). Without that
+    the fail-closed guarantee above had a hole: it only ever applied to lines
+    STARTING with "CLAIM", so a claim written as a markdown list item was
+    skipped before the guarantee could reach it and disappeared silently.
     """
     claims: list[Claim] = []
-    for line in raw.splitlines():
+    for raw_line in raw.splitlines():
+        # Undecorate BEFORE the startswith test, not after. A decorated line
+        # fails that test and is skipped outright, which is a silent drop --
+        # the one outcome this extractor's fail-closed design exists to avoid.
+        line = undecorate_claim_line(raw_line)
         if not line.strip().upper().startswith("CLAIM"):
             continue
         m = _CLAIM_LINE.match(line)
