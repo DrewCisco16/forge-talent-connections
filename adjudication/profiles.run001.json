@@ -12,9 +12,31 @@
     "path. /v1/chat/completions is the conventional path for that shape.",
     "Confirm both against the vendor page; the vendor wins.",
     "",
+    "THE OUTPUT CAP IS LEFT AT THE ADAPTER DEFAULT (4096) ON EVERY SEAT, AND",
+    "THAT IS DELIBERATE. A per-seat 'max_tokens' key would override it, and the",
+    "handoff flags two seats where 4096 may be too small: a reasoning model",
+    "spends thinking tokens from the SAME cap as the reply, so it can return a",
+    "well-formed 200 with empty text. But the cap also drives the pre-call",
+    "ceiling check, and raising it is NOT free. Measured on a 24-item",
+    "calibration, worst case across all five seats:",
+    "",
+    "    cap  4096  ->  $0.72   fits --max-cost 1.00",
+    "    cap  6144  ->  $1.08   REFUSED at 1.00",
+    "    cap  8192  ->  $1.43   REFUSED at 1.00",
+    "    cap 16000  ->  $2.80   REFUSED at 1.00",
+    "",
+    "So raising a cap without also raising --max-cost turns a seat that would",
+    "have answered into a run that never starts. If a seat reports 'cut off at",
+    "the 4096-token cap', add \"max_tokens\": <bigger> to THAT seat here and",
+    "raise --max-cost in proportion. Worst case scales linearly with the cap.",
+    "",
+    "Those dollar figures are a deliberately conservative BOUND, not a forecast:",
+    "the estimator allows 5x the cap in billed output because reasoning tokens",
+    "are billed and are not bounded by max_tokens. Actual spend is normally far",
+    "below it. The ceiling refuses on the bound, which is the point.",
+    "",
     "Contains NO credentials. Keys live only in .env."
   ],
-
   "seat_1": {
     "name": "openai",
     "endpoint": "https://api.openai.com/v1/chat/completions",
@@ -25,11 +47,20 @@
     "body": {
       "model": "{{model}}",
       "max_completion_tokens": "{{max_tokens}}",
-      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
     },
-    "text_path": ["choices", 0, "message", "content"]
+    "text_path": [
+      "choices",
+      0,
+      "message",
+      "content"
+    ]
   },
-
   "seat_2": {
     "name": "google",
     "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -39,11 +70,20 @@
     "_note": "run-001: FAILED 5/5, cause unrecorded. OpenAI-compat endpoint used because seat_profiles rejects a model placeholder in the URL. Suspect key type.",
     "body": {
       "model": "{{model}}",
-      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
     },
-    "text_path": ["choices", 0, "message", "content"]
+    "text_path": [
+      "choices",
+      0,
+      "message",
+      "content"
+    ]
   },
-
   "seat_3": {
     "name": "mistral",
     "endpoint": "https://api.mistral.ai/v1/chat/completions",
@@ -55,11 +95,20 @@
       "model": "{{model}}",
       "max_tokens": "{{max_tokens}}",
       "temperature": "{{temperature}}",
-      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
     },
-    "text_path": ["choices", 0, "message", "content"]
+    "text_path": [
+      "choices",
+      0,
+      "message",
+      "content"
+    ]
   },
-
   "seat_4": {
     "name": "xai",
     "endpoint": "https://api.x.ai/v1/chat/completions",
@@ -71,23 +120,43 @@
       "model": "{{model}}",
       "max_completion_tokens": "{{max_tokens}}",
       "temperature": "{{temperature}}",
-      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
     },
-    "text_path": ["choices", 0, "message", "content"]
+    "text_path": [
+      "choices",
+      0,
+      "message",
+      "content"
+    ]
   },
-
   "seat_5": {
     "name": "anthropic",
     "endpoint": "https://api.anthropic.com/v1/messages",
     "auth_header": "x-api-key",
     "auth_template": "{key}",
-    "extra_headers": { "anthropic-version": "2023-06-01" },
+    "extra_headers": {
+      "anthropic-version": "2023-06-01"
+    },
     "_note": "run-001: FAILED 5/5 on temperature -- root-caused and fixed. No temperature key: current Claude models 400 on sampling parameters. Preflight now blocks its return.",
     "body": {
       "model": "{{model}}",
       "max_tokens": "{{max_tokens}}",
-      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+      "messages": [
+        {
+          "role": "user",
+          "content": "{{prompt}}"
+        }
+      ]
     },
-    "text_path": ["content", 0, "text"]
+    "text_path": [
+      "content",
+      0,
+      "text"
+    ]
   }
 }
