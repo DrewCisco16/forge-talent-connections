@@ -445,13 +445,20 @@ def run_adjudication(
     run_id: str = "adjudication",
     adjudications: Mapping[str, bool] | None = None,
     total_seeded: int | None = None,
+    carry_forward: bool = True,
 ) -> AdjudicationAnswer:
     """
-    Run the five passes one at a time and return what survived.
+    Run the five rounds one at a time and return what survived.
 
-    Nothing here selects an answer. The passes run in order, the gates rule,
+    Nothing here selects an answer. The rounds run in order, the gates rule,
     candidates are removed, and whatever is left is the result -- including
     'none' and including 'more than one'.
+
+    carry_forward=True (the default) makes the rounds iterative: each round is
+    shown what the earlier rounds established, so round k+1 refines round k.
+    That buys refinement with independence -- see BLINDING_CONTRACT -- and the
+    report says which rounds were affected. False runs the rounds
+    information-independent instead.
     """
     chosen = list(passes) if passes is not None else list(DEFAULT_PASSES)
     orch = Orchestrator(list(gates) if gates is not None else _default_gates())
@@ -467,7 +474,8 @@ def run_adjudication(
     intake_ruled = orch.gate_candidate_claims(cands)
     if intake_ruled:
         audit.append("intake", {"claims_ruled": len(intake_ruled)})
-    results = orch.run_sequential(artifact, cands, runner, passes=chosen, audit=audit)
+    results = orch.run_sequential(artifact, cands, runner, passes=chosen,
+                                  audit=audit, carry_forward=carry_forward)
 
     conduct = ConductLedger.from_run(orch.detections_by_seat, orch.verdicts,
                                      all_seat_ids=list(seat_fns))
@@ -809,11 +817,39 @@ def render_report(answer: AdjudicationAnswer) -> str:
     add("")
 
     add("-" * 72)
-    add(f"PASSES, ONE AT A TIME ({len(answer.passes)})")
+    add(f"ROUNDS, ONE AT A TIME ({len(answer.passes)})")
     add("-" * 72)
+
+    # WHICH ROUNDS SHARED AN INPUT, SAID BEFORE THE NUMBERS ARE READ.
+    #
+    # A round that was shown what the earlier rounds established had that text
+    # handed to all five seats at once. Agreement inside it is therefore
+    # partly explained by the shared input rather than by five analysts
+    # checking independently -- and the per-round agreement figures printed
+    # below look exactly the same either way. Stating it above the table is
+    # the difference between a reader interpreting those numbers correctly and
+    # reading corroboration into a common cause.
+    carried = [i for i, r in enumerate(answer.passes, 1)
+               if r.carried_from_round is not None]
+    if carried:
+        add("ITERATIVE: each round was shown what the earlier rounds")
+        add("established, so the rounds refine one another.")
+        add("  round 1        : artifact only -- seats shared no other input")
+        add(f"  rounds {carried[0]}-{carried[-1]}      : also shown the comprised answer so far")
+        add("  Agreement within those rounds is partly explained by that")
+        add("  shared text. Only round 1's agreement is independent")
+        add("  corroboration. Run with --independent-rounds to measure the")
+        add("  panel without the carry.")
+    else:
+        add("INDEPENDENT ROUNDS: every round saw the artifact alone, so no")
+        add("round could inherit an error from an earlier one.")
+    add("")
+
     for i, res in enumerate(answer.passes, 1):
         rec, div = res.record, res.divergence
         add(f"{i}. {res.pass_name}")
+        if res.carried_from_round is not None:
+            add(f"     shown what rounds 1-{res.carried_from_round} established")
         add(f"     proposed {rec.proposed} | accepted {rec.auto_accepted} | "
             f"rejected {rec.auto_rejected} | escalated {rec.escalated}"
             + (f" | blocked {rec.blocked}" if rec.blocked else ""))
@@ -981,6 +1017,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="path to profiles.json -- runs the REAL panel")
     ap.add_argument("--check-profiles", metavar="PATH",
                     help="validate a profiles file offline and exit; spends nothing")
+    ap.add_argument("--independent-rounds", action="store_true",
+                    help="do not carry the comprised answer between rounds. "
+                         "Five lenses over one fixed artifact, so no round "
+                         "can inherit an error from an earlier one and "
+                         "cross-round agreement is independent corroboration. "
+                         "Costs the iteration: round 5 will not build on "
+                         "round 1.")
     ap.add_argument("--seat5", choices=("external", "in-process"),
                     default="external",
                     help="how Claude is reached. 'external' (default) gives it "
@@ -1170,6 +1213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             artifact, candidates, seat_fns, gates=chosen_gates,
             audit_path=args.audit, run_id=args.run_id,
             adjudications=adjudications,
+            carry_forward=not args.independent_rounds,
         )
     except CeilingReached as exc:
         # PARTIAL, not a crash. The operator paid for the calls that were made

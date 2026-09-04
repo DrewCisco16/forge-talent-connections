@@ -1388,17 +1388,36 @@ BLINDING_CONTRACT = """
 A seat is shown EXACTLY three things: the artifact under review, the lens for
 the pass it is running, and the output format. It is never shown:
 
-  - any other seat's response, on this pass or any earlier one
-  - any gate verdict (accepted / rejected / escalated)
-  - any candidate's elimination status
+  - any other seat's response, on this round or any earlier one
   - the pass number, or which passes have already run
+  - anything at all, in round 1, beyond the artifact and the lens
 
-WHY. Showing results is what turns a panel of adversaries into a panel of
-agreers. A seat that sees a prior verdict anchors on it, and the errors it
-makes stop being independent of the errors already in the record. That is the
-mechanism behind the amplification numbers at the top of this module: seats
-that see each other converge, and convergence without independence is
-COLLAPSE, not corroboration.
+WHAT A SEAT IS SHOWN FROM ROUND 2 ONWARD. The comprised answer of the earlier
+rounds: what the gates verified, what they refuted, what is still open, and
+which candidates remain. That is the iterative loop -- round k+1 refines round
+k instead of re-reading the same text through a new lens. It is composed by
+the orchestrator from ADJUDICATED material only, it never names a seat, and it
+is composed once per round so every seat of that round sees the same text.
+Run with carry_forward=False to restore fully independent rounds.
+
+WHY THE WITHIN-ROUND RULE IS ABSOLUTE. Showing a seat another seat's answer is
+what turns a panel of adversaries into a panel of agreers. A seat that sees a
+peer's claim anchors on it, and the errors it makes stop being independent of
+the errors already in the record. That is the mechanism behind the
+amplification numbers at the top of this module: seats that see each other
+converge, and convergence without independence is COLLAPSE, not corroboration.
+Within a round the five seats are therefore sealed from one another, always.
+
+WHY THE BETWEEN-ROUND CARRY IS ACCEPTED ANYWAY, AND WHAT IT COSTS. The carried
+section is a COMMON INPUT to all five seats of every later round. An error
+that survives into it is inherited by the whole panel at once, and the panel
+then agrees about it because it was handed to them -- not because five
+analysts checked it independently. So agreement in rounds 2..5 is evidence of
+a shared input, and a correlation computed across those rounds is measuring a
+panel that shares text by design. This is a deliberate trade: iteration is
+bought with independence. Round 1 is the only round that pays nothing for it,
+and `SequentialPassResult.carried_from_round` records the rest so a reader
+never has to assume an independence the run did not have.
 
 HOW IT IS ENFORCED. build_blinded_prompt() is the only constructor of seat
 input, and its signature accepts no history parameter of any kind. There is no
@@ -1406,10 +1425,16 @@ argument through which a prior result could be passed, so the leak cannot be
 introduced by a caller mistake -- only by editing this function, which the
 test suite asserts against.
 
-WHAT THIS COSTS. Blinded seats cannot build on each other. Pass 2 does not
-refine pass 1; it re-examines the same artifact through a different lens. The
-orchestrator -- code, not a model -- is the only component that sees
-everything, and it decides by mechanical gate rather than by vote.
+HOW IT IS ENFORCED, STILL. build_blinded_prompt() remains the only constructor
+of seat input and still accepts no history parameter of any kind: there is no
+argument through which one seat's response could be handed to another. The
+carry does not travel through it. It is folded into the ARTIFACT by
+compose_carry_forward() before the round begins, from claims the gates have
+already ruled on -- so what reaches a seat is adjudicated material, never a
+peer's raw answer in flight.
+
+The orchestrator -- code, not a model -- remains the only component that sees
+everything, and it still decides by mechanical gate rather than by vote.
 """
 
 
@@ -1531,6 +1556,63 @@ opt_abc123 | the claim". Optional, and only meaningful in a round where
 options exist -- round one creates them, so nothing there can name one."""
 
 
+_DECORATION = re.compile(r"^[\s>*\-+\u2022`|]+")
+_EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
+_ORDERED_MARKER = re.compile(r"^\s*\d+[.)]\s+")
+_TRAILING_EMPHASIS = re.compile(r"[*`]+\s*$")
+_LEADING_EMPHASIS = re.compile(r"^\s*(?:[>\-+\u2022]\s*)*[*`]")
+
+
+def undecorate_claim_line(line: str) -> str:
+    """Strip list and emphasis decoration from a claim line, fields untouched.
+
+    WHY THE REAL PATH NEEDS THIS. The extractor below only considers a line
+    that STARTS WITH "CLAIM". A model that writes its findings as a markdown
+    list -- which is what a model asked for a list of findings does -- produces
+    "- CLAIM | ..." or "**CLAIM | ...**" or "1. CLAIM | ...", none of which
+    start with CLAIM. Those lines were not malformed-and-escalated; they were
+    skipped before the fail-closed branch could see them, and the claim
+    vanished with nothing counted and nothing raised. Measured on the four
+    commonest list shapes, all four lost the claim entirely.
+
+    Only the segment BEFORE the first pipe is de-emphasised, so an asterisk
+    inside a multiplication expression is never disturbed. Ordered-list markers
+    are removed separately because a leading digit is not decoration in
+    general -- only when it is followed by "." or ")" and a space.
+    """
+    # Ordered-list marker first, and the opener test below runs against the
+    # RESULT of this rather than the original line: "1. **CLAIM | ... |
+    # text**" opens with a digit, so testing the raw line found no emphasis,
+    # left the closing "**" on the last field, and split the claim id from the
+    # identical finding written without a number.
+    after_marker = _ORDERED_MARKER.sub("", line)
+    stripped = _DECORATION.sub("", after_marker)
+
+    # TRAILING EMPHASIS, BUT ONLY WHEN IT CLOSES SOMETHING THIS LINE OPENED.
+    #
+    # Why it must be stripped at all: "**CLAIM | ... | the total is 47**"
+    # strips at the front and leaves the asterisks on the LAST field, so the
+    # text becomes "the total is 47**". content_claim_id hashes that text, so
+    # a seat that bolded its finding and a seat that did not produce DIFFERENT
+    # claim ids for the same finding, and the run reads two agreeing seats as
+    # two disagreeing ones.
+    #
+    # Why it must be conditional: a trailing marker is not always decoration.
+    # "CLAIM | ... | value of `total_sum`" ends in a backtick that CLOSES an
+    # inline code span and belongs to the text. Stripping unconditionally
+    # corrupted it to "value of `total_sum" -- trading one text-mangling bug
+    # for another. Decoration wraps: strip the closer only when this line
+    # opened with an emphasis marker.
+    if _LEADING_EMPHASIS.match(after_marker):
+        stripped = _TRAILING_EMPHASIS.sub("", stripped)
+
+    head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
+    if not head:
+        return stripped
+    cleaned = re.sub(r"[*`_]", "", head.group(1))
+    return cleaned + stripped[head.end():]
+
+
 def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     """
     Reference extractor for the documented output format.
@@ -1540,9 +1622,18 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     warrant. JUDGMENT has no applicable gate, so it escalates to a human. A
     malformed claim is never silently dropped -- dropping it would let a model
     smuggle an unverified assertion past the gates by writing it badly.
+
+    Each line is undecorated first (see undecorate_claim_line). Without that
+    the fail-closed guarantee above had a hole: it only ever applied to lines
+    STARTING with "CLAIM", so a claim written as a markdown list item was
+    skipped before the guarantee could reach it and disappeared silently.
     """
     claims: list[Claim] = []
-    for line in raw.splitlines():
+    for raw_line in raw.splitlines():
+        # Undecorate BEFORE the startswith test, not after. A decorated line
+        # fails that test and is skipped outright, which is a silent drop --
+        # the one outcome this extractor's fail-closed design exists to avoid.
+        line = undecorate_claim_line(raw_line)
         if not line.strip().upper().startswith("CLAIM"):
             continue
         m = _CLAIM_LINE.match(line)
@@ -1869,6 +1960,16 @@ class SequentialPassResult:
     record: PassRecord
     divergence: PassDivergence
     responses: list[SeatResponse] = field(default_factory=list)
+    carried_from_round: int | None = None
+    """Which round's comprised answer this round was shown, if any.
+
+    None means the round saw the artifact alone and its seats shared no input
+    beyond it -- true of round 1 always, and of every round when the panel is
+    run with carry_forward=False. An integer means the seats of this round
+    were handed what rounds 1..k established, so their agreement is partly
+    explained by that shared text rather than by independent checking. The
+    report reads this rather than assuming; a number here is the difference
+    between corroboration and a common cause."""
 
 
 # ===========================================================================
@@ -2392,28 +2493,158 @@ class Orchestrator:
 
     # -- sequential, blinded execution --------------------------------------
 
-    def run_sequential(
+    # -- the round-to-round carry ------------------------------------------
+
+    CARRY_HEADER = "=== WHAT THE EARLIER ROUNDS ESTABLISHED ==="
+
+    def compose_carry_forward(
+        self,
+        artifact: str,
+        candidates: Sequence[Candidate],
+        through_pass: int,
+    ) -> str:
+        """Build the input for the NEXT round: the artifact plus what the
+        rounds so far comprised.
+
+        THIS IS THE ITERATIVE LOOP, AND IT COSTS INDEPENDENCE ON PURPOSE.
+        Round k+1 is meant to refine round k rather than re-examine the same
+        text through a new lens, so the comprised answer travels forward. The
+        price is stated here rather than buried: everything in this section is
+        a COMMON INPUT to all five seats of the next round. An error that
+        survives into it is inherited by every seat at once, and they will
+        then agree about it for that reason and not because they checked it
+        independently. Cross-round agreement is therefore evidence of shared
+        input, not of corroboration, and `carry_forward_rounds` on the result
+        records which rounds were affected so a reader is never left to assume
+        an independence the run did not have.
+
+        Two properties are preserved, because losing them would make the
+        round's five answers incomparable rather than merely dependent:
+
+        * NO SEAT IS NAMED. The section is aggregate; `source_seat` is never
+          written out. A seat that could tell which analyst said what could
+          model the others and start agreeing with a particular one, which is
+          seat-to-seat leakage wearing the carry's clothes.
+        * EVERY SEAT IN A ROUND SEES THE SAME TEXT. The carry is composed once
+          per round, before any seat of that round is prompted, so within the
+          round the panel is still blind and still symmetric.
+
+        Ordering is by claim id throughout: replay mode forbids nondeterminism,
+        and a section whose order drifted between runs would change the prompt
+        and therefore the answers.
+        """
+        verified: list[str] = []
+        refuted: list[str] = []
+        open_q: list[str] = []
+
+        for claim_id in sorted(self.verdicts):
+            v = self.verdicts[claim_id]
+            claim = self._proposed_index.get(claim_id)
+            if claim is None:
+                continue
+            line = f"  - {claim.text}"
+            if claim.warrant:
+                line += f"   [warrant: {claim.warrant}]"
+            # status is a GateStatus, never a bool. Comparing it to True/False
+            # silently sorted EVERY adjudicated claim into `open_q`, so a
+            # refuted claim -- which this section tells the next round to
+            # treat as settled -- was carried forward as still unresolved, and
+            # a verified one lost its verification. The section still rendered
+            # perfectly well formed. Compare against the enum.
+            if v.status is GateStatus.PASS:
+                verified.append(line)
+            elif v.status is GateStatus.FAIL:
+                refuted.append(line)
+            else:
+                # None (escalated: no gate applied), INAPPLICABLE, or BLOCKED.
+                # In none of those does the run hold a mechanical opinion, so
+                # the claim travels as an open question and never as a finding.
+                open_q.append(line)
+
+        parts = [
+            artifact,
+            "",
+            self.CARRY_HEADER,
+            f"(Composed by the adjudicator after round {through_pass}, from "
+            f"what survived mechanical gates. Not any analyst's opinion, and "
+            f"no analyst is identified. Treat REFUTED as settled and do not "
+            f"re-assert it; treat OPEN as still needing work.)",
+            "",
+        ]
+        if verified:
+            parts += ["VERIFIED -- a gate confirmed these:", *verified, ""]
+        if refuted:
+            parts += ["REFUTED -- a gate disproved these:", *refuted, ""]
+        if open_q:
+            parts += ["OPEN -- no gate applied; still unresolved:",
+                      *open_q, ""]
+
+        remaining = [c.id for c in candidates if not c.eliminated]
+        gone = [(c.id, c.elimination_reason or "")
+                for c in candidates if c.eliminated]
+        if remaining or gone:
+            parts.append("CANDIDATES:")
+            if remaining:
+                parts.append(f"  still standing: {', '.join(sorted(remaining))}")
+            for cid, why in sorted(gone):
+                parts.append(f"  removed: {cid} -- {why}")
+            parts.append("")
+
+        if not (verified or refuted or open_q or remaining or gone):
+            # Nothing was comprised, so nothing is carried. Appending an empty
+            # header would still change the prompt and would tell the next
+            # round that a round had run, which is a leak that buys nothing.
+            return artifact
+
+        return "\n".join(parts).rstrip() + "\n"
+
+    def run_sequential(  # noqa: PLR0913
+        # Six arguments, two of them keyword-only switches. Collapsing them
+        # into a config object would hide that `carry_forward` exists, and it
+        # is the switch that decides whether the rounds are independent -- the
+        # single most consequential choice a caller makes here.
         self,
         artifact: str,
         candidates: list[Candidate],
         runner: BlindedSeatRunner,
         passes: Sequence[Pass] | None = None,
+        *,
         audit: Any = None,
+        carry_forward: bool = True,
     ) -> list[SequentialPassResult]:
         """
-        Run the five passes ONE AT A TIME against a single artifact.
+        Run the five rounds ONE AT A TIME, each round refining the last.
 
-        Each pass: every seat is prompted in isolation via build_blinded_prompt
-        (see BLINDING_CONTRACT), the claims that come back are gated
-        mechanically, and the seats' disagreement is measured and recorded.
+        Within a round: every seat is prompted in isolation via
+        build_blinded_prompt (see BLINDING_CONTRACT), each answers alone, and
+        only once ALL of them have answered are the claims gated mechanically
+        and the disagreement measured. No seat sees another seat's answer, and
+        every seat of a round is handed identical text.
 
-        No seat is shown the previous pass's claims, verdicts, eliminations, or
-        the other seats' answers. The passes are sequential in TIME only; they
-        are independent in INFORMATION. That is deliberate -- a relay where
-        pass k+1 reads pass k's conclusions is the topology this module exists
-        to avoid.
+        Between rounds (carry_forward=True, the default): the comprised answer
+        of rounds 1..k -- what the gates verified, what they refuted, what is
+        still open, and which candidates remain -- is appended to the artifact
+        and becomes the input to round k+1. Round k+1 therefore REFINES round
+        k rather than re-examining the same text through a new lens, which is
+        the iterative loop this tool is built around.
 
-        Returns one SequentialPassResult per pass, in order.
+        WHAT THAT COSTS, STATED PLAINLY. The carried section is a COMMON INPUT
+        to all five seats of every later round. An error that survives into it
+        is inherited by the whole panel at once, and the panel will then agree
+        about it because it was handed to them, not because five analysts
+        checked it independently. So agreement in rounds 2..5 is NOT evidence
+        of independent corroboration, and any rho computed across those rounds
+        is measuring a panel that shares an input by design. The rounds that
+        received carried content are recorded on each SequentialPassResult
+        (`carried_from_round`) and surfaced in the report, so no reader has to
+        assume an independence the run did not have. Round 1 alone is
+        uncontaminated.
+
+        carry_forward=False restores fully information-independent rounds:
+        five lenses over one fixed artifact, all consolidation in code at the
+        end. Nothing else about the run changes.
+
+        Returns one SequentialPassResult per round, in order.
         """
         chosen = list(passes) if passes is not None else list(self.passes)
         results: list[SequentialPassResult] = []
@@ -2424,8 +2655,16 @@ class Orchestrator:
         if audit is not None:
             audit.record_artifact(artifact)
 
-        for p in chosen:
-            responses = runner.run(p, artifact)
+        # The text this round's seats actually see. Round 1 is the artifact as
+        # given; later rounds get the artifact plus what earlier rounds
+        # comprised. It is composed ONCE per round, before any seat of that
+        # round is prompted, so the panel stays symmetric and blind within the
+        # round even while the rounds themselves build on one another.
+        round_input = artifact
+        carried_from: int | None = None
+
+        for index, p in enumerate(chosen, start=1):
+            responses = runner.run(p, round_input)
             divergence = measure_divergence(p, responses)
             self.divergence_by_pass[p.id] = divergence
 
@@ -2434,10 +2673,22 @@ class Orchestrator:
                 claims.extend(r.claims)
 
             record = self.run_pass(p, candidates, claims)
-            result = SequentialPassResult(p.id, p.name, record, divergence, responses)
+            result = SequentialPassResult(
+                p.id, p.name, record, divergence, responses,
+                carried_from_round=carried_from,
+            )
             results.append(result)
             if audit is not None:
                 audit.record_pass(result)
+
+            # Compose the next round's input from everything comprised so far.
+            # Built after this round is gated, so it can only ever contain
+            # adjudicated material -- never a raw seat response in flight.
+            if carry_forward and index < len(chosen):
+                nxt = self.compose_carry_forward(artifact, candidates, index)
+                if nxt != round_input:
+                    round_input = nxt
+                    carried_from = index
 
         if audit is not None:
             audit.record_stop_decision(self.should_stop(candidates))

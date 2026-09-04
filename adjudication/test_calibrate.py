@@ -1012,3 +1012,206 @@ class TestSeatIntervalsGuardTheCutDecision:
         text = CB.render_calibration(
             CB.run_calibration(CB._demo_seats(items), items, draws=200))
         assert "intervals OVERLAP" in text
+
+
+# ---------------------------------------------------------------------------
+# a run that cost money is worth scoring more than once
+# ---------------------------------------------------------------------------
+
+class TestThePaidRepliesSurviveTheRun:
+    """Before the transcript existed, the raw seat text was discarded the
+    instant it was parsed -- only counts reached the result.
+
+    That put the operator in a bad place on exactly the failure this module
+    warns them about. When the report says CONFIRMATIONS THAT MATCHED NO ITEM
+    ID -- a seat reworded the statements instead of copying them -- the score
+    is biased in the FLATTERING direction, and the only remedy on offer was to
+    pay five vendors again to look at it. Every extraction defect found in
+    this module (markdown decoration, spacing variance, thousands separators)
+    had that same shape: a well-formed report over evidence that had quietly
+    fallen out. On synthetic seats they were catchable because the text was
+    ours. On paid seats there was nothing to go back to.
+    """
+
+    def test_a_rescore_reproduces_the_original_number_exactly(self, tmp_path):
+        """The point of the transcript. If replay disagreed with the run it
+        came from, it would be a second opinion rather than a record."""
+        book = tmp_path / "t.json"
+        first = CB.main(["--demo", "--n-items", "12", "--transcript",
+                         str(book)])
+        items = CB.build_items(12, CB.DEFAULT_SEED)
+        live = CB.run_calibration(CB._demo_seats(items), items)
+
+        _, replayed = CB.load_transcript(str(book))
+        again = CB.run_calibration(replayed, items)
+
+        assert first == 0
+        assert again.rho == pytest.approx(live.rho)
+        assert again.effective_seats == pytest.approx(live.effective_seats)
+        assert again.seat_accuracy == live.seat_accuracy
+        assert again.rho_ci == live.rho_ci
+
+    def test_replay_calls_no_seat_and_needs_no_credentials(self, tmp_path,
+                                                           monkeypatch):
+        """A re-score must be free. If it could reach a vendor it would be
+        another paid run wearing the name of a cheap one."""
+        book = tmp_path / "t.json"
+        CB.main(["--demo", "--n-items", "12", "--transcript", str(book)])
+
+        for i in range(1, 6):
+            monkeypatch.delenv(f"ADJ_SEAT_{i}_API_KEY", raising=False)
+
+        def forbidden(*a, **k):
+            raise AssertionError("a re-score reached for live seats")
+
+        monkeypatch.setattr(CB, "_demo_seats", forbidden)
+        with mock.patch.dict("sys.modules"):
+            assert CB.main(["--rescore", str(book)]) == 0
+
+    def test_a_seat_that_errored_replays_as_errored_not_as_silent(self,
+                                                                 tmp_path):
+        """A seat that timed out and a seat that judged every statement false
+        are different observations. Replaying the first as the second would
+        put a fabricated row into the correlation -- the exact defaulting this
+        module refuses everywhere else."""
+        items = CB.build_items(12, CB.DEFAULT_SEED)
+        seats = dict(CB._demo_seats(items))
+        broken = min(seats)
+
+        def dies(_prompt):
+            raise RuntimeError("HTTP 503 from vendor")
+
+        seats[broken] = dies
+
+        # The seat runner absorbs an ordinary seat error and records it on the
+        # response; only a budget ceiling propagates. So the run completes,
+        # and the recorder must have captured the failure on the way past.
+        captured = {}
+        res = CB.run_calibration(CB.recording_seats(seats, captured), items)
+
+        assert captured[broken] == {"error": "HTTP 503 from vendor"}
+        assert broken in res.excluded_seats
+        assert broken not in res.scored_seats
+
+        book = tmp_path / "t.json"
+        CB.write_transcript(str(book), items=items,
+                            seed=CB.DEFAULT_SEED, replies=captured)
+        _, replayed = CB.load_transcript(str(book))
+        with pytest.raises(CB.ReplayedSeatError, match="HTTP 503"):
+            replayed[broken]("prompt")
+
+    def test_replies_already_paid_for_survive_a_budget_stop(self, tmp_path):
+        """The ceiling propagates by design, so the run dies mid-panel. That
+        is precisely the run whose replies are worth keeping: the money is
+        already gone and there is no report to show for it."""
+        from adjudication_orchestrator import BudgetExceeded
+
+        items = CB.build_items(12, CB.DEFAULT_SEED)
+        seats = dict(CB._demo_seats(items))
+        order = sorted(seats)
+        answered, stops = order[0], order[1]
+
+        def ceiling(_prompt):
+            raise BudgetExceeded("max cost reached")
+
+        seats[stops] = ceiling
+
+        captured = {}
+        with pytest.raises(BudgetExceeded):
+            CB.run_calibration(CB.recording_seats(seats, captured), items)
+
+        assert answered in captured, (
+            "the seat that answered before the ceiling was paid for and lost")
+        assert captured[answered]["reply"]
+
+    def test_the_cli_writes_a_transcript_even_when_the_run_dies(self,
+                                                               tmp_path,
+                                                               monkeypatch):
+        from adjudication_orchestrator import BudgetExceeded
+
+        items = CB.build_items(12, CB.DEFAULT_SEED)
+        real = CB._demo_seats(items)
+        order = sorted(real)
+
+        def half_a_panel(_items):
+            seats = dict(real)
+
+            def ceiling(_prompt):
+                raise BudgetExceeded("max cost reached")
+
+            seats[order[1]] = ceiling
+            return seats
+
+        monkeypatch.setattr(CB, "_demo_seats", half_a_panel)
+        book = tmp_path / "t.json"
+        with pytest.raises(BudgetExceeded):
+            CB.main(["--demo", "--n-items", "12", "--transcript", str(book)])
+
+        assert book.exists(), "a run that spent money left nothing behind"
+
+
+class TestTheTranscriptReaderFailsClosed:
+    """Scoring paid replies against the wrong questions would produce a
+    confident, wrong rho -- the failure mode this whole module exists to
+    refuse. Every unreadable transcript has to stop the run, not degrade it.
+    """
+
+    def _book(self, tmp_path, mutate):
+        import json
+        book = tmp_path / "t.json"
+        CB.main(["--demo", "--n-items", "12", "--transcript", str(book)])
+        payload = json.loads(book.read_text())
+        mutate(payload)
+        book.write_text(json.dumps(payload))
+        return book
+
+    def test_questions_that_do_not_match_the_seed_are_refused(self, tmp_path):
+        def swap(p):
+            p["items"][0]["expression"] = "2 + 2 = 4"
+
+        book = self._book(tmp_path, swap)
+        with pytest.raises(ValueError, match="not the ones seed"):
+            CB.load_transcript(str(book))
+        assert CB.main(["--rescore", str(book)]) == 2
+
+    def test_an_unknown_schema_is_refused_rather_than_guessed_at(self,
+                                                                tmp_path):
+        book = self._book(tmp_path, lambda p: p.__setitem__("schema", 99))
+        with pytest.raises(ValueError, match="schema"):
+            CB.load_transcript(str(book))
+
+    def test_a_transcript_with_no_replies_is_refused(self, tmp_path):
+        book = self._book(tmp_path, lambda p: p.__setitem__("seats", {}))
+        with pytest.raises(ValueError, match="no seat replies"):
+            CB.load_transcript(str(book))
+
+    def test_a_transcript_with_no_items_is_refused(self, tmp_path):
+        book = self._book(tmp_path, lambda p: p.__setitem__("items", []))
+        with pytest.raises(ValueError, match="no item set"):
+            CB.load_transcript(str(book))
+
+    def test_a_missing_file_exits_two_rather_than_scoring_nothing(self,
+                                                                  tmp_path):
+        assert CB.main(["--rescore", str(tmp_path / "absent.json")]) == 2
+
+    def test_an_edited_answer_key_cannot_move_rho(self, tmp_path):
+        """`is_true` is read to build the Item, but the gate recomputes every
+        expression during scoring. A transcript whose truth flags were flipped
+        must score the same as one whose were not."""
+        import json
+        book = tmp_path / "t.json"
+        CB.main(["--demo", "--n-items", "12", "--transcript", str(book)])
+        payload = json.loads(book.read_text())
+
+        honest_items, honest_seats = CB.load_transcript(str(book))
+        honest = CB.run_calibration(honest_seats, honest_items)
+
+        for entry in payload["items"]:
+            entry["is_true"] = not entry["is_true"]
+        forged = tmp_path / "forged.json"
+        forged.write_text(json.dumps(payload))
+
+        lied_items, lied_seats = CB.load_transcript(str(forged))
+        lied = CB.run_calibration(lied_seats, lied_items)
+
+        assert lied.rho == pytest.approx(honest.rho)

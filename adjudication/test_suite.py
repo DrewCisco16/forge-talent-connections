@@ -1006,6 +1006,123 @@ class TestFivePassFramework:
         ]
 
 
+class TestAClaimSurvivesHowAModelActuallyWritesIt:
+    """The extractor only ever looked at lines STARTING with "CLAIM", and a
+    model asked for a list of findings writes a list.
+
+    Measured before this was fixed, on the four commonest list shapes: all
+    four lost the claim ENTIRELY. Not escalated, not counted, not flagged --
+    skipped above the fail-closed branch that was supposed to make silent
+    loss impossible. The run then reported confidently over whatever happened
+    to be left.
+
+    Calibration had already been hardened against exactly this, because that
+    is where real-model formatting was first measured. The main adjudication
+    path -- the one an operator actually runs -- had none of it.
+    """
+
+    GOOD = "CLAIM | arithmetic | 12 + 35 = 47 | the total is 47"
+
+    @pytest.mark.parametrize("shape", [
+        "{c}",
+        "- {c}",
+        "* {c}",
+        "+ {c}",
+        "1. {c}",
+        "2) {c}",
+        "**{c}**",
+        "- **{c}**",
+        "   - {c}",
+        "> {c}",
+        "`{c}`",
+        "  {c}  ",
+    ])
+    def test_the_claim_parses_however_the_model_decorated_it(self, shape):
+        raw = shape.format(c=self.GOOD)
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1, f"claim lost from {raw!r}"
+        assert claims[0].kind is AO.ClaimKind.ARITHMETIC
+        assert claims[0].warrant == "12 + 35 = 47"
+        assert claims[0].text == "the total is 47"
+
+    def test_an_asterisk_inside_the_expression_is_not_stripped(self):
+        """The negative control, and the risk the fix had to avoid. Emphasis
+        markers and the multiplication operator are the same character. Strip
+        too eagerly and every multiplication warrant is corrupted into
+        something the arithmetic gate cannot recompute -- trading a silent
+        loss for a silent wrong answer, which is worse."""
+        raw = "- **CLAIM | arithmetic | 463*785 = 363455 | the product**"
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].warrant == "463*785 = 363455"
+
+    def test_underscores_and_backticks_inside_the_expression_survive(self):
+        raw = "- CLAIM | arithmetic | 2 + 2 = 4 | value of `total_sum`"
+        claims = AO.line_claim_extractor(raw, "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].text == "value of `total_sum`"
+
+    def test_the_same_finding_hashes_the_same_however_it_was_decorated(self):
+        """The reason decoration matters at all, and the sharper half of it.
+
+        content_claim_id hashes the claim TEXT. Leading decoration was the
+        obvious problem; the closing marker is the subtle one, because the
+        line still parses and nothing looks wrong -- the text simply carries
+        "**" on the end. Two seats reporting the identical finding, one of
+        them bolding it, then produce two different claim ids: the run counts
+        them as separate claims, the seats read as disagreeing when they
+        agree, and every downstream measure of convergence is wrong in the
+        direction that looks like healthy independence.
+
+        The ordered-list case is here because it was missed once: "1. **...**"
+        opens with a digit, so a check for a leading emphasis marker run
+        against the raw line found none, and the closing "**" survived.
+        """
+        shapes = [
+            "{c}",
+            "- {c}",
+            "**{c}**",
+            "1. **{c}**",
+            "2) `{c}`",
+            "   - **{c}**",
+        ]
+        ids = {
+            AO.line_claim_extractor(s.format(c=self.GOOD), "s1", "p1")[0].id
+            for s in shapes
+        }
+        assert len(ids) == 1, (
+            f"the same finding split into {len(ids)} claims on decoration alone")
+
+    def test_a_decorated_but_malformed_claim_still_fails_closed(self):
+        """Undecorating must not turn a silent drop into a silent pass. A line
+        that says CLAIM and does not parse still becomes a JUDGMENT with no
+        warrant, so it escalates to a human instead of slipping through."""
+        claims = AO.line_claim_extractor(
+            "- **CLAIM -- arithmetic -- 2 + 2 = 5**", "s1", "p1")
+        assert len(claims) == 1
+        assert claims[0].kind is AO.ClaimKind.JUDGMENT
+        assert claims[0].warrant is None
+
+    def test_a_line_that_is_not_a_claim_is_still_ignored(self):
+        """Undecoration widens what parses; it must not invent claims out of
+        ordinary prose."""
+        prose = "- The artifact makes a strong claim about growth.\n"
+        prose += "Here are my findings:\n"
+        prose += "1. The framing is neutral."
+        assert AO.line_claim_extractor(prose, "s1", "p1") == []
+
+    def test_a_decorated_claim_reaches_the_gate_and_gets_ruled(self):
+        """End to end: the point is not that a string parses, but that the
+        evidence reaches a gate and changes the run."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("- **CLAIM | arithmetic | 2 + 2 = 5 | the sum is 5**"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner, carry_forward=False)
+        assert o.history[0].auto_rejected == 1, (
+            "a decorated false claim must be refuted, not skipped")
+
+
 class TestBlinding:
     def test_prompt_builder_accepts_no_history_parameter(self):
         """The blinding holds because there is no argument through which a
@@ -1021,34 +1138,209 @@ class TestBlinding:
         with pytest.raises(dataclasses.FrozenInstanceError):
             sp.artifact = "tampered"
 
-    def test_no_prior_pass_content_reaches_any_later_prompt(self):
-        """The canary: both seats emit a distinctive string on every pass. If
-        any later prompt contained a prior pass's output, the canary would
-        show up in prompt_log."""
-        canary = "CANARY-9f3a-PRIOR-RESULT"
+    def _canary_run(self, canary, **kw):
         runner = AO.BlindedSeatRunner({
             "s1": _seat(f"CLAIM | arithmetic | 1+1 = 3 | {canary}"),
             "s2": _seat(f"CLAIM | judgment |  | {canary}"),
         })
         o = Orchestrator([ArithmeticGate()])
-        o.run_sequential("clean artifact", [], runner)
-        assert len(runner.prompt_log) == 10          # 5 passes x 2 seats
+        o.run_sequential("clean artifact", [], runner, **kw)
+        return runner
+
+    def test_no_seat_sees_another_seats_answer_within_a_round(self):
+        """The property that survives the round-to-round carry, and the one
+        that makes a round's five answers comparable at all.
+
+        Seats answer one at a time. If seat 2's prompt could contain seat 1's
+        reply, the two would stop being independent readings of the same text
+        and the round would be a relay. Every seat of a round is handed
+        identical input, composed once before any of them is called.
+        """
+        canary = "CANARY-9f3a-PRIOR-RESULT"
+        runner = self._canary_run(canary)
+        first_round = runner.prompt_log[:2]
+        assert len({sp.render() for sp in first_round}) == 1
+        for sp in first_round:
+            assert canary not in sp.render()
+
+    def test_the_comprised_answer_reaches_the_next_round_on_purpose(self):
+        """The carry, asserted rather than assumed.
+
+        This is the behaviour the module previously forbade, and the canary
+        below is the same string that used to prove it could not happen. It is
+        now expected to appear from round 2 onward: the comprised answer of
+        rounds 1..k is the input to round k+1, which is what makes the five
+        rounds iterative rather than five independent readings.
+
+        Round 1 stays clean. It is the only round whose seats share no input
+        beyond the artifact, and therefore the only one whose agreement is
+        evidence of independent corroboration.
+        """
+        canary = "CANARY-9f3a-PRIOR-RESULT"
+        runner = self._canary_run(canary)
+        assert len(runner.prompt_log) == 10          # 5 rounds x 2 seats
+        rendered = [sp.render() for sp in runner.prompt_log]
+
+        assert not any(canary in r for r in rendered[:2]), (
+            "round 1 must see the artifact alone")
+        assert all(canary in r for r in rendered[2:]), (
+            "rounds 2-5 must be shown what the earlier rounds established")
+
+    def test_carry_forward_off_restores_fully_independent_rounds(self):
+        """The original guarantee, still available and still exact.
+
+        A panel run this way is five lenses over one fixed artifact: no round
+        can inherit an error from an earlier one, and cross-round agreement
+        means what it used to mean.
+        """
+        canary = "CANARY-9f3a-PRIOR-RESULT"
+        runner = self._canary_run(canary, carry_forward=False)
+        assert len(runner.prompt_log) == 10
         for sp in runner.prompt_log:
             assert canary not in sp.render()
 
-    def test_gate_verdicts_do_not_reach_any_prompt(self):
+    def test_the_carry_never_names_a_seat(self):
+        """Aggregate or nothing. A later round that could tell WHICH analyst
+        said what could model them individually and start agreeing with one --
+        seat-to-seat leakage arriving by way of the carry, which the
+        within-round blinding above would not catch."""
+        runner = AO.BlindedSeatRunner({
+            "seat_alpha": _seat("CLAIM | arithmetic | 12 + 35 = 47 | total"),
+            "seat_beta": _seat("CLAIM | arithmetic | 2 + 2 = 5 | sum"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        for sp in runner.prompt_log:
+            rendered = sp.render()
+            assert "seat_alpha" not in rendered
+            assert "seat_beta" not in rendered
+
+    def test_gate_verdicts_reach_later_rounds_but_never_the_first(self):
+        """Verdicts travel with the comprised answer -- that is the point of
+        carrying it. What must not happen is a verdict reaching round 1, where
+        there is nothing yet to have been adjudicated."""
         runner = AO.BlindedSeatRunner({
             "s1": _seat("CLAIM | arithmetic | 12 + 35 = 50 | wrong total"),
         })
         o = Orchestrator([ArithmeticGate()])
         o.run_sequential("artifact", [], runner)
-        # a real verdict was produced on pass 1 ...
         assert o.history[0].auto_rejected == 1
-        # ... and none of its wording appears in any prompt, on any pass
+
+        first, later = runner.prompt_log[0].render(), runner.prompt_log[1:]
+        assert "REFUTED" not in first
+        assert Orchestrator.CARRY_HEADER not in first
+        assert any("REFUTED" in sp.render() for sp in later), (
+            "a refuted claim must reach the next round, or it gets re-asserted")
+
+    def test_a_refuted_claim_is_carried_as_refuted_not_as_open(self):
+        """THE REGRESSION. ClaimVerdict.status is a GateStatus, not a bool.
+        The first build of the composer tested `status is True` / `is False`,
+        which never matches an enum, so EVERY adjudicated claim fell through
+        to the open-questions list: verified findings lost their verification
+        and refuted ones -- which the section tells the next round to treat as
+        settled and not re-assert -- were handed forward as unresolved. The
+        carried text still read as perfectly well formed. Only the labels were
+        wrong, which is the whole failure mode this tool exists to catch.
+        """
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | the total is 47"),
+            "s2": _seat("CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        carried = runner.prompt_log[-1].render()
+
+        # Anchor on the section HEADINGS, not the bare words: "REFUTED" also
+        # appears in the explanatory paragraph above them.
+        verified = carried.index("VERIFIED -- a gate confirmed these:")
+        refuted = carried.index("REFUTED -- a gate disproved these:")
+        assert verified < refuted
+        assert verified < carried.index("the total is 47") < refuted
+        assert carried.index("the total is 5") > refuted
+        assert "OPEN -- " not in carried, (
+            "both claims were gated; neither is an open question")
+
+    def test_nothing_comprised_means_nothing_carried(self):
+        """An empty section would still change the prompt and would tell the
+        next round that a round had run -- a leak that buys nothing."""
+        o = Orchestrator([ArithmeticGate()])
+        assert o.compose_carry_forward("just the artifact", [], 1) == (
+            "just the artifact")
+
+    def test_the_carry_does_not_depend_on_which_seat_spoke_first(self):
+        """Replay mode forbids nondeterminism, and this is where it could
+        enter: the carried section is built from a dict of verdicts, and a
+        dict preserves INSERTION order. Without the sort, the text would be
+        ordered by whichever seat happened to propose a claim first -- stable
+        within one process, so a naive same-process comparison would call it
+        deterministic, but different the moment seats reply in another order,
+        which across five vendors they will. Two panels asserting the same
+        claims in different seat order must carry byte-identical text.
+        """
+        claims = [
+            "CLAIM | arithmetic | 12 + 35 = 47 | total a",
+            "CLAIM | arithmetic | 7 * 6 = 42 | total b",
+            "CLAIM | arithmetic | 2 + 2 = 5 | total c",
+        ]
+
+        def carried(order):
+            runner = AO.BlindedSeatRunner(
+                {f"s{i}": _seat(claims[j]) for i, j in enumerate(order)})
+            o = Orchestrator([ArithmeticGate()])
+            o.run_sequential("artifact", [], runner)
+            text = runner.prompt_log[-1].render()
+            return text[text.index(Orchestrator.CARRY_HEADER):]
+
+        # The permutation must reorder two claims that land in the SAME
+        # section. Moving the refuted one around proves nothing: it is filtered
+        # into its own list, so the two verified claims keep their relative
+        # order either way and the assertion holds even with the sort removed.
+        assert carried([0, 1, 2]) == carried([1, 0, 2])
+
+    def test_every_seat_of_a_carried_round_sees_identical_text(self):
+        """The carry is composed once per round, before any seat of that round
+        is called. If it were composed per seat, seats could diverge on input
+        and the round's answers would stop being comparable."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | total"),
+            "s2": _seat("CLAIM | arithmetic | 2 + 2 = 5 | sum"),
+            "s3": _seat("CLAIM | judgment |  | a judgement"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        for start in range(0, 15, 3):
+            round_prompts = runner.prompt_log[start:start + 3]
+            assert len({sp.render() for sp in round_prompts}) == 1
+
+    def test_the_result_records_which_rounds_shared_an_input(self):
+        """A reader must never have to assume an independence the run did not
+        have, so each round carries the fact on its own result."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | total"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        res = o.run_sequential("artifact", [], runner)
+        assert [r.carried_from_round for r in res] == [None, 1, 2, 3, 4]
+
+        runner2 = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | total"),
+        })
+        o2 = Orchestrator([ArithmeticGate()])
+        res2 = o2.run_sequential("artifact", [], runner2, carry_forward=False)
+        assert [r.carried_from_round for r in res2] == [None] * 5
+
+    def test_gate_verdicts_do_not_reach_any_prompt_when_carry_is_off(self):
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 50 | wrong total"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner, carry_forward=False)
+        assert o.history[0].auto_rejected == 1
         for sp in runner.prompt_log:
             rendered = sp.render()
             assert "recomputed" not in rendered
             assert "eliminated" not in rendered.lower()
+            assert Orchestrator.CARRY_HEADER not in rendered
 
     def test_every_seat_on_a_pass_is_shown_identical_text(self):
         """No seat is handed anything the others were not. Seat
@@ -3957,7 +4249,7 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         rc = RA.main([str(artifact), "--profiles", path, "--max-cost", "1000.00"])
         out = capsys.readouterr().out
         assert calls["n"] == 25, "5 external seats x 5 passes"
-        assert "PASSES, ONE AT A TIME (5)" in out
+        assert "ROUNDS, ONE AT A TIME (5)" in out
         # c_false stands on "2 + 2 = 5" and the gate refutes it; nothing
         # refutes c_true, so it survives by elimination.
         assert "SURVIVOR: c_true" in out

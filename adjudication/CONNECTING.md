@@ -74,6 +74,51 @@ list indices. For a response shaped
 
 Keys starting with `_` are comments — ignored by the checker and by loading.
 
+### A worked example: the Anthropic seat
+
+One vendor's block, filled in, so you have something correct to pattern the
+other four against. Paste it into whichever seat you give to Anthropic.
+
+```json
+{
+  "name": "anthropic",
+  "endpoint": "https://api.anthropic.com/v1/messages",
+  "auth_header": "x-api-key",
+  "auth_template": "{key}",
+  "extra_headers": { "anthropic-version": "2023-06-01" },
+  "body": {
+    "model": "{{model}}",
+    "max_tokens": "{{max_tokens}}",
+    "messages": [{ "role": "user", "content": "{{prompt}}" }]
+  },
+  "text_path": ["content", 0, "text"]
+}
+```
+
+Three things in it differ from the OpenAI-shaped default in
+`profiles.example.json`, and each one fails in its own way if carried over:
+
+- **`auth_template` is `{key}`, not `Bearer {key}`.** Anthropic authenticates
+  on `x-api-key` with the bare key. A `Bearer ` prefix is a 401 on every call.
+- **`anthropic-version` is required.** Without that header the request is
+  rejected before the model sees it.
+- **There is no `{{temperature}}`.** Current Claude models reject sampling
+  parameters (`temperature`, `top_p`, `top_k`) with a 400. The preflight in §3
+  refuses to start a run that would send one to an Anthropic endpoint, so this
+  is caught before it costs anything — but only if you leave it out here.
+
+`text_path` is `["content", 0, "text"]` because the reply is a list of content
+blocks: `{"content": [{"type": "text", "text": "..."}], ...}`.
+
+For your model id, Anthropic's current ids include `claude-opus-5`,
+`claude-sonnet-5`, and `claude-haiku-4-5`. Copy the exact string from the
+vendor's own model list; where it disagrees with this page, the vendor wins.
+
+**This block is the only one written for you.** The other four vendors have to
+come off their own API references, for the reason stated above — and because
+the environment this repository is built in cannot reach vendor documentation
+to verify them.
+
 ## 3. Check before you spend anything
 
 ```

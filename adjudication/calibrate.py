@@ -372,25 +372,13 @@ class CalibrationResult:
         return sum(self.seat_accuracy.values()) / len(self.seat_accuracy)
 
 
-_DECORATION = re.compile(r"^[\s>*\-+•`|]+")
-_EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
-
-
-def _undecorate(line: str) -> str:
-    """Strip markdown decoration from a claim line without touching its fields.
-
-    Leading bullets and emphasis are removed, and emphasis characters are also
-    dropped from the CLAIM token itself -- "**CLAIM**" survives the leading
-    strip as "CLAIM**", which still fails the line pattern. Only the segment
-    BEFORE the first pipe is touched, so an asterisk inside a multiplication
-    expression is never disturbed.
-    """
-    stripped = _DECORATION.sub("", line)
-    head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
-    if not head:
-        return stripped
-    cleaned = re.sub(r"[*`_]", "", head.group(1))
-    return cleaned + stripped[head.end():]
+# ONE IMPLEMENTATION, NOT TWO. This started here, because calibration was
+# where real-model formatting was first measured. The main adjudication path
+# needed exactly the same treatment and now has it, so the definition moved to
+# the orchestrator and this is an alias. Two copies would drift, and the copy
+# that fell behind would be the one deciding whether a paid run's evidence
+# survived parsing.
+_undecorate = AO.undecorate_claim_line
 
 
 def _canonical_key(s: str) -> str:
@@ -1208,6 +1196,179 @@ def _collapsed_demo_seats(items: Sequence[Item]) -> dict[str, Callable[[str], st
 
 REJECTED_SAMPLING_KEYS = ("temperature", "top_p", "top_k")
 
+# ---------------------------------------------------------------------------
+# the transcript -- so a run that cost money is never scored only once
+# ---------------------------------------------------------------------------
+
+TRANSCRIPT_SCHEMA = 1
+"""Bumped when the on-disk shape changes. A reader that does not recognise the
+version refuses rather than guessing at the fields."""
+
+
+class ReplayedSeatError(RuntimeError):
+    """Raised by a replayed seat that errored on the original run.
+
+    It exists so a re-score reproduces the ORIGINAL EXCLUSION rather than
+    silently scoring the seat as silent. A seat that timed out and a seat that
+    judged every statement false are different observations, and collapsing
+    them is exactly the kind of fabricated row this module refuses elsewhere.
+    """
+
+
+def recording_seats(
+    seat_fns: Mapping[str, Callable[[str], str]],
+    sink: dict[str, dict[str, str]],
+) -> dict[str, Callable[[str], str]]:
+    """Wrap seats so every raw reply is captured BEFORE anything parses it.
+
+    WHY THIS EXISTS. A calibration run spends real money at five vendors, and
+    until now the raw text was discarded the instant it was parsed: only
+    counts survived into the result. Every extraction defect found in this
+    module -- markdown decoration, spacing variance, thousands separators --
+    changed the score while leaving the report looking perfectly well formed.
+    On synthetic seats those were catchable because the text was ours. On paid
+    seats the operator got a number and no way to see what the model said, and
+    the documented remedy for a suspicious score was to run it again.
+
+    `sink` is mutated as each seat answers rather than returned at the end, so
+    a run stopped part-way -- a budget ceiling, a crash, an interrupt -- still
+    leaves behind everything that was already paid for.
+    """
+    def wrap(seat_id: str, fn: Callable[[str], str]) -> Callable[[str], str]:
+        def recorded(prompt: str) -> str:
+            try:
+                raw = fn(prompt)
+            except Exception as exc:
+                # Recorded, then re-raised untouched: this wrapper observes and
+                # never decides. Swallowing here would turn a seat failure into
+                # an empty reply, and the budget ceiling into a scored run.
+                sink[seat_id] = {"error": str(exc)}
+                raise
+            sink[seat_id] = {"reply": raw}
+            return raw
+        return recorded
+
+    return {seat_id: wrap(seat_id, fn) for seat_id, fn in seat_fns.items()}
+
+
+def write_transcript(
+    path: str,
+    *,
+    items: Sequence[Item],
+    seed: int,
+    replies: Mapping[str, Mapping[str, str]],
+) -> None:
+    """Write the raw replies plus the quiz they answered.
+
+    The item set is stored alongside the text because a reply is meaningless
+    without the questions it responded to, and scoring one against a different
+    quiz would produce a confident, wrong rho.
+    """
+    payload = {
+        "schema": TRANSCRIPT_SCHEMA,
+        "seed": seed,
+        "n_items": len(items),
+        "items": [
+            {"item_id": it.item_id, "expression": it.expression,
+             "is_true": it.is_true, "band": it.band}
+            for it in items
+        ],
+        "seats": {
+            seat_id: dict(rec) for seat_id, rec in sorted(replies.items())
+        },
+    }
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, sort_keys=True)
+
+
+def load_transcript(
+    path: str,
+) -> tuple[list[Item], dict[str, Callable[[str], str]]]:
+    """Rebuild the quiz and replayable seats from a saved run. Fail closed.
+
+    The replayed seats are ordinary `Callable[[str], str]`, so a re-score runs
+    through `run_calibration` UNCHANGED. That is deliberate: a second scoring
+    implementation could drift from the first and there would be no way to
+    tell which number was right. Replay reuses the one path there is.
+    """
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: not a transcript object")
+
+    schema = raw.get("schema")
+    if schema != TRANSCRIPT_SCHEMA:
+        raise ValueError(
+            f"{path}: transcript schema {schema!r}, this build reads "
+            f"{TRANSCRIPT_SCHEMA}. Refusing rather than guessing at fields."
+        )
+
+    stored = raw.get("items")
+    if not isinstance(stored, list) or not stored:
+        raise ValueError(f"{path}: transcript carries no item set")
+
+    items = [
+        Item(
+            item_id=str(d["item_id"]),
+            expression=str(d["expression"]),
+            is_true=bool(d["is_true"]),
+            band=str(d.get("band", "medium")),
+        )
+        for d in stored
+    ]
+
+    # THE ANSWER KEY IS RECOMPUTED, NEVER TRUSTED FROM THE FILE.
+    #
+    # `is_true` is read above only to build the Item; the gate recomputes each
+    # expression during scoring, so a transcript whose truth flags were edited
+    # cannot move rho. This check is the separate question of whether the file
+    # is internally coherent: an item set that no longer matches the seed it
+    # claims means the file was assembled by hand or by a different build, and
+    # scoring paid replies against the wrong questions is precisely the silent
+    # wrong number this module exists to refuse.
+    seed = raw.get("seed")
+    if isinstance(seed, int):
+        try:
+            expected = build_items(len(items), seed)
+        except ValueError:
+            expected = []
+        if expected and [i.expression for i in expected] != [
+            i.expression for i in items
+        ]:
+            raise ValueError(
+                f"{path}: the stored questions are not the ones seed {seed} "
+                f"with {len(items)} items produces. Refusing to score replies "
+                f"against a quiz they may not have answered."
+            )
+
+    seats_raw = raw.get("seats")
+    if not isinstance(seats_raw, dict) or not seats_raw:
+        raise ValueError(f"{path}: transcript carries no seat replies")
+
+    def replay(rec: Mapping[str, Any]) -> Callable[[str], str]:
+        if "error" in rec:
+            message = str(rec["error"])
+
+            def failing(_prompt: str) -> str:
+                raise ReplayedSeatError(message)
+            return failing
+        text = str(rec.get("reply", ""))
+
+        def answering(_prompt: str) -> str:
+            return text
+        return answering
+
+    seats = {
+        str(seat_id): replay(rec)
+        for seat_id, rec in sorted(seats_raw.items())
+        if isinstance(rec, dict)
+    }
+    if not seats:
+        raise ValueError(f"{path}: no readable seat record in transcript")
+    return items, seats
+
+
 def preflight_settings(path: str) -> list[str]:
     """Problems that would cost money to discover. Empty list means clear.
 
@@ -1275,6 +1436,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="hard ceiling for this calibration run")
     ap.add_argument("--seat5", choices=("external", "in-process"),
                     default="external")
+    ap.add_argument("--transcript", metavar="PATH",
+                    help="save every seat's raw reply here. A paid run is "
+                         "worth scoring more than once; without this the text "
+                         "is gone the moment it is parsed.")
+    ap.add_argument("--rescore", metavar="PATH",
+                    help="score a saved transcript instead of calling any "
+                         "seat. No network, no credentials, no cost.")
     ap.add_argument("--json", metavar="PATH",
                     help="also write the raw report as JSON")
     ap.add_argument("--ignore-preflight", action="store_true",
@@ -1293,7 +1461,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"CALIBRATION NOT STARTED: {exc}", file=sys.stderr)
         return 2
 
-    if args.demo or args.demo_collapsed:
+    # Replay first: a re-score must not touch credentials, settings, or the
+    # network, so it is decided before any of that is loaded.
+    if args.rescore:
+        try:
+            items, seats = load_transcript(args.rescore)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"CALIBRATION NOT SCORED: {exc}", file=sys.stderr)
+            print("Nothing was sent and nothing was spent.", file=sys.stderr)
+            return 2
+    elif args.demo or args.demo_collapsed:
         seats = (_collapsed_demo_seats(items) if args.demo_collapsed
                  else _demo_seats(items))
     else:
@@ -1332,7 +1509,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("Nothing was sent and nothing was spent.", file=sys.stderr)
             return 2
 
-    res = run_calibration(seats, items)
+    # THE TRANSCRIPT IS WRITTEN EVEN IF THE RUN DIES.
+    #
+    # A budget ceiling propagates out of the seat runner by design, and a
+    # crash mid-panel is exactly the run whose replies are most worth keeping:
+    # the money is already spent. Recording into a dict that survives the
+    # exception, and writing it in `finally`, means a partial run still leaves
+    # something re-scorable behind instead of a bill and nothing else.
+    captured: dict[str, dict[str, str]] = {}
+    if args.transcript and not args.rescore:
+        seats = recording_seats(seats, captured)
+
+    try:
+        res = run_calibration(seats, items)
+    finally:
+        if args.transcript and not args.rescore and captured:
+            try:
+                write_transcript(args.transcript, items=items,
+                                 seed=args.seed, replies=captured)
+                print(f"transcript written to {args.transcript}")
+            except OSError as exc:
+                # Never let a failed write mask the run's own outcome.
+                print(f"WARNING: transcript not written: {exc}",
+                      file=sys.stderr)
+
     print(render_calibration(res))
 
     if args.json:
