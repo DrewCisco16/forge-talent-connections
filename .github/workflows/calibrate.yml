@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       n_items:
-        description: "How many propositions (even number). More items, steadier rho, slightly more cost."
+        description: "How many propositions. MUST BE A MULTIPLE OF 6 (24, 60, 120) so each difficulty band gets equal true and false items. More items, steadier rho, and barely more cost -- they all ride in one prompt."
         required: true
         default: "24"
       seed:
