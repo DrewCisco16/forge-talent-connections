@@ -218,6 +218,97 @@ const List<Story> kStories = <Story>[
   Story(id: "kai", name: "Kai", avatar: "assets/heroes/hero_14.png"),
 ];
 
+/// Talent Stories for the vertical browser. Sample people, honestly framed:
+/// no footage is invented for them, so the browser shows poster frames and
+/// says so on screen.
+const List<TalentStory> kTalentStories = <TalentStory>[
+  TalentStory(
+    id: "story-drew",
+    authorName: "Drew",
+    authorAvatar: "assets/heroes/hero_10.png",
+    authorStatus: VerificationStatus.verified,
+    headline: "Network Operations · Splunk · Python",
+    caption:
+        "Six years keeping networks honest. Every claim on my profile has "
+        "a seal or a human behind it.",
+    vouchCount: 214,
+    tags: <String>["#SkillsFirst", "#VetToTech"],
+  ),
+  TalentStory(
+    id: "story-maya",
+    authorName: "Maya Chen",
+    authorAvatar: "assets/heroes/hero_04.png",
+    authorStatus: VerificationStatus.verified,
+    headline: "UX design · Web build",
+    caption:
+        "The portal deliverables are sealed. This is the work, not a "
+        "summary of the work.",
+    vouchCount: 96,
+    tags: <String>["#Shipped", "#Sealed"],
+  ),
+  TalentStory(
+    id: "story-jordan",
+    authorName: "Jordan Reyes",
+    authorAvatar: "assets/heroes/hero_12.png",
+    authorStatus: VerificationStatus.verified,
+    headline: "Cloud foundations · Data analysis",
+    caption:
+        "Cleared my cloud credential this morning. Checked, sealed, and "
+        "on the record.",
+    vouchCount: 41,
+    tags: <String>["#Cloud", "#Verified"],
+  ),
+  TalentStory(
+    id: "story-ana",
+    authorName: "Ana Duarte",
+    authorAvatar: "assets/heroes/hero_06.png",
+    authorStatus: VerificationStatus.pending,
+    headline: "Accessibility · Front end",
+    caption:
+        "My accessibility pass is still in review, and this Story says "
+        "so. Here, pending means pending.",
+    vouchCount: 18,
+    tags: <String>["#A11y", "#InReview"],
+  ),
+];
+
+/// The Talent Signature fixture: strengths drawn only from records that
+/// exist elsewhere in this demo, with their evidence named. No numbers, no
+/// rankings, no invented traits.
+const TalentSignature kTalentSignature = TalentSignature(
+  summary:
+      "Calm operations work under real pressure, proven by sealed records "
+      "and vouched for by named humans.",
+  strengths: <SignatureStrength>[
+    SignatureStrength(
+      name: "Incident response",
+      evidence: "Sealed service record",
+      status: VerificationStatus.verified,
+    ),
+    SignatureStrength(
+      name: "Splunk analysis",
+      evidence: "Verified deliverable, checked against the raw feed",
+      status: VerificationStatus.verified,
+    ),
+    SignatureStrength(
+      name: "Working under pressure",
+      evidence: "Vouch from Maya Chen, Aug 2026",
+      status: VerificationStatus.verified,
+    ),
+    SignatureStrength(
+      name: "Cloud fundamentals",
+      evidence: "Credential still checking",
+      status: VerificationStatus.pending,
+    ),
+  ],
+  refusals: <String>[
+    "No personality scores, ever.",
+    "No predictions about your future, ever.",
+    "No reading of your video or audio without your consent, and none at "
+        "all until the legal review clears it.",
+  ],
+);
+
 /// Feed entries.
 const List<FeedPost> kFeed = <FeedPost>[
   FeedPost(

@@ -148,6 +148,18 @@ class MissionScreen extends StatelessWidget {
               "recommendation can substitute for either human choice.",
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          const SectionLabel("The road ahead"),
+          const SizedBox(height: 6),
+          ForgeCard(
+            child: body(
+              "Within the year: Talent Stories, the Talent Signature, and "
+              "AI opportunity matching grow from the samples in this demo "
+              "into full features. Within the first year after official "
+              "release: exploring Opportunity spaces in augmented reality, "
+              "as the content and the technology prove ready.",
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection + 4),
           GoldButton(
             label: "Continue to FORGE Talent Connections",

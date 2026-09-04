@@ -38,6 +38,39 @@ class FeedPost {
   final int vouchCount;
 }
 
+/// One Talent Story: a short verified video introduction in the vertical
+/// Story browser.
+///
+/// Demo entries are sample people, and no footage is invented for them: the
+/// browser renders honest poster frames and says so. In production a Story
+/// is a real upload that carries the same verification standard as
+/// everything else - the badge on the author is earned, never decorative.
+class TalentStory {
+  const TalentStory({
+    required this.id,
+    required this.authorName,
+    required this.authorAvatar,
+    required this.authorStatus,
+    required this.headline,
+    required this.caption,
+    required this.vouchCount,
+    this.tags = const <String>[],
+  });
+
+  final String id;
+  final String authorName;
+  final String authorAvatar;
+  final VerificationStatus authorStatus;
+
+  /// The skills line under the name, for instance "UX design · Web build".
+  final String headline;
+
+  /// What the Story says, shown as its caption.
+  final String caption;
+  final int vouchCount;
+  final List<String> tags;
+}
+
 /// A message in a thread.
 class ChatMessage {
   const ChatMessage({

@@ -162,6 +162,16 @@ final FutureProvider<RewardsProgram> rewardsProvider =
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadRewards(),
     );
 
+final FutureProvider<List<TalentStory>> talentStoriesProvider =
+    FutureProvider<List<TalentStory>>(
+      (Ref ref) => ref.watch(forgeRepositoryProvider).loadTalentStories(),
+    );
+
+final FutureProvider<TalentSignature> talentSignatureProvider =
+    FutureProvider<TalentSignature>(
+      (Ref ref) => ref.watch(forgeRepositoryProvider).loadTalentSignature(),
+    );
+
 final FutureProvider<List<AssistantExchange>> assistantTranscriptProvider =
     FutureProvider<List<AssistantExchange>>(
       (Ref ref) => ref.watch(forgeRepositoryProvider).loadAssistantTranscript(),

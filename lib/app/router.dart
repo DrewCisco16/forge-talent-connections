@@ -9,6 +9,7 @@ import "../features/core/b4_credentials.dart";
 import "../features/core/b5_trust_wallet.dart";
 import "../features/core/b6_ai_match.dart";
 import "../features/core/b7_opportunity_detail.dart";
+import "../features/core/talent_signature.dart";
 import "../features/onboarding/a1_splash.dart";
 import "../features/onboarding/a2_create_profile.dart";
 import "../features/onboarding/a3_choose_avatar.dart";
@@ -22,6 +23,7 @@ import "../features/social/c3_vouch_flow.dart";
 import "../features/social/c6_rewards.dart";
 import "../features/social/c4_chat.dart";
 import "../features/social/c5_notifications.dart";
+import "../features/social/talent_stories.dart";
 import "../features/trust/d1_export_certificate.dart";
 import "../features/trust/seal_check.dart";
 import "../features/trust/d2_project_space.dart";
@@ -90,6 +92,11 @@ GoRouter buildRouter() {
         builder: (_, __) => const C2VideoPitch(),
       ),
       GoRoute(
+        path: "/talent-stories",
+        name: "talent-stories",
+        builder: (_, __) => const TalentStories(),
+      ),
+      GoRoute(
         path: "/gallery",
         name: "gallery",
         builder: (_, __) => const WidgetGallery(),
@@ -131,6 +138,11 @@ GoRouter buildRouter() {
             path: "/assistant",
             name: "assistant",
             builder: (_, __) => const AiAssistant(),
+          ),
+          GoRoute(
+            path: "/talent-signature",
+            name: "talent-signature",
+            builder: (_, __) => const TalentSignatureScreen(),
           ),
           GoRoute(
             path: "/credentials",

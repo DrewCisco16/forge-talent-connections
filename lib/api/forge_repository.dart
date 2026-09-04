@@ -41,6 +41,9 @@ abstract interface class TrustRepository {
 /// Reads the social surfaces.
 abstract interface class SocialRepository {
   Future<List<Story>> loadStories();
+
+  /// Talent Stories: the vertical browser of verified video introductions.
+  Future<List<TalentStory>> loadTalentStories();
   Future<List<FeedPost>> loadFeed();
   Future<ChatThread> loadThread();
   Future<List<AppNotification>> loadNotifications();
@@ -80,6 +83,10 @@ abstract interface class GrowthRepository {
   /// eligibility are computed by the backend from verified events only.
   Future<RewardsProgram> loadRewards();
   Future<List<AssistantExchange>> loadAssistantTranscript();
+
+  /// The Talent Signature: strengths drawn only from the verified record,
+  /// with the evidence named and the feature's refusals stated as copy.
+  Future<TalentSignature> loadTalentSignature();
 }
 
 /// The full surface the app needs.

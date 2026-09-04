@@ -7,6 +7,7 @@ import "package:forge_talent_connections/features/core/b4_credentials.dart";
 import "package:forge_talent_connections/features/core/b5_trust_wallet.dart";
 import "package:forge_talent_connections/features/core/b6_ai_match.dart";
 import "package:forge_talent_connections/features/core/b7_opportunity_detail.dart";
+import "package:forge_talent_connections/features/core/talent_signature.dart";
 import "package:forge_talent_connections/features/onboarding/a1_splash.dart";
 import "package:forge_talent_connections/features/onboarding/a2_create_profile.dart";
 import "package:forge_talent_connections/features/onboarding/a3_choose_avatar.dart";
@@ -20,6 +21,7 @@ import "package:forge_talent_connections/features/social/c3_vouch_flow.dart";
 import "package:forge_talent_connections/features/social/c6_rewards.dart";
 import "package:forge_talent_connections/features/social/c4_chat.dart";
 import "package:forge_talent_connections/features/social/c5_notifications.dart";
+import "package:forge_talent_connections/features/social/talent_stories.dart";
 import "package:forge_talent_connections/features/trust/d1_export_certificate.dart";
 import "package:forge_talent_connections/features/trust/d2_project_space.dart";
 import "package:forge_talent_connections/features/trust/d3_sign_in.dart";
@@ -55,6 +57,8 @@ final Map<String, Widget> screenCatalog = <String, Widget>{
   "C4 Chat": const C4Chat(),
   "C5 Notifications": const C5Notifications(),
   "C6 Rewards": const C6Rewards(),
+  "Talent Stories": const TalentStories(),
+  "Talent Signature": const TalentSignatureScreen(),
   "Legal Terms": const LegalTerms(),
   "D1 Export Certificate": const D1ExportCertificate(),
   "D2 Project Space": const D2ProjectSpace(),

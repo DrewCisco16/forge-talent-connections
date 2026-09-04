@@ -141,6 +141,44 @@ class PitchStudio {
   final String note;
 }
 
+/// One strength in the Talent Signature, with the verified evidence behind
+/// it. A strength without evidence does not appear here at all, and a
+/// strength whose evidence is still checking is shown still checking.
+class SignatureStrength {
+  const SignatureStrength({
+    required this.name,
+    required this.evidence,
+    required this.status,
+  });
+
+  final String name;
+
+  /// The record that proves it - a seal, a checked deliverable, a vouch.
+  final String evidence;
+  final VerificationStatus status;
+}
+
+/// The Talent Signature: a portrait of strengths drawn only from the
+/// verified record.
+///
+/// It is deliberately not a score. It carries no numbers, no rankings, and
+/// no guesses about who the person is; [refusals] states out loud what this
+/// feature will never do, so the boundary is part of the product.
+class TalentSignature {
+  const TalentSignature({
+    required this.summary,
+    required this.strengths,
+    required this.refusals,
+  });
+
+  /// One plain-language line, assembled from the evidence below it.
+  final String summary;
+  final List<SignatureStrength> strengths;
+
+  /// What this feature never does, stated as product copy.
+  final List<String> refusals;
+}
+
 /// One scripted exchange with the AI Assistant.
 ///
 /// The demo transcript is fixture data; in production the assistant runs on

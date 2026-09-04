@@ -381,6 +381,95 @@ class B1Dashboard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
+          // The two feature previews the founder scheduled for within the
+          // year: both are labelled samples in the demo and say so on their
+          // own screens.
+          InkWell(
+            onTap: () => context.go("/talent-stories"),
+            borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+            child: ForgeCard(
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.video_library_outlined,
+                    size: 22,
+                    color: forge.cyan,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          "Talent Stories",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Short verified video introductions, one swipe "
+                          "at a time",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.3,
+                            color: forge.textSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: forge.textSub),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          InkWell(
+            onTap: () => context.go("/talent-signature"),
+            borderRadius: BorderRadius.circular(ForgeShape.cardRadius),
+            child: ForgeCard(
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.fingerprint, size: 22, color: forge.gold),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          "Talent Signature",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.cardTitle,
+                            fontWeight: FontWeight.w700,
+                            color: forge.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Your strengths, drawn only from your verified "
+                          "record",
+                          style: TextStyle(
+                            fontFamily: ForgeType.bodyFamily,
+                            fontSize: ForgeType.caption,
+                            height: 1.3,
+                            color: forge.textSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: forge.textSub),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: ForgeSpacing.gapCard),
           AsyncView<TrustWalletSummary>(
             value: ref.watch(walletSummaryProvider),
             pendingLabel: "Loading growth",

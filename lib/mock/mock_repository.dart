@@ -226,6 +226,9 @@ class MockForgeRepository implements ForgeRepository {
   Future<List<Story>> loadStories() => _serve(kStories);
 
   @override
+  Future<List<TalentStory>> loadTalentStories() => _serve(kTalentStories);
+
+  @override
   Future<List<FeedPost>> loadFeed() => _serve(kFeed);
 
   @override
@@ -373,6 +376,9 @@ class MockForgeRepository implements ForgeRepository {
   @override
   Future<List<AssistantExchange>> loadAssistantTranscript() =>
       _serve(kAssistantTranscript);
+
+  @override
+  Future<TalentSignature> loadTalentSignature() => _serve(kTalentSignature);
 
   @override
   Future<AssistantDraft> loadPortfolioDraft() => _serve(
