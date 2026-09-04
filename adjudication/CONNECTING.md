@@ -74,6 +74,37 @@ list indices. For a response shaped
 
 Keys starting with `_` are comments — ignored by the checker and by loading.
 
+### Start from run-001 rather than from scratch
+
+A live five-vendor run already happened. `profiles.run001.json` in this
+directory is the settings file reconstructed from it, and
+`HANDOFF-run-001-failures.md` is what that run found.
+
+```
+cp profiles.run001.json profiles.json
+```
+
+It passes `--check-profiles` and the calibration preflight as shipped. What it
+carries per seat:
+
+| Seat | Vendor | run-001 |
+|---|---|---|
+| seat_1 | OpenAI | errored 5/5, cause unrecorded |
+| seat_2 | Google | errored 5/5, cause unrecorded |
+| seat_3 | Mistral | **answered** |
+| seat_4 | xAI | **answered** |
+| seat_5 | Anthropic | errored 5/5 on `temperature` — root-caused, fix applied here |
+
+Everything in it is what that run actually sent, with one inference marked in
+the file: the handoff records the Mistral and xAI hostnames and that both are
+plain OpenAI-shaped chat completions, but not the URL path. Confirm both
+against the vendor page; the vendor wins.
+
+Seats 1 and 2 are the open question, and `diagnose-seats.py` settles them for
+well under a cent — one call per seat, a six-token prompt, a 64-token cap. It
+prints the HTTP status and the vendor's own error body, which is exactly what
+run-001 discarded.
+
 ### A worked example: the Anthropic seat
 
 One vendor's block, filled in, so you have something correct to pattern the

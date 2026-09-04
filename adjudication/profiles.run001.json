@@ -1,0 +1,93 @@
+{
+  "_README": [
+    "RECONSTRUCTED FROM run-001, recorded in HANDOFF-run-001-failures.md.",
+    "Every endpoint, auth header, body shape and text_path below is what that",
+    "live run actually sent -- not written from memory. Seats 3 and 4 are the",
+    "two that WORKED. Seat 5 carries the temperature fix that run diagnosed.",
+    "Seats 1 and 2 failed with a cause the run did not record; diagnose-seats.py",
+    "settles them for well under a cent.",
+    "",
+    "ONE INFERENCE, FLAGGED: the handoff records the Mistral and xAI hostnames",
+    "and says both are 'plain OpenAI-shaped chat completions', but not the URL",
+    "path. /v1/chat/completions is the conventional path for that shape.",
+    "Confirm both against the vendor page; the vendor wins.",
+    "",
+    "Contains NO credentials. Keys live only in .env."
+  ],
+
+  "seat_1": {
+    "name": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "auth_header": "authorization",
+    "auth_template": "Bearer {key}",
+    "extra_headers": {},
+    "_note": "run-001: FAILED 5/5, cause unrecorded. No temperature: reasoning models reject it. Hypotheses in HANDOFF-run-001-failures.md.",
+    "body": {
+      "model": "{{model}}",
+      "max_completion_tokens": "{{max_tokens}}",
+      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+    },
+    "text_path": ["choices", 0, "message", "content"]
+  },
+
+  "seat_2": {
+    "name": "google",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    "auth_header": "authorization",
+    "auth_template": "Bearer {key}",
+    "extra_headers": {},
+    "_note": "run-001: FAILED 5/5, cause unrecorded. OpenAI-compat endpoint used because seat_profiles rejects a model placeholder in the URL. Suspect key type.",
+    "body": {
+      "model": "{{model}}",
+      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+    },
+    "text_path": ["choices", 0, "message", "content"]
+  },
+
+  "seat_3": {
+    "name": "mistral",
+    "endpoint": "https://api.mistral.ai/v1/chat/completions",
+    "auth_header": "authorization",
+    "auth_template": "Bearer {key}",
+    "extra_headers": {},
+    "_note": "run-001: WORKED. Body shape verbatim from that run.",
+    "body": {
+      "model": "{{model}}",
+      "max_tokens": "{{max_tokens}}",
+      "temperature": "{{temperature}}",
+      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+    },
+    "text_path": ["choices", 0, "message", "content"]
+  },
+
+  "seat_4": {
+    "name": "xai",
+    "endpoint": "https://api.x.ai/v1/chat/completions",
+    "auth_header": "authorization",
+    "auth_template": "Bearer {key}",
+    "extra_headers": {},
+    "_note": "run-001: WORKED. Uses max_completion_tokens, with temperature.",
+    "body": {
+      "model": "{{model}}",
+      "max_completion_tokens": "{{max_tokens}}",
+      "temperature": "{{temperature}}",
+      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+    },
+    "text_path": ["choices", 0, "message", "content"]
+  },
+
+  "seat_5": {
+    "name": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "auth_header": "x-api-key",
+    "auth_template": "{key}",
+    "extra_headers": { "anthropic-version": "2023-06-01" },
+    "_note": "run-001: FAILED 5/5 on temperature -- root-caused and fixed. No temperature key: current Claude models 400 on sampling parameters. Preflight now blocks its return.",
+    "body": {
+      "model": "{{model}}",
+      "max_tokens": "{{max_tokens}}",
+      "messages": [{ "role": "user", "content": "{{prompt}}" }]
+    },
+    "text_path": ["content", 0, "text"]
+  }
+}
