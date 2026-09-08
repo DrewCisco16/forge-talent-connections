@@ -109,13 +109,18 @@ open -e .env
 That opens it in TextEdit. You'll see five blocks. Fill in the key and the
 model ID for each. **Nothing else in the file needs changing.**
 
-| Seat | Company | Model to use | Why |
+| Seat | Company | Model id | Why |
 |---|---|---|---|
-| 1 | OpenAI | **GPT-5.6 Sol** | their flagship — your pick, and correct |
-| 2 | Google | **the Pro tier — NOT Flash** | Flash is the fast/cheap tier; a weak seat contributes *misses* |
-| 3 | Mistral | **Magistral Medium** | their *reasoning* model — thinks stepwise, which is the job |
-| 4 | xAI | **Grok 4.3** | flagship, reasoning on by default |
-| 5 | Anthropic | **Claude Opus 5** | reasoning flagship; reported id `claude-opus-5` |
+| 1 | OpenAI | `gpt-5.6-sol` | their flagship reasoning model |
+| 2 | Google | `gemini-3.1-pro-preview` | the **Pro** tier, NOT Flash — Flash is the fast/cheap tier, and a weak seat contributes *misses* |
+| 3 | Mistral | `mistral-medium-latest` | Magistral Medium is **retired**; this is the current id |
+| 4 | xAI | `grok-4.6` | Grok 4.3 is **superseded** |
+| 5 | Anthropic | `claude-opus-5` | reasoning flagship |
+
+These are the ids in `rates.json`, which is what the panel actually prices and
+runs. Earlier versions of this table named **Magistral Medium** and **Grok
+4.3**; both are gone, so anyone following it put dead ids in `.env` and got
+authentication-shaped errors that had nothing to do with their keys.
 
 ⚠️ **The model ID is not the marketing name.** "Gemini Pro" is the name;
 the API wants an exact code string from their model page. Copy it exactly.
