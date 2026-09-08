@@ -74,6 +74,119 @@ list indices. For a response shaped
 
 Keys starting with `_` are comments — ignored by the checker and by loading.
 
+### Start from run-001 rather than from scratch
+
+A live five-vendor run already happened. `profiles.run001.json` in this
+directory is the settings file reconstructed from it, and
+`HANDOFF-run-001-failures.md` is what that run found.
+
+```
+cp profiles.run001.json profiles.json
+```
+
+It passes `--check-profiles` and the calibration preflight as shipped. What it
+carries per seat:
+
+| Seat | Vendor | run-001 |
+|---|---|---|
+| seat_1 | OpenAI | errored 5/5, cause unrecorded |
+| seat_2 | Google | errored 5/5, cause unrecorded |
+| seat_3 | Mistral | **answered** |
+| seat_4 | xAI | **answered** |
+| seat_5 | Anthropic | errored 5/5 on `temperature` — root-caused, fix applied here |
+
+Everything in it is what that run actually sent, with one inference marked in
+the file: the handoff records the Mistral and xAI hostnames and that both are
+plain OpenAI-shaped chat completions, but not the URL path. Confirm both
+against the vendor page; the vendor wins.
+
+### The output cap and the spend ceiling are coupled
+
+Worth knowing **before** a seat fails, because the obvious fix breaks the run.
+
+On a reasoning model the thinking tokens come out of the **same** budget as the
+reply. Too small a cap and the seat returns a well-formed 200 with empty text —
+it reads as a seat that examined the artifact and found nothing. The adapter
+catches that case and says so:
+
+> *`was cut off at the 4096-token cap before writing any reply`… Raise
+> max_tokens for this seat; the text path is not the problem.*
+
+The obvious response is to raise the cap. But the cap also drives the pre-call
+ceiling check, and raising it is not free. Measured on a 24-item calibration,
+worst case across all five seats:
+
+| Per-seat cap | Worst case, 5 calls | Against `--max-cost 1.00` |
+|---|---|---|
+| **4096** (default) | **$0.72** | fits |
+| 6144 | $1.08 | refused |
+| 8192 | $1.43 | refused |
+| 16000 | $2.80 | refused |
+
+Even a 1.5× raise refuses the run before a single call. **Raise a cap and you
+must raise `--max-cost` with it** — worst case scales linearly.
+
+To raise one seat, add `max_tokens` to that seat's block:
+
+```json
+"seat_1": { "name": "openai", "max_tokens": 8192, ... }
+```
+
+Those dollar figures are a conservative **bound**, not a forecast. The estimator
+allows 5× the cap in billed output, because reasoning tokens are billed and are
+not bounded by `max_tokens`. Real spend is normally far below it — but the
+ceiling refuses on the bound, which is the whole point of a ceiling.
+
+Seats 1 and 2 are the open question, and `diagnose-seats.py` settles them for
+well under a cent — one call per seat, a six-token prompt, a 64-token cap. It
+prints the HTTP status and the vendor's own error body, which is exactly what
+run-001 discarded.
+
+### A worked example: the Anthropic seat
+
+One vendor's block, filled in, so you have something correct to pattern the
+other four against. Paste it into whichever seat you give to Anthropic.
+
+```json
+{
+  "name": "anthropic",
+  "endpoint": "https://api.anthropic.com/v1/messages",
+  "auth_header": "x-api-key",
+  "auth_template": "{key}",
+  "extra_headers": { "anthropic-version": "2023-06-01" },
+  "body": {
+    "model": "{{model}}",
+    "max_tokens": "{{max_tokens}}",
+    "messages": [{ "role": "user", "content": "{{prompt}}" }]
+  },
+  "text_path": ["content", 0, "text"]
+}
+```
+
+Three things in it differ from the OpenAI-shaped default in
+`profiles.example.json`, and each one fails in its own way if carried over:
+
+- **`auth_template` is `{key}`, not `Bearer {key}`.** Anthropic authenticates
+  on `x-api-key` with the bare key. A `Bearer ` prefix is a 401 on every call.
+- **`anthropic-version` is required.** Without that header the request is
+  rejected before the model sees it.
+- **There is no `{{temperature}}`.** Current Claude models reject sampling
+  parameters (`temperature`, `top_p`, `top_k`) with a 400. The preflight in §3
+  refuses to start a run that would send one to an Anthropic endpoint, so this
+  is caught before it costs anything — but only if you leave it out here.
+
+`text_path` is `["content", 0, "text"]` because the reply is a list of content
+blocks: `{"content": [{"type": "text", "text": "..."}], ...}`.
+
+For your model id, Anthropic's current ids include `claude-opus-5`,
+`claude-sonnet-5`, and `claude-haiku-4-5`. Copy the exact string from the
+vendor's own model list; where it disagrees with this page, the vendor wins.
+
+**This block is the only one written for you.** The other four vendors have to
+come off their own API references, for the reason stated above — and because
+the environment this repository is built in cannot reach vendor documentation
+to verify them.
+
 ## 3. Check before you spend anything
 
 ```

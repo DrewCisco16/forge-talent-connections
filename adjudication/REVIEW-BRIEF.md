@@ -119,9 +119,14 @@ specific site genuinely needs it, argue that site.
 
 ## Already known — do not spend effort re-finding these
 
-- No real model has ever run through this. Every number came from scripted
-  synthetic seats. The machinery is verified; the behaviour of a real panel is
-  unmeasured.
+- A real five-vendor panel HAS run: run-001, recorded in
+  `HANDOFF-run-001-failures.md`. Two seats answered (Mistral, xAI); three
+  errored 5-of-5 identically, and seat_5's cause was found and fixed
+  (`temperature` sent to a model that rejects sampling parameters). rho came
+  back NOT MEASURABLE, so the panel has run but has never been CALIBRATED --
+  those are different, and an earlier version of this brief conflated them by
+  saying no real model had ever run. Every number in the test suite is still
+  from scripted synthetic seats.
 - Two references the statistics rest on (Chao 1987, Kish 1965) are unverified
   against their sources; the build environment blocks the lookup routes.
 - `test_suite.py` is one 4,100-line file and `adjudication_orchestrator.py` is
