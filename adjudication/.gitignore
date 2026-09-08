@@ -6,3 +6,16 @@ __pycache__/
 htmlcov/
 .env
 review/
+
+# RUNTIME SPEND STATE, NOT SOURCE. Both were tracked and should not have been.
+#
+# .spend-by-day.json is this machine's daily spend total. Committing it means
+# every clone inherits one operator's local ledger -- and this one carried a
+# fabricated $117.53 for 2026-08-26, written when the test suite was still
+# pointing at the operator's real file. With a daily ceiling configured, that
+# phantom figure refuses real runs against money nobody spent.
+#
+# .lock is a zero-byte fcntl artifact. A committed lock file is a stale lock
+# file in every checkout.
+.spend-by-day.json
+.spend-by-day.json.lock
