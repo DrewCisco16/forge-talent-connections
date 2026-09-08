@@ -172,6 +172,116 @@ class CallCost:
     """
 
 
+DEFAULT_DAY_STATE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".spend-by-day.json")
+"""The one file every entry point counts against.
+
+A per-run ceiling bounds ONE command. Nothing bounded a DAY, because each
+tool built its own ledger with no day state at all -- so a run refused at
+$17 could be started again immediately, and again, and no limit anywhere
+would notice. The protection an operator actually wants is not "this command
+cannot exceed X", it is "today cannot exceed X", and that needs a shared
+file.
+"""
+
+DEFAULT_DAY_CEILING = 25.00
+"""What a day may cost before every tool refuses, unless told otherwise.
+
+GROUNDED IN THIS PANEL'S OWN MEASUREMENTS, not picked for looking round. The
+largest run this project authorises is the five-round panel: $16.82 planned,
+$4.96 actually billed. $25 leaves room for one full panel run plus the cheap
+instruments around it -- stage_zero at $0.04, one_model at $0.03 to $0.16 --
+and refuses a SECOND full panel run in the same day without a deliberate
+raise. That is the shape of the mistake worth stopping: not one expensive
+call, but the same expensive thing started again because the first looked
+wrong.
+
+ON BY DEFAULT, and that is the point. A ceiling nobody sets is a ceiling
+nobody has, and every tool here previously defaulted to no daily limit at
+all. Raise it with ADJUDICATION_DAY_CEILING when you mean to; the figure is
+printed at the start of every run so it is never a surprise.
+"""
+
+
+def operator_ledger(rates: Mapping[str, Rate],
+                    per_run: float,
+                    per_day: float | None = None,
+                    day_state_path: str | None = None) -> CostLedger:
+    """The ledger every entry point should build, wired to the shared day.
+
+    WHY A FACTORY RATHER THAN A CONVENTION. Each tool constructed
+    `CostLedger(rates=rates, per_run=...)` with no day state, each for a
+    defensible local reason -- a probe should not eat the panel's budget, a
+    calibration measurement is not an adjudication. Every one of those
+    reasons was about how to ALLOCATE a budget, and the operator's actual
+    exposure is the TOTAL. Five tools each correctly declining to count
+    themselves adds up to nothing being counted.
+
+    ADJUDICATION_DAY_CEILING overrides the figure. ADJUDICATION_DAY_STATE
+    overrides the file, which is what the test suite uses so a test run can
+    never write to the operator's real ledger -- a defect this project has
+    already had once, at a fabricated $117.53.
+    """
+    env_ceiling = os.environ.get("ADJUDICATION_DAY_CEILING", "").strip()
+    if per_day is None:
+        per_day = float(env_ceiling) if env_ceiling else DEFAULT_DAY_CEILING
+    if day_state_path is None:
+        day_state_path = (os.environ.get("ADJUDICATION_DAY_STATE", "").strip()
+                          or DEFAULT_DAY_STATE)
+    return CostLedger(rates=rates, per_run=per_run, per_day=per_day,
+                      day_state_path=day_state_path)
+
+
+class ModelNotPriced(CeilingReached):
+    """The model being called is not the model the price was verified for."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, 0.0, 0.0, 0.0)
+
+
+def check_models_are_priced(identity: Mapping[str, tuple[str, str]],
+                            config: Mapping[str, object]) -> None:
+    """Refuse to spend when the seat calls a model this file did not price.
+
+    THE HOLE THIS CLOSES, AND NOTHING CHECKED IT. Every ceiling in this
+    project is computed from rates.json: dollars per million tokens, stamped
+    with the date they were read off the vendor's own page. The seat, though,
+    calls whatever model id is in the environment -- and the two were never
+    compared. Point a seat at a different or newer model and the arithmetic
+    keeps running against the OLD model's price, so the limit is enforced to
+    four decimal places against a number that does not apply.
+
+    That is the same defect `stale_rates` and `is_priced_for` already refuse
+    in their own dimensions -- an expired price, a request larger than the
+    price was checked at -- arriving through the one door left open. The
+    manual's rule is not conditional: "a ceiling computed from unchecked
+    prices does not bound anything."
+
+    IT REFUSES RATHER THAN WARNS, and that is deliberate even though it will
+    one day interrupt a legitimate model upgrade. A warning printed at the top
+    of a run that then spends money is a warning nobody reads until the bill.
+    The fix is thirty seconds: put the new id in rates.json beside a price
+    read from the vendor's page today, and the refusal names exactly which
+    seat and which id.
+    """
+    wrong: list[str] = []
+    for seat_id, (_vendor, model) in sorted(identity.items()):
+        entry = config.get(seat_id)
+        if not isinstance(entry, dict):
+            continue
+        priced = str(entry.get("_model") or "").strip()
+        if priced and model and priced != model:
+            wrong.append(
+                f"{seat_id} calls {model!r} but rates.json prices {priced!r}")
+    if wrong:
+        raise ModelNotPriced(
+            "the price this ceiling is computed from was verified for a "
+            "DIFFERENT model, so the limit bounds nothing: "
+            + "; ".join(wrong)
+            + ". Update the _model and the prices in rates.json from the "
+              "vendor's own pricing page, and re-stamp verified_on.")
+
+
 OVERRUN_TOLERANCE = 0.05
 """How far a bill may exceed its authorisation before the run stops.
 

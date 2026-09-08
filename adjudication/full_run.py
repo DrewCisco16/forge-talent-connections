@@ -35,7 +35,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from convergence import analyse, render
-from cost_ledger import CostLedger, rates_from_config
+from cost_ledger import operator_ledger, rates_from_config
 from night_loop import ROUNDS, RunTooExpensive, assess, live_night
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,7 +76,8 @@ def main() -> int:
     ask = _ask()
     with open(os.path.join(HERE, "rates.json"), encoding="utf-8") as fh:
         rates = rates_from_config(json.load(fh))
-    ledger = CostLedger(rates=rates, per_run=CEILING)
+    ledger = operator_ledger(rates, per_run=CEILING)
+    print(f"  daily ceiling ${ledger.per_day:.2f} across ALL tools")
 
     out = os.path.join(HERE, "runs", f"full-{time.strftime('%Y%m%d-%H%M%S')}")
     print(f"  five rounds, ceiling ${CEILING:.2f}")

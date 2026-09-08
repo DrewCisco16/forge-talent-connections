@@ -14,7 +14,7 @@ from collections.abc import Sequence
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from adjudication_orchestrator import Orchestrator
-from cost_ledger import CostLedger, rates_from_config
+from cost_ledger import operator_ledger, rates_from_config
 from night_loop import ROUNDS, RoundResult, run_night
 from run_adjudication import live_seats, load_env_file, night_gates
 
@@ -41,7 +41,7 @@ def main() -> int:
     print(load_env_file())
     with open("rates.json", encoding="utf-8") as fh:
         rates = rates_from_config(json.load(fh))
-    ledger = CostLedger(rates=rates, per_run=CEILING)
+    ledger = operator_ledger(rates, per_run=CEILING)
 
     seats = live_seats("profiles.json", ledger=ledger)
 

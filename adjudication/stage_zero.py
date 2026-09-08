@@ -397,14 +397,13 @@ def main() -> int:
 
     import json as _json
 
-    from cost_ledger import CostLedger, rates_from_config
+    from cost_ledger import operator_ledger, rates_from_config
     from run_adjudication import live_seats, load_env_file
     print(load_env_file())
     with open(os.path.join(HERE, "rates.json"), encoding="utf-8") as fh:
         rates = rates_from_config(_json.load(fh))
-    # No day_state_path: a calibration measurement must not consume the
-    # operator's daily budget for adjudication runs.
-    ledger = CostLedger(rates=rates, per_run=CEILING)
+    ledger = operator_ledger(rates, per_run=CEILING)
+    print(f"  daily ceiling ${ledger.per_day:.2f} across ALL tools")
     seats = live_seats(os.path.join(HERE, "profiles.json"), ledger=ledger)
     if SEAT not in seats:
         print(f"  no seat {SEAT!r}; have {sorted(seats)}")

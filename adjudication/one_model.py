@@ -356,14 +356,18 @@ def main() -> int:
         print(f"{path} is empty")
         return 2
 
-    from cost_ledger import CostLedger, rates_from_config
+    from cost_ledger import operator_ledger, rates_from_config
     from run_adjudication import live_seats, load_env_file, night_gates
     print(load_env_file())
     with open(os.path.join(HERE, "rates.json"), encoding="utf-8") as fh:
         rates = rates_from_config(json.load(fh))
-    # No day_state_path: a single checked answer must not consume the daily
-    # budget reserved for panel runs.
-    ledger = CostLedger(rates=rates, per_run=CEILING)
+    # COUNTS AGAINST THE DAY, and it did not. The comment here used to say
+    # a single checked answer must not consume the panel's daily budget --
+    # true about allocation, and it left the operator with no daily limit at
+    # all, because every other tool said the same thing about itself.
+    ledger = operator_ledger(rates, per_run=CEILING)
+    print(f"  daily ceiling ${ledger.per_day:.2f} across ALL tools "
+          f"(ADJUDICATION_DAY_CEILING to change)")
     seats = live_seats(os.path.join(HERE, "profiles.json"), ledger=ledger)
     if SEAT not in seats:
         print(f"  no seat {SEAT!r}; configured: {sorted(seats)}")

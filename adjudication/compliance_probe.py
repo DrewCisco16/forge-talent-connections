@@ -36,7 +36,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from cost_ledger import CostLedger, plan_run, rates_from_config
+from cost_ledger import operator_ledger, plan_run, rates_from_config
 from night_loop import PERSONAS, ROUNDS, thinker_prompt
 from run_adjudication import live_seats, load_env_file
 
@@ -81,8 +81,7 @@ def main() -> int:
     with open(os.path.join(here, "rates.json"), encoding="utf-8") as fh:
         rates = rates_from_config(json.load(fh))
 
-    # No day_state_path: a probe must not consume the operator's daily budget.
-    ledger = CostLedger(rates=rates, per_run=CEILING)
+    ledger = operator_ledger(rates, per_run=CEILING)
     seats = live_seats(os.path.join(here, "profiles.json"), ledger=ledger)
 
     caps = dict.fromkeys(sorted(seats), CAP)

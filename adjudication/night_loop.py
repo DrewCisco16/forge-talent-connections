@@ -1735,6 +1735,15 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     load_env_file()
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)
+    # THE CEILING IS ONLY AS GOOD AS THE PRICE IT IS COMPUTED FROM. Every
+    # limit in this run comes from rates.json; the seats call whatever the
+    # environment says. Nothing compared the two, so a seat pointed at a
+    # different model spent against the old model's price with the limit
+    # enforced to four decimal places on a number that did not apply.
+    from cost_ledger import check_models_are_priced
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "rates.json"), encoding="utf-8") as _fh:
+        check_models_are_priced(identity, json.load(_fh))
     seats = live_seats(profiles_path, ledger=ledger)
 
     for seat_id, cap in (caps or {}).items():

@@ -277,7 +277,7 @@ def main() -> int:
     if LIMIT:
         questions = questions[:LIMIT]
 
-    from cost_ledger import CostLedger, rates_from_config
+    from cost_ledger import operator_ledger, rates_from_config
     from night_loop import RunTooExpensive, live_night
 
     with open(os.path.join(HERE, "rates.json"), encoding="utf-8") as fh:
@@ -304,7 +304,7 @@ def main() -> int:
                   f"Stopping with {i - 1} of {len(questions)} done.")
             break
         print(f"\n  [{i}/{len(questions)}] {q.id}")
-        ledger = CostLedger(rates=rates, per_run=PER_QUESTION_CEILING)
+        ledger = operator_ledger(rates, per_run=PER_QUESTION_CEILING)
         run_dir = os.path.join(out_root, q.id)
         try:
             results = live_night(
