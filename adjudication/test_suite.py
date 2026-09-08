@@ -1303,13 +1303,48 @@ class TestBlinding:
 
         # Anchor on the section HEADINGS, not the bare words: "REFUTED" also
         # appears in the explanatory paragraph above them.
-        verified = carried.index("VERIFIED -- a gate confirmed these:")
         refuted = carried.index("REFUTED -- a gate disproved these:")
-        assert verified < refuted
-        assert verified < carried.index("the total is 47") < refuted
-        assert carried.index("the total is 5") > refuted
-        assert "OPEN -- " not in carried, (
-            "both claims were gated; neither is an open question")
+        assert carried.index("the total is 5") > refuted, (
+            "the load-bearing assertion: a refuted claim is carried as "
+            "REFUTED, so the next round treats it as settled")
+
+        # THE THIRD SECTION, AND IT IS NOT VERIFIED. This test asserted that
+        # "12 + 35 = 47" landed under VERIFIED. It does not, and should not:
+        # the WARRANT held, and the sentence it was offered for -- "the total
+        # is 47" -- is not itself arithmetic any gate can rule on. That is
+        # WARRANT_HELD, and it was falling into the `else` branch and being
+        # carried as "OPEN -- no gate applied", which is false about a claim a
+        # gate did check.
+        held = carried.index("EVIDENCE VERIFIED, PROPOSITION OPEN")
+        assert held < carried.index("the total is 47")
+        assert "OPEN -- no gate applied" not in carried, (
+            "both claims reached a gate; neither is unexamined")
+
+    def test_a_held_warrant_is_never_carried_as_verified(self):
+        """The distinction the WARRANT_HELD status exists for. Carrying it as
+        VERIFIED tells the next round the PROPOSITION is settled when only the
+        EVIDENCE is -- the exact conflation that let one warrant support a
+        sentence and its negation."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 2 + 2 = 4 | the launch is safe"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        carried = runner.prompt_log[-1].render()
+        assert "the launch is safe" in carried
+        assert "VERIFIED -- a gate confirmed these:" not in carried
+        assert "EVIDENCE VERIFIED, PROPOSITION OPEN" in carried
+
+    def test_a_genuinely_self_checking_claim_still_verifies(self):
+        """The fix must not empty the VERIFIED section. When the claim TEXT is
+        itself the assertion the gate ruled on, it is verified outright."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | 12 + 35 = 47"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        carried = runner.prompt_log[-1].render()
+        assert "VERIFIED -- a gate confirmed these:" in carried
 
     def test_nothing_comprised_means_nothing_carried(self):
         """An empty section would still change the prompt and would tell the

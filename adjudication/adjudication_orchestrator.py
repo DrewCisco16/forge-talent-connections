@@ -2590,6 +2590,7 @@ class Orchestrator:
         """
         verified: list[str] = []
         refuted: list[str] = []
+        held: list[str] = []
         open_q: list[str] = []
 
         for claim_id in sorted(self.verdicts):
@@ -2610,6 +2611,20 @@ class Orchestrator:
                 verified.append(line)
             elif v.status is GateStatus.FAIL:
                 refuted.append(line)
+            elif v.status is GateStatus.WARRANT_HELD:
+                # NEITHER A FINDING NOR AN UNEXAMINED CLAIM, and it was being
+                # carried as the latter. This fell to the `else` below, whose
+                # comment says "no gate applied" -- which is false here. A gate
+                # ran and the warrant HELD; what is open is whether the warrant
+                # establishes the sentence it was offered for.
+                #
+                # Carrying it as an open question tells the next round nobody
+                # checked anything, so a seat re-derives evidence already in
+                # hand. Carrying it as VERIFIED would be worse: it would tell
+                # the round the proposition is settled when only the evidence
+                # is. The status exists precisely because those are different,
+                # so the carry has to say so in its own words.
+                held.append(line)
             else:
                 # None (escalated: no gate applied), INAPPLICABLE, or BLOCKED.
                 # In none of those does the run hold a mechanical opinion, so
@@ -2630,6 +2645,13 @@ class Orchestrator:
             parts += ["VERIFIED -- a gate confirmed these:", *verified, ""]
         if refuted:
             parts += ["REFUTED -- a gate disproved these:", *refuted, ""]
+        if held:
+            parts += [
+                "EVIDENCE VERIFIED, PROPOSITION OPEN -- a gate checked the "
+                "warrant and it held. Whether it establishes the sentence is "
+                "a reading, and no gate settles it. Do not re-derive the "
+                "evidence; do question the inference:",
+                *held, ""]
         if open_q:
             parts += ["OPEN -- no gate applied; still unresolved:",
                       *open_q, ""]
@@ -2645,7 +2667,12 @@ class Orchestrator:
                 parts.append(f"  removed: {cid} -- {why}")
             parts.append("")
 
-        if not (verified or refuted or open_q or remaining or gone):
+        # `held` IS IN THIS TEST, and leaving it out silently dropped a whole
+        # round. A round whose only outcome was a checked-and-holding warrant
+        # produced no carry at all, so the next round was told nothing had been
+        # established -- and a seat re-derived evidence already in hand, which
+        # is the cost the carry exists to avoid.
+        if not (verified or refuted or held or open_q or remaining or gone):
             # Nothing was comprised, so nothing is carried. Appending an empty
             # header would still change the prompt and would tell the next
             # round that a round had run, which is a leak that buys nothing.
