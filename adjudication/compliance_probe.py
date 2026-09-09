@@ -111,24 +111,33 @@ def main() -> int:
     print(f"  calling: {', '.join(wanted)}")
     replies: dict[str, str] = {}
     failures: dict[str, str] = {}
+    truncated: dict[str, str] = {}
     for seat_id in wanted:
         t0 = time.time()
         try:
             replies[seat_id] = seats[seat_id](prompts[seat_id])
             print(f"  {seat_id}: {len(replies[seat_id])} chars in "
                   f"{time.time() - t0:.0f}s", flush=True)
+            if getattr(seats[seat_id], "last_truncated", False):
+                truncated[seat_id] = (
+                    f"cut off at the {CAP}-token cap (stop reason "
+                    f"{getattr(seats[seat_id], 'last_stop_reason', '')!r})")
+                print(f"  {seat_id}: {truncated[seat_id]} -- the contract "
+                      f"lines go at the END of a reply that was cut short",
+                      flush=True)
         except Exception as exc:  # noqa: BLE001 - one seat must not stop the rest
             failures[seat_id] = f"{type(exc).__name__}: {exc}"
             print(f"  {seat_id}: FAILED after {time.time() - t0:.0f}s -- "
                   f"{failures[seat_id]}", flush=True)
 
     print("\n" + "\n".join(ledger.render()))
-    _report(replies, failures, here)
+    _report(replies, failures, here, truncated)
     return 0 if replies else 1
 
 
 def _report(replies: dict[str, str], failures: dict[str, str],
-            here: str) -> None:
+            here: str, truncated: dict[str, str] | None = None) -> None:
+    truncated = truncated or {}
     print("\n" + "=" * 70)
     print("CONTRACT COMPLIANCE -- what each seat actually wrote")
     print("=" * 70)
@@ -167,7 +176,16 @@ def _report(replies: dict[str, str], failures: dict[str, str],
                 if c["OPTION"] and c["PREDICATE"] and c["FORMULA"]]
     partial = [s for s, c in counts.items()
                if s not in complete and (c["OPTION"] or c["PREDICATE"])]
-    silent = [s for s in counts if s not in complete and s not in partial]
+    # A SEAT THE CAP CUT OFF IS NOT SILENT, and the difference decides this
+    # probe's verdict. Silence means the seat read the contract and wrote none
+    # of it; truncation means the cap fell before the lines it writes last.
+    # Measured live: one seat returned 246 characters at a 4,096 cap, was
+    # scored under "nothing usable", and the verdict below recommended
+    # abandoning the text contract for a structured-output rewrite. The
+    # contract was fine. The cap was small.
+    cut = [s for s in counts if s in truncated and s not in complete]
+    silent = [s for s in counts
+              if s not in complete and s not in partial and s not in cut]
 
     print(f"\n  fully compliant: {len(complete)}/{len(counts)}"
           + (f"  ({', '.join(sorted(complete))})" if complete else ""))
@@ -175,6 +193,9 @@ def _report(replies: dict[str, str], failures: dict[str, str],
         print(f"  partial:         {', '.join(sorted(partial))}")
     if silent:
         print(f"  nothing usable:  {', '.join(sorted(silent))}")
+    if cut:
+        print(f"  cut off at cap:  {', '.join(sorted(cut))}  -- NOT a "
+              f"contract failure; raise PROBE_CAP for these seats")
     if failures:
         print(f"  call failed:     {', '.join(sorted(failures))}")
 
@@ -212,6 +233,12 @@ def _report(replies: dict[str, str], failures: dict[str, str],
         print("  structured-output mode -- OpenAI json_schema, Gemini")
         print("  responseSchema, Anthropic tool use -- which makes the shape")
         print("  a provider-enforced guarantee instead of a request.")
+    elif len(complete) + len(cut) == len(counts) and cut:
+        print("  VERDICT: every seat that finished its reply wrote the")
+        print(f"  contract. {len(cut)} seat(s) were cut off by the {CAP}-token")
+        print("  cap before reaching the lines the contract puts last. That")
+        print("  is a cap to raise, not a contract to abandon -- re-probe")
+        print("  those seats with a larger PROBE_CAP before deciding anything.")
     elif len(complete) < len(counts):
         print("  VERDICT: PARTIAL, which is the worst case for a text")
         print("  contract. The panel silently runs short: the seats that")

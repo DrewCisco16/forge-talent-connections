@@ -863,6 +863,16 @@ class RoundResult:
     that found nothing: it is a round that could not look."""
     thinkers_ok: list[str] = field(default_factory=list)
     thinkers_failed: dict[str, str] = field(default_factory=dict)
+    thinkers_truncated: dict[str, str] = field(default_factory=dict)
+    """Seats whose reply came back but was cut off by the output cap.
+
+    A THIRD CASE, and the two it sits between are opposite facts. A seat that
+    failed was never reached. A seat that declared nothing read the contract
+    and chose not to. A seat cut off at the cap did neither: it was reached,
+    it was writing, and the cap fell before the contract lines it puts at the
+    end. Counting it as silent told a live run that a seat had nothing to say
+    when the seat had been interrupted, which is the corruption rule 5 of the
+    dispatch brief names."""
     claims: int = 0
     passed: int = 0
     failed: int = 0
@@ -1151,6 +1161,14 @@ def run_night(
                  f"({len(raw):,} chars)")
             texts[seat_id] = raw
             res.thinkers_ok.append(seat_id)
+            if getattr(fn, "last_truncated", False):
+                why = (f"cut off at the {getattr(fn, 'max_tokens', '?')}-token "
+                       f"cap (stop reason "
+                       f"{getattr(fn, 'last_stop_reason', '')!r})")
+                res.thinkers_truncated[seat_id] = why
+                emit(f"  {label}: {why} -- its contract lines are at the end "
+                     f"of a reply that has no end; not a seat that declared "
+                     f"nothing")
             with open(os.path.join(rd, f"thinker-{seat_id}.md"), "w",
                       encoding="utf-8") as fh:
                 fh.write(raw)
@@ -1195,7 +1213,10 @@ def run_night(
             # A seat that answered and declared no option is a permanent hole
             # in the candidate set, and the run has to name it rather than
             # quietly proceeding with four seats' worth of answers.
-            res.silent_seats = silent_seats()
+            # A truncated seat is not silent. Its OPTION lines are in the part
+            # of the reply the cap removed.
+            res.silent_seats = [sid for sid in silent_seats()
+                                if sid not in res.thinkers_truncated]
             if res.silent_seats:
                 emit(f"  {len(res.silent_seats)} seat(s) declared no option: "
                      f"{', '.join(res.silent_seats)}")
@@ -1802,7 +1823,8 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
     """
     payload = [
         {"round": r.n, "name": r.name, "thinkers_ok": r.thinkers_ok,
-         "thinkers_failed": r.thinkers_failed, "claims": r.claims,
+         "thinkers_failed": r.thinkers_failed,
+         "thinkers_truncated": r.thinkers_truncated, "claims": r.claims,
          "passed": r.passed, "failed": r.failed, "blocked": r.blocked,
          "escalated": r.escalated, "degraded": r.degraded,
          "closer_failed": r.closer_failed, "merged": bool(r.merged),
@@ -2305,6 +2327,15 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
             f"rule anything out -- so the answer stands and the refutation "
             f"stands with it. Read these before acting on any survivor: "
             + "; ".join(f"round {n}: {f}" for n, f in calibration))
+    truncated = [(r.n, sid, why) for r in results
+                 for sid, why in r.thinkers_truncated.items()]
+    if truncated:
+        caveats.append(
+            f"{len(truncated)} SEAT REPLY(IES) WERE CUT OFF BY THE OUTPUT CAP: "
+            + "; ".join(f"round {n} {sid} {why}" for n, sid, why in truncated)
+            + ". Whatever those seats would have committed to is missing, "
+              "not declined. Raise that seat's max_tokens, and the ceiling "
+              "with it, before reading their silence as a finding.")
     degraded = [r.n for r in results if r.degraded]
     if degraded:
         caveats.append(

@@ -396,6 +396,20 @@ class HttpSeat:
         self.max_tokens: int = (profile.max_tokens
                                 if profile.max_tokens is not None
                                 else max_tokens)
+        self.last_stop_reason: str = ""
+        self.last_truncated: bool = False
+        """Whether the LAST reply was cut off by the output cap.
+
+        A reply with no text at max_tokens raises SeatError below. A reply
+        with SOME text at max_tokens used to return silently, and that is the
+        worse case: the contract asks for its OPTION / PREDICATE / CLAIM lines
+        at the END of the reply, so a seat cut off mid-prose looks exactly like
+        a seat that read the contract and declared nothing. Measured live: a
+        246-character reply at a 4,096 cap was scored as a non-compliant seat
+        and the probe's verdict recommended abandoning the text contract. It
+        was a cap, not a contract failure. The flag lets every caller tell
+        those apart; it is one reply's state and is overwritten by the next.
+        """
         self.temperature = temperature
         self.timeout_s = timeout_s
         self.retry = retry or RetryPolicy()
@@ -704,6 +718,12 @@ class HttpSeat:
                 f"seat {self.seat_id}: extract_text returned "
                 f"{type(text).__name__}, expected str"
             )
+        # RECORD WHETHER THE CAP CUT THIS REPLY SHORT. Text came back, so it
+        # is returned -- partial reasoning is real data -- but a caller that
+        # counts contract lines must know the tail is missing.
+        self.last_stop_reason = _stop_reason(payload)
+        self.last_truncated = self.last_stop_reason in (
+            "max_tokens", "length", "MAX_TOKENS")
         return text
 
 
