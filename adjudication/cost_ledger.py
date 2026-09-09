@@ -87,6 +87,25 @@ class Rate:
     input_per_mtok: float
     output_per_mtok: float
     verified_on: str | None = None
+    model_unverified: str | None = None
+    """Why this seat's MODEL IDENTIFIER has not been checked, or None.
+
+    A FLAG NOBODY READS IS A FLAG THAT DOES NOTHING. rates.json carried this
+    fact in an underscore-prefixed comment key, which rates_from_config skips
+    by design, so the one seat whose model id could not be verified ran
+    exactly like the four that could and nothing anywhere said so.
+
+    It is not the same risk as an unchecked PRICE and it is not smaller. A
+    wrong price makes the ceiling decorative, which is why an unusable price
+    refuses the run outright. A wrong model id can return a well-formed 200
+    from a vendor's fallback and be recorded as a seat that had nothing to
+    say, rather than a seat that was never reached -- opposite facts, and the
+    second one silently corrupts the statistics this tool exists to produce.
+
+    Reported rather than refused. Which seats are worth running is the
+    operator's call, and turning one flagged seat into no run at all is the
+    same trade the cap-and-ceiling note warns about.
+    """
     tiers: tuple[tuple[int, float, float], ...] = ()
     max_input_tokens: int | None = None
     output_multiplier: float = HIDDEN_OUTPUT_MULTIPLIER
@@ -486,6 +505,18 @@ class CostLedger:
         return sorted(s for s, r in self.rates.items()
                       if r.max_input_tokens is None)
 
+    def unverified_models(self) -> dict[str, str]:
+        """Seats whose MODEL IDENTIFIER nobody has checked, and why.
+
+        Separate from stale_rates, which is about the price. A seat can have
+        a price verified this week and be pointed at a model id that was
+        never confirmed against the vendor's own reference -- which is
+        exactly the state seat_3 has been in since Mistral retired the
+        Magistral line.
+        """
+        return {s: r.model_unverified for s, r in sorted(self.rates.items())
+                if r.model_unverified}
+
     def stale_rates(self) -> list[str]:
         """Seats whose price cannot bound anything: unverified, expired, or
         zero. A zero price means every call is free and the ceiling is
@@ -823,6 +854,16 @@ class CostLedger:
             out.append(f"  RATES UNVERIFIED OR STALE for: {', '.join(sorted(stale))}")
             out.append("  A ceiling computed from unchecked rates does not bound anything.")
             out.append("  Re-check the vendor pricing pages and stamp verified_on.")
+        unchecked = self.unverified_models()
+        if unchecked:
+            out.append("")
+            out.append(f"  MODEL IDENTIFIER NOT VERIFIED for: "
+                       f"{', '.join(unchecked)}")
+            out.append("  A stale model id can return a well-formed reply from a")
+            out.append("  vendor's fallback, which this tool records as a seat that")
+            out.append("  had nothing to say rather than one that was never reached.")
+            for seat, why in unchecked.items():
+                out.append(f"    {seat}: {why}")
         return out
 
 
@@ -883,6 +924,10 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
                   and cap > 0 else None)
         cin = _finite_positive(cfg.get("input_per_mtok"))
         cout = _finite_positive(cfg.get("output_per_mtok"))
+        # NOT underscore-prefixed, so it is read rather than skipped as a
+        # comment. Any non-empty string is the reason; it is printed verbatim.
+        flag = cfg.get("model_unverified")
+        why = str(flag).strip() if isinstance(flag, str) and flag.strip() else None
         # An unusable price drops the verification date with it. Keeping the
         # date on a zero rate was the failure: stale_rates() saw a
         # recently-verified entry and reported nothing, while the seat it
@@ -896,6 +941,7 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
             tiers=tuple(sorted(tiers)),
             max_input_tokens=max_in,
             output_multiplier=mult or HIDDEN_OUTPUT_MULTIPLIER,
+            model_unverified=why,
         )
     return out
 

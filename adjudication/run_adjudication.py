@@ -1151,6 +1151,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"rates unverified or stale for {', '.join(stale)}. "
                   f"A ceiling computed from unchecked prices does not bound "
                   f"anything.", file=sys.stderr)
+        # THE MODEL ID, WHICH IS A DIFFERENT FACT FROM THE PRICE. A seat can
+        # be priced correctly this week and be pointed at an identifier
+        # nobody has confirmed against the vendor's own reference. Said here
+        # rather than refused: an unusable price makes the ceiling
+        # decorative, which is worth refusing over, while an unchecked model
+        # id is a risk the operator can weigh -- and refusing would turn one
+        # flagged seat into no run at all.
+        for seat, why in ledger.unverified_models().items():
+            print(f"{seat}: the model identifier has not been verified. {why}",
+                  file=sys.stderr)
 
     if args.profiles:
         # A PAID PANEL WITHOUT A LEDGER IS AN UNBOUNDED PANEL.

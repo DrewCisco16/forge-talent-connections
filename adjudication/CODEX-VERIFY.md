@@ -202,6 +202,20 @@ line. The contract asks for them in the same block seats demonstrably obey for
 they do not comply, a run reports that nothing was adjudicated rather than
 producing a wrong answer.
 
+> **CORRECTION, 2026-09-09.** This paragraph is still true and it was read as
+> the wrong question. It asks whether the models comply. It is at least as
+> much a question about the parser: every one of those lines was matched with
+> a pattern anchored at the start of the line, and `CLAIM` was the only marker
+> that had been taught to survive a bullet. Measured on the twelve shapes a
+> model uses for a line it thinks of as data, eleven of twelve lost the
+> `PREDICATE` and ten of twelve lost the `OPTION`, in silence. So a compliant
+> seat and a silent one produced the same empty result, and the three surfaces
+> that would have told the difference — `compliance_probe.py`, `canary_run.py`
+> and `readiness.py` — each counted the same way and would each have reported
+> a compliant panel as a silent one. `SCOPE-AUDIT.md` carries the measurement
+> and what changed. The compliance question is still open, and it can now be
+> asked without the parser answering it first.
+
 I have also narrowed what can eliminate twice now — first off prose, then off
 challenger-supplied arithmetic. Fabricated citations and fabricated quotes no
 longer remove candidates either. **Please tell me if this is now so narrow that

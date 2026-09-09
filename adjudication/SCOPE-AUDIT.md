@@ -117,3 +117,84 @@ invented for it. The architecture already answers it: an auditor's assertion
 changes nothing, and only a `CHALLENGE` that code recomputes to a FAIL does.
 So the auditors would plug into the existing machinery unchanged. The only
 question left is the one above, and it needs a decision, not code.
+
+---
+
+## What the 2026-09-09 audit found, after every row above said BUILT
+
+Every specification above was BUILT and tested, and the tool still could not
+have adjudicated a real reply. The gap was not in any specification — it was
+between the contract the seats are given and the code that reads what they
+send back.
+
+**The protocol was readable only when written bare.** `OPTION`, `PREDICATE`,
+`FORMULA`, `INPUT`, `CHALLENGE` and `MERGE` were each matched with a pattern
+anchored at the start of the line. `CLAIM` had been fixed for this in an
+earlier pass; nothing else had. Measured across the twelve shapes a model
+actually uses for a line it thinks of as data:
+
+| Marker | Shapes lost, of 12 |
+|---|---|
+| PREDICATE | 11 |
+| OPTION | 10 |
+| CHALLENGE | 9 of 10 |
+| MERGE | 6 of 7 |
+
+Nothing was raised in any case. Row 2.3.4 says machine-checkable claims are
+checked by machine, and that was true of every claim the parser saw. A seat
+that followed the contract exactly and then formatted its reply as a list —
+the ordinary case, not the awkward one — had its answer and its commitments
+dropped before any gate ran.
+
+The cost is asymmetric. A `CLAIM` removes nothing, so losing one loses a
+report line. An `OPTION` line **is** the answer, and a `PREDICATE` with its
+`FORMULA` and `INPUT` is the only thing in this tool that can remove an
+answer. An option whose commitments were eaten by a bullet character cannot
+be checked, cannot be refuted, and survives to the end reported as untested —
+which on the page is indistinguishable from an answer that withstood five
+rounds.
+
+`CODEX-VERIFY.md` records that no live seat had ever emitted one of these
+lines. That was read as a compliance question about the models. It was at
+least as much a question about the parser.
+
+**Three measurement surfaces were counting the same way, and each reported a
+working panel as a broken one.**
+
+| Surface | What it would have said |
+|---|---|
+| `compliance_probe.py` | a fully compliant seat counted as SILENT, and the verdict text recommends abandoning the text contract for each vendor's structured-output mode |
+| `canary_run.py` | zero on every column of the contract-compliance table |
+| `readiness.py` | the "seats write the contract" square unticked, on the tracker whose whole purpose is to say what has been established |
+
+`readiness.py`'s own comments already record two earlier rounds of this same
+counting error — a compliant panel at 15 of 32, and a passing check reported
+as failing. This was the third.
+
+**The closer is a model too, and nothing had treated it as one.** A bolded
+`MERGE` line got past the contamination check's local decoration rule, which
+requires a space after its marker, and was reported as a sentence no seat
+proposed — the same false contamination warning this project had already
+fixed once, arriving by another route.
+
+**One report said the right thing for the wrong reason.** Three distinct
+facts land in `options_unexamined`, and the run summary named two of them.
+The third is the one the first full five-round run actually produced on every
+surviving option: eighteen of twenty-one commitments passed, each a seat
+computing its own multiplication, with nobody outside the proposing seat ever
+touching the number. Each reason is now named with its own count.
+
+### What this changes about the rows above
+
+Nothing is downgraded. Every row was BUILT as stated, and each remains so.
+What the audit adds is that **BUILT and tested was not sufficient evidence of
+BUILT and reachable**, and the whole history of this project is that same
+finding: a capability that existed and could not be reached from the engine
+that spends money. The test suite proved the machinery correct on input the
+machinery itself constructed. The one thing it had never been given was a
+reply shaped the way a model shapes one.
+
+The end-to-end check that found this — five stub seats writing realistic
+markdown through `run_night`, and the same through `one_model.check` — is
+now part of the suite. It is cheap, it is offline, and it is the only test
+here that exercises the tool the way a paid run will.
