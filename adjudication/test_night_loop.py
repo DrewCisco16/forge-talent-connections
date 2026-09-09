@@ -2964,3 +2964,77 @@ class TestTheUntestedCaveatNamesTheRealReason:
                       if "NEVER TESTED" in c)
         assert OS.ONLY_ITS_OWN_ARITHMETIC in caveat
         assert "declared no commitment this code could compute" not in caveat
+
+
+class TestTheCloserIsAModelToo:
+    """Everything about how a seat formats its output applies to the closer,
+    and the closer is the one whose text becomes the deliverable.
+
+    Its MERGE lines were matched only when written bare. A closer that
+    correctly identified two seats proposing the same answer, and wrote it as
+    a list item, had the merge dropped -- and twins are not harmless: the
+    commitments follow the OPTION line, so the second copy carries none,
+    cannot be checked, cannot be removed, and survives to the end reported as
+    untested.
+    """
+
+    POOL_TEXT = "\n".join([
+        "OPTION | rent capacity for six months and decide after",
+        "PREDICATE | total cost | = | 12 dollars",
+        "FORMULA | months * per_month",
+        "INPUT | months = 6",
+        "INPUT | per_month = 2",
+        "",
+        "OPTION | lease the capacity for half a year then decide",
+    ])
+
+    def _pool(self):
+        return OS.parse_options(self.POOL_TEXT)
+
+    @pytest.mark.parametrize("shape", [
+        "MERGE | {a} | {b}",
+        "- MERGE | {a} | {b}",
+        "* MERGE | {a} | {b}",
+        "1. MERGE | {a} | {b}",
+        "**MERGE | {a} | {b}**",
+        "- **MERGE | {a} | {b}**",
+        "> MERGE | {a} | {b}",
+    ])
+    def test_a_merge_survives_how_the_closer_writes_it(self, shape):
+        pool = self._pool()
+        assert len(pool) == 2
+        merged = OS.apply_merges(
+            pool, shape.format(a=pool[0].id, b=pool[1].id))
+        by_id = {o.id: o for o in merged}
+        assert by_id[pool[1].id].merged_into == pool[0].id, (
+            "the duplicate was not folded into the answer it repeats")
+        assert by_id[pool[0].id].merged_into is None
+
+    def test_prose_still_merges_nothing(self):
+        """The negative control. Undecorating must not let the closer merge
+        by talking about it: only a MERGE line naming ids in the pool does
+        anything, and an id it invents is ignored."""
+        pool = self._pool()
+        prose = OS.apply_merges(
+            pool, "I think the first two options are really the same.")
+        assert all(o.merged_into is None for o in prose)
+        invented = OS.apply_merges(
+            self._pool(), f"MERGE | {pool[0].id} | opt_deadbeef")
+        assert all(o.merged_into is None for o in invented)
+
+    def test_a_bolded_merge_line_is_not_reported_as_an_invention(self):
+        """A warning that fires on every correct run is worse than no
+        warning: the operator learns to skip it, and the sentence it exists
+        to catch goes past with the rest. This already happened once on a
+        live round -- sixteen sentences flagged, the first three the closer's
+        own MERGE lines -- and bold was a second route to it."""
+        flagged = NL.closer_introduced(
+            "**MERGE | opt_3f9a2c | opt_88ab01**", {"seat_1": "some text"})
+        assert flagged == []
+
+    def test_a_bolded_invention_is_still_caught(self):
+        """The check this must not blind. Emphasis is not a way past it."""
+        flagged = NL.closer_introduced(
+            "**Recommendation: liquidate the Zurich subsidiary immediately.**",
+            {"seat_1": "the panel considered renting capacity for months"})
+        assert flagged, "an invented recommendation went unflagged"

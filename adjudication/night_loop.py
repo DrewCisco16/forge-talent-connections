@@ -51,6 +51,7 @@ from adjudication_orchestrator import (
     GateStatus,
     Orchestrator,
     line_claim_extractor,
+    undecorate_marker_line,
 )
 from convergence import analyse
 from convergence import divergence as seat_divergence
@@ -1972,7 +1973,19 @@ def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str
     for raw in _SENTENCE.findall(merged or ""):
         sentence = raw.strip()
         sentence = _DECORATION.sub("", sentence).strip()
-        if _CLOSERS_OWN_LINE.match(sentence):
+        # BOLD IS DECORATION THE LOCAL RULE ABOVE DOES NOT COVER: it strips
+        # "- ", "* " and "1. ", each of which needs a space after it, so
+        # "**MERGE | opt_a | opt_b**" reached the check as prose and was
+        # reported as a sentence no seat proposed. That is the same false
+        # contamination warning this branch was written to stop, arriving by
+        # a different route.
+        #
+        # Only PROTOCOL RECOGNITION reads the undecorated form. A sentence is
+        # still read and flagged on its own words, so a marker remains no way
+        # to smuggle an invention past the check: "**Recommendation: acquire
+        # the Zurich subsidiary**" is not protocol in either form.
+        if (_CLOSERS_OWN_LINE.match(sentence)
+                or _CLOSERS_OWN_LINE.match(undecorate_marker_line(sentence))):
             # THE CLOSER'S REQUIRED OUTPUT IS NOT AN INVENTION.
             #
             # Measured on a live round: the merge was flagged CONTAMINATED

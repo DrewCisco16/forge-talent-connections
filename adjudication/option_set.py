@@ -774,8 +774,14 @@ def apply_merges(pool: Sequence[Option], closer_text: str) -> list[Option]:
     """
     by_id = {o.id: o for o in pool}
     absorbed: dict[str, str] = {}
-    for line in (closer_text or "").splitlines():
-        m = _MERGE.match(line)
+    for raw_line in (closer_text or "").splitlines():
+        # THE CLOSER IS A MODEL TOO, AND IT FORMATS ITS OUTPUT. A MERGE line
+        # written as "- MERGE | opt_a | opt_b" or bolded never matched, so the
+        # duplicates it correctly identified were not collapsed -- and twins
+        # are not harmless here: the commitments follow the OPTION line, so
+        # the second copy carries none, cannot be checked, cannot be removed,
+        # and survives to the end reported as untested.
+        m = _MERGE.match(undecorate_marker_line(raw_line))
         if not m:
             continue
         ids = [i.lower() for i in _OPT_ID.findall(m.group(1))
