@@ -1385,3 +1385,56 @@ class TestTheCheckingLayerRoundThree:
                b"Management attributed it to cost control and product mix. "
                ) * 8
         assert self._quote_check(raw, "text/html").status is GateStatus.FAIL
+
+
+class TestBothCitationGatesReadOneFormat:
+    """The claim contract asks for
+
+        <doi> :: <surname> ;; <year> ;; <title>
+
+    so the field-matching gate can check the identifier resolves to the paper
+    the seat actually named. The resolution gate read the WHOLE string as a
+    bare identifier and returned FAIL "malformed identifier" -- a valid source
+    called fabricated, its resolver never invoked, by the gate whose job is
+    confirming sources exist. The two gates were rejecting each other's
+    required format.
+    """
+
+    DOI = "10.1038/s41586-020-2649-2"
+    FULL = f"{DOI} :: Harris ;; 2020 ;; Array programming with NumPy"
+
+    def _check(self, warrant, resolver=lambda _i: True):
+        import adjudication_orchestrator as AO
+        claim = AO.Claim(id="c", kind=AO.ClaimKind.CITATION, text="t",
+                         warrant=warrant)
+        return AO.CitationResolutionGate(resolver).check(claim)
+
+    def test_the_contract_format_reaches_the_resolver(self):
+        seen = []
+        r = self._check(self.FULL, lambda i: seen.append(i) or True)
+        assert seen == [self.DOI], "the resolver saw the identifier alone"
+        assert r.status.value == "pass"
+
+    def test_a_bare_identifier_still_works(self):
+        assert self._check(self.DOI).status.value == "pass"
+
+    def test_a_url_still_works(self):
+        assert self._check("https://example.org/paper").status.value == "pass"
+
+    def test_something_that_is_not_an_identifier_is_still_refused(self):
+        assert self._check("not a doi at all").status.value == "fail"
+
+    def test_the_metadata_form_with_no_identifier_is_refused(self):
+        assert self._check(":: Harris ;; 2020 ;; A title").status.value == "fail"
+
+    def test_both_gates_accept_the_same_string(self):
+        """The property that was broken: one format, two gates, no argument."""
+        import adjudication_orchestrator as AO
+        from citation_gate import CitationFieldMatchGate
+
+        claim = AO.Claim(id="c", kind=AO.ClaimKind.CITATION, text="t",
+                         warrant=self.FULL)
+        field = CitationFieldMatchGate(record_fn=lambda _d: None)
+        assert field.applies_to(claim)
+        assert AO.CitationResolutionGate(lambda _i: True).applies_to(claim)
+        assert self._check(self.FULL).status.value == "pass"

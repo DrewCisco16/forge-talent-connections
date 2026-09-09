@@ -93,9 +93,17 @@ not install a package manager on his machine on your own initiative.
 .venv/bin/python run_adjudication.py --demo
 ```
 
-**Pass condition:** the output contains `SURVIVOR: c_true` and a `HOLES`
-section. This uses fake seats, touches no network, and costs nothing. If it
-fails, stop and report the error verbatim — everything after this depends on it.
+**Pass condition:** the output contains a `HOLES` section and ends with
+`NOT RESOLVED -- see holes above`, and the command **exits 1**. That is the
+pass condition, not a failure: the demo deliberately leaves judgment items
+open, and the tool exits non-zero while any hole remains.
+
+This uses fake seats, touches no network, and costs nothing. If it errors,
+stop and report the error verbatim — everything after this depends on it.
+
+*(An earlier version of this brief said to look for `SURVIVOR: c_true`. Prose
+claims no longer eliminate candidates — removal requires a candidate's own
+declared arithmetic to fail — so no demo run reports a single survivor.)*
 
 ---
 
@@ -121,7 +129,7 @@ fetch now. The marketing name on the box is never the ID the API wants.
 |---|---|---|
 | 1 | OpenAI | their current flagship reasoning model |
 | 2 | Google | the **Pro** tier — explicitly **not** Flash |
-| 3 | Mistral | their **reasoning** model (the Magistral line), not the general Large model |
+| 3 | Mistral | Mistral Medium 3.5 (`mistral-medium-3504`) — the **Magistral** reasoning line is retired; this is the vendor's named replacement and it is NOT a reasoning model. Verify the id and price before use. |
 | 4 | xAI | their current flagship Grok |
 | 5 | Anthropic | their current flagship Opus |
 

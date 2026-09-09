@@ -74,8 +74,20 @@ python3 -m venv .venv
 .venv/bin/python run_adjudication.py --demo
 ```
 
-✅ **You'll know it worked:** you see a report ending in
-`SURVIVOR: c_true` and a `HOLES` section.
+✅ **You'll know it worked:** you see a `HOLES` section listing what the run
+could not close, each with what would close it, and a final line reading
+`NOT RESOLVED -- see holes above`. The command exits **1**, not 0.
+
+⚠️ **That is success, not failure.** The demo deliberately leaves judgment
+items open, and the tool exits non-zero while any hole remains — a lone
+surviving answer with an unworked queue is a shortlist, not a conclusion. A
+run that printed a clean verdict here would be the thing this tool exists to
+prevent.
+
+*(Earlier versions of this guide said to look for `SURVIVOR: c_true`. That
+was true of a much older build. Prose claims no longer eliminate candidates —
+removal now requires a candidate's own declared arithmetic to fail — so no
+demo run reports a single survivor any more.)*
 
 That was a pretend run with fake AI seats. It proves the machinery works
 before you spend a cent.
@@ -97,13 +109,47 @@ open -e .env
 That opens it in TextEdit. You'll see five blocks. Fill in the key and the
 model ID for each. **Nothing else in the file needs changing.**
 
-| Seat | Company | Model to use | Why |
+| Seat | Company | Model id | Why |
 |---|---|---|---|
-| 1 | OpenAI | **GPT-5.6 Sol** | their flagship — your pick, and correct |
-| 2 | Google | **the Pro tier — NOT Flash** | Flash is the fast/cheap tier; a weak seat contributes *misses* |
-| 3 | Mistral | **Magistral Medium** | their *reasoning* model — thinks stepwise, which is the job |
-| 4 | xAI | **Grok 4.3** | flagship, reasoning on by default |
-| 5 | Anthropic | **Claude Opus 5** | reasoning flagship; reported id `claude-opus-5` |
+| 1 | OpenAI | `gpt-5.6-sol` | their flagship reasoning model |
+| 2 | Google | `gemini-3.1-pro-preview` | the **Pro** tier, NOT Flash — Flash is the fast/cheap tier, and a weak seat contributes *misses* |
+| 3 | Mistral | `mistral-medium-3504` — **verify before use** | see the note below; this seat is no longer a reasoning model |
+| 4 | xAI | `grok-4.6` | Grok 4.3 is **superseded** |
+| 5 | Anthropic | `claude-opus-5` | reasoning flagship |
+
+These are the ids in `rates.json`, which is what the panel actually prices and
+runs. Earlier versions of this table named **Magistral Medium** and **Grok
+4.3**; both are gone, so anyone following it put dead ids in `.env` and got
+authentication-shaped errors that had nothing to do with their keys.
+
+### ⚠️ Seat 3 needs a decision, not just an id
+
+**Mistral is the company. Magistral was its *reasoning* line.** They are
+different products, and that distinction is why this seat was chosen.
+
+Mistral's own documentation now lists `magistral-medium-2509` and
+`magistral-small-2509` as **deprecated 2026-05-22 / 2026-04-30, retired
+2026-07-31**, with **Mistral Medium 3.5** and **Mistral Small 4** named as the
+recommended replacements. So the retirement is real and the replacement is the
+vendor's own.
+
+Two things follow, and neither is a typo fix:
+
+1. **This seat is no longer a reasoning seat.** The original rationale in this
+   table was "their *reasoning* model — thinks stepwise, which is the job."
+   Mistral Medium 3.5 is described by Mistral as "optimized for agentic and
+   coding use cases" — a frontier general-purpose model, not a stepwise
+   reasoner. Mistral no longer publishes a dedicated reasoning line, so this
+   is a capability that left the vendor, not one we traded away. The panel is
+   four reasoning seats and one general seat until you decide otherwise.
+
+2. **The configured id is not in Mistral's documented list.** `rates.json`
+   carries `mistral-medium-latest`; the documented id is `mistral-medium-3504`.
+   `-latest` aliases often work and are often undocumented, so this has not
+   been changed for you — but it has not been confirmed either, and the price
+   beside it ($1.50 / $7.50, stamped 2026-08-25) could not be re-verified
+   against the pricing page. **Check both on Mistral's own pages before the
+   next paid run.** A ceiling computed from an unchecked price bounds nothing.
 
 ⚠️ **The model ID is not the marketing name.** "Gemini Pro" is the name;
 the API wants an exact code string from their model page. Copy it exactly.
@@ -144,6 +190,20 @@ This never contacts any company. It cannot cost you money.
 ---
 
 ## Step 5 — The real run
+
+### From your phone (no Mac needed once the secrets are set)
+
+**Actions → adjudicate → Run workflow.** Paste your question in `ask`, leave
+`max_cost_usd` at `17.00`, type `SPEND` in `confirm`, tap Run. The report
+appears in the run's Summary tab about an hour later, gates first, then the
+answer. `USING.md` is the whole procedure on one page, including what the
+run's colour means — green with a warning is the ordinary result, not a
+fault.
+
+It uses the same three secrets as the calibration button, so if that runs,
+this runs.
+
+### From the Mac
 
 ```bash
 .venv/bin/python run_adjudication.py YOUR-FILE.txt \

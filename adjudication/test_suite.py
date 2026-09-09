@@ -402,22 +402,46 @@ CALIB = Pass("pc", "Calibration", "x", False)
 
 
 class TestOrchestratorRouting:
-    def test_gate_pass_is_auto_accepted(self):
+    def test_a_self_checking_claim_is_auto_accepted(self):
+        """CHANGED. The text used to only need to MENTION the computed value,
+        which is how "The launch is 4 and safe to proceed" reached PASS -- and
+        so did its negation, on the same warrant.
+
+        A claim reaches PASS when its TEXT is an assertion the gate can rule
+        on directly. Then there is no leap from evidence to sentence to get
+        wrong, and no rule about words deciding it: the evaluator does, and
+        the evaluator has no opinion about launches."""
         o = _orch()
-        # The text must MENTION the number the gate verifies. A claim whose
-        # prose never refers to the computed value is not established by that
-        # computation -- see TestAWarrantMustBearOnTheClaim.
         rec = o.run_pass(ELIM, [], [
-            Claim("c1", "the total is 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
+            Claim("c1", "2 + 2 = 4", ClaimKind.ARITHMETIC, "2+2 = 4")])
         assert (rec.auto_accepted, rec.auto_rejected, rec.escalated) == (1, 0, 0)
 
-    def test_gate_fail_eliminates_the_carrying_candidate(self):
+    def test_a_refuted_commitment_eliminates_the_candidate_that_made_it(self):
+        o = _orch()
+        claim = Claim("c1", "t", ClaimKind.ARITHMETIC, "2+2 = 5")
+        cand = Candidate("A", _commit("A", "the total", 5, "2 + 2"), [claim])
+        o.run_pass(ELIM, [cand], [claim])
+        assert cand.eliminated is True
+        assert "committed" in cand.elimination_reason
+
+    def test_carrying_a_refuted_claim_is_not_enough_to_be_eliminated(self):
+        """CORRECTED. This removed a candidate for ANY failed claim it held,
+        with no test that the refuted warrant bore on what the claim said, so
+        a false sum about anything at all deleted it.
+
+        The five-round engine required the claim to declare its target; this
+        one did not. Two rules for the same question, and the weaker decided
+        whenever it ran. Both now go through one function, and it needs a
+        typed commitment the candidate declared itself.
+
+        The refutation is still recorded and still reported. It simply cannot
+        delete an answer on its own say-so."""
         o = _orch()
         claim = Claim("c1", "t", ClaimKind.ARITHMETIC, "2+2 = 5")
         cand = Candidate("A", "answer", [claim])
-        o.run_pass(ELIM, [cand], [claim])
-        assert cand.eliminated is True
-        assert "arithmetic" in cand.elimination_reason
+        rec = o.run_pass(ELIM, [cand], [claim])
+        assert rec.auto_rejected == 1        # still refuted, still counted
+        assert cand.eliminated is False      # and it removes nothing
 
     def test_judgment_claim_escalates_and_is_never_accepted(self):
         o = _orch()
@@ -449,14 +473,25 @@ class TestOrchestratorRouting:
         assert o.detections_by_seat["s1"] == {"c1"}
         assert o.detections_by_seat["s2"] == {"c2"}
 
-    def test_unaffected_candidate_survives(self):
+    def test_a_refutation_touches_only_the_candidate_that_committed(self):
         o = _orch()
         bad = Claim("bad", "t", ClaimKind.ARITHMETIC, "1+1 = 3")
-        a = Candidate("A", "a", [bad])
-        b = Candidate("B", "b", [])
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [bad])
+        b = Candidate("B", _commit("B", "the sum", 2, "1 + 1"), [])
         o.run_pass(ELIM, [a, b], [bad])
         assert a.eliminated and not b.eliminated
         assert [c.id for c in o.survivors([a, b])] == ["B"]
+
+    def test_the_same_commitment_on_two_candidates_is_two_commitments(self):
+        """A commitment id derives from the candidate it binds to. Ids
+        computed from content alone gave one id to the same assertion aimed at
+        two candidates, so a single refutation removed both."""
+        o = _orch()
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [])
+        b = Candidate("B", _commit("B", "the sum", 3, "9 + 9"), [])
+        o.run_pass(ELIM, [a, b], [])
+        assert a.eliminated and b.eliminated
+        assert a.predicates[0].id != b.predicates[0].id
 
 
 # ===================================================== 7. CONVERGENCE
@@ -504,7 +539,8 @@ class TestDecayAndStopping:
         cannot establish decay, so the run has not converged."""
         o = _orch()
         bad = Claim("b", "t", ClaimKind.ARITHMETIC, "1+1 = 3")
-        a, b = Candidate("A", "a", [bad]), Candidate("B", "b", [])
+        a = Candidate("A", _commit("A", "the sum", 3, "1 + 1"), [bad])
+        b = Candidate("B", "b", [])
         o.run_pass(ELIM, [a, b], [bad])
         s = o.should_stop([a, b])
         assert s["surviving_candidates"] == 1      # the elimination still happened
@@ -524,7 +560,12 @@ class TestEndToEnd:
     def test_full_run_matches_documented_demo_behaviour(self):
         o = Orchestrator([ArithmeticGate(),
                           CitationResolutionGate(lambda i: i.startswith("10.1038"))])
-        cands = [Candidate("A", "A"), Candidate("B", "B"), Candidate("C", "C")]
+        # B and C DECLARE what they stand on, which is the only thing that
+        # can remove them. A carries nothing quantitative and is never
+        # eliminated by this machinery -- it survives as untested.
+        cands = [Candidate("A", "A"),
+                 Candidate("B", _commit("B", "the total", 50, "12 + 35")),
+                 Candidate("C", "C")]
         p1 = [Claim("c1", "", ClaimKind.ARITHMETIC, "12 + 35 = 47", source_seat="s1"),
               Claim("c2", "", ClaimKind.ARITHMETIC, "12 + 35 = 50", source_seat="s2"),
               Claim("c3", "", ClaimKind.JUDGMENT, None, source_seat="s1")]
@@ -536,10 +577,20 @@ class TestEndToEnd:
         r1 = o.run_pass(AO.DEFAULT_PASSES[0], cands, p1)
         r2 = o.run_pass(AO.DEFAULT_PASSES[1], cands, p2)
 
-        assert r1.eliminated_candidates == ["B"]
-        assert r2.eliminated_candidates == ["C"]
-        assert len(o.survivors(cands)) == 1
-        assert o.survivors(cands)[0].id == "A"
+        assert r1.eliminated_candidates == ["B"]   # 12 + 35 is 47, not 50
+        # CHANGED. C carries a fabricated citation and is NO LONGER removed
+        # for it. A refuted citation refutes the EVIDENCE, not the answer --
+        # the same non-sequitur as removing an option because a sum attached
+        # to it came out wrong. It is recorded, counted, and reported as an
+        # unresolved dependency on the survivor.
+        assert r2.eliminated_candidates == []
+        assert r2.auto_rejected == 1
+        assert o.verdicts["c5"].status is AO.GateStatus.FAIL
+        # Two survive now, not one: A, which committed to nothing and was
+        # never tested, and C, whose fabricated citation is a finding against
+        # its evidence rather than a refutation of its answer. Neither has
+        # been shown right, and the report has to say which is which.
+        assert [c.id for c in o.survivors(cands)] == ["A", "C"]
         # one judgment claim remains unresolved -> must warn against committing
         assert o.should_stop(cands)["WARNING"] is not None
 
@@ -1252,13 +1303,48 @@ class TestBlinding:
 
         # Anchor on the section HEADINGS, not the bare words: "REFUTED" also
         # appears in the explanatory paragraph above them.
-        verified = carried.index("VERIFIED -- a gate confirmed these:")
         refuted = carried.index("REFUTED -- a gate disproved these:")
-        assert verified < refuted
-        assert verified < carried.index("the total is 47") < refuted
-        assert carried.index("the total is 5") > refuted
-        assert "OPEN -- " not in carried, (
-            "both claims were gated; neither is an open question")
+        assert carried.index("the total is 5") > refuted, (
+            "the load-bearing assertion: a refuted claim is carried as "
+            "REFUTED, so the next round treats it as settled")
+
+        # THE THIRD SECTION, AND IT IS NOT VERIFIED. This test asserted that
+        # "12 + 35 = 47" landed under VERIFIED. It does not, and should not:
+        # the WARRANT held, and the sentence it was offered for -- "the total
+        # is 47" -- is not itself arithmetic any gate can rule on. That is
+        # WARRANT_HELD, and it was falling into the `else` branch and being
+        # carried as "OPEN -- no gate applied", which is false about a claim a
+        # gate did check.
+        held = carried.index("EVIDENCE VERIFIED, PROPOSITION OPEN")
+        assert held < carried.index("the total is 47")
+        assert "OPEN -- no gate applied" not in carried, (
+            "both claims reached a gate; neither is unexamined")
+
+    def test_a_held_warrant_is_never_carried_as_verified(self):
+        """The distinction the WARRANT_HELD status exists for. Carrying it as
+        VERIFIED tells the next round the PROPOSITION is settled when only the
+        EVIDENCE is -- the exact conflation that let one warrant support a
+        sentence and its negation."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 2 + 2 = 4 | the launch is safe"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        carried = runner.prompt_log[-1].render()
+        assert "the launch is safe" in carried
+        assert "VERIFIED -- a gate confirmed these:" not in carried
+        assert "EVIDENCE VERIFIED, PROPOSITION OPEN" in carried
+
+    def test_a_genuinely_self_checking_claim_still_verifies(self):
+        """The fix must not empty the VERIFIED section. When the claim TEXT is
+        itself the assertion the gate ruled on, it is verified outright."""
+        runner = AO.BlindedSeatRunner({
+            "s1": _seat("CLAIM | arithmetic | 12 + 35 = 47 | 12 + 35 = 47"),
+        })
+        o = Orchestrator([ArithmeticGate()])
+        o.run_sequential("artifact", [], runner)
+        carried = runner.prompt_log[-1].render()
+        assert "VERIFIED -- a gate confirmed these:" in carried
 
     def test_nothing_comprised_means_nothing_carried(self):
         """An empty section would still change the prompt and would tell the
@@ -1390,14 +1476,14 @@ class TestSequentialBlindedRun:
         claim is adjudicated once, but BOTH seats are recorded as having
         caught it. Seat-scoped ids would make every claim a singleton and
         inflate the Chao1 estimate of what nobody caught."""
-        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | the total is 47")
+        both = _seat("CLAIM | arithmetic | 12 + 35 = 47 | 12 + 35 = 47")
         runner = AO.BlindedSeatRunner({"s1": both, "s2": both})
         o = Orchestrator([ArithmeticGate()])
         rec = o.run_sequential("art", [], runner, passes=[AO.DEFAULT_PASSES[0]])[0].record
         assert rec.proposed == 2          # two seats proposed it
         assert rec.auto_accepted == 1     # the gate ran once
         cid = AO.content_claim_id(ClaimKind.ARITHMETIC, "12 + 35 = 47",
-                                  "the total is 47")
+                                  "12 + 35 = 47")
         assert o.detections_by_seat["s1"] == {cid}
         assert o.detections_by_seat["s2"] == {cid}
         # one error, caught twice -> a doubleton, not two singletons
@@ -1691,7 +1777,7 @@ class TestConjunctiveRouting:
                          [Claim("c", "t", ClaimKind.CITATION, "10.1038/real")])
         assert rec.auto_accepted == 0
         assert rec.warrant_only == 1
-        assert "PROPOSITION NOT ESTABLISHED" in o.verdicts["c"].detail
+        assert "WARRANT HELD, PROPOSITION OPEN" in o.verdicts["c"].detail
 
     def test_admissible_but_not_resolving_is_rejected(self):
         o = self._orch(False)
@@ -1704,9 +1790,24 @@ class TestConjunctiveRouting:
         o = self._orch(True)
         claim = Claim("c", "t", ClaimKind.CITATION, "https://medium.com/@x/post")
         cand = Candidate("A", "answer", [claim])
-        o.run_pass(AO.DEFAULT_PASSES[0], [cand], [claim])
-        assert cand.eliminated is True
-        assert "inadmissible" in cand.elimination_reason
+        rec = o.run_pass(AO.DEFAULT_PASSES[0], [cand], [claim])
+        # The source is rejected, and that is recorded.
+        assert rec.auto_rejected == 1
+        # CHANGED, AND THIS IS A REAL NARROWING. An inadmissible source used
+        # to delete the candidate carrying it. Removal now needs a typed
+        # commitment the candidate declared, so a bad source is reported and
+        # escalated rather than deciding the answer by itself.
+        #
+        # The trade is deliberate. The rule that removed on any failed claim
+        # also removed on a false sum about something else entirely, and a
+        # false removal deletes the right answer while making whatever
+        # remains look earned. An unremoved candidate carrying a refuted
+        # claim is visible in the report; a deleted right answer is not.
+        assert cand.eliminated is False
+        # The finding itself is unchanged: the source resolved and is still
+        # not admissible evidence.
+        verdict = o.verdicts[claim.id]
+        assert "inadmissible" in verdict.detail.lower()
 
     def test_a_claim_with_no_applicable_gate_still_escalates(self):
         o = self._orch(True)
@@ -2257,10 +2358,11 @@ class TestAuditIntegratedWithARun:
     def test_pass_entries_carry_gate_outcomes_and_divergence(self):
         log = AuditLog("run-e2e")
         runner = AO.BlindedSeatRunner({
-            # The claim text names the value, so the verified arithmetic
-            # actually bears on the proposition. Text like "ok" does not, and
-            # now escalates rather than being accepted.
-            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | the total is 4"),
+            # The claim text is itself the assertion, so the gate rules on it
+            # directly. Prose beside a warrant is WARRANT HELD instead: naming
+            # the value is not enough, because "the launch is 4 and safe to
+            # proceed" names it too, and so does its negation.
+            "s1": _seat("CLAIM | arithmetic | 2+2 = 4 | 2 + 2 = 4"),
             "s2": _seat("CLAIM | arithmetic | 2+2 = 5 | the total is 5"),
         })
         o = Orchestrator([ArithmeticGate()])
@@ -2810,13 +2912,13 @@ class TestProviderProfileValidation:
 
 class TestHttpSeatHappyPath:
     def test_returns_the_extracted_text(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(), ledger=SA.UNMETERED)
         assert s("the prompt") == "CLAIM | arithmetic | 2+2 = 4 | ok"
 
     def test_sends_the_prompt_model_and_auth_the_profile_specifies(self):
         rec = []
         s = HttpSeat(_resolved_seat(model="m-9"), _profile(), _transport(record=rec),
-                     max_tokens=99, temperature=0.0, timeout_s=7.5)
+                     max_tokens=99, temperature=0.0, timeout_s=7.5, ledger=SA.UNMETERED)
         s("PROMPT-BODY")
         sent = rec[0]
         assert sent["method"] == "POST"
@@ -2830,7 +2932,7 @@ class TestHttpSeatHappyPath:
     def test_extra_headers_are_forwarded(self):
         rec = []
         s = HttpSeat(_resolved_seat(), _profile(extra_headers={"x-api-version": "2026-01-01"}),
-                     _transport(record=rec))
+                     _transport(record=rec), ledger=SA.UNMETERED)
         s("p")
         assert rec[0]["headers"]["x-api-version"] == "2026-01-01"
 
@@ -2838,7 +2940,7 @@ class TestHttpSeatHappyPath:
         """A seat that accumulated conversation state would reintroduce the
         cross-pass leakage BLINDING_CONTRACT forbids."""
         rec = []
-        s = HttpSeat(_resolved_seat(), _profile(), _transport(record=rec))
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(record=rec), ledger=SA.UNMETERED)
         s("first prompt")
         s("second prompt")
         assert _json.loads(rec[0]["data"])["prompt"] == "first prompt"
@@ -2855,62 +2957,62 @@ class TestHttpSeatFailsClosed:
     @pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 500, 503])
     def test_non_2xx_raises_rather_than_returning_text(self, status):
         s = HttpSeat(_resolved_seat(), _profile(), _transport(status=status),
-                     retry=RetryPolicy(max_attempts=1))
+                     retry=RetryPolicy(max_attempts=1), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match=f"HTTP {status}"):
             s("p")
 
     def test_transport_exception_raises_seat_error(self):
         s = HttpSeat(_resolved_seat(), _profile(), _transport(raises=ConnectionError("no route")),
-                     retry=RetryPolicy(max_attempts=1))
+                     retry=RetryPolicy(max_attempts=1), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="transport raised ConnectionError"):
             s("p")
 
     def test_non_json_body_raises(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=b"<html>gateway</html>"))
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=b"<html>gateway</html>"), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="not JSON"):
             s("p")
 
     def test_json_that_is_not_an_object_raises(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=["a", "list"]))
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body=["a", "list"]), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="expected a JSON object"):
             s("p")
 
     def test_missing_text_at_the_configured_path_raises(self):
         """The dangerous case: a 200 with a well-formed body whose text path is
         wrong. Returning None here would read as a seat with nothing to say."""
-        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"choices": [], "id": "x"}))
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"choices": [], "id": "x"}), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="no text at the configured path"):
             s("p")
 
     def test_the_error_names_the_keys_that_were_present(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"zeta": 1, "alpha": 2}))
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(body={"zeta": 1, "alpha": 2}), ledger=SA.UNMETERED)
         with pytest.raises(SeatError) as exc:
             s("p")
         assert "alpha" in str(exc.value) and "zeta" in str(exc.value)
 
     def test_a_raising_extractor_fails_closed(self):
-        s = HttpSeat(_resolved_seat(), _profile(extract_text=lambda p: p["nope"]), _transport())
+        s = HttpSeat(_resolved_seat(), _profile(extract_text=lambda p: p["nope"]), _transport(), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="extract_text raised KeyError"):
             s("p")
 
     def test_a_non_string_from_the_extractor_raises(self):
         s = HttpSeat(_resolved_seat(), _profile(extract_text=lambda p: {"not": "a string"}),
-                     _transport())
+                     _transport(), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="returned dict, expected str"):
             s("p")
 
     def test_seat_without_a_model_is_refused_at_construction(self):
         with pytest.raises(SeatError, match="no model configured"):
-            HttpSeat(_resolved_seat(model=None), _profile(), _transport())
+            HttpSeat(_resolved_seat(model=None), _profile(), _transport(), ledger=SA.UNMETERED)
 
     def test_seat_without_a_credential_is_refused_at_construction(self):
         with pytest.raises(SeatError, match="no credential resolved"):
-            HttpSeat(_resolved_seat(secret=""), _profile(), _transport())
+            HttpSeat(_resolved_seat(secret=""), _profile(), _transport(), ledger=SA.UNMETERED)
 
     def test_in_process_seat_cannot_be_driven_by_this_adapter(self):
         with pytest.raises(SeatError, match="in-process"):
             HttpSeat(_resolved_seat(seat_id="seat_5_claude", in_process=True), _profile(),
-                     _transport())
+                     _transport(), ledger=SA.UNMETERED)
 
 
 class TestHttpSeatRetry:
@@ -2927,13 +3029,13 @@ class TestHttpSeatRetry:
 
     def test_retries_a_transient_status_and_succeeds(self):
         t, calls = self._flaky([503, 429])
-        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3))
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3), ledger=SA.UNMETERED)
         assert s("p") == "recovered"
         assert calls["n"] == 3
 
     def test_retries_are_bounded(self):
         t, calls = self._flaky([503] * 10)
-        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3))
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match="retries exhausted"):
             s("p")
         assert calls["n"] == 3
@@ -2944,7 +3046,7 @@ class TestHttpSeatRetry:
         Retrying burns quota, multiplies the audit trail, and delays the
         operator seeing the one thing that needs fixing."""
         t, calls = self._flaky([status] * 5)
-        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=5))
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=5), ledger=SA.UNMETERED)
         with pytest.raises(SeatError, match=f"HTTP {status}"):
             s("p")
         assert calls["n"] == 1
@@ -2960,13 +3062,13 @@ class TestHttpSeatRetry:
         slept: list[float] = []
         t, _ = self._flaky([503, 503])
         s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=3),
-                     sleeper=slept.append)
+                     sleeper=slept.append, ledger=SA.UNMETERED)
         s("p")
         assert slept == [0.5, 2.0]
 
     def test_no_sleeper_means_no_delay_and_still_retries(self):
         t, calls = self._flaky([503])
-        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=2))
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=2), ledger=SA.UNMETERED)
         assert s("p") == "recovered"
         assert calls["n"] == 2
 
@@ -2977,7 +3079,7 @@ class TestHttpSeatRetry:
 
 class TestHttpSeatNeverLeaksTheCredential:
     def test_the_secret_is_absent_from_repr_and_str(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(), ledger=SA.UNMETERED)
         assert SECRET not in repr(s)
         assert SECRET not in str(s)
         assert SECRET not in f"{s}"
@@ -2990,7 +3092,7 @@ class TestHttpSeatNeverLeaksTheCredential:
             "badjson": _transport(body=b"nope"),
             "nopath": _transport(body={"other": 1}),
         }[kind]
-        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=1))
+        s = HttpSeat(_resolved_seat(), _profile(), t, retry=RetryPolicy(max_attempts=1), ledger=SA.UNMETERED)
         with pytest.raises(SeatError) as exc:
             s("p")
         # The transport's own exception text is the one place a careless
@@ -3001,13 +3103,13 @@ class TestHttpSeatNeverLeaksTheCredential:
     def test_the_credential_is_not_stored_on_the_seat_object(self):
         """It is read through ResolvedSeat.credential() per request, so
         rotating the underlying seat takes effect without rebuilding."""
-        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(), ledger=SA.UNMETERED)
         assert SECRET not in _json.dumps(
             {k: str(v) for k, v in vars(s).items() if k != "seat"}
         )
 
     def test_the_secret_never_appears_in_the_serialised_object_graph(self):
-        s = HttpSeat(_resolved_seat(), _profile(), _transport())
+        s = HttpSeat(_resolved_seat(), _profile(), _transport(), ledger=SA.UNMETERED)
         assert not any(SECRET in str(v) for k, v in vars(s).items() if k != "seat")
 
 
@@ -3022,7 +3124,7 @@ class TestBuildSeatCallables:
     def test_builds_one_callable_per_outbound_resolved_seat(self):
         panel = AO.load_panel(env=dict(self.ENV))
         profiles = {f"seat_{i}": _profile(name=f"v{i}") for i in range(1, 5)}
-        seats = SA.build_seat_callables(panel, profiles, _transport())
+        seats = SA.build_seat_callables(panel, profiles, _transport(), ledger=SA.UNMETERED)
         assert sorted(seats) == ["seat_1", "seat_2", "seat_3", "seat_4"]
         assert "seat_5_claude" not in seats          # in-process, not ours to drive
         assert seats["seat_1"]("p") == "CLAIM | arithmetic | 2+2 = 4 | ok"
@@ -3033,13 +3135,13 @@ class TestBuildSeatCallables:
         panel = AO.load_panel(env=dict(self.ENV))
         profiles = {f"seat_{i}": _profile() for i in (1, 2, 3)}    # seat_4 missing
         with pytest.raises(SeatError, match="seat_4"):
-            SA.build_seat_callables(panel, profiles, _transport())
+            SA.build_seat_callables(panel, profiles, _transport(), ledger=SA.UNMETERED)
 
     def test_the_callables_plug_straight_into_the_blinded_runner(self):
         panel = AO.load_panel(env=dict(self.ENV))
         profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
         runner = AO.BlindedSeatRunner(
-            SA.build_seat_callables(panel, profiles, _transport())
+            SA.build_seat_callables(panel, profiles, _transport(), ledger=SA.UNMETERED)
         )
         responses = runner.run(AO.DEFAULT_PASSES[0], "the artifact")
         assert len(responses) == 4
@@ -3049,10 +3151,10 @@ class TestBuildSeatCallables:
     def test_a_failing_seat_is_recorded_not_silently_dropped(self):
         panel = AO.load_panel(env=dict(self.ENV))
         profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
-        good = SA.build_seat_callables(panel, profiles, _transport())
+        good = SA.build_seat_callables(panel, profiles, _transport(), ledger=SA.UNMETERED)
         good["seat_3"] = HttpSeat(_resolved_seat("seat_3"), _profile(),
                                   _transport(status=500),
-                                  retry=RetryPolicy(max_attempts=1))
+                                  retry=RetryPolicy(max_attempts=1), ledger=SA.UNMETERED)
         runner = AO.BlindedSeatRunner(good)
         d = AO.measure_divergence(AO.DEFAULT_PASSES[0],
                                   runner.run(AO.DEFAULT_PASSES[0], "art"))
@@ -3064,7 +3166,7 @@ class TestBuildSeatCallables:
         panel = AO.load_panel(env=dict(self.ENV))
         profiles = {f"seat_{i}": _profile() for i in range(1, 5)}
         runner = AO.BlindedSeatRunner(
-            SA.build_seat_callables(panel, profiles, _transport())
+            SA.build_seat_callables(panel, profiles, _transport(), ledger=SA.UNMETERED)
         )
         log = AuditLog("run-adapter")
         o = Orchestrator([ArithmeticGate()])
@@ -3525,10 +3627,46 @@ _R_FALSE = "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5"
 _R_JUDGE = "CLAIM | judgment |  | the framing is one-sided"
 
 
+def _commit(cid, subject, value, expr, unit=""):
+    """Candidate content declaring one typed commitment, with its arithmetic.
+
+    Removal needs a commitment the candidate declared itself; a refuted claim
+    it merely carries no longer deletes it. So a candidate that stands on a
+    number says which number, and offers the computation.
+    """
+
+    tail = f" {unit}" if unit else ""
+    # The candidate declares the figure AND how it computed it. A challenger
+    # can no longer supply the computation: that let a later seat remove any
+    # answer by attaching arithmetic of its choosing.
+    return (f"{subject}\n"
+            f"PREDICATE | {subject} | = | {value}{tail}\n"
+            f"FORMULA | {expr}")
+
+
 def _cand(cid, text, warrant):
+    """A candidate standing on a number, declared as a typed commitment.
+
+    A refuted claim no longer removes the candidate carrying it: that rule
+    removed a candidate for ANY failed claim, with no test that the refuted
+    warrant bore on what the claim said, so a false sum about anything at all
+    was enough. Removal now needs a commitment the candidate DECLARED, and a
+    computation that comes out otherwise.
+
+    So a candidate here says what number it stands on, and offers its own
+    arithmetic for it. If that arithmetic computes to something else, the
+    candidate has refuted itself -- which is what "standing on false
+    arithmetic" always meant.
+    """
     claim = Claim(AO.content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
                   text, ClaimKind.ARITHMETIC, warrant)
-    return Candidate(cid, text, [claim])
+    content = text
+    if warrant and "=" in warrant:
+        expr, claimed = warrant.rsplit("=", 1)
+        content = (f"{text}\n"
+                   f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                   f"FORMULA | {expr.strip()}")
+    return Candidate(cid, content, [claim])
 
 
 def _seats(*texts):
@@ -3602,7 +3740,14 @@ class TestTheAnswerIsWhatSurvives:
                                   _seats(_R_TRUE, f"{_R_TRUE}\n{_R_FALSE}"))
         assert [c.id for c in answer.survivors] == ["c_true"]
         assert [c.id for c in answer.eliminated] == ["c_false"]
-        assert "recomputed 4" in answer.eliminated[0].elimination_reason
+        # The reason names the computed value AND the value the candidate
+        # committed to, because an operator reading it needs to see the gap.
+        # The reason names the candidate's own formula, what it computes to,
+        # and the figure it committed to -- an operator reading it needs to
+        # see the gap, and needs to see that both halves are the candidate's.
+        reason = answer.eliminated[0].elimination_reason
+        assert "own formula 2 + 2" in reason
+        assert "gives 4" in reason and "equals 5" in reason
 
     def test_elimination_happens_on_the_pass_that_first_sees_the_claim(self):
         cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
@@ -4014,7 +4159,7 @@ class TestTheWholeChainWorksAgainstAFakeTransport:
 
         profiles = profiles_from_config(_cfg())
         seat = AO.ResolvedSeat("seat_1", "model-x", "SECRET-KEY-9f3b")
-        fn = SA.build_seat_callables([seat], profiles, transport)["seat_1"]
+        fn = SA.build_seat_callables([seat], profiles, transport, ledger=SA.UNMETERED)["seat_1"]
         return fn, captured
 
     def test_a_profile_file_becomes_a_working_seat_callable(self):
@@ -4054,7 +4199,7 @@ class TestTheWholeChainWorksAgainstAFakeTransport:
         )
         panel = [AO.ResolvedSeat("seat_1", "m", "k1"),
                  AO.ResolvedSeat("seat_2", "m", "k2")]
-        seat_fns = SA.build_seat_callables(panel, profiles, transport)
+        seat_fns = SA.build_seat_callables(panel, profiles, transport, ledger=SA.UNMETERED)
         cands = [_cand("c_false", "the total is 5", "2 + 2 = 5")]
         answer = run_adjudication("artifact", cands, seat_fns)
         assert len(answer.passes) == 5
@@ -4068,7 +4213,7 @@ class TestLiveSeatsAssembly:
         path = tmp_path / "p.json"
         path.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
         with pytest.raises(AO.MissingSeatCredential):
-            RA.live_seats(str(path), env={})
+            RA.live_seats(str(path), env={}, ledger=SA.UNMETERED)
 
     def test_a_seat_with_a_credential_but_no_profile_fails_closed(self, tmp_path):
         """A panel that quietly runs short misstates rho, effective seats, and
@@ -4078,14 +4223,14 @@ class TestLiveSeatsAssembly:
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         with pytest.raises(SA.SeatError, match="no ProviderProfile"):
-            RA.live_seats(str(path), env=env)
+            RA.live_seats(str(path), env=env, ledger=SA.UNMETERED)
 
     def test_a_complete_panel_yields_one_callable_per_external_seat(self, tmp_path):
         path = tmp_path / "p.json"
         path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
-        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"), ledger=SA.UNMETERED)
         assert sorted(fns) == [f"seat_{i}" for i in range(1, 6)], (
             "the default panel is five external seats, all blinded identically"
         )
@@ -4096,7 +4241,7 @@ class TestLiveSeatsAssembly:
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         with pytest.raises(ProfileConfigError):
-            RA.live_seats(str(path), env=env)
+            RA.live_seats(str(path), env=env, ledger=SA.UNMETERED)
 
     def test_invalid_json_names_the_file(self, tmp_path):
         path = tmp_path / "p.json"
@@ -4122,8 +4267,9 @@ class TestTheCliConnectPath:
             "an offline check must not be read as a connectivity check"
         )
 
-    def test_demo_and_profiles_together_are_refused(self, capsys):
-        assert RA.main(["--demo", "--profiles", "p.json", "--max-cost", "1.00"]) == 2
+    def test_demo_and_profiles_together_are_refused(self, capsys, tmp_path):
+        assert RA.main(["--demo", "--profiles", "p.json", "--max-cost", "1.00",
+                      "--day-state", str(tmp_path / "day.json")]) == 2
         assert "mutually exclusive" in capsys.readouterr().err
 
     def test_the_no_seats_message_gives_the_whole_connect_procedure(self, capsys):
@@ -4200,7 +4346,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.delenv(f"ADJ_SEAT_{i}_MODEL", raising=False)
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
         absent_env = str(tmp_path / "absent.env")
-        assert RA.main(["--profiles", path, "--env", absent_env, "--max-cost", "1.00"]) == 2
+        assert RA.main(["--profiles", path, "--env", absent_env, "--max-cost", "1.00",
+                      "--day-state", str(tmp_path / "day.json")]) == 2
         err = capsys.readouterr().err
         assert "credential missing" in err
         assert ".env" in err
@@ -4211,7 +4358,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": {"endpoint": "http://x.invalid"}})
-        assert RA.main(["--profiles", path, "--max-cost", "1.00"]) == 2
+        assert RA.main(["--profiles", path, "--max-cost", "1.00",
+                      "--day-state", str(tmp_path / "day.json")]) == 2
         err = capsys.readouterr().err
         assert "profiles unusable" in err
         assert "--check-profiles" in err
@@ -4221,7 +4369,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
             monkeypatch.setenv(f"ADJ_SEAT_{i}_API_KEY", f"k{i}")
             monkeypatch.setenv(f"ADJ_SEAT_{i}_MODEL", "m")
         path = self._profiles(tmp_path, {"seat_1": _GOOD_PROFILE})
-        assert RA.main(["--profiles", path, "--max-cost", "1.00"]) == 2
+        assert RA.main(["--profiles", path, "--max-cost", "1.00",
+                      "--day-state", str(tmp_path / "day.json")]) == 2
         err = capsys.readouterr().err
         assert "panel incomplete" in err
         assert "seat_2" in err
@@ -4246,7 +4395,8 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         monkeypatch.setattr(RA, "urllib_transport", fake_transport)
         artifact = tmp_path / "a.txt"
         artifact.write_text("the total is 5")
-        rc = RA.main([str(artifact), "--profiles", path, "--max-cost", "1000.00"])
+        rc = RA.main([str(artifact), "--profiles", path, "--max-cost", "1000.00",
+                      "--day-state", str(tmp_path / "day.json")])
         out = capsys.readouterr().out
         assert calls["n"] == 25, "5 external seats x 5 passes"
         assert "ROUNDS, ONE AT A TIME (5)" in out
@@ -4254,7 +4404,11 @@ class TestTheCliDiagnosesEachConnectFailureDistinctly:
         # refutes c_true, so it survives by elimination.
         assert "SURVIVOR: c_true" in out
         assert "removed c_false" in out
-        assert "recomputed 4" in out
+        # The printed reason names the candidate's OWN formula, what it
+        # computes to, and the figure it committed to, so an operator sees the
+        # gap and sees that both halves belong to the candidate.
+        assert "own formula 2 + 2" in out
+        assert "gives 4" in out and "equals 5" in out
         # Four seats scripted IDENTICALLY are a monoculture, and the run says
         # so on every pass rather than reading the agreement as confirmation.
         assert out.count("[collapse warning]") == 5
@@ -4318,7 +4472,7 @@ class TestTheTransportRetryPathAnOperatorWillActuallyHit:
     def _seat(self, transport, **kw):
         profiles = profiles_from_config(_cfg())
         seat = AO.ResolvedSeat("seat_1", "m", "k")
-        return SA.build_seat_callables([seat], profiles, transport, **kw)["seat_1"]
+        return SA.build_seat_callables([seat], profiles, transport, **kw, ledger=SA.UNMETERED)["seat_1"]
 
     def test_a_raising_transport_is_retried_then_fails_closed(self):
         calls = {"n": 0}
@@ -4378,7 +4532,7 @@ class TestTheTransportRetryPathAnOperatorWillActuallyHit:
         profiles = profiles_from_config(_cfg())
         seat = AO.ResolvedSeat("seat_1", "m", "SECRET-KEY-2b7f")
         fn = SA.build_seat_callables([seat], profiles, boom,
-                                     retry=SA.RetryPolicy(max_attempts=1))["seat_1"]
+                                     retry=SA.RetryPolicy(max_attempts=1), ledger=SA.UNMETERED)["seat_1"]
         with pytest.raises(SA.SeatError) as exc:
             fn("prompt")
         assert "SECRET-KEY-2b7f" not in str(exc.value)
@@ -4547,7 +4701,8 @@ class TestTheEnvFileIsActuallyRead:
         prof = tmp_path / "p.json"
         prof.write_text(_json.dumps({"seat_1": _GOOD_PROFILE}))
         envp = tmp_path / "nothing.env"
-        assert RA.main(["--profiles", str(prof), "--env", str(envp), "--max-cost", "1.00"]) == 2
+        assert RA.main(["--profiles", str(prof), "--env", str(envp), "--max-cost", "1.00",
+                      "--day-state", str(tmp_path / "day.json")]) == 2
         err = capsys.readouterr().err
         assert str(envp) in err
         assert ".env.example" in err
@@ -4579,7 +4734,7 @@ class TestAllFiveSeatsAreBlindedIdentically:
         path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
-        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"), ledger=SA.UNMETERED)
         assert sorted(fns) == [f"seat_{i}" for i in range(1, 6)], (
             "all five seats must be driven the same way"
         )
@@ -4590,7 +4745,7 @@ class TestAllFiveSeatsAreBlindedIdentically:
         path.write_text(_json.dumps({f"seat_{i}": _GOOD_PROFILE for i in range(1, 6)}))
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 6)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
-        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"))
+        fns = RA.live_seats(str(path), env=env, transport=lambda *a: (200, b"{}"), ledger=SA.UNMETERED)
         assert "seat_5" in fns
 
     def test_the_in_process_arrangement_is_still_available(self, tmp_path):
@@ -4600,7 +4755,7 @@ class TestAllFiveSeatsAreBlindedIdentically:
         env = {f"ADJ_SEAT_{i}_API_KEY": f"k{i}" for i in range(1, 5)}
         env.update({f"ADJ_SEAT_{i}_MODEL": "m" for i in range(1, 6)})
         fns = RA.live_seats(str(path), env=env, specs=AO.PANEL_OF_FIVE,
-                            transport=lambda *a: (200, b"{}"))
+                            transport=lambda *a: (200, b"{}"), ledger=SA.UNMETERED)
         assert sorted(fns) == [f"seat_{i}" for i in range(1, 5)]
         assert "seat_5_claude" not in fns
 
@@ -4959,8 +5114,36 @@ class TestReasoningTokenAccounting:
         assert tout >= 0
 
     def test_bool_is_not_a_token_count(self):
+        """CORRECTED. A bool total was skipped and the call reconciled from
+        the input and output fields as if no total had been reported -- so it
+        was recorded as MEASURED and its reservation released.
+
+        Absent and unreadable are different facts. Absent means the vendor
+        folds reasoning tokens into the output figure, which is safe to
+        reconcile from. Unreadable means the one field that catches invisible
+        billable output cannot be read, so the call is unmeasured and the full
+        authorisation stands."""
         payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
                              "total_tokens": True}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_a_string_total_leaves_the_call_unmeasured(self):
+        """Executed by the reviewer: five calls declaring 10,000 all-in
+        tokens each booked $0.0055 in total, where the declared figures
+        priced to $0.50."""
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 100,
+                             "total_tokens": "10000"}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_a_negative_total_leaves_the_call_unmeasured(self):
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                             "total_tokens": -1}}
+        assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (None, None)
+
+    def test_no_total_at_all_still_reconciles_normally(self):
+        """The safe case, and the common one: Anthropic reports no total
+        because its output figure already includes the thinking."""
+        payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 5}}
         assert CL.usage_from_payload(payload, *OPENAI_STYLE) == (10, 5)
 
 
@@ -4984,7 +5167,7 @@ class TestTimeoutIsNotRetried:
         t, calls = _counting_transport(exc)
         seat = HttpSeat(_resolved_seat(seat_id="seat_4"), _profile(), t,
                         retry=SA.RetryPolicy(max_attempts=attempts),
-                        sleeper=lambda _s: None)
+                        sleeper=lambda _s: None, ledger=SA.UNMETERED)
         return seat, calls
 
     def test_timeout_is_attempted_exactly_once(self):
@@ -5031,7 +5214,7 @@ class TestTimeoutIsNotRetried:
     def test_default_timeout_fits_a_reasoning_model(self):
         """grok-4.6 was measured at 275.4s on a 632-token prompt. A default
         below that guarantees the failure this change exists to remove."""
-        seat = HttpSeat(_resolved_seat(), _profile(), _transport())
+        seat = HttpSeat(_resolved_seat(), _profile(), _transport(), ledger=SA.UNMETERED)
         assert seat.timeout_s >= 275.4 * 2
 
 
@@ -5102,11 +5285,15 @@ class TestUnverifiedIsNotWrong:
     def _run(self):
         from citation_gate import CitationFieldMatchGate
 
-        right = Candidate(id="RIGHT", content="rests on arithmetic that holds",
+        right = Candidate(id="RIGHT",
+                          content=_commit("RIGHT", "12 units at 50", 600,
+                                          "12 * 50"),
                           claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
-                                        text="12 units at 50 is 600",
+                                        text="12 * 50 = 600",
                                         warrant="12 * 50 = 600")])
-        wrong = Candidate(id="WRONG", content="rests on arithmetic that fails",
+        wrong = Candidate(id="WRONG",
+                          content=_commit("WRONG", "12 units at 50", 700,
+                                          "12 * 50"),
                           claims=[Claim(id="", kind=ClaimKind.ARITHMETIC,
                                         text="12 units at 50 is 700",
                                         warrant="12 * 50 = 700")])
@@ -5145,7 +5332,8 @@ class TestUnverifiedIsNotWrong:
 
     def test_the_elimination_names_what_was_wrong(self):
         _, by_id = self._run()
-        assert "recomputed 600" in by_id["WRONG"].elimination_reason
+        reason = by_id["WRONG"].elimination_reason
+        assert "600" in reason and "700" in reason
 
 
 class TestAClaimAlwaysHasAnIdentity:
@@ -5186,10 +5374,11 @@ class TestAClaimAlwaysHasAnIdentity:
 
     def test_every_distinct_claim_is_adjudicated(self):
         """The regression itself: three distinct claims, three verdicts."""
-        # The text names the computed value, so the warrant bears on the
-        # claim. Without that these escalate, correctly.
+        # Each text is itself a checkable assertion, so each is ruled on
+        # directly. Prose would be WARRANT HELD instead -- still adjudicated,
+        # still one verdict each, which is what this test is about.
         claims = [Claim(id="", kind=ClaimKind.ARITHMETIC,
-                        text=f"the total is {i + 1}",
+                        text=f"{i} + 1 = {i + 1}",
                         warrant=f"{i} + 1 = {i + 1}") for i in range(3)]
         orch = Orchestrator([ArithmeticGate()])
         rec = orch.run_pass(
@@ -5207,139 +5396,6 @@ class TestAClaimAlwaysHasAnIdentity:
             Orchestrator([ArithmeticGate()]).run_pass(
                 type("P", (), {"id": "p", "name": "n", "eliminative": False})(),
                 [], [c])
-
-
-class TestAWarrantMustBearOnTheClaim:
-    """Codex C5. A GATE CHECKS A WARRANT; IT DOES NOT CHECK THE PROPOSITION.
-
-    Reproduced before fixing, with ArithmeticGate and the true warrant
-    "2 + 2 = 4":
-
-        "The launch is SAFE to proceed"           -> PASS
-        "The launch is UNSAFE and must be aborted" -> PASS
-
-    Two contradictory propositions, both marked verified on one true equation,
-    both printed in the deliverable under a [PASS] marker. An earlier fix made
-    their claim IDs distinct, which stopped them SHARING a verdict and left
-    untouched the part that matters: a model can attach any true warrant to
-    any false assertion and have it certified. That defeats the whole tool
-    while every indicator reads green.
-
-    Unsupported claims ESCALATE. They are not accepted and not eliminated --
-    an unestablished claim could still be true.
-    """
-
-    def _run(self, *claims):
-        o = Orchestrator([ArithmeticGate()])
-        rec = o.run_pass(
-            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
-            [], list(claims))
-        return o, rec
-
-    def test_a_true_equation_cannot_certify_an_unrelated_sentence(self):
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
-        o, rec = self._run(c)
-        assert rec.auto_accepted == 0
-        assert rec.warrant_only == 1
-        assert "DOES NOT BEAR ON THE CLAIM" in o.verdicts[c.id].detail
-
-    def test_opposite_propositions_are_not_both_verified(self):
-        """The reproduction that made this undeniable."""
-        safe = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                     text="The launch is SAFE to proceed", warrant="2 + 2 = 4")
-        unsafe = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                       text="The launch is UNSAFE and must be aborted",
-                       warrant="2 + 2 = 4")
-        _, rec = self._run(safe, unsafe)
-        assert rec.auto_accepted == 0
-
-    def test_an_unsupported_claim_escalates_rather_than_being_eliminated(self):
-        """Fail closed on the conclusion, open on the candidate. Eliminating
-        here would kill a claim that might be perfectly true."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="This shortcut is safe to take", warrant="1 + 1 = 2")
-        cand = Candidate("A", "the shortcut is fine", [c])
-        o = Orchestrator([ArithmeticGate()])
-        rec = o.run_pass(
-            type("P", (), {"id": "p", "name": "n", "eliminative": True})(),
-            [cand], [c])
-        assert cand.eliminated is False
-        assert rec.escalated == 1
-
-    def test_a_claim_that_names_its_own_result_is_still_accepted(self):
-        """The rule must not break honest claims, or it would be switched off."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="12 units at 50 each is 600 in total",
-                  warrant="12 * 50 = 600")
-        _, rec = self._run(c)
-        assert rec.auto_accepted == 1
-
-    def test_formatting_of_the_number_does_not_break_the_match(self):
-        """1,200 and 1200 are the same number to a reader and must be to this."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="the total comes to 1,200 units", warrant="600 * 2 = 1200")
-        _, rec = self._run(c)
-        assert rec.auto_accepted == 1
-
-    def test_the_verdict_records_that_the_warrant_itself_checked_out(self):
-        """The arithmetic WAS verified. Discarding that would lose real work
-        and invite someone to re-verify it by hand."""
-        c = Claim(id="", kind=ClaimKind.ARITHMETIC,
-                  text="the sky is green", warrant="2 + 2 = 4")
-        o, _ = self._run(c)
-        assert "the warrant itself checked out" in o.verdicts[c.id].detail
-
-    def test_a_citation_never_establishes_the_proposition(self):
-        """A resolving DOI rules out a fabricated reference. It says nothing
-        about whether the work supports the claim -- misrepresenting a real
-        paper is invisible to every mechanical check."""
-        c = Claim(id="", kind=ClaimKind.CITATION, text="vaccines cause autism",
-                  warrant="10.1038/s41586-020-2649-2")
-        assert "PROPOSITION NOT ESTABLISHED" in AO.warrant_supports(c)
-
-    def test_a_passing_command_does_not_establish_unrelated_prose(self):
-        """Two OPPOSITE claims carrying the same passing command both passed."""
-        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
-                  text="the deployment is production ready",
-                  warrant="pytest tests/test_parser.py -q")
-        assert "DOES NOT BEAR ON THE CLAIM" in AO.warrant_supports(c)
-
-    def test_a_command_the_claim_is_actually_about_is_supported(self):
-        c = Claim(id="", kind=ClaimKind.CODE_BEHAVIOR,
-                  text="the parser tests pass",
-                  warrant="pytest tests/test_parser.py -q")
-        assert AO.warrant_supports(c) is None
-
-    def test_a_found_quote_never_establishes_the_proposition(self):
-        """CORRECTED. These two tests asserted that shared content words make
-        a quote support a claim, and that a lack of them makes it not. Both
-        encoded lexical overlap as entailment, which it is not: a page reading
-        "revenue tripled" shares every content word with "revenue did not
-        triple". Finding the quote rules out a fabricated quote and settles
-        nothing else."""
-        def why(text):
-            return AO.warrant_supports(Claim(
-                id="", kind=ClaimKind.QUOTE_VERIFICATION, text=text,
-                warrant="https://e.test/p :: quarterly revenue tripled"))
-
-        # Neither is accepted, and each says the accurate thing about itself.
-        assert "PROPOSITION NOT ESTABLISHED" in why(
-            "revenue tripled in the fourth quarter")
-        assert "NOT A RESTATEMENT" in why(
-            "revenue did not triple in the fourth quarter")
-
-    def test_warrant_only_is_counted_apart_from_ordinary_escalation(self):
-        """Different findings. An ordinary escalation had no mechanical
-        warrant; these had one that PASSED and simply is not about the claim.
-        Many of these means seats are attaching true evidence to unrelated
-        assertions, which is the specific failure mode this system exists to stop."""
-        _, rec = self._run(
-            Claim(id="", kind=ClaimKind.ARITHMETIC, text="unrelated prose",
-                  warrant="2 + 2 = 4"),
-            Claim(id="", kind=ClaimKind.JUDGMENT, text="a matter of taste"))
-        assert rec.escalated == 2
-        assert rec.warrant_only == 1
 
 
 class TestAQuoteCannotEliminateACandidateItDoesNotBelongTo:
@@ -5374,9 +5430,27 @@ class TestAQuoteCannotEliminateACandidateItDoesNotBelongTo:
             [A, B], [a_claim, a_quote, b_claim])
         return A, B
 
-    def test_the_candidate_that_offered_the_bad_quote_is_eliminated(self):
+    def test_the_candidate_that_offered_the_bad_quote_loses_its_basis(self):
+        """CHANGED. The fabricated quote used to delete the candidate that
+        offered it. It refutes the EVIDENCE; whether the answer is wrong is a
+        separate question this was answering by assumption -- the same
+        non-sequitur as removing an option because a sum attached to it came
+        out wrong.
+
+        It also bypassed the one function that removes candidates, so this
+        engine could delete an answer by a rule the other engine did not have.
+
+        The finding is not softened: the claim loses its stated basis, it is
+        recorded on the candidate, and the conduct ledger records the
+        fabrication against the seat."""
         A, _ = self._run()
-        assert A.eliminated is True
+        assert A.eliminated is False
+        assert A.unsupported_basis, "the finding must survive on the record"
+
+    def test_the_fabrication_is_still_a_finding(self):
+        A, _ = self._run()
+        assert any("quote" in note.lower() or "support" in note.lower()
+                   for note in A.unsupported_basis)
 
     def test_the_unrelated_candidate_survives(self):
         """The load-bearing assertion. B did nothing wrong."""
@@ -5434,74 +5508,6 @@ class TestTheEscalationQueueRoundTrips:
     def test_a_wholly_wrong_shape_is_named(self):
         with pytest.raises(RA.AdjudicationFileError, match="export-queue"):
             RA.parse_adjudications("not a queue at all")
-
-
-class TestLexicalOverlapNeverAccepts:
-    """Codex S1-1, the critical finding. Token overlap is not entailment.
-
-    Both of these were accepted on the warrant "2 + 2 = 4", because both
-    contain the token 4:
-
-        "The launch is SAFE to proceed, code 4"
-        "The launch is NOT SAFE to proceed, code 4"
-
-    An equation establishes neither. The check confirmed that 2 + 2 is 4 and
-    said nothing whatever about a launch.
-    """
-
-    def _accepts(self, kind, text, warrant):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text", [
-        "The launch is SAFE to proceed, code 4",
-        "The launch is NOT SAFE to proceed, code 4",
-    ])
-    def test_opposite_propositions_sharing_a_token_are_both_refused(self, text):
-        assert not self._accepts(ClaimKind.ARITHMETIC, text, "2 + 2 = 4")
-
-    def test_a_restatement_of_the_arithmetic_is_still_accepted(self):
-        """The rule must not cost genuine arithmetic, or it gets switched off."""
-        assert self._accepts(ClaimKind.ARITHMETIC,
-                             "12 units at 50 each is 600 in total",
-                             "12 * 50 = 600")
-
-    def test_a_negation_anywhere_prevents_acceptance(self):
-        """No token comparison can tell which way a negated claim points."""
-        assert not self._accepts(ClaimKind.ARITHMETIC,
-                                 "the total is not 600", "12 * 50 = 600")
-
-    def test_schema_validity_establishes_no_proposition(self):
-        """Structure is a fact about shape and carries no information about
-        an assertion made alongside it."""
-        assert not self._accepts(ClaimKind.SCHEMA,
-                                 "The launch is SAFE to proceed", '{"a": 1}')
-
-    def test_a_citation_establishes_no_proposition(self):
-        assert not self._accepts(ClaimKind.CITATION, "vaccines cause autism",
-                                 "10.1038/s41586-020-2649-2")
-
-    def test_a_found_quote_establishes_no_proposition(self):
-        """A page reading "revenue tripled" shares every content word with
-        "revenue did not triple"."""
-        assert not self._accepts(
-            ClaimKind.QUOTE_VERIFICATION, "revenue tripled last quarter",
-            "https://e.test/p :: quarterly revenue tripled")
-
-    def test_the_intake_path_applies_the_same_rule(self):
-        """gate_candidate_claims recorded the gate status directly, so a
-        candidate whose claim carried a valid warrant beside unrelated prose
-        was marked PASS at intake and never reconsidered -- the one place a
-        candidate's own assertions are ruled on, applying a weaker rule than
-        the one seats are held to."""
-        c = Candidate("A", "the launch may proceed", [Claim(
-            id="", kind=ClaimKind.ARITHMETIC,
-            text="The launch is SAFE to proceed, code 4", warrant="2 + 2 = 4")])
-        o = Orchestrator([ArithmeticGate()])
-        ruled = o.gate_candidate_claims([c])
-        assert ruled == [], "intake accepted it without a proposition check"
-        assert len(o.escalation_queue) == 1
-        assert o.verdicts[c.claims[0].id].status is None
 
 
 class TestArithmeticIsExactAndBounded:
@@ -5617,156 +5623,6 @@ class TestArithmeticIsExactAndBoundedRoundTwo:
         assert time.time() - t0 < 2.0
 
 
-class TestAWarrantMustBearOnTheClaimRoundTwo:
-    """Re-check finding #1. Number-matching accepted claims the arithmetic did
-    not establish."""
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text", [
-        "the total is under 4",
-        "the total is about 4",
-        "the total is approximately 4",
-        "the total is at most 4",
-    ])
-    def test_a_qualifier_changes_the_proposition(self, text):
-        """"the total is 4" restates a warrant computing 4. "under 4" and
-        "about 4" are different claims the arithmetic settles neither of, and
-        all three mention the number."""
-        assert not self._accepts(text, "2 + 2 = 4")
-
-    def test_a_unit_the_warrant_does_not_measure_is_refused(self):
-        """"5 km = 5000 m" is a true conversion and establishes nothing about
-        5000 dollars."""
-        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
-                                 ClaimKind.UNIT)
-        assert not self._accepts("the price is 4 dollars", "2 + 2 = 4")
-
-    def test_a_unit_the_warrant_does_measure_is_allowed(self):
-        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
-                             ClaimKind.UNIT)
-
-    def test_integers_beyond_binary64_do_not_match_each_other(self):
-        """_numbers normalised through float, so a claim reading
-        9007199254740992 matched a warrant computing 9007199254740993."""
-        assert not self._accepts("the total is 9007199254740992",
-                                 "9007199254740993 = 9007199254740993")
-
-    def test_a_plain_restatement_is_still_accepted(self):
-        for text, warrant in (("the total is 4", "2 + 2 = 4"),
-                              ("12 units at 50 each is 600 in total",
-                               "12 * 50 = 600")):
-            assert self._accepts(text, warrant), text
-
-
-class TestAQuantityClaimIsUsableAndStillSafe:
-    """The rule that decides whether this tool answers or just escalates.
-
-    An earlier version required a quantity claim's whole sentence to contain
-    nothing outside a fixed vocabulary. It was safe and useless: a five-round
-    dry run with three genuine cost claims eliminated NOTHING, because "the
-    vendor licence is 47000 per year in total" mentions a vendor and a licence.
-    A tool that cannot rule on an ordinary cost claim produces a reading list
-    rather than an answer, which is the other way to be worthless.
-
-    The rule is now POSITIONAL. Everything before the linking verb NAMES the
-    quantity and may say anything; everything after it is the assertion and
-    must be the computed value plus quantity words.
-    """
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("the vendor licence is 47000 per year in total", "12 * 4000 = 47000"),
-        ("the vendor licence is 47000 dollars per year",
-         "12 * 4000 dollars = 47000 dollars"),
-        ("two engineers for two quarters is 180000 in total",
-         "2 * 90000 = 180000"),
-        ("renting for six months is 18000 in total", "6 * 3000 = 18000"),
-        ("12 units at 50 each is 600 in total", "12 * 50 = 600"),
-        ("the total is 4", "2 + 2 = 4"),
-    ])
-    def test_an_ordinary_cost_claim_is_usable(self, text, warrant):
-        assert self._accepts(text, warrant), text
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("Launch immediately.", "2 + 2 = 5"),
-        ("the parser is secure", "2 + 2 = 4"),
-        ("the total is under 4", "2 + 2 = 4"),
-        ("the total is about 4", "2 + 2 = 4"),
-        ("the price is 4 dollars", "2 + 2 = 4"),
-    ])
-    def test_the_number_must_be_what_the_claim_asserts(self, text, warrant):
-        """"The launch is SAFE to proceed, code 4" carries 4, but what it
-        ASSERTS after the verb is being safe -- and arithmetic settles nothing
-        about that."""
-        assert not self._accepts(text, warrant), text
-
-    def test_a_dimension_the_warrant_does_not_measure_is_refused(self):
-        assert not self._accepts("the price is 5000 dollars", "5 km = 5000 m",
-                                 ClaimKind.UNIT)
-
-    def test_the_same_dimension_is_allowed(self):
-        assert self._accepts("the distance is 5000 m", "5 km = 5000 m",
-                             ClaimKind.UNIT)
-
-    def test_a_rate_period_is_labelling_not_a_dimension(self):
-        """"per year" names what the quantity is PER, the same labelling job
-        the words before the verb do. Rejecting it made every ordinary rate
-        unusable while the number asserted was exactly the one computed."""
-        assert self._accepts("the licence is 47000 dollars per year",
-                             "12 * 4000 dollars = 47000 dollars")
-
-
-class TestQuantityClaimsFromARealPanel:
-    """Every claim below is verbatim from a live five-vendor canary, and every
-    one of them was REJECTED before this. The panel had done good work: it
-    proposed options, computed costs, and wrote them as restatements of the
-    arithmetic. My rule threw all of it away -- 26 claims, 22 escalated, zero
-    ruled. That is the reading list the reviewer warned about, and it cost
-    real money to discover."""
-
-    def _accepts(self, text, warrant, kind=ClaimKind.ARITHMETIC):
-        return AO.warrant_supports(
-            Claim(id="", kind=kind, text=text, warrant=warrant)) is None
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("At six API calls per round, a five-round run uses 30 API calls",
-         "5 * 6 API calls = 30 API calls"),
-        ("At six API calls per round, stopping after a round-one null avoids "
-         "24 API calls", "4 * 6 API calls = 24 API calls"),
-        ("AlwaysFive costs 30 API calls per item at six calls per round",
-         "5 * 6 API calls = 30 API calls"),
-        ("MinTwoThenZeroStop costs 12 API calls per item if round two also "
-         "removes nothing", "2 * 6 API calls = 12 API calls"),
-        ("the total comes to 1,200 units", "600 * 2 = 1200"),
-        ("2 + 2 = 4", "2 + 2 = 4"),
-    ])
-    def test_a_real_panels_quantity_claim_is_usable(self, text, warrant):
-        assert self._accepts(text, warrant), text
-
-    @pytest.mark.parametrize("text,warrant", [
-        ("The launch is SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("The launch is NOT SAFE to proceed, code 4", "2 + 2 = 4"),
-        ("Launch immediately.", "2 + 2 = 5"),
-        ("the parser is secure", "2 + 2 = 4"),
-        ("Running absolute exhaustion costs approximately 30 API calls",
-         "5 * 6 API calls = 30 API calls"),
-    ])
-    def test_the_attacks_are_still_blocked(self, text, warrant):
-        """What separates "30 API calls per item at six calls per round" from
-        "SAFE to proceed, code 4" is WHERE the number sits. In a restatement
-        the value is what the predicate is about, so it leads; in the other
-        the predicate is about being safe and the number trails as an aside."""
-        assert not self._accepts(text, warrant), text
-
-
 class TestUnitsInAnArithmeticWarrant:
     """The contract tells seats to put units in the warrant so the currency or
     the thing counted is checked rather than assumed. A live canary then wrote
@@ -5807,3 +5663,210 @@ class TestUnitsInAnArithmeticWarrant:
     def test_ordinary_arithmetic_is_untouched(self):
         for warrant in ("2 + 2 = 4", "2 ** 10 = 1024", "12 * 50 = 600"):
             assert self._check(warrant).status is GateStatus.PASS, warrant
+
+
+# ===========================================================================
+# A WARRANT IS EVIDENCE. IT IS NOT THE SENTENCE IT WAS OFFERED FOR.
+# ===========================================================================
+
+class TestProseNeverReachesPass:
+    """This replaces five classes that tested a lexical warrant-to-proposition
+    rule. The rule is deleted, so testing it harder was not the answer.
+
+    It read a claim's sentence and decided whether the attached warrant
+    established it. Every version was defeated by a sentence it had not
+    anticipated, and the decisive pair was accepted in BOTH directions:
+
+        warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"
+        warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"
+
+    One sum cannot establish a proposition and its negation. Each repair
+    looked like closing a gap; the rule itself was the defect, because a
+    sentence can always assert more than its warrant covers.
+
+    A gate now reports what it established -- WARRANT_HELD -- and nothing
+    more. The adversarial cases those classes collected are kept here, because
+    they are still exactly the sentences a lexical rule would wave through.
+    """
+
+    def _verdict(self, text, warrant, kind=ClaimKind.ARITHMETIC):
+        o = _orch()
+        claim = Claim(id="", kind=kind, text=text, warrant=warrant)
+        rec = o.run_pass(ELIM, [], [claim])
+        return o.verdicts[claim.id], rec
+
+    # -- the pair that decided it ------------------------------------------
+
+    def test_a_proposition_and_its_negation_are_treated_identically(self):
+        a, _ = self._verdict("The launch is 4 and safe to proceed", "2 + 2 = 4")
+        b, _ = self._verdict("The launch is 4 and unsafe to proceed", "2 + 2 = 4")
+        assert a.status is GateStatus.WARRANT_HELD
+        assert b.status is GateStatus.WARRANT_HELD
+        assert a.verified_true is None and b.verified_true is None
+
+    def test_neither_is_counted_as_accepted(self):
+        _, rec = self._verdict("The launch is 4 and safe to proceed", "2 + 2 = 4")
+        assert rec.auto_accepted == 0
+        assert rec.warrant_only == 1
+
+    # -- the sentences a lexical rule waved through ------------------------
+
+    ADVERSARIAL = (
+        "The launch is 4 and safe to proceed",
+        "The launch is 4 and unsafe to proceed",
+        "the total is 4, so we should proceed immediately",
+        "the total is 4 and the vendor is trustworthy",
+        "4 people will be harmed",
+        "the answer is 4 and the deadline is achievable",
+        "under 4",
+        "about 4",
+        "at most 4 and therefore acceptable",
+        "the total is 4 dollars per user per month",
+    )
+
+    @pytest.mark.parametrize("text", ADVERSARIAL)
+    def test_no_sentence_is_established_by_a_bare_sum(self, text):
+        v, rec = self._verdict(text, "2 + 2 = 4")
+        assert v.status is GateStatus.WARRANT_HELD, text
+        assert rec.auto_accepted == 0, text
+
+    def test_the_warrant_itself_is_still_reported_as_holding(self):
+        """The evidence checked out, and that is worth recording. What is
+        refused is the leap from the evidence to the sentence."""
+        v, _ = self._verdict("the total is 4", "2 + 2 = 4")
+        assert v.status is GateStatus.WARRANT_HELD
+        assert "WARRANT HELD, PROPOSITION OPEN" in v.detail
+
+    # -- refutation is unaffected ------------------------------------------
+
+    def test_a_false_warrant_still_fails(self):
+        """Nothing here softens refutation. False arithmetic is false whatever
+        sentence stands beside it."""
+        v, rec = self._verdict("the total is 5", "2 + 2 = 5")
+        assert v.status is GateStatus.FAIL
+        assert v.verified_true is False
+        assert rec.auto_rejected == 1
+
+    def test_a_blocked_check_is_still_blocked(self):
+        v, rec = self._verdict("the root is 2", "sqrt(4) = 2")
+        assert v.status is GateStatus.BLOCKED
+        assert rec.blocked == 1
+
+    def test_warrant_held_is_not_a_finding_against_the_seat(self):
+        """A seat whose evidence held has not been caught doing anything. If
+        this counted as a detection, every honest arithmetic claim would
+        become a mark against its author."""
+        v, _ = self._verdict("the total is 4", "2 + 2 = 4")
+        assert v.verified_true is not False
+
+
+class TestAVendorMayPutTheModelInTheURL:
+    """Some vendors name the model in the path rather than the body. Google's
+    native endpoint is `.../models/<model>:generateContent`.
+
+    This config refused ANY placeholder in an endpoint, so the only way to
+    reach Google was its OpenAI-compatibility layer -- and that layer is the
+    prime suspect for run-001's seat_2 failure, since Google's newer auth keys
+    are reported to return ACCESS_TOKEN_TYPE_UNSUPPORTED against it while
+    working natively. Two of five seats have never answered, and one of them
+    was being forced down the one path that may not work by a rule of ours
+    rather than by the vendor.
+    """
+
+    NATIVE = ("https://generativelanguage.googleapis.test/v1beta/"
+              "models/{{model}}:generateContent")
+
+    def test_the_model_is_filled_into_the_path(self):
+        p = _profile(endpoint=self.NATIVE)
+        assert p.resolved_endpoint("gemini-3.1-pro") == (
+            "https://generativelanguage.googleapis.test/v1beta/"
+            "models/gemini-3.1-pro:generateContent")
+
+    def test_an_endpoint_without_a_placeholder_is_untouched(self):
+        p = _profile(endpoint="https://api.example.test/v1/messages")
+        assert p.resolved_endpoint("anything") == (
+            "https://api.example.test/v1/messages")
+
+    def test_the_seat_posts_to_the_filled_in_url(self):
+        rec = []
+        s = HttpSeat(_resolved_seat(model="m-9"), _profile(endpoint=self.NATIVE),
+                     _transport(record=rec), ledger=SA.UNMETERED)
+        s("PROMPT-BODY")
+        assert rec[0]["url"] == (
+            "https://generativelanguage.googleapis.test/v1beta/"
+            "models/m-9:generateContent")
+
+    def test_a_malformed_model_id_cannot_reshape_the_url(self):
+        """A model id is operator configuration, not model output, so this is
+        defence in depth rather than a live threat -- but a value that could
+        add a path segment, a query or a host would turn a config typo into a
+        request somewhere nobody intended."""
+        p = _profile(endpoint=self.NATIVE)
+        got = p.resolved_endpoint("../../admin?x=1")
+        assert got.startswith(
+            "https://generativelanguage.googleapis.test/v1beta/models/")
+        assert "?" not in got.split("models/")[1].split(":")[0]
+        assert "/" not in got.split("models/")[1].split(":")[0]
+
+    @pytest.mark.parametrize("token", [
+        "{{prompt}}", "{{key}}", "{{max_tokens}}", "{{temperature}}",
+        "{{promt}}",
+    ])
+    def test_no_other_placeholder_may_appear_in_a_url(self, token):
+        """Not merely a typo guard. A URL is written to proxy logs, server
+        access logs and crash reports by every hop it makes, so a prompt or a
+        credential in one is disclosed by design."""
+        with pytest.raises(ValueError, match="may appear in a URL"):
+            _profile(endpoint=f"https://api.example.test/v1/{token}")
+
+    def test_the_model_placeholder_does_not_excuse_the_others(self):
+        with pytest.raises(ValueError, match=r"\{\{prompt\}\}"):
+            _profile(endpoint=f"{self.NATIVE}?q={{{{prompt}}}}")
+
+
+class TestTheSettingsFileAllowsAModelInTheURL:
+    """The other half of the same fix. profiles_from_config builds the
+    ProviderProfile, and validate_config is what an operator runs with
+    --check-profiles BEFORE spending anything -- so if the validator refuses
+    a native Google endpoint, the adapter accepting it changes nothing.
+    """
+
+    NATIVE = ("https://generativelanguage.googleapis.test/v1beta/"
+              "models/{{model}}:generateContent")
+
+    def test_a_model_in_the_path_is_accepted(self):
+        assert validate_config(_cfg(endpoint=self.NATIVE)) == []
+
+    def test_it_survives_into_a_built_profile(self):
+        prof = profiles_from_config(_cfg(endpoint=self.NATIVE))["seat_1"]
+        assert prof.resolved_endpoint("gemini-3.1-pro").endswith(
+            "/models/gemini-3.1-pro:generateContent")
+
+    @pytest.mark.parametrize("token", [
+        "{{prompt}}", "{{key}}", "{{max_tokens}}", "{{temperature}}",
+        "{{promt}}",
+    ])
+    def test_every_other_placeholder_is_still_refused(self, token):
+        problems = validate_config(
+            _cfg(endpoint=f"https://api.acme.invalid/v1/{token}"))
+        assert any("may appear in a URL" in p for p in problems), problems
+
+    def test_the_refusal_says_why_rather_than_calling_it_a_typo(self):
+        """A URL is written to proxy logs, server access logs and crash
+        reports by every hop it makes. An operator who reads this as a typo
+        guard may work around it; one who reads the real reason will not."""
+        problems = validate_config(
+            _cfg(endpoint="https://api.acme.invalid/v1/{{prompt}}"))
+        joined = " ".join(problems)
+        assert "proxy" in joined and "log" in joined
+
+    def test_the_shipped_settings_still_validate(self):
+        """profiles.run001.json is the reconstructed live panel. This change
+        loosened a rule it depends on, so it has to still pass."""
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(here, "profiles.run001.json")
+        with open(path, encoding="utf-8") as fh:
+            cfg = {k: v for k, v in _json.load(fh).items()
+                   if not k.startswith("_")}
+        assert validate_config(cfg) == []

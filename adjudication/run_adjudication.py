@@ -646,7 +646,8 @@ DAY_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 def build_ledger(per_run: float | None, per_stage: float | None,
                  per_day: float | None,
-                 rates_path: str | None = None) -> CostLedger | None:
+                 rates_path: str | None = None,
+                 day_state_path: str | None = None) -> CostLedger | None:
     """A ledger, or None when no ceiling was asked for.
 
     Returns None rather than an unenforcing ledger when every ceiling is
@@ -688,7 +689,7 @@ def build_ledger(per_run: float | None, per_stage: float | None,
         raw = json.load(fh)
     return CostLedger(rates=rates_from_config(raw), per_run=per_run,
                       per_stage=per_stage, per_day=per_day,
-                      day_state_path=DAY_STATE_FILE)
+                      day_state_path=day_state_path or DAY_STATE_FILE)
 
 
 def live_seats(
@@ -896,6 +897,24 @@ def render_report(answer: AdjudicationAnswer) -> str:
         add(f"  {len(answer.survivors)} SURVIVE -- not narrowed to one:")
         for c in answer.survivors:
             add(f"    {c.id}{_cov(answer, c.id)}")
+    # EVIDENCE THAT WAS TAKEN AWAY FROM A SURVIVOR.
+    #
+    # A fabricated quote leaves the claims it was offered for standing on
+    # nothing. That no longer deletes the candidate -- refuting a quote
+    # refutes the evidence, not the answer -- so the finding has to appear
+    # here or it disappears entirely, which is worse than the removal it
+    # replaced. It was collected and never printed at all.
+    shaky = [c for c in answer.survivors if getattr(c, "unsupported_basis", None)]
+    if shaky:
+        add("")
+        add("  EVIDENCE WITHDRAWN FROM SURVIVING ANSWERS")
+        add("  A quote these rest on was proven absent from the source it was")
+        add("  attributed to. The answer is not thereby wrong, and it is no")
+        add("  longer standing on what it said it stood on.")
+        for c in shaky:
+            add(f"    {c.id}")
+            for note in c.unsupported_basis:
+                add(f"      {note}")
     for c in answer.eliminated:
         reason = c.elimination_reason or ""
         tag = ("EARNED" if c.elimination_kind == "earned"
@@ -975,10 +994,23 @@ def _demo_seats() -> dict[str, Callable[[str], str]]:
 
 
 def _demo_candidate(cid: str, text: str, warrant: str) -> Candidate:
-    """A candidate standing on one arithmetic claim."""
+    """A candidate standing on one arithmetic commitment.
+
+    IT DECLARES THE NUMBER, and offers the computation for it. Carrying a
+    claim that some gate refutes is no longer enough to be removed -- that
+    rule removed a candidate for any failed claim it held, including a false
+    sum about something else entirely. A candidate goes when a commitment it
+    made itself comes out otherwise.
+    """
     claim = Claim(content_claim_id(ClaimKind.ARITHMETIC, warrant, text),
                   text, ClaimKind.ARITHMETIC, warrant)
-    return Candidate(cid, text, [claim])
+    content = text
+    if warrant and "=" in warrant:
+        expr, claimed = warrant.rsplit("=", 1)
+        content = (f"{text}\n"
+                   f"PREDICATE | {text} | = | {claimed.strip()}\n"
+                   f"FORMULA | {expr.strip()}")
+    return Candidate(cid, content, [claim])
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -997,11 +1029,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                          "gates need a resolver and a test runner and are not "
                          "selectable here -- see CONNECTING.md")
     ap.add_argument("--max-cost", type=float, metavar="USD",
-                    help="hard per-run spend ceiling. The run aborts mid-run "
-                         "and writes a partial result rather than crossing it. "
-                         "Checked BEFORE each call.")
+                    help="per-run spend ceiling. NOT A HARD LIMIT, and "
+                         "calling it one would be a promise nothing keeps: no "
+                         "vendor publishes a guaranteed maximum for a request "
+                         "plus all its billable output, so each call is "
+                         "checked against an ESTIMATE before it is made and "
+                         "reconciled against the bill afterwards. A call that "
+                         "costs more than it was authorised for stops the "
+                         "next one. The limit can be crossed; it cannot be "
+                         "crossed twice without you being told.")
     ap.add_argument("--max-cost-per-stage", type=float, metavar="USD")
     ap.add_argument("--max-cost-per-day", type=float, metavar="USD")
+    ap.add_argument("--day-state", metavar="PATH",
+                    help="where the shared daily spend total is kept. "
+                         "Defaults to .spend-by-day.json beside this file. "
+                         "Point it elsewhere to keep a run out of the "
+                         "operator's real daily total -- a test or a "
+                         "rehearsal should not consume a real budget.")
     ap.add_argument("--resolve-dois", action="store_true",
                     help="switch on the citation gates: every cited DOI must "
                          "actually resolve. Uses Crossref and doi.org, which "
@@ -1096,7 +1140,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         ledger = build_ledger(args.max_cost, args.max_cost_per_stage,
-                              args.max_cost_per_day)
+                              args.max_cost_per_day,
+                              day_state_path=args.day_state)
     except ValueError as exc:
         print(f"cost ceiling: {exc}", file=sys.stderr)
         return 2
@@ -1106,6 +1151,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"rates unverified or stale for {', '.join(stale)}. "
                   f"A ceiling computed from unchecked prices does not bound "
                   f"anything.", file=sys.stderr)
+        # THE MODEL ID, WHICH IS A DIFFERENT FACT FROM THE PRICE. A seat can
+        # be priced correctly this week and be pointed at an identifier
+        # nobody has confirmed against the vendor's own reference. Said here
+        # rather than refused: an unusable price makes the ceiling
+        # decorative, which is worth refusing over, while an unchecked model
+        # id is a risk the operator can weigh -- and refusing would turn one
+        # flagged seat into no run at all.
+        for seat, why in ledger.unverified_models().items():
+            print(f"{seat}: the model identifier has not been verified. {why}",
+                  file=sys.stderr)
 
     if args.profiles:
         # A PAID PANEL WITHOUT A LEDGER IS AN UNBOUNDED PANEL.

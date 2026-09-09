@@ -29,10 +29,12 @@ this year.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -85,6 +87,25 @@ class Rate:
     input_per_mtok: float
     output_per_mtok: float
     verified_on: str | None = None
+    model_unverified: str | None = None
+    """Why this seat's MODEL IDENTIFIER has not been checked, or None.
+
+    A FLAG NOBODY READS IS A FLAG THAT DOES NOTHING. rates.json carried this
+    fact in an underscore-prefixed comment key, which rates_from_config skips
+    by design, so the one seat whose model id could not be verified ran
+    exactly like the four that could and nothing anywhere said so.
+
+    It is not the same risk as an unchecked PRICE and it is not smaller. A
+    wrong price makes the ceiling decorative, which is why an unusable price
+    refuses the run outright. A wrong model id can return a well-formed 200
+    from a vendor's fallback and be recorded as a seat that had nothing to
+    say, rather than a seat that was never reached -- opposite facts, and the
+    second one silently corrupts the statistics this tool exists to produce.
+
+    Reported rather than refused. Which seats are worth running is the
+    operator's call, and turning one flagged seat into no run at all is the
+    same trade the cap-and-ceiling note warns about.
+    """
     tiers: tuple[tuple[int, float, float], ...] = ()
     max_input_tokens: int | None = None
     output_multiplier: float = HIDDEN_OUTPUT_MULTIPLIER
@@ -105,9 +126,16 @@ class Rate:
 
     This is still a BOUND, not a prediction, and it is still a guess where no
     measurement exists. What makes tightening it safe is the reconciliation
-    below: a call that bills more than it was authorised for halts the run, so
-    an optimistic multiplier is caught on its first use rather than at the end
-    of the bill."""
+    below: a call that bills more than it was authorised for stops the NEXT
+    dispatch, so an optimistic multiplier is caught on its first use rather
+    than at the end of the bill.
+
+    IT STOPS THE NEXT CALL, WHICH IS NOT THE SAME AS HALTING THE RUN. An
+    overrun on the last call of a run has no next call to refuse, so it is
+    recorded and the run returns normally. That is the honest limit of this
+    control: it bounds how far a mispriced call can carry the run forward, and
+    it cannot un-spend the call that revealed the problem. The overrun is in
+    the ledger either way, and the run total is the figure to read."""
 
     def tier_for(self, input_tokens: int) -> tuple[float, float]:
         """The prices that apply at this input size."""
@@ -163,6 +191,116 @@ class CallCost:
     """
 
 
+DEFAULT_DAY_STATE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".spend-by-day.json")
+"""The one file every entry point counts against.
+
+A per-run ceiling bounds ONE command. Nothing bounded a DAY, because each
+tool built its own ledger with no day state at all -- so a run refused at
+$17 could be started again immediately, and again, and no limit anywhere
+would notice. The protection an operator actually wants is not "this command
+cannot exceed X", it is "today cannot exceed X", and that needs a shared
+file.
+"""
+
+DEFAULT_DAY_CEILING = 25.00
+"""What a day may cost before every tool refuses, unless told otherwise.
+
+GROUNDED IN THIS PANEL'S OWN MEASUREMENTS, not picked for looking round. The
+largest run this project authorises is the five-round panel: $16.82 planned,
+$4.96 actually billed. $25 leaves room for one full panel run plus the cheap
+instruments around it -- stage_zero at $0.04, one_model at $0.03 to $0.16 --
+and refuses a SECOND full panel run in the same day without a deliberate
+raise. That is the shape of the mistake worth stopping: not one expensive
+call, but the same expensive thing started again because the first looked
+wrong.
+
+ON BY DEFAULT, and that is the point. A ceiling nobody sets is a ceiling
+nobody has, and every tool here previously defaulted to no daily limit at
+all. Raise it with ADJUDICATION_DAY_CEILING when you mean to; the figure is
+printed at the start of every run so it is never a surprise.
+"""
+
+
+def operator_ledger(rates: Mapping[str, Rate],
+                    per_run: float,
+                    per_day: float | None = None,
+                    day_state_path: str | None = None) -> CostLedger:
+    """The ledger every entry point should build, wired to the shared day.
+
+    WHY A FACTORY RATHER THAN A CONVENTION. Each tool constructed
+    `CostLedger(rates=rates, per_run=...)` with no day state, each for a
+    defensible local reason -- a probe should not eat the panel's budget, a
+    calibration measurement is not an adjudication. Every one of those
+    reasons was about how to ALLOCATE a budget, and the operator's actual
+    exposure is the TOTAL. Five tools each correctly declining to count
+    themselves adds up to nothing being counted.
+
+    ADJUDICATION_DAY_CEILING overrides the figure. ADJUDICATION_DAY_STATE
+    overrides the file, which is what the test suite uses so a test run can
+    never write to the operator's real ledger -- a defect this project has
+    already had once, at a fabricated $117.53.
+    """
+    env_ceiling = os.environ.get("ADJUDICATION_DAY_CEILING", "").strip()
+    if per_day is None:
+        per_day = float(env_ceiling) if env_ceiling else DEFAULT_DAY_CEILING
+    if day_state_path is None:
+        day_state_path = (os.environ.get("ADJUDICATION_DAY_STATE", "").strip()
+                          or DEFAULT_DAY_STATE)
+    return CostLedger(rates=rates, per_run=per_run, per_day=per_day,
+                      day_state_path=day_state_path)
+
+
+class ModelNotPriced(CeilingReached):
+    """The model being called is not the model the price was verified for."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, 0.0, 0.0, 0.0)
+
+
+def check_models_are_priced(identity: Mapping[str, tuple[str, str]],
+                            config: Mapping[str, object]) -> None:
+    """Refuse to spend when the seat calls a model this file did not price.
+
+    THE HOLE THIS CLOSES, AND NOTHING CHECKED IT. Every ceiling in this
+    project is computed from rates.json: dollars per million tokens, stamped
+    with the date they were read off the vendor's own page. The seat, though,
+    calls whatever model id is in the environment -- and the two were never
+    compared. Point a seat at a different or newer model and the arithmetic
+    keeps running against the OLD model's price, so the limit is enforced to
+    four decimal places against a number that does not apply.
+
+    That is the same defect `stale_rates` and `is_priced_for` already refuse
+    in their own dimensions -- an expired price, a request larger than the
+    price was checked at -- arriving through the one door left open. The
+    manual's rule is not conditional: "a ceiling computed from unchecked
+    prices does not bound anything."
+
+    IT REFUSES RATHER THAN WARNS, and that is deliberate even though it will
+    one day interrupt a legitimate model upgrade. A warning printed at the top
+    of a run that then spends money is a warning nobody reads until the bill.
+    The fix is thirty seconds: put the new id in rates.json beside a price
+    read from the vendor's page today, and the refusal names exactly which
+    seat and which id.
+    """
+    wrong: list[str] = []
+    for seat_id, (_vendor, model) in sorted(identity.items()):
+        entry = config.get(seat_id)
+        if not isinstance(entry, dict):
+            continue
+        priced = str(entry.get("_model") or "").strip()
+        if priced and model and priced != model:
+            wrong.append(
+                f"{seat_id} calls {model!r} but rates.json prices {priced!r}")
+    if wrong:
+        raise ModelNotPriced(
+            "the price this ceiling is computed from was verified for a "
+            "DIFFERENT model, so the limit bounds nothing: "
+            + "; ".join(wrong)
+            + ". Update the _model and the prices in rates.json from the "
+              "vendor's own pricing page, and re-stamp verified_on.")
+
+
 OVERRUN_TOLERANCE = 0.05
 """How far a bill may exceed its authorisation before the run stops.
 
@@ -182,21 +320,39 @@ under-estimate is the one direction that spends money the operator forbade.
 
 
 
-class CeilingOverrun(BudgetExceeded):
+class CeilingOverrun(CeilingReached):
     """A completed call cost more than it was authorised for.
+
+    A CeilingReached, because every caller that stops cleanly on cost catches
+    that one. It was a sibling, so the CLI, the console and the watcher --
+    which all catch CeilingReached and write a partial-run record -- missed it
+    entirely: an overrun fell to the generic handler and was written out as a
+    stack trace in the failures folder, which reads like a defect in the panel
+    rather than the spend control doing its job.
 
     THE PRE-CALL CHECK IS AN ESTIMATE, AND AN ESTIMATE IS NOT A GUARANTEE.
     It cannot be one: no provider publishes a contractual maximum for the
     complete serialised request plus all billable output, reasoning tokens
-    included. A reviewer put it exactly right -- if such a bound is
-    unavailable, this code cannot honestly offer a hard pre-dispatch ceiling.
+    included. If such a bound is unavailable, this code cannot honestly offer
+    a hard pre-dispatch ceiling.
 
     So it offers what it CAN guarantee instead. Every completed call is
     reconciled against what it was authorised for, and a call that cost more
-    stops the run. The operator is not promised the limit will never be
-    crossed. They are promised it will not be crossed twice without them being
-    told, which is a claim this code can actually keep.
+    stops the NEXT dispatch. The operator is not promised the limit will never
+    be crossed. They are promised it will not be crossed twice without them
+    being told -- and that an overrun on the very last call, which has no next
+    dispatch to refuse, is still recorded and still reported.
     """
+
+    def __init__(self, message: str):
+        # Straight to the base exception: the parent refuses a call BEFORE it
+        # is made and can say what that call would have added. This reports
+        # something that has already happened, and there is no next call to
+        # describe.
+        super(CeilingReached, self).__init__(message)
+        self.which, self.spent, self.limit, self.would_add = (
+            "overrun", 0.0, 0.0, 0.0)
+
 
 
 def estimate_request_tokens(body: bytes) -> int:
@@ -267,6 +423,13 @@ class CostLedger:
     estimate that was wrong once is wrong for every call of the same shape."""
     halt_on_overrun: bool = True
     _stage_spent: dict[str, float] = field(default_factory=dict)
+    _day_reserved: float = 0.0
+    """How much of today's shared budget this run has already claimed.
+
+    Written to the day file before each dispatch, so a second process reads a
+    figure that includes this run's outstanding calls rather than one that is
+    about to be stale.
+    """
 
     # -- totals ------------------------------------------------------------
     @property
@@ -342,6 +505,18 @@ class CostLedger:
         return sorted(s for s, r in self.rates.items()
                       if r.max_input_tokens is None)
 
+    def unverified_models(self) -> dict[str, str]:
+        """Seats whose MODEL IDENTIFIER nobody has checked, and why.
+
+        Separate from stale_rates, which is about the price. A seat can have
+        a price verified this week and be pointed at a model id that was
+        never confirmed against the vendor's own reference -- which is
+        exactly the state seat_3 has been in since Mistral retired the
+        Magistral line.
+        """
+        return {s: r.model_unverified for s, r in sorted(self.rates.items())
+                if r.model_unverified}
+
     def stale_rates(self) -> list[str]:
         """Seats whose price cannot bound anything: unverified, expired, or
         zero. A zero price means every call is free and the ceiling is
@@ -398,9 +573,38 @@ class CostLedger:
                 raise CeilingReached(f"per-stage ({pass_id})", s,
                                      self.per_stage, would_add)
         if self.per_day is not None:
+            # CHECKED AND RESERVED IN ONE LOCKED OPERATION.
+            #
+            # Reading the day file and then dispatching left a window: two
+            # watchers sharing a $1/day limit each read $0.00, each authorised
+            # $0.75, and both calls went out. Neither process did anything
+            # wrong on its own, and the limit was exceeded by half again.
+            #
+            # The reservation is written to the shared file BEFORE the call,
+            # so the second process reads the first's claim on the budget
+            # rather than a figure that is about to be stale. persist_day then
+            # writes only the difference between what this run actually
+            # committed and what it has already reserved.
+            self._reserve_day(would_add)
+
+    def _reserve_day(self, would_add: float) -> None:
+        """Claim `would_add` of today's budget, or refuse."""
+        if self.per_day is None:
+            return
+        if not self.day_state_path:
+            # Nothing shared to race over: this process is the only claimant.
             d = self.day_spent() + self.committed
             if d + would_add > self.per_day:
                 raise CeilingReached("per-day", d, self.per_day, would_add)
+            return
+        with self._day_lock():
+            on_disk = self._day_total_locked()
+            mine = max(0.0, self.committed - self._day_reserved)
+            if on_disk + mine + would_add > self.per_day:
+                raise CeilingReached("per-day", on_disk + mine, self.per_day,
+                                     would_add)
+            self._write_day_locked(on_disk + mine + would_add)
+            self._day_reserved += mine + would_add
 
     def record(self, seat_id: str, input_tokens: int | None,  # noqa: PLR0913, PLR0917
                output_tokens: int | None, pass_id: str | None = None,
@@ -422,33 +626,178 @@ class CostLedger:
             self.overruns.append(
                 f"{seat_id}: authorised ${authorised:.4f}, billed "
                 f"${dollars:.4f} ({dollars / max(authorised, 1e-9):.1f}x)")
+        # THE TOLERANCE IS ABOUT THE ESTIMATE, NOT ABOUT THE CEILING.
+        #
+        # It exists because a vendor's token accounting differs slightly from
+        # ours, so a call billing a few percent over what was authorised is
+        # not evidence the estimator is broken. Applied to the run ceiling it
+        # meant something else entirely: a final call taking the run to
+        # $1.0490 under a $1.00 limit finished with nothing recorded, because
+        # the per-call figure was inside tolerance.
+        #
+        # A crossed ceiling is a crossed ceiling. Nobody granted a few percent
+        # of headroom on the number the operator actually set.
+        if self.per_run is not None and self.spent > self.per_run:
+            over = f"the run has spent ${self.spent:.4f} against a " \
+                   f"${self.per_run:.2f} ceiling"
+            if over not in self.overruns:
+                self.overruns.append(over)
         charge = dollars if dollars is not None else cc.estimated_dollars
         if pass_id is not None and charge:
             self._stage_spent[pass_id] = \
                 self._stage_spent.get(pass_id, 0.0) + charge
+        # RECONCILE THE SHARED DAY AS SOON AS THE BILL IS KNOWN.
+        #
+        # _reserve_day claims the worst case before the call and the release
+        # arithmetic in _persist_day_locked gives back whatever the call did
+        # not use -- but nothing called it, so the reservation stood forever.
+        # Measured live: two calls billing $0.024 between them held $0.68 of
+        # the day.
+        #
+        # Only when the call was MEASURED. A vendor that returned no usage
+        # block told us nothing about what it charged, so its authorisation
+        # stays claimed; releasing it would hand the next run a budget that
+        # may already be spent.
+        if measured and self.day_state_path:
+            self.persist_day()
         return cc
+
+    @contextmanager
+    def _day_lock(self) -> Iterator[None]:
+        """Hold an exclusive lock over the shared daily file.
+
+        THE READ AND THE WRITE HAVE TO BE ONE OPERATION. Two watchers sharing
+        a day file each read the same figure, each added their own spend, and
+        the second write replaced the first -- so one process's whole run
+        vanished from the daily total and the next run was handed a budget
+        that had already been spent.
+
+        The lock is on a sidecar rather than the state file itself, because
+        the state file is replaced by rename and a lock held on the old inode
+        protects nothing once the rename lands.
+        """
+        # Not an assert: asserts vanish under -O, and this one guards the
+        # path the whole lock is taken on.
+        if not self.day_state_path:
+            raise ValueError("no daily state path to lock")
+        lock_path = f"{self.day_state_path}.lock"
+        os.makedirs(os.path.dirname(os.path.abspath(lock_path)) or ".",
+                    exist_ok=True)
+        fh = open(lock_path, "a+", encoding="utf-8")  # noqa: SIM115
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            finally:
+                fh.close()
 
     def persist_day(self) -> None:
         if not self.day_state_path:
             return
+        with self._day_lock():
+            self._persist_day_locked()
+
+    def _day_total_locked(self) -> float:
+        """Today's figure from the shared file. Caller holds the lock."""
+        path = self.day_state_path
+        if not path or not os.path.exists(path):
+            return 0.0
+        try:
+            with open(path, encoding="utf-8") as fh:
+                blob = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CeilingReached(
+                f"daily spend state at {path} is unreadable "
+                f"({type(exc).__name__}). Refusing to spend: an unreadable "
+                f"ledger is not an empty one",
+                0.0, self.per_day or 0.0, 0.0,
+            ) from None
+        if not isinstance(blob, dict):
+            return 0.0
+        return float(blob.get(date.today().isoformat(), 0.0) or 0.0)
+
+    def _write_day_locked(self, total: float) -> None:
+        """Set today's figure. Caller holds the lock."""
+        path = self.day_state_path
+        if not path:
+            raise ValueError("no daily state path to write")
         blob: dict[str, float] = {}
-        if os.path.exists(self.day_state_path):
+        if os.path.exists(path):
             try:
-                with open(self.day_state_path, encoding="utf-8") as fh:
+                with open(path, encoding="utf-8") as fh:
+                    blob = json.load(fh)
+            except Exception:  # noqa: BLE001
+                blob = {}
+        if not isinstance(blob, dict):
+            blob = {}
+        blob[date.today().isoformat()] = float(total)
+        tmp = f"{path}.{os.getpid()}.{id(self)}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(blob, fh, indent=2)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+    def _persist_day_locked(self) -> None:
+        path = self.day_state_path
+        if not path:
+            raise ValueError("no daily state path to write")
+        blob: dict[str, float] = {}
+        if os.path.exists(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
                     blob = json.load(fh)
             except Exception:  # noqa: BLE001
                 blob = {}
         today = date.today().isoformat()
-        blob[today] = float(blob.get(today, 0.0)) + self.spent
+        # COMMITTED, NOT SPENT. `spent` counts only calls the vendor gave us a
+        # usage block for. A call that came back unmeasured keeps its full
+        # authorisation inside the run -- correctly -- and then persisted as
+        # ZERO, so a $0.40 reservation left the day file believing nothing had
+        # been spent and handed the next run that budget again.
+        #
+        # The same figure the in-run ceilings are tested against is the figure
+        # the shared file has to carry.
+        # ONLY WHAT HAS NOT ALREADY BEEN RESERVED. Every dispatch claims its
+        # estimate in this file before the call, so adding the run's whole
+        # committed figure again at the end would double-count it.
+        # RELEASE THE UNUSED RESERVATION once the bill is known.
+        #
+        # Every dispatch claims its WORST CASE in this file before the call --
+        # correctly, because an in-flight call could cost that much. What was
+        # missing is the other half: when the call comes back measured and
+        # cheaper, the difference has to go back to the day.
+        #
+        # Without it the file carried reservations forever. Measured on the
+        # first live runs: two one_model calls that billed $0.0108 and $0.0134
+        # consumed $0.68 of a $25 day, because each had reserved $0.33. That
+        # is a thirtyfold over-count, and it is not merely wasteful -- an
+        # operator blocked at "$25 spent" having actually spent seventy cents
+        # cannot tell a working limit from a broken one, and the natural fix
+        # is to raise or disable the ceiling.
+        #
+        # This run's contribution to the day is replaced rather than added to,
+        # so the file holds what the run has ACTUALLY committed: real dollars
+        # for measured calls, full authorisation for unmeasured ones -- which
+        # keeps the fail-closed behaviour that reservation existed for, since
+        # `committed` still counts an unmeasured call at its estimate.
+        mine_now = max(0.0, self.committed)
+        blob[today] = max(
+            0.0, float(blob.get(today, 0.0)) - self._day_reserved + mine_now)
+        self._day_reserved = mine_now
         # A UNIQUE temporary name per writer. Two processes sharing
         # "<path>.tmp" raced: one os.replace moved the file out from under the
         # other, which then raised FileNotFoundError, and one day's spend was
         # lost -- silently raising the next run's available budget.
-        tmp = f"{self.day_state_path}.{os.getpid()}.{id(self)}.tmp"
+        tmp = f"{path}.{os.getpid()}.{id(self)}.tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(blob, fh, indent=2)
-            os.replace(tmp, self.day_state_path)
+            os.replace(tmp, path)
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
@@ -505,6 +854,16 @@ class CostLedger:
             out.append(f"  RATES UNVERIFIED OR STALE for: {', '.join(sorted(stale))}")
             out.append("  A ceiling computed from unchecked rates does not bound anything.")
             out.append("  Re-check the vendor pricing pages and stamp verified_on.")
+        unchecked = self.unverified_models()
+        if unchecked:
+            out.append("")
+            out.append(f"  MODEL IDENTIFIER NOT VERIFIED for: "
+                       f"{', '.join(unchecked)}")
+            out.append("  A stale model id can return a well-formed reply from a")
+            out.append("  vendor's fallback, which this tool records as a seat that")
+            out.append("  had nothing to say rather than one that was never reached.")
+            for seat, why in unchecked.items():
+                out.append(f"    {seat}: {why}")
         return out
 
 
@@ -565,6 +924,10 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
                   and cap > 0 else None)
         cin = _finite_positive(cfg.get("input_per_mtok"))
         cout = _finite_positive(cfg.get("output_per_mtok"))
+        # NOT underscore-prefixed, so it is read rather than skipped as a
+        # comment. Any non-empty string is the reason; it is printed verbatim.
+        flag = cfg.get("model_unverified")
+        why = str(flag).strip() if isinstance(flag, str) and flag.strip() else None
         # An unusable price drops the verification date with it. Keeping the
         # date on a zero rate was the failure: stale_rates() saw a
         # recently-verified entry and reported nothing, while the seat it
@@ -578,6 +941,7 @@ def rates_from_config(raw: Mapping[str, Mapping[str, object]]) -> dict[str, Rate
             tiers=tuple(sorted(tiers)),
             max_input_tokens=max_in,
             output_multiplier=mult or HIDDEN_OUTPUT_MULTIPLIER,
+            model_unverified=why,
         )
     return out
 
@@ -642,7 +1006,23 @@ def usage_from_payload(payload: Mapping[str, object],
     # literal "usage" would silently do nothing for one of them while looking
     # like it worked.
     total = _sibling_total(payload, input_path)
-    if total is not None and tin is not None and tout is not None:
+    if total is INVALID_TOTAL:
+        # THE VENDOR REPORTED A TOTAL AND IT IS NOT A NUMBER.
+        #
+        # This was indistinguishable from reporting no total at all, so a
+        # payload carrying "total_tokens": "10000" was reconciled from the
+        # input and output fields alone, the reservation was released, and the
+        # call was recorded as measured. Five such calls booked $0.0055 where
+        # the declared totals priced to $0.50.
+        #
+        # An absent total means the vendor folds its reasoning tokens into the
+        # output figure, which is safe to reconcile from. A total that is
+        # present and unreadable means the field this ledger relies on to
+        # catch invisible billable output cannot be read -- so the call is
+        # UNMEASURED, the full authorisation stands, and the run total is an
+        # explicit lower bound.
+        return None, None
+    if isinstance(total, int) and tin is not None and tout is not None:
         if total < tin + tout:
             # The vendor's own arithmetic does not close. We cannot tell which
             # figure is wrong, so we report none of them: an unmeasured call
@@ -659,8 +1039,26 @@ TOTAL_FIELD_NAMES = ("total_tokens", "totalTokenCount", "total_token_count")
 input-token field. Not a vendor list -- a list of spellings of one idea."""
 
 
+class _InvalidTotal:
+    """A total the vendor reported that this code cannot read.
+
+    Distinct from None, which means no total was reported at all. The two used
+    to be one value, and conflating them turned an unreadable figure into a
+    silently cheaper call.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "INVALID_TOTAL"
+
+
+INVALID_TOTAL = _InvalidTotal()
+
+
 def _sibling_total(payload: Mapping[str, object],
-                   input_path: Sequence[object] | None) -> int | None:
+                   input_path: Sequence[object] | None
+                   ) -> int | _InvalidTotal | None:
     """The all-in token count sitting alongside the input-token count.
 
     Returns None when the vendor reports no total. None means "not reported",
@@ -682,48 +1080,136 @@ def _sibling_total(payload: Mapping[str, object],
     if not isinstance(cur, dict):
         return None
     for name in TOTAL_FIELD_NAMES:
+        if name not in cur:
+            continue
         v = cur.get(name)
-        if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return int(v)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return INVALID_TOTAL          # present, and not a number
+        if v < 0 or (isinstance(v, float) and not v.is_integer()):
+            return INVALID_TOTAL
+        return int(v)
     return None
 
 
-MIN_USEFUL_CAP = 2048
-"""Smallest output cap worth sending to a reasoning model.
+CLOSER_HEADROOM = 2.0
+"""How much more output room the merging seat gets than a thinker.
 
-Below this the thinking consumes the whole budget and the reply comes back
-empty -- observed live, twice, on two different vendors. A run sized under
-this floor would not be a cheaper run, it would be a run that produces
-nothing and still bills for it.
+Its prompt carries every thinker's reply, the option list, and the check
+results, and on a reasoning model the thinking is charged against the same
+cap. Given a thinker's share it produced nothing at all.
+"""
+
+MIN_CLOSER_CAP = 16_384
+"""Smallest cap the merging seat is KNOWN to work in.
+
+WHAT WAS ACTUALLY MEASURED: it failed at 7,190 -- cut off before writing a
+single character, the merge lost, a paid run ended after one round -- and it
+completed at 16,384. Nothing was ever observed in between.
+
+This was set to 8,192 and the docstring called it measured. It was not: it
+sat in the untested gap, chosen because it looked like a reasonable halfway
+point. A floor exists precisely to keep the merge out of the region where it
+produces nothing, so picking an unobserved value for it defeats the purpose,
+and the failure it guards against costs the entire run rather than part of
+it. The floor is the smallest size that has been seen to work.
+
+Lowering it needs evidence: a merge that completes at the smaller size, on
+this panel, with a full option list. Until then the cost of being wrong is
+one-sided -- too high buys a shorter reply, too low buys nothing at all.
+"""
+
+MIN_USEFUL_CAP = 4096
+"""Smallest output cap a seat on this panel is KNOWN to answer at.
+
+MEASURED, AND THE PREVIOUS FIGURE WAS NOT. This was 2,048 and its docstring
+called that observed. A live probe of all five seats at exactly 2,048 had one
+of them return ZERO CHARACTERS: it is a reasoning model, the thinking counts
+against the cap, and it spent the whole budget before writing anything. The
+same seat answered at 4,096.
+
+What the probe actually established, per seat:
+
+    2,048   one seat answered, one seat returned nothing
+    4,096   four seats answered; the fifth was cut off
+   16,384   the fifth answered (see MIN_CLOSER_CAP)
+
+So 4,096 is the smallest size at which every seat that is not the merging
+seat has been seen to produce a reply. Below it a run is not cheaper, it is a
+run that bills for silence.
+
+Lowering it needs evidence of the same kind: a seat answering at the smaller
+size, on this panel, with a full round-one prompt. The cost of being wrong is
+one-sided -- too high buys a shorter reply, too low buys nothing at all.
 """
 
 
 @dataclass
 class RunPlan:
-    """What a run will cost before any of it is spent."""
+    """What a run is estimated to cost, before any of it is spent."""
 
     calls: int
-    worst_case: float
+    estimate: float
     caps: dict[str, int]
     ceiling: float
     fits: bool
     note: str
 
+    @property
+    def worst_case(self) -> float:
+        """DEPRECATED NAME, kept so existing callers keep reading.
+
+        It was never a worst case. Input length is bounded by what the code
+        sends, but nothing here bounds what a provider BILLS -- a vendor that
+        counts tokens differently, or charges for a retry this code treats as
+        free, puts the true figure above any number computed here. Calling an
+        estimate a worst case invites treating it as a guarantee, and the
+        guarantee that can actually be kept is the reconciliation-and-halt in
+        record(), not this.
+        """
+        return self.estimate
+
+
+THINKER_INPUT_TOKENS = 6_200
+"""Measured: a maximal round-two thinker prompt, at the option ceiling.
+
+Built with MAX_OPTIONS options each carrying MAX_PREDICATES_PER_OPTION
+commitments and rendered with their ids: 18,486 characters, about 6,162
+tokens. Round one is smaller (about 2,680), so this is the binding case.
+"""
+
+CLOSER_INPUT_OVERHEAD = 9_100
+"""Measured: the closer's prompt MINUS the thinker replies it carries.
+
+The closer prompt is linear in the thinker caps, because it quotes every
+reply in full. Measured at three cap sizes with a maximal option list:
+
+    thinker cap  4,096 -> 29,511 tokens
+    thinker cap  8,192 -> 49,991 tokens
+    thinker cap 16,384 -> 90,951 tokens
+
+which is 5 x cap + 9,031 in every case. THE PLANNER USED A FLAT 4,000 TOKENS
+OF INPUT FOR EVERY CALL, so it under-counted the closer by more than seven
+times. Repricing a plan that reported a $6.96 fit against a $7.00 ceiling
+gave $7.41, and simulating the calls in order refused the thirtieth -- the
+final merge -- after $6.79 had already been authorised. The run would have
+paid for everything and produced no answer.
+"""
+
 
 def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
-             est_input: int = 4000) -> RunPlan:
+             est_input: int = THINKER_INPUT_TOKENS,
+             ask_chars: int = 0) -> RunPlan:
     """Size the run to the ceiling, rather than refusing when it does not fit.
 
     THE CEILING SHOULD DRIVE THE CAPS, NOT THE OTHER WAY ROUND. With the
-    configured caps a five-round run's worst case was $25.51, so an operator
-    setting a sensible $3 limit got a refusal on the first call -- or, worse,
-    a run that stopped twenty minutes in with four rounds unpaid for and no
-    answer.
+    configured caps a five-round run came to $25.51, so an operator setting a
+    sensible $3 limit got a refusal on the first call -- or, worse, a run that
+    stopped twenty minutes in with four rounds unpaid for and no answer.
 
-    This computes the worst case for the panel as configured, and if it does
-    not fit, the largest uniform cap that does. The operator is then choosing
-    between a shorter reply and no run at all, which is a real choice, instead
-    of discovering the limit halfway through.
+    THE FIGURE IS AN ESTIMATE, NOT A BOUND. It counts what this code will
+    send and what it has asked the provider to return. It cannot bound what a
+    provider bills. The enforceable promise is reconciliation after each call
+    and a halt on overrun, not this number.
 
     It reports rather than imposing. Nothing here changes a cap on its own:
     the caller decides, because a smaller cap means shorter answers and that
@@ -731,6 +1217,22 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
     """
     per_round = len(caps) + 1                       # thinkers plus one merge
     calls = per_round * rounds
+    closer = _closer_seats(caps)
+    # THE ASK IS IN EVERY PROMPT, AND IT IS NOT A FIXED SIZE. Planning used a
+    # constant thinker input, so a 300,000-character question passed the plan
+    # and was then refused by the real pre-dispatch check -- after the plan
+    # had told the operator the run would fit.
+    est_input += int(ask_chars / CHARS_PER_TOKEN)
+
+    def closer_input(cap_for: Mapping[str, int]) -> int:
+        """What the merging seat actually reads: EVERY reply, in full.
+
+        Including its own. The merging seat thinks first, blind, with the
+        other four, and is then given all five replies -- its own among them.
+        This summed only the other four, so the estimate was short by one
+        thinker's whole output on every merge call of every round.
+        """
+        return CLOSER_INPUT_OVERHEAD + sum(cap_for.values())
 
     def worst(cap_for: Mapping[str, int]) -> float:
         total = 0.0
@@ -738,41 +1240,96 @@ def plan_run(ledger: CostLedger, caps: Mapping[str, int], rounds: int = 5,
             rate = ledger.rates.get(seat_id)
             if rate is None:
                 continue
-            n = rounds * (2 if seat_id in _closer_seats(caps) else 1)
-            total += n * rate.cost(est_input,
-                                   int(cap * rate.output_multiplier))
+            out = int(cap * rate.output_multiplier)
+            # EVERY SEAT THINKS ONCE A ROUND, and the merging seat is then
+            # called a SECOND time with a much larger prompt. Both calls used
+            # to be priced with the same small input figure.
+            total += rounds * rate.cost(est_input, out)
+            if seat_id in closer:
+                total += rounds * rate.cost(closer_input(cap_for), out)
         return total
 
-    as_configured = worst(caps)
+    def with_floor(cap_for: Mapping[str, int]) -> dict[str, int]:
+        """The merging seat's floor, and no cap above what was configured.
+
+        Scaling multiplied the closer by CLOSER_HEADROOM, so under a larger
+        ceiling it could come out ABOVE its configured cap -- 16,384 raised to
+        17,611 -- while the plan reported that caps had been reduced. A plan
+        may shorten a reply to fit a ceiling; it has no business lengthening
+        one the operator configured.
+        """
+        # ORDER MATTERS. Clamp to what was configured FIRST, then raise the
+        # merging seat to its floor -- clamping afterwards put it straight
+        # back under the floor whenever the operator had configured a small
+        # merging cap, which is precisely the case the floor exists for.
+        out = {s: min(c, caps[s]) if s in caps else c
+               for s, c in cap_for.items()}
+        for seat_id in closer:
+            out[seat_id] = max(out.get(seat_id, 0), MIN_CLOSER_CAP)
+        return out
+
     ceiling = ledger.per_run or float("inf")
+
+    # A SEAT WITH NO PRICE MAKES THE WHOLE ESTIMATE MEANINGLESS.
+    #
+    # worst() skipped seats it could not price, so a panel missing one seat's
+    # rate was costed as though that seat were free -- the plan reported a
+    # fit, four transports dispatched, and the fifth was refused at the
+    # pre-call check. Four calls paid for, no answer, and a plan that had said
+    # it would work.
+    unpriced = sorted(s for s in caps if ledger.rates.get(s) is None)
+    if unpriced:
+        return RunPlan(
+            calls, float("inf"), dict(caps), ceiling, False,
+            f"no price is configured for {', '.join(unpriced)}, so this run "
+            f"cannot be costed at all. Skipping those seats would estimate "
+            f"them at zero and report a fit that the pre-call check then "
+            f"refuses partway through, having already paid for the rest. Add "
+            f"their rates to rates.json from the vendor's own pricing page.")
+
+    # THE FLOOR APPLIES EVEN WHEN THE CONFIGURED PANEL ALREADY FITS. This
+    # returned before enforcing it, so a configured 4,096-token merging seat
+    # stayed at 4,096 -- below the size at which it has been observed to
+    # produce anything -- purely because the total happened to be affordable.
+    configured = with_floor(caps)
+    as_configured = worst(configured)
     if as_configured <= ceiling:
-        return RunPlan(calls, as_configured, dict(caps), ceiling, True,
-                       "the panel as configured fits inside the ceiling")
+        note = "the panel as configured fits inside the ceiling"
+        if configured != dict(caps):
+            note = ("the panel fits, with the merging seat raised to its "
+                    f"{MIN_CLOSER_CAP:,}-token floor")
+        return RunPlan(calls, as_configured, configured, ceiling, True, note)
 
     # Scale every cap by the same factor, so no seat is starved relative to
     # another, then converge: one division lands exactly on the ceiling, where
-    # float error and the MIN_USEFUL_CAP floor can push the result a fraction
-    # over and reject a plan that fits.
+    # float error and the floors can push the result a fraction over and
+    # reject a plan that fits.
     factor = ceiling / as_configured if as_configured else 1.0
-    for _ in range(40):
-        scaled = {s: max(MIN_USEFUL_CAP, int(c * factor))
-                  for s, c in caps.items()}
+    for _ in range(60):
+        scaled = with_floor({s: max(MIN_USEFUL_CAP, int(c * factor))
+                             for s, c in caps.items()})
         scaled_worst = worst(scaled)
         if scaled_worst <= ceiling:
             return RunPlan(
                 calls, scaled_worst, scaled, ceiling, True,
                 f"caps reduced to fit ${ceiling:.2f}; replies will be shorter")
-        if all(c <= MIN_USEFUL_CAP for c in scaled.values()):
+        if all(c <= MIN_USEFUL_CAP or s in closer
+               for s, c in scaled.items()):
             break                       # already at the floor; cannot shrink
         factor *= 0.9
-    needed = worst(dict.fromkeys(caps, MIN_USEFUL_CAP))
+    floor = with_floor(dict.fromkeys(caps, MIN_USEFUL_CAP))
+    needed = worst(floor)
     return RunPlan(
-        calls, needed, dict.fromkeys(caps, MIN_USEFUL_CAP), ceiling, False,
-        f"even at the {MIN_USEFUL_CAP}-token floor this panel needs about "
-        f"${needed:.2f}. Below that a reasoning model spends the whole budget "
-        f"thinking and returns nothing, so a smaller ceiling buys no answer "
-        f"rather than a shorter one")
-
+        calls, needed, floor, ceiling, False,
+        f"{rounds} rounds with this panel needs about ${needed:.2f}, with "
+        f"every reply already cut to the smallest size that still works. "
+        f"Below {MIN_USEFUL_CAP:,} tokens a reasoning model spends its whole "
+        f"budget thinking and returns nothing, and the merging seat -- which "
+        f"reads every seat's reply in full, its own included -- needs "
+        f"{MIN_CLOSER_CAP:,} "
+        f"or it produces no answer at all. A smaller ceiling buys a failed "
+        f"run, not a shorter one. Raise it to ${needed:.2f}, or run fewer "
+        f"rounds")
 
 def _closer_seats(caps: Mapping[str, int]) -> set[str]:
     """The seat that also merges, which therefore gets called twice a round."""

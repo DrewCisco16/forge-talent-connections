@@ -559,10 +559,35 @@ class TestAFailedDispatchConsumesBudget:
 class TestPassIdReachesTheLedgerFromTheRealPath:
 
     def test_a_seat_can_be_told_which_pass_it_is_in(self):
+        # UNMETERED, not None. A seat with no ledger spends with no limit of
+        # any kind, and that used to be what you got by not mentioning cost.
+        # This test is about pass ids, so it opts out explicitly.
         seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
-                           _ok(), ledger=None)
+                           _ok(), ledger=SA.UNMETERED)
         seat.set_pass("r3")
         assert seat.pass_id == "r3"
+
+    def test_a_seat_built_without_a_ledger_is_refused(self):
+        """It was the DEFAULT, so any caller that simply did not think about
+        cost got an unmetered seat and no warning."""
+        with pytest.raises(SA.SeatError, match="no cost ledger"):
+            SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                        _ok(), ledger=None)
+
+    def test_omitting_the_argument_entirely_is_also_refused(self):
+        """The one that mattered. Passing None at least means someone thought
+        about cost and got it wrong; omitting the argument means nobody
+        thought about it at all, and that was the DEFAULT -- so an unmetered
+        seat was what a caller got for not mentioning the subject."""
+        with pytest.raises(SA.SeatError, match="not mentioning cost"):
+            SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                        _ok())
+
+    def test_an_explicit_opt_out_is_honoured(self):
+        """Offline fakes and demos spend nothing and say so."""
+        seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), _profile(),
+                           _ok(), ledger=SA.UNMETERED)
+        assert seat.ledger is None
 
     def test_a_full_round_attributes_every_call_to_that_round(self, tmp_path):
         """pass_id was added as a constructor argument, tested through a seat
@@ -582,7 +607,11 @@ class TestPassIdReachesTheLedgerFromTheRealPath:
             name="v", endpoint="https://api.example.invalid/v1",
             auth_header="authorization", auth_template="Bearer {key}",
             build_body=lambda m, p, mt, t: {"model": m},
-            extract_text=lambda p: "a\nCLAIM | arithmetic | 2 + 2 = 4 | it is 4",
+            # Declares an OPTION: round one exists to create the candidate
+            # set, and a round one that creates none stops the run before
+            # round two, so there would be no second round to attribute.
+            extract_text=lambda p: ("OPTION | an answer worth considering\n"
+                                    "CLAIM | arithmetic | 2 + 2 = 4 | it is 4"),
             usage_input_path=["usage", "prompt_tokens"],
             usage_output_path=["usage", "completion_tokens"])
         seats = {f"seat_{i}": SA.HttpSeat(
@@ -932,9 +961,9 @@ class TestTheCeilingDrivesTheCaps:
                               output_multiplier=2.5),
         }
 
-    def _plan(self, ceiling):
+    def _plan(self, ceiling, rounds=5):
         led = CL.CostLedger(rates=self._rates(), per_run=ceiling)
-        return CL.plan_run(led, self.CAPS)
+        return CL.plan_run(led, self.CAPS, rounds=rounds)
 
     def test_a_generous_ceiling_leaves_the_caps_alone(self):
         plan = self._plan(30.00)
@@ -942,16 +971,85 @@ class TestTheCeilingDrivesTheCaps:
         assert plan.caps == self.CAPS
 
     def test_a_modest_ceiling_shrinks_the_caps_rather_than_refusing(self):
-        plan = self._plan(5.00)
+        plan = self._plan(16.00)
         assert plan.fits
-        assert max(plan.caps.values()) < max(self.CAPS.values())
-        assert plan.worst_case <= 5.00
+        assert max(plan.caps.values()) <= max(self.CAPS.values())
+        assert plan.estimate <= 16.00
 
-    def test_a_three_dollar_ceiling_now_runs(self):
+    def test_a_short_run_fits_a_small_ceiling(self):
         """The exact case that refused on the first call."""
-        plan = self._plan(3.00)
+        plan = self._plan(6.00, rounds=2)
         assert plan.fits
-        assert plan.worst_case <= 3.00
+        assert plan.estimate <= 6.00
+
+    def test_the_estimate_counts_what_the_merging_seat_actually_reads(self):
+        """The planner priced EVERY call at a flat 4,000 input tokens. The
+        merging seat quotes every thinker's reply in full, so at a 4,096-token
+        thinker cap its prompt measures about 29,500 tokens -- more than seven
+        times what was charged for it.
+
+        A plan reporting a $6.96 fit against a $7.00 ceiling repriced to
+        $7.41, and replaying the calls in order refused the thirtieth, the
+        final merge, after $6.79 was already authorised: everything paid for
+        and no answer."""
+        led = CL.CostLedger(rates=self._rates(), per_run=1000.00)
+        real = CL.plan_run(led, self.CAPS, rounds=1)
+        understated = CL.plan_run(led, self.CAPS, rounds=1, est_input=4000)
+        # The old flat figure is cheaper than the truth, and the gap is the
+        # thinker replies the merging seat reads.
+        assert real.estimate > understated.estimate
+        # Raising only the THINKER caps raises the merge's input too, because
+        # it quotes them in full.
+        wider = dict(self.CAPS)
+        wider["seat_2"] = wider["seat_2"] * 4
+        assert CL.plan_run(led, wider, rounds=1).estimate > real.estimate
+
+    def test_a_plan_never_lengthens_a_reply_the_operator_configured(self):
+        """Scaling multiplied the merging seat by its headroom factor, so
+        under a larger ceiling it came out ABOVE its configured cap -- 16,384
+        raised to 17,611 -- while the plan reported caps had been reduced."""
+        for ceiling in (16.00, 30.00, 100.00):
+            plan = self._plan(ceiling)
+            if plan.fits:
+                for seat, cap in plan.caps.items():
+                    assert cap <= self.CAPS[seat], (seat, ceiling)
+
+    def test_the_merging_seat_gets_its_floor_even_when_the_panel_fits(self):
+        """The fit path returned before the floor was applied, so a
+        configured 4,096-token merging seat stayed there -- below the size at
+        which it has ever been seen to produce anything -- purely because the
+        total happened to be affordable."""
+        caps = dict(self.CAPS, seat_5=4096)
+        led = CL.CostLedger(rates=self._rates(), per_run=1000.00)
+        plan = CL.plan_run(led, caps, rounds=5)
+        assert plan.fits
+        assert plan.caps["seat_5"] >= CL.MIN_CLOSER_CAP
+
+    def test_five_rounds_at_three_dollars_is_refused_with_the_real_number(self):
+        """CORRECTED once the merging seat got a measured floor. A $3 ceiling
+        can fund two rounds, not five -- and selling five would spend the whole
+        budget on rounds that could never produce an answer, because the merge
+        would be starved. The refusal names what it actually needs."""
+        plan = self._plan(3.00, rounds=5)
+        assert not plan.fits
+        assert plan.estimate > 3.00
+        assert "or run fewer rounds" in plan.note
+
+    def test_the_merging_seat_gets_more_room_than_a_thinker(self):
+        """It reads every thinker's reply plus the option list plus the check
+        results, and on a reasoning model the thinking counts against the same
+        cap. Scaling every seat by one factor starved it: at 7,190 tokens it
+        was cut off before writing a single character, the merge failed, and a
+        paid run ended after round one."""
+        plan = self._plan(12.00)
+        assert plan.caps["seat_5"] > plan.caps["seat_2"]
+
+    def test_the_merging_seat_never_falls_below_its_measured_floor(self):
+        """At 7,190 it produced nothing. At 16,384 it completed."""
+        for ceiling in (8.00, 12.00, 30.00):
+            plan = self._plan(ceiling)
+            if plan.fits:
+                assert plan.caps["seat_5"] >= CL.MIN_CLOSER_CAP, ceiling
 
     def test_a_ceiling_below_the_floor_is_refused_with_the_real_number(self):
         """Below the floor a reasoning model spends the whole budget thinking
@@ -960,9 +1058,11 @@ class TestTheCeilingDrivesTheCaps:
         plan = self._plan(1.00)
         assert not plan.fits
         assert "needs about" in plan.note
+        assert "a failed run, not" in plan.note
 
     def test_no_cap_falls_below_the_useful_floor(self):
-        assert all(c >= CL.MIN_USEFUL_CAP for c in self._plan(3.00).caps.values())
+        assert all(c >= CL.MIN_USEFUL_CAP
+                   for c in self._plan(3.00, rounds=2).caps.values())
 
     def test_the_closer_seat_is_counted_twice_a_round(self):
         """seat_5 thinks blind AND merges, so it is called twice per round.
@@ -980,8 +1080,9 @@ class TestTheCeilingDrivesTheCaps:
         """It reports. A smaller cap means shorter answers, and that is the
         operator's call to make."""
         caps = dict(self.CAPS)
-        self._plan(3.00)
+        plan = self._plan(3.00, rounds=2)
         assert caps == self.CAPS
+        assert plan.caps is not self.CAPS
 
 
 class TestThePerSeatOutputBound:
@@ -1012,11 +1113,57 @@ class TestThePerSeatOutputBound:
             assert rates["seat_1"].output_multiplier == \
                 CL.HIDDEN_OUTPUT_MULTIPLIER, bad
 
-    def test_the_shipped_rates_carry_measured_multipliers(self):
+    def test_every_shipped_seat_states_its_own_multiplier(self):
+        """THE PROXY THIS REPLACES WAS WRONG, and a live run proved it.
+
+        It asserted every shipped multiplier was BELOW the unmeasured default
+        of 5.0, using "below the default" as a stand-in for "measured". Then
+        seat_2 was measured at 2.9x on the first five-round run -- it billed
+        $0.1475 against $0.1289 authorised and the overrun halt stopped the
+        run on call three -- and raising it to 6.0 for headroom turned this
+        test red for a value that is BETTER established than the one it was
+        defending. A proxy that fails on new evidence is measuring the wrong
+        thing.
+
+        What the file actually promises is that no seat is silently running on
+        the default, so that is what this checks: an explicit key per seat.
+        """
         with open("rates.json", encoding="utf-8") as fh:
-            rates = CL.rates_from_config(json.load(fh))
-        assert all(r.output_multiplier < CL.HIDDEN_OUTPUT_MULTIPLIER
-                   for r in rates.values())
+            blob = json.load(fh)
+        seats = {k: v for k, v in blob.items()
+                 if not k.startswith("_") and isinstance(v, dict)}
+        assert seats, "rates.json shipped with no seats"
+        missing = [k for k, v in seats.items() if "output_multiplier" not in v]
+        assert not missing, (
+            f"{missing} would silently take the {CL.HIDDEN_OUTPUT_MULTIPLIER}x "
+            f"default, so nobody has looked at what those seats actually bill")
+
+    def test_every_shipped_multiplier_has_headroom_over_its_measurement(self):
+        """The file's own convention: roughly double the largest measurement.
+
+        seat_2 is why this exists. It sat at 2.5 against a 1.23x measurement
+        -- 2.0x headroom, which read as comfortable -- and a longer round-one
+        prompt on the real five-round run produced 2.9x. A multiplier is a
+        BOUND, and a bound with no margin over the only figure anyone has
+        measured is a bound waiting to halt a paid run.
+        """
+        import re
+        with open("rates.json", encoding="utf-8") as fh:
+            blob = json.load(fh)
+        thin = []
+        for seat, cfg in sorted(blob.items()):
+            if seat.startswith("_") or not isinstance(cfg, dict):
+                continue
+            note = cfg.get("_note_output_multiplier", "")
+            found = [float(x) for x in re.findall(r"([\d.]+)x", note)]
+            if not found:
+                continue          # nothing measured yet; nothing to compare
+            if cfg["output_multiplier"] < 2.0 * max(found):
+                thin.append(f"{seat}: {cfg['output_multiplier']} against a "
+                            f"measured {max(found)}x")
+        assert not thin, (
+            "these multipliers have less than 2x headroom over their own "
+            "recorded measurement: " + "; ".join(thin))
 
     def test_the_bound_reaches_the_seat(self):
         """A multiplier nothing reads is the same as no multiplier."""
@@ -1033,3 +1180,358 @@ class TestThePerSeatOutputBound:
         seat = SA.HttpSeat(AO.ResolvedSeat("seat_1", "m", "k"), prof,
                            _ok(), ledger=led, max_tokens=1000)
         assert seat._multiplier() == 2.0
+
+
+class TestAnOverrunStopsTheNextCallNotThisOne:
+    """The docstring said an overrun "halts the run". It refuses the next
+    DISPATCH, and an overrun on the final call has no next dispatch to refuse
+    -- so the run returns normally, having spent the money.
+
+    That is the honest limit of the control: it bounds how far a mispriced
+    call can carry a run forward, and it cannot un-spend the call that
+    revealed the problem. Saying otherwise reads as a guarantee nothing keeps.
+    """
+
+    def _ledger(self):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return CL.CostLedger(rates={"seat_1": rate}, per_run=1000.0)
+
+    def test_the_overrun_is_recorded(self):
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        assert led.overruns, "an overrun that is not recorded is invisible"
+
+    def test_the_next_call_is_refused(self):
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        # CeilingOverrun, which IS a CeilingReached, naming the ratio: the
+        # estimate this ceiling relies on has been shown not to hold here.
+        with pytest.raises(CL.CeilingOverrun):
+            led.check_before_call("seat_1", 10, 10)
+
+    def test_an_overrun_on_the_last_call_does_not_undo_it(self):
+        """Nothing follows it, so nothing is refused, and the money is spent.
+        The ledger still carries the fact."""
+        led = self._ledger()
+        led.record("seat_1", 1_000_000, 1_000_000,
+                   estimated_dollars=0.01, authorised=0.01)
+        assert led.spent > 0.01
+        assert len(led.overruns) == 1
+
+
+class TestTheEstimateCountsEveryReplyAndTheAsk:
+    """Two ways the figure came out low, both of them systematic."""
+
+    @property
+    def CAPS(self):
+        return {f"seat_{i}": 4096 for i in range(1, 6)}
+
+    def _rates(self):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return dict.fromkeys(self.CAPS, rate)
+
+    def _plan(self, **kw):
+        led = CL.CostLedger(rates=self._rates(), per_run=10_000.0)
+        return CL.plan_run(led, self.CAPS, rounds=1, **kw)
+
+    def test_the_merging_seat_is_charged_for_its_own_reply_too(self):
+        """It thinks first, blind, with the other four, and is then given all
+        five replies -- its own among them. Summing only the other four was
+        short by one thinker's whole output on every merge of every round."""
+        # Output priced at zero and no thinker input, so the whole estimate
+        # IS the merge's input and can be checked against it directly.
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates=dict.fromkeys(self.CAPS, rate),
+                            per_run=10_000.0)
+        plan = CL.plan_run(led, self.CAPS, rounds=1, est_input=0)
+        all_five = CL.CLOSER_INPUT_OVERHEAD + sum(plan.caps.values())
+        four = CL.CLOSER_INPUT_OVERHEAD + sum(
+            c for s, c in plan.caps.items() if s != "seat_5")
+        assert all_five > four
+        assert plan.estimate == pytest.approx(all_five / 1e6, rel=1e-9)
+
+    def test_a_large_ask_raises_the_estimate(self):
+        """Planning used a constant thinker input, so a 300,000-character
+        question passed the plan and was then refused by the real pre-dispatch
+        check -- after the plan had told the operator it would fit."""
+        small = self._plan(ask_chars=0).estimate
+        large = self._plan(ask_chars=300_000).estimate
+        assert large > small
+
+    def test_a_ceiling_that_only_a_short_ask_fits_refuses_the_long_one(self):
+        led = CL.CostLedger(rates=self._rates(), per_run=0.20)
+        short = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=0)
+        long = CL.plan_run(led, self.CAPS, rounds=1, ask_chars=1_000_000)
+        assert long.estimate > short.estimate
+
+
+class TestTheDailyLedgerSurvivesConcurrentWriters:
+    """The watcher is the one component that spends unattended, and two of
+    them can share a day file. The read-modify-write was not atomic: both
+    processes read the same figure, both added their own spend, and the second
+    write replaced the first -- so one run vanished from the daily total and
+    the next was handed a budget that had already been spent.
+
+    REAL PROCESSES, NOT THREADS. flock is held per process, so a threaded
+    version would exercise none of the locking and pass whether or not it
+    existed.
+    """
+
+    WRITER = """
+import sys
+sys.path.insert(0, {here!r})
+import cost_ledger as CL
+rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+               verified_on="2026-08-25")
+led = CL.CostLedger(rates={{"s": rate}}, day_state_path=sys.argv[1])
+led.record("s", 1_000_000, 0)        # exactly $1.00
+led.persist_day()
+"""
+
+    def _spawn(self, tmp_path, n):
+        import subprocess
+        import sys
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        script = tmp_path / "writer.py"
+        script.write_text(self.WRITER.format(here=here))
+        state = str(tmp_path / "day.json")
+        procs = [subprocess.Popen([sys.executable, str(script), state])
+                 for _ in range(n)]
+        for proc in procs:
+            assert proc.wait(timeout=60) == 0
+        return state
+
+    def _total(self, state):
+        import json
+        with open(state, encoding="utf-8") as fh:
+            return sum(json.load(fh).values())
+
+    def test_no_writer_is_lost(self, tmp_path):
+        state = self._spawn(tmp_path, 8)
+        assert self._total(state) == pytest.approx(8.0, rel=1e-9)
+
+    def test_the_file_is_still_readable_afterwards(self, tmp_path):
+        """A torn write is worse than a lost one: day_spent refuses to run on
+        an unreadable ledger, so a corrupt file stops every later run."""
+        state = self._spawn(tmp_path, 8)
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates={"s": rate}, per_day=100.0,
+                            day_state_path=state)
+        assert led.day_spent() == pytest.approx(8.0, rel=1e-9)
+
+
+class TestAnUnmeasuredCallIsNotAFreeCall:
+    """`spent` counts only calls the vendor gave a usage block for. A call
+    that came back unmeasured keeps its full authorisation inside the run --
+    correctly -- and then persisted to the shared day file as ZERO. So a $0.40
+    reservation left that file believing nothing had been spent, and the next
+    run was handed the same budget again.
+    """
+
+    def _ledger(self, path):
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=1.0,
+                       verified_on="2026-08-25")
+        return CL.CostLedger(rates={"s": rate}, per_day=100.0,
+                             day_state_path=str(path))
+
+    def test_an_unmeasured_call_reaches_the_day_file(self, tmp_path):
+        led = self._ledger(tmp_path / "day.json")
+        led.record("s", None, None, estimated_dollars=0.40)
+        assert led.spent == 0.0            # nothing measurable came back
+        assert led.committed == pytest.approx(0.40)
+        led.persist_day()
+        assert self._ledger(tmp_path / "day.json").day_spent() == \
+            pytest.approx(0.40)
+
+    def test_a_measured_call_is_unchanged(self, tmp_path):
+        led = self._ledger(tmp_path / "day.json")
+        led.record("s", 1_000_000, 0, estimated_dollars=99.0)
+        led.persist_day()
+        # The MEASURED figure, not the estimate it was authorised against.
+        assert self._ledger(tmp_path / "day.json").day_spent() == \
+            pytest.approx(1.0)
+
+
+class TestTwoProcessesCannotBothSpendTheSameBudget:
+    """Reading the day file and then dispatching left a window. Two watchers
+    sharing a $1/day limit each read $0.00, each authorised $0.75, and both
+    calls went out -- neither process doing anything wrong on its own, and the
+    limit exceeded by half again.
+
+    The estimate is claimed in the shared file BEFORE the call, so the second
+    process reads the first's claim rather than a figure about to be stale.
+    """
+
+    CLAIMANT = """
+import sys
+sys.path.insert(0, {here!r})
+import cost_ledger as CL
+rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+               verified_on="2026-08-25")
+led = CL.CostLedger(rates={{"s": rate}}, per_day=1.00,
+                    day_state_path=sys.argv[1])
+try:
+    # 750,000 input tokens at $1/Mtok = $0.75.
+    led.check_before_call("s", 750_000, 0)
+except CL.CeilingReached:
+    sys.exit(3)          # correctly refused
+sys.exit(0)              # authorised
+"""
+
+    def _race(self, tmp_path, n=2):
+        import subprocess
+        import sys
+
+        here = os.path.dirname(os.path.abspath(__file__))
+        script = tmp_path / "claimant.py"
+        script.write_text(self.CLAIMANT.format(here=here))
+        state = str(tmp_path / "day.json")
+        procs = [subprocess.Popen([sys.executable, str(script), state])
+                 for _ in range(n)]
+        return [p.wait(timeout=60) for p in procs]
+
+    def test_only_one_of_two_is_authorised(self, tmp_path):
+        codes = self._race(tmp_path)
+        assert sorted(codes) == [0, 3], (
+            "both processes authorised $0.75 against a $1.00 daily limit")
+
+    def test_the_claim_is_visible_to_a_later_reader(self, tmp_path):
+        self._race(tmp_path, n=1)
+        rate = CL.Rate(input_per_mtok=1.0, output_per_mtok=0.0,
+                       verified_on="2026-08-25")
+        led = CL.CostLedger(rates={"s": rate}, per_day=1.00,
+                            day_state_path=str(tmp_path / "day.json"))
+        assert led.day_spent() == pytest.approx(0.75)
+
+
+class TestTheSuiteNeverSpendsTheOperatorsBudget:
+    """Running the tests wrote to the real .spend-by-day.json beside the code.
+
+    A CLI test passing --max-cost built a ledger on the DEFAULT day-state path
+    and persisted to it, so every test run added fake spend to the operator's
+    actual daily total -- which had reached $121 of money nobody spent. With a
+    daily ceiling configured that refuses a real run for a budget that was
+    never consumed.
+    """
+
+    def test_a_ledger_can_be_pointed_somewhere_else(self, tmp_path):
+        import run_adjudication as RA
+
+        path = tmp_path / "elsewhere.json"
+        led = RA.build_ledger(1.0, None, 1.0, day_state_path=str(path))
+        assert led is not None
+        assert led.day_state_path == str(path)
+
+    def test_the_default_is_still_the_shared_file(self):
+        import run_adjudication as RA
+
+        led = RA.build_ledger(1.0, None, 1.0)
+        assert led is not None
+        assert led.day_state_path == RA.DAY_STATE_FILE
+
+    def test_no_test_writes_to_the_shared_file(self):
+        """The property itself, checked by CI rather than by remembering.
+
+        Any future test that runs the CLI with a ceiling and forgets
+        --day-state fails here rather than quietly charging the operator.
+        """
+        import subprocess
+        import sys
+
+        import run_adjudication as RA
+
+        def snapshot(path):
+            if not os.path.exists(path):
+                return None
+            with open(path, "rb") as fh:
+                return fh.read()
+
+        shared = RA.DAY_STATE_FILE
+        before = snapshot(shared)
+        here = os.path.dirname(os.path.abspath(__file__))
+        subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             os.path.join(here, "test_suite.py")],
+            cwd=here, capture_output=True, timeout=900, check=False)
+        after = snapshot(shared)
+        assert after == before, (
+            "the test suite changed the operator's real daily spend ledger")
+
+
+class TestAnUncheckedModelIdentifierIsSaidOutLoud:
+    """rates.json carried "this model id could not be verified" in an
+    underscore-prefixed comment key, which rates_from_config skips by design.
+    So the one seat whose identifier nobody had confirmed ran exactly like
+    the four that had been, and nothing anywhere said so.
+
+    It is a different fact from an unchecked PRICE and not a smaller one. A
+    wrong price makes the ceiling decorative, which is why an unusable price
+    refuses the run. A wrong model id can return a well-formed 200 from a
+    vendor's fallback and be recorded as a seat that had nothing to say
+    rather than one that was never reached -- opposite facts, and the second
+    silently corrupts the statistics this tool exists to produce.
+    """
+
+    PRICED: ClassVar[dict[str, object]] = {
+        "input_per_mtok": 1.5, "output_per_mtok": 7.5,
+        "verified_on": "2099-01-01"}
+
+    def _ledger(self, extra):
+        rates = CL.rates_from_config({
+            "seat_1": dict(self.PRICED),
+            "seat_3": {**self.PRICED, **extra},
+        })
+        return CL.CostLedger(rates=rates, per_run=1.0)
+
+    def test_a_seat_with_a_checked_identifier_is_not_listed(self):
+        assert self._ledger({}).unverified_models() == {}
+
+    def test_the_reason_is_read_and_kept_verbatim(self):
+        why = "Mistral retired the Magistral line; this id is not confirmed."
+        assert self._ledger({"model_unverified": why}).unverified_models() == {
+            "seat_3": why}
+
+    def test_a_comment_key_is_still_a_comment(self):
+        """The failure this replaces. An underscore-prefixed key is skipped
+        by design -- that is how rates.json carries _vendor and _source -- so
+        a flag written there is documentation, not a control."""
+        assert self._ledger(
+            {"_note_model_UNVERIFIED": "not confirmed"}).unverified_models() == {}
+
+    def test_a_blank_flag_is_not_a_warning(self):
+        for blank in ("", "   ", None, True, 1):
+            assert self._ledger({"model_unverified": blank}
+                                ).unverified_models() == {}, blank
+
+    def test_the_price_being_fresh_does_not_clear_the_identifier(self):
+        """The two facts are independent, and conflating them is how this
+        went unreported: seat_3's price carries a verified_on date."""
+        led = self._ledger({"model_unverified": "not confirmed"})
+        assert led.stale_rates() == []
+        assert "seat_3" in led.unverified_models()
+
+    def test_the_report_names_the_seat_and_the_reason(self):
+        why = "Magistral is retired and this is not Magistral."
+        text = "\n".join(self._ledger({"model_unverified": why}).render())
+        assert "MODEL IDENTIFIER NOT VERIFIED for: seat_3" in text
+        assert why in text
+        assert "never reached" in text
+
+    def test_the_shipped_settings_still_flag_the_seat_they_describe(self):
+        """rates.json's own note says seat_3's id is unconfirmed. If that
+        note ever stops being readable by this code, the warning disappears
+        and nothing fails -- which is the state this test exists to end."""
+        import json
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "rates.json"), encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=1.0)
+        assert "seat_3" in led.unverified_models()

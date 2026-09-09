@@ -1,0 +1,48 @@
+{
+  "_README": [
+    "SOP 8.1 step 3: THIRTY real examples from the task class this tool will",
+    "actually handle, each with a known-correct answer.",
+    "",
+    "They have to be yours. A baseline measured on another domain predicts",
+    "nothing about this one -- SOP 10.1 gives leave-one-domain-out R-squared",
+    "of -2.09, which is worse than no information. Questions invented to fill",
+    "the file would produce a confident number deciding whether months of work",
+    "continue, resting on nothing.",
+    "",
+    "WHERE TO GET THEM. Decisions you have already made and know the outcome",
+    "of. Analyses somebody later checked. Anything where the right answer was",
+    "established afterwards by something other than an opinion.",
+    "",
+    "Copy this file to stage-zero-questions.json and replace the rows.",
+    "",
+    "kind:",
+    "  exact    the answer must match after case and punctuation are folded",
+    "  numeric  compared as a number, within tolerance (absolute)",
+    "  oneof    any entry in accept counts as correct",
+    "",
+    "Nothing here is graded by a model. A model grading a model reintroduces",
+    "the correlated error the baseline exists to measure."
+  ],
+  "questions": [
+    {
+      "id": "example-numeric",
+      "question": "A vendor quotes $1,666.67 per month for six months, billed monthly. What is the total contract value in dollars?",
+      "answer": "10000.02",
+      "kind": "numeric",
+      "tolerance": "0.02"
+    },
+    {
+      "id": "example-oneof",
+      "question": "A candidate holds a valid H-1B transferred to us three weeks ago and asks whether they may begin billable client work on Monday. Answer yes or no.",
+      "answer": "yes",
+      "kind": "oneof",
+      "accept": ["yes", "y", "yes they may"]
+    },
+    {
+      "id": "example-exact",
+      "question": "Which single clause in the attached MSA governs assignment on change of control? Give the clause number only.",
+      "answer": "14.3",
+      "kind": "exact"
+    }
+  ]
+}

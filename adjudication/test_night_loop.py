@@ -14,13 +14,17 @@ is not written down gets deleted the first time it is inconvenient.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import pathlib
+import re
+from fractions import Fraction
 from typing import ClassVar
 
 import pytest
 
+import cost_ledger as CL
 import night_loop as NL
 import seat_independence as SI
 from adjudication_orchestrator import (
@@ -58,7 +62,14 @@ def _fake_clock():
     return now
 
 
-def _panel(n: int = 5, reply: str = "an answer\n\nCLAIM | arithmetic | 2 + 2 = 4 | it adds up"):
+# A seat's default reply DECLARES an option. Round one exists to create the
+# candidate set, and a round one that creates none now stops the run rather
+# than paying for four more rounds that can only remove from an empty set.
+_REPLY = ("OPTION | an answer worth considering\n"
+          "\nCLAIM | arithmetic | 2 + 2 = 4 | it adds up")
+
+
+def _panel(n: int = 5, reply: str = _REPLY):
     return {f"seat_{i}": _seat(reply) for i in range(1, n + 1)}
 
 
@@ -437,8 +448,18 @@ class TestConfidenceCeiling:
         defaulted to High would stamp certainty on exactly the runs where
         independence is unknown."""
         c = NL.confidence_clause(5, None)
-        assert "LOW" in c
-        assert "Unmeasured independence is not high independence" in c
+        assert "Low" in c
+        assert "unmeasured independence is not high independence" in c.lower()
+
+    def test_the_closer_is_told_to_call_it_unmeasured_not_low(self):
+        """The packet reported UNMEASURED while the closer was told the
+        ceiling was LOW. Those are different facts wearing one word: Low is
+        what a measurement earns when it finds the seats correlated, and a
+        reader seeing both could not tell whether independence had been
+        checked and found poor or never checked at all."""
+        c = NL.confidence_clause(5, None)
+        assert "UNMEASURED" in c
+        assert "DO NOT WRITE THAT CORROBORATION IS LOW" in c
 
     def test_correlated_seats_cap_lower_than_independent_ones(self):
         assert SI.confidence_ceiling(5, 0.0) == "High"
@@ -671,9 +692,12 @@ class TestRepeatedFailuresStayVisible:
         import adjudication_orchestrator as AO
 
         orch = _orch()
-        # Text names the value, so the warrant bears on the claim.
+        # The text is itself the assertion, so the gate rules on it directly
+        # and the claim is accepted. Prose would be WARRANT HELD, which counts
+        # under warrant_only rather than auto_accepted -- this test is about
+        # the REPEAT counting, so it uses the case that reaches a ruling.
         claim = AO.Claim(id="", kind=AO.ClaimKind.ARITHMETIC,
-                         text="the total is 4", warrant="2 + 2 = 4")
+                         text="2 + 2 = 4", warrant="2 + 2 = 4")
         p = type("P", (), {"id": "p1", "name": "one", "eliminative": False})()
         first = orch.run_pass(p, [], [claim])
         second = orch.run_pass(p, [], [claim])
@@ -795,6 +819,9 @@ def _round(n=1, claims=10, failed=0, escalated=0, rho=0.1,  # noqa: PLR0913, PLR
     r.options_removed = [f"opt_{n}_{i}" for i in range(removed)]
     r.options_alive = (list(alive) if alive is not None
                        else [f"opt_alive_{i}" for i in range(max(0, created - removed))])
+    # This round reached the option bookkeeping. An empty survivor list is
+    # falsey, so whether we LOOKED is recorded apart from what we found.
+    r.options_observed = True
     r.merged = "a merged answer"
     for k, v in kw.items():
         setattr(r, k, v)
@@ -1293,6 +1320,7 @@ class TestOneVendorCannotWearFiveNames:
 # ---------------------------------------------------------------------------
 
 import option_set as OS  # noqa: E402
+import predicate as P  # noqa: E402
 
 
 class TestCodeOwnsTheSurvivorSet:
@@ -1311,11 +1339,44 @@ class TestCodeOwnsTheSurvivorSet:
     OPT_LIQUIDATE = OS.option_id("Liquidate inventory immediately.")
     OPT_HOLD = OS.option_id("Hold inventory and reprice next quarter.")
 
-    def _run(self, tmp_path, claim_line, rounds=1):
+    # The commitment the liquidate option declares when it is proposed. Its
+    # id is derived from the option it binds to, so it cannot be aimed
+    # somewhere else.
+    PRED_LIQUIDATE = P.Predicate(
+        option_id=OS.option_id("Liquidate inventory immediately."),
+        subject="write-down on the remaining stock", relation="=",
+        value=Fraction(4), unit="").id
+
+    # LIQUIDATE'S OWN ARITHMETIC DOES NOT ADD UP: it says the write-down is
+    # 4 and computes it as 2 + 3. HOLD's does. Nothing another seat writes can
+    # change either fact, which is the point.
+    PROPOSALS = (
+        "OPTION | Liquidate inventory immediately.\n"
+        "PREDICATE | write-down on the remaining stock | = | 4\n"
+        "FORMULA | 2 + 3\n"
+        "OPTION | Hold inventory and reprice next quarter.\n"
+        "PREDICATE | quarters of carrying cost | = | 2\n"
+        "FORMULA | 1 + 1\n")
+
+    SOUND = (
+        "OPTION | Liquidate inventory immediately.\n"
+        "PREDICATE | write-down on the remaining stock | = | 4\n"
+        "FORMULA | 2 + 2\n"
+        "OPTION | Hold inventory and reprice next quarter.\n"
+        "PREDICATE | quarters of carrying cost | = | 2\n"
+        "FORMULA | 1 + 1\n")
+
+    def _run(self, tmp_path, later_line="", rounds=1, proposals=None):
+        state = {"n": 0}
+        first = proposals if proposals is not None else self.PROPOSALS
+
         def seat(_p):
-            return ("1. Liquidate inventory immediately.\n"
-                    "2. Hold inventory and reprice next quarter.\n"
-                    + claim_line)
+            # Round one proposes the options and the commitments they rest
+            # on. Later rounds may only dispute the inputs of what exists.
+            state["n"] += 1
+            if state["n"] <= 5:
+                return first
+            return later_line
 
         def closer(_p):
             # Round one asks the closer only which entries are the same
@@ -1326,16 +1387,43 @@ class TestCodeOwnsTheSurvivorSet:
                             closer, _orch(), str(tmp_path),
                             rounds=NL.ROUNDS[:rounds])
 
-    def _on_point(self):
-        """A refuted claim that DECLARES its option and whose warrant bears on
-        what it says. Only this may remove anything."""
-        return (f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_LIQUIDATE} | "
-                f"the total is 5\n")
+    def _dispute(self):
+        """Another seat putting a different number into the same formula.
 
-    def test_a_declared_on_point_refutation_removes_the_option(self, tmp_path):
-        res = self._run(tmp_path, self._on_point())
+        A REAL FINDING AND NOT A REFUTATION. Neither seat's figure has been
+        independently established, and preferring the later one would let any
+        seat delete any answer by asserting a different number with more
+        confidence.
+        """
+        return f"CHALLENGE | {self.PRED_LIQUIDATE} | a = 9\n"
+
+    def test_an_options_own_arithmetic_removes_it(self, tmp_path):
+        """It said the write-down is 4 and computed it as 2 + 3. Its own
+        formula, its own inputs, its own figure -- and they disagree."""
+        res = self._run(tmp_path, rounds=1)
         assert res[0].options_created == 2
         assert res[0].options_removed == [self.OPT_LIQUIDATE]
+        assert self.OPT_HOLD in res[0].options_alive
+
+    def test_a_dispute_over_inputs_removes_nothing(self, tmp_path):
+        """THE DEFECT THIS REPLACED. A challenge supplied the whole
+        expression, so a later seat could write anything:
+
+            PREDICATE | annual launch accidents | = | 4 accidents
+            CHALLENGE | <that id> | 2 + 3
+
+        "2 + 3" was evaluated, read as 5 accidents, and removed the option.
+        Nothing connects 2 + 3 to annual launch accidents, and no rule about
+        expressions could connect them -- the same defect as the prose rule in
+        different clothes, a later model choosing the reasoning that condemns
+        an answer it did not write.
+
+        A challenge now changes the INPUTS to the option's own formula, and
+        records a disagreement for a person to settle."""
+        res = self._run(tmp_path, self._dispute(), rounds=2,
+                        proposals=self.SOUND)
+        assert res[1].options_removed == []
+        assert len(res[1].options_alive) == 2
 
     def test_an_unrelated_false_warrant_removes_nothing(self, tmp_path):
         """The decisive re-check failure. "2 + 2 = 5" is false and says
@@ -1349,7 +1437,7 @@ class TestCodeOwnsTheSurvivorSet:
         res = self._run(
             tmp_path,
             f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_LIQUIDATE} | "
-            f"Liquidate inventory immediately.\n")
+            f"Liquidate inventory immediately.\n", proposals=self.SOUND)
         assert res[0].options_removed == []
         assert len(res[0].options_alive) == 2
 
@@ -1357,14 +1445,85 @@ class TestCodeOwnsTheSurvivorSet:
         """Nobody said what it was about."""
         res = self._run(
             tmp_path,
-            "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5\n")
+            "CLAIM | arithmetic | 2 + 2 = 5 | the total is 5\n",
+            proposals=self.SOUND)
         assert res[0].options_removed == []
 
-    def test_a_claim_naming_a_different_option_removes_only_that_one(self, tmp_path):
+    def test_a_self_check_touches_only_the_option_that_committed(self,
+                                                                 tmp_path):
+        """Liquidate's arithmetic fails; Hold's holds. One goes."""
+        res = self._run(tmp_path, rounds=1)
+        assert res[0].options_removed == [self.OPT_LIQUIDATE]
+        assert self.OPT_HOLD in res[0].options_alive
+
+    def test_no_seat_can_supply_the_formula(self, tmp_path):
+        """A FORMULA line in a later round creates nothing, and a challenge
+        carrying an expression instead of inputs binds nothing."""
         res = self._run(
             tmp_path,
-            f"CLAIM | arithmetic | 2 + 2 = 5 | {self.OPT_HOLD} | the total is 5\n")
-        assert res[0].options_removed == [self.OPT_HOLD]
+            f"FORMULA | 99 * 99\n"
+            f"CHALLENGE | {self.PRED_LIQUIDATE} | 2 + 3\n",
+            rounds=2, proposals=self.SOUND)
+        assert res[1].options_removed == []
+        assert len(res[1].options_alive) == 2
+
+    def test_the_same_commitment_aimed_elsewhere_is_a_different_id(self):
+        """Claim ids were computed from kind, warrant and text alone, so one
+        sentence aimed at two options received ONE id. A single refuted
+        verdict then keyed both, and one false claim removed two unrelated
+        candidates. What a commitment is about is part of what it is."""
+        a = P.Predicate(option_id="opt_aaaaaa", subject="cost", relation="=",
+                        value=Fraction(4), unit="dollars")
+        b = P.Predicate(option_id="opt_bbbbbb", subject="cost", relation="=",
+                        value=Fraction(4), unit="dollars")
+        assert a.id != b.id
+
+    def test_a_seat_cannot_invent_a_dependency_in_a_later_round(self, tmp_path):
+        """The defeat that mattered most. A seat could attach a fresh claim to
+        any option in any round, so a false sum aimed at a candidate it wanted
+        gone removed it. A challenge names a commitment that ALREADY EXISTS;
+        naming one that does not exist refutes nothing."""
+        res = self._run(tmp_path, "CHALLENGE | pred_deadbeef0000 | a = 3\n",
+                        rounds=2, proposals=self.SOUND)
+        assert res[1].options_removed == []
+        assert len(res[1].options_alive) == 2
+
+    def test_a_predicate_line_in_a_later_round_creates_nothing(self, tmp_path):
+        """Commitments are fixed when the options are proposed."""
+        res = self._run(
+            tmp_path,
+            f"OPTION | Something entirely new\n"
+            f"PREDICATE | invented commitment | = | 1\n"
+            f"FORMULA | 1 + 1\n"
+            f"CHALLENGE | {self.PRED_LIQUIDATE} | a = 2\n", rounds=2,
+            proposals=self.SOUND)
+        assert res[1].options_created == 0
+        assert len(res[1].options_alive) == 2
+        assert res[1].options_removed == []
+
+    def test_prose_beside_a_challenge_changes_nothing(self):
+        """The property that no lexical rule could hold. One warrant used to
+        support a proposition AND its negation:
+
+            warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"
+            warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"
+
+        Both were ruled supported, so a refuted variant removed an option the
+        arithmetic said nothing about. A ruling is now a comparison between a
+        computed value and a declared one; there is no text field in it for a
+        second proposition to ride in on."""
+        def commit(formula):
+            return P.Predicate(option_id="opt_launch",
+                               subject="readiness code", relation="=",
+                               value=Fraction(4), unit="", formula=formula)
+
+        # The option's own arithmetic decides it, and nothing else. There is
+        # no text field in the comparison at all.
+        assert P.self_check(commit("2 + 2")).status == "pass"
+        assert P.self_check(commit("2 + 3")).status == "fail"
+        # And a sentence is not an expression, so it settles nothing.
+        for prose in ("safe to proceed", "unsafe to proceed"):
+            assert P.self_check(commit(prose)).status == "blocked"
 
     def test_a_negation_borrowing_an_options_words_does_not_attach(self):
         """"Do not liquidate inventory immediately" CONTAINS "liquidate
@@ -1383,71 +1542,153 @@ class TestCodeOwnsTheSurvivorSet:
         so a refuted proposition appeared three times in every seat's
         round-two prompt. Removing an option and then printing it to everyone
         is not removing it."""
-        res = self._run(tmp_path, self._on_point(), rounds=2)
+        res = self._run(tmp_path, rounds=1)
         assert "Liquidate inventory immediately" not in res[0].merged
         assert "Liquidate inventory immediately" in res[0].record_text
 
     def test_the_removal_is_kept_in_the_record(self, tmp_path):
-        res = self._run(tmp_path, self._on_point())
+        res = self._run(tmp_path, rounds=1)
         assert "Removed" in res[0].record_text
         assert "mechanically refuted" in res[0].record_text
 
     def test_options_keep_their_identity_across_rounds(self):
-        a = OS.parse_options("1. Build it in house over two quarters\n"
-                             "2. Buy the vendor platform")
-        b = OS.parse_options("1. Buy the vendor platform\n"
-                             "2. Build it in house over two quarters")
+        a = OS.parse_options("OPTION | Build it in house over two quarters\n"
+                             "OPTION | Buy the vendor platform")
+        b = OS.parse_options("OPTION | Buy the vendor platform\n"
+                             "OPTION | Build it in house over two quarters")
         assert {o.id for o in a} == {o.id for o in b}
 
-    def test_only_a_standing_fail_removes_an_option(self):
-        """A blocked check did not happen and an escalated claim has not been
-        ruled on. Neither can take an option out."""
-        import adjudication_orchestrator as AO
+    def test_only_a_refutation_removes_an_option(self):
+        """A blocked check did not happen. BLOCKED is not FAILED, and an
+        option removed for being hard to check is an answer deleted for a
+        property of the checker rather than of the answer."""
+        def commit(formula):
+            return P.Predicate(option_id="opt_aaaaaa", subject="cost",
+                               relation="=", value=Fraction(4), unit="",
+                               formula=formula)
 
-        claim = Claim(id="c1", kind=AO.ClaimKind.ARITHMETIC,
-                      text="the total is 5", warrant="2 + 2 = 5",
-                      about_option="opt_aaaaaa")
-        for status in (AO.GateStatus.BLOCKED, AO.GateStatus.PASS,
-                       AO.GateStatus.INAPPLICABLE):
-            opt = OS.Option(id="opt_aaaaaa", text="the total is 5",
-                            claims=["c1"])
-            verdict = type("V", (), {"status": status, "detail": "d"})()
-            assert OS.eliminate([opt], {"c1": verdict}, 1, {"c1": claim}) == []
-        opt = OS.Option(id="opt_aaaaaa", text="the total is 5", claims=["c1"])
-        fail = type("V", (), {"status": AO.GateStatus.FAIL, "detail": "d"})()
-        assert OS.eliminate([opt], {"c1": fail}, 1, {"c1": claim}) == [opt]
+        # Its own formula holds, cannot be evaluated, or was never declared.
+        # None of these is a refutation.
+        for formula in ("2 + 2", "sqrt(4)", "2 ** 999", "not an expression",
+                        ""):
+            pred = commit(formula)
+            opt = OS.Option(id="opt_aaaaaa", text="an option",
+                            predicates=[pred])
+            assert OS.eliminate([opt], P.adjudicate([pred], []), 1) == [], \
+                formula
+
+        # A dispute over the inputs is a finding, and still not a refutation.
+        pred = commit("a + b")
+        pred = P.replace(pred, inputs=(("a", Fraction(2)), ("b", Fraction(2))))
+        opt = OS.Option(id="opt_aaaaaa", text="an option", predicates=[pred])
+        rulings = P.adjudicate([pred], [(pred.id, {"a": Fraction(9)})])
+        assert OS.eliminate([opt], rulings, 1) == []
+        assert rulings[pred.id].disputes
+
+        # Its own arithmetic failing IS a refutation.
+        pred = commit("2 + 3")
+        opt = OS.Option(id="opt_aaaaaa", text="an option", predicates=[pred])
+        assert OS.eliminate([opt], P.adjudicate([pred], []), 1) == [opt]
 
     def test_an_escalated_claim_never_removes_an_option(self):
         opt = OS.Option(id="o1", text="an option", claims=["c1"])
         assert OS.eliminate([opt], {"c1": None}, 1) == []
 
+    def _opt_with(self, *commitments):
+        """An option carrying one commitment per (value, formula) given."""
+        opt = OS.Option(id="o1", text="an option")
+        opt.predicates = [
+            P.Predicate(option_id="o1", subject=f"quantity {i}", relation="=",
+                        value=Fraction(v), unit="", formula=f)
+            for i, (v, f) in enumerate(commitments)]
+        return opt
+
     def test_a_blocked_only_survivor_is_not_examined(self):
         """An option whose sole dependency was BLOCKED counted as examined,
         and a sole survivor resting on one blocked `sqrt(4) = 2` was presented
         under "the answer that survived"."""
-        import adjudication_orchestrator as AO
+        opt = self._opt_with((4, "sqrt(4)"))
+        rulings = P.adjudicate(opt.predicates, [])
+        assert rulings[opt.predicates[0].id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        blocked = type("V", (), {"status": AO.GateStatus.BLOCKED, "detail": "d"})()
-        assert OS.unexamined([opt], {"c1": blocked}) == [opt]
+    def test_a_commitment_with_no_formula_is_not_examined(self):
+        """Nothing can be recomputed, so nothing was."""
+        opt = self._opt_with((4, ""))
+        rulings = P.adjudicate(opt.predicates, [])
+        assert rulings[opt.predicates[0].id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
-    def test_an_escalated_only_survivor_is_not_examined(self):
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        assert OS.unexamined([opt], {"c1": None}) == [opt]
+    def test_an_option_with_no_commitment_is_not_examined(self):
+        """Nothing about it could be computed, so nothing about it was."""
+        opt = OS.Option(id="o1", text="an option")
+        assert OS.unexamined([opt], {}) == [opt]
 
-    def test_a_ruled_survivor_is_examined(self):
-        import adjudication_orchestrator as AO
+    def test_a_survivor_checked_only_against_its_own_arithmetic_is_untested(self):
+        """CORRECTED, AND A PAID RUN IS WHAT CORRECTED IT.
 
-        opt = OS.Option(id="o1", text="an option", claims=["c1"])
-        passed = type("V", (), {"status": AO.GateStatus.PASS, "detail": "d"})()
-        assert OS.unexamined([opt], {"c1": passed}) == []
+        This asserted that a fully ruled survivor is EXAMINED. A self-check
+        asks whether the option's own formula on the option's own inputs gives
+        the option's own figure, and a competent model always passes that --
+        it is a check on the seat's arithmetic, not on its claim about the
+        world.
+
+        Measured on the first full five-round run: twenty-one commitments,
+        eighteen PASS, and all eighteen of that shape -- "gives 30, committed
+        equals 30". Twelve options survived and their commitments appeared
+        under rulings, which reads as twelve answers that were checked and
+        held. Not one had been tested by anything outside itself.
+        """
+        opt = self._opt_with((4, "2 + 2"))
+        rulings = P.adjudicate(opt.predicates, [])
+        assert rulings[opt.predicates[0].id].status == "pass"
+        assert OS.unexamined([opt], rulings) == [opt], (
+            "a PASS on your own multiplication is not scrutiny")
+
+    def test_a_disputed_commitment_that_still_holds_counts_as_tested(self):
+        """The other half, and the fix is worthless without it. A commitment
+        somebody attacked and could not break HAS been examined, and it must
+        stop being reported as untested -- otherwise the warning fires on
+        every surviving option forever and an operator learns to ignore it."""
+        opt = self._opt_with((4, "2 + 2"))
+        pid = opt.predicates[0].id
+        rulings = P.adjudicate(opt.predicates, [(pid, {"a": Fraction(9)})])
+        assert OS.unexamined([opt], rulings) == [] or rulings[pid].disputes, (
+            "the setup is broken if no dispute was recorded")
+        if rulings[pid].disputes:
+            assert OS.unexamined([opt], rulings) == []
+
+    def test_a_second_seats_independent_route_counts_as_tested(self):
+        """An ALTERNATE is another seat reaching the same figure its own way.
+        Two independent derivations agreeing is corroboration, which is the
+        one thing a five-seat panel produces that one model cannot."""
+        opt = self._opt_with((4, "2 + 2"))
+        opt.predicates = [dataclasses.replace(
+            opt.predicates[0], alternates=(("1 + 3", ()),))]
+        rulings = P.adjudicate(opt.predicates, [])
+        assert OS.unexamined([opt], rulings) == []
+
+    def test_one_settled_commitment_does_not_cover_an_unsettled_one(self):
+        """CORRECTED. This asked whether ANY dependency reached a verdict, so
+        an option resting on one computed figure and one BLOCKED check counted
+        as examined and carried no warning at all.
+
+        Half-checked is not checked. The unresolved half is exactly where the
+        answer might fail, and a PASS beside it produces the appearance of
+        scrutiny rather than the fact."""
+        opt = self._opt_with((4, "2 + 2"), (9, "sqrt(81)"))
+        good, bad = opt.predicates
+        rulings = P.adjudicate(opt.predicates, [])
+        assert rulings[good.id].status == "pass"
+        assert rulings[bad.id].status == "blocked"
+        assert OS.unexamined([opt], rulings) == [opt]
 
     def test_an_open_list_is_not_parsed_as_options(self):
         """The closer is required to end with an OPEN list naming what the
         round could not settle. Those bullets became candidate answers."""
         opts = OS.parse_options(
-            "1. Build the ingest service in house\n"
-            "2. Buy the vendor platform and migrate\n"
+            "OPTION | Build the ingest service in house\n"
+            "OPTION | Buy the vendor platform and migrate\n"
             "\nOPEN:\n"
             "- whether the vendor roadmap is credible\n"
             "- what migration would actually cost\n")
@@ -1457,7 +1698,7 @@ class TestCodeOwnsTheSurvivorSet:
         """Cutting to the first twelve dropped answers by the order they
         happened to be written in, with nothing recorded. Reversing the
         closer's ordering changed which option vanished."""
-        text = "\n".join(f"{i}. option number {i} written out here"
+        text = "\n".join(f"OPTION | option number {i} written out here"
                          for i in range(1, OS.MAX_OPTIONS + 3))
         with pytest.raises(OS.TooManyOptions):
             OS.parse_options(text)
@@ -1468,21 +1709,60 @@ class TestCodeOwnsTheSurvivorSet:
         as having no usable option set and nothing could be eliminated. The
         guard is against a seat emitting a hundred lines, not against a panel
         considering the answers it actually proposed."""
-        text = "\n".join(f"{i}. a genuinely distinct option number {i}"
+        text = "\n".join(f"OPTION | a genuinely distinct option number {i}"
                          for i in range(1, 21))
         assert len(OS.parse_options(text)) == 20
 
     def test_prose_around_the_list_is_not_an_option(self):
         opts = OS.parse_options(
             "Here are the distinct options:\n"
-            "1. Build the ingest service in house\n"
-            "2. Buy the vendor platform and migrate\n"
+            "OPTION | Build the ingest service in house\n"
+            "OPTION | Buy the vendor platform and migrate\n"
             "That list is what later rounds eliminate from.")
         assert len(opts) == 2
 
     def test_duplicate_proposals_collapse_to_one_option(self):
-        opts = OS.parse_options("1. Build it in house\n2. Build it in house")
+        opts = OS.parse_options(
+            "OPTION | Build it in house\nOPTION | Build it in house")
         assert len(opts) == 1
+
+    def test_a_premise_list_is_not_an_option_set(self):
+        """THE BUG THAT WOULD HAVE WASTED A PAID RUN. A live canary parsed ten
+        options out of five seats. Eight were one seat's numbered premises --
+        "The panel consists of five AI seats", "Each round costs approximately
+        six API calls" -- and the three answers that seat actually proposed,
+        written as "### Option 1:" headings, were not among them. Five rounds
+        would have adjudicated the panel's own setup while the real candidates
+        were never on the table.
+
+        Nothing in the layout separates a premise from a proposal; it is a
+        question of what the seat MEANT. So the seat has to say which it is."""
+        text = ("### Premises\n"
+                "1. The panel consists of five AI seats.\n"
+                "2. Each round costs approximately six API calls.\n"
+                "3. API calls have a marginal cost in time and money.\n")
+        assert OS.parse_options(text) == []
+
+    def test_a_heading_that_names_itself_an_option_counts(self):
+        """Four of five seats wrote their proposals this way unprompted, in
+        four different house styles. Reading what the models already produce
+        beats insisting they learn a new convention -- the OPTION line is
+        still what the contract asks for, and this catches the rest."""
+        text = ("### Option 1: Always run all five rounds\n"
+                "Some reasoning about it.\n"
+                "**Option 2: Stop at the first null round**\n"
+                "## Option C -- Patience-2 with a hard cap of five\n")
+        assert [o.text for o in OS.parse_options(text)] == [
+            "Always run all five rounds",
+            "Stop at the first null round",
+            "Patience-2 with a hard cap of five"]
+
+    def test_a_seat_that_declares_nothing_contributes_nothing(self):
+        """One canary seat wrote bold numbered lines with no such word. Those
+        were answers, and they are not recoverable without guessing. An empty
+        option set is recoverable; a wrong one is not."""
+        assert OS.parse_options("**1. Always run all five rounds.**\n"
+                                "**2. Stop at the first null round.**\n") == []
 
 
 class TestTheTwoPathsAgreeAboutIndependence:
@@ -1553,6 +1833,7 @@ class TestAFailedRoundDoesNotOverstateCompletion:
         r1.options_created = 3
         r1.options_removed = ["opt_a"]
         r1.options_alive = ["opt_b", "opt_c"]
+        r1.options_observed = True
         r1.rho = None
         r1.merged = "x"
         r1.thinkers_ok = [f"seat_{i}" for i in range(1, 6)]
@@ -1578,8 +1859,8 @@ class TestTheOptionSetComesFromTheSeats:
     SOLE option. The invention detector missed it because every word had
     appeared in some seat's text."""
 
-    PROPOSALS = ("1. Hold all inventory until next quarter\n"
-                 "2. Liquidate only damaged inventory this week\n")
+    PROPOSALS = ("OPTION | Hold all inventory until next quarter\n"
+                 "OPTION | Liquidate only damaged inventory this week\n")
 
     def _run(self, tmp_path, closer_text):
         return NL.run_night(
@@ -1589,7 +1870,7 @@ class TestTheOptionSetComesFromTheSeats:
             rounds=NL.ROUNDS[:1])
 
     def test_a_recombination_never_becomes_an_option(self, tmp_path):
-        res = self._run(tmp_path, "1. Hold damaged inventory this week\n")
+        res = self._run(tmp_path, "OPTION | Hold damaged inventory this week\n")
         assert res[0].options_created == 2
         assert "Hold damaged inventory this week" not in res[0].merged
 
@@ -1601,57 +1882,75 @@ class TestTheOptionSetComesFromTheSeats:
     def test_a_wholly_invented_option_is_not_a_member(self, tmp_path):
         """It was flagged as invented and still became a member and appeared
         in the packet."""
-        res = self._run(tmp_path, "1. Acquire the Zurich subsidiary\n")
+        res = self._run(tmp_path, "OPTION | Acquire the Zurich subsidiary\n")
         assert "Zurich" not in res[0].merged
 
     def test_the_closer_can_still_merge_duplicates(self):
         pool = OS.parse_proposals({
-            "s1": "1. Build it in house over two quarters\n"
-                  "2. Buy the vendor platform\n",
-            "s2": "1. Build the thing ourselves over two quarters\n"})
+            "s1": "OPTION | Build it in house over two quarters\n"
+                  "OPTION | Buy the vendor platform\n",
+            "s2": "OPTION | Build the thing ourselves over two quarters\n"})
         assert len(pool) == 3
         merged = OS.apply_merges(pool, f"MERGE | {pool[0].id} | {pool[2].id}")
-        assert len(merged) == 2
-        # The surviving wording is a SEAT's, chosen by pool order rather than
-        # by the closer.
+        # CHANGED. A merge used to DROP the absorbed entry, so a model saying
+        # two answers were "the same" removed one from consideration and the
+        # record showed two options where three had been proposed. Whether two
+        # wordings are one answer is a semantic call, and this design does not
+        # let a model make those about membership.
+        assert len(merged) == 3
+        assert merged[2].merged_into == pool[0].id
+        # The keeper is chosen by POOL ORDER, by this code, so the wording
+        # that leads is a seat's own rather than the closer's pick.
+        assert merged[0].merged_into is None
         assert merged[0].text == "Build it in house over two quarters"
+        # The absorbed wording is presented under its keeper, not hidden.
+        working = OS.render_working(merged)
+        assert "also proposed as" in working
+        assert "Build the thing ourselves over two quarters" in working
 
     def test_a_merge_naming_an_unknown_id_changes_nothing(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Buy the vendor platform\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Buy the vendor platform\n"})
         assert len(OS.apply_merges(
             pool, "MERGE | opt_notreal01 | opt_notreal02")) == 2
 
     def test_prose_in_the_merge_step_is_ignored(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Buy the vendor platform\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Buy the vendor platform\n"})
         assert len(OS.apply_merges(
             pool, "I think option 1 and option 2 are really the same.")) == 2
 
     def test_chained_merges_land_on_one_survivor(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"
-                                         "2. Build the thing ourselves\n"
-                                         "3. Construct it internally\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"
+                                         "OPTION | Build the thing ourselves\n"
+                                         "OPTION | Construct it internally\n"})
         merged = OS.apply_merges(
             pool, f"MERGE | {pool[1].id} | {pool[2].id}\n"
                   f"MERGE | {pool[0].id} | {pool[1].id}")
-        assert len(merged) == 1
-        assert merged[0].id == pool[0].id
+        # Every wording is retained; the chain lands them all on one keeper.
+        assert len(merged) == 3
+        assert merged[0].merged_into is None
+        assert merged[1].merged_into == pool[0].id
+        assert merged[2].merged_into == pool[0].id
+        # One heading in the working text, with the other two beneath it.
+        working = OS.render_working(merged)
+        assert working.count("1. [") == 1
+        assert working.count("also proposed as") == 2
 
     def test_every_seats_proposals_reach_the_pool(self):
         pool = OS.parse_proposals({
-            "s1": "1. Build it in house\n",
-            "s2": "1. Buy the vendor platform\n",
-            "s3": "1. Rent capacity for six months\n"})
+            "s1": "OPTION | Build it in house\n",
+            "s2": "OPTION | Buy the vendor platform\n",
+            "s3": "OPTION | Rent capacity for six months\n"})
         assert len(pool) == 3
 
     def test_identical_wording_collapses_without_a_merge_line(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n",
-                                   "s2": "1. Build it in house\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n",
+                                   "s2": "OPTION | Build it in house\n"})
         assert len(pool) == 1
 
     def test_the_closer_is_told_it_may_not_add(self):
-        pool = OS.parse_proposals({"s1": "1. Build it in house\n"})
+        pool = OS.parse_proposals({"s1": "OPTION | Build it in house\n"})
         text = OS.render_pool(pool)
         assert "may not add an option" in text
         assert "MERGE |" in text
@@ -1716,8 +2015,12 @@ class TestWarrantVerifiedIsNotTheSameAsUnchecked:
             ClaimKind.CITATION,
             "10.1/x :: Harris ;; 2020 ;; Array programming with NumPy",
             [CitationFieldMatchGate(record_fn=lambda _d: rec)])
-        assert "WARRANT OK" in text
+        # The status word changed: a verified warrant beside prose is
+        # WARRANT HELD, PROPOSITION OPEN, and the line says both halves rather
+        # than abbreviating to a word a reader could take for a ruling.
+        assert "WARRANT HELD, PROPOSITION OPEN" in text
         assert "ran and held" in text
+        assert "confirms the EVIDENCE" in text
 
     def test_a_claim_with_no_gate_still_reports_as_escalated(self):
         text = self._summary(ClaimKind.JUDGMENT, None, [ArithmeticGate()])
@@ -1745,3 +2048,993 @@ class TestWarrantVerifiedIsNotTheSameAsUnchecked:
         packet = (tmp_path / "VERIFIER-PACKET.md").read_text()
         assert "Evidence verified, proposition open" in packet
         assert "Still open -- no mechanical check applied" in packet
+
+
+class TestEveryEntryPointPlansItsCaps:
+    """The canary planned its caps; live_night did not. The console and the
+    watcher are the two ways a real run is actually started, and both go
+    through live_night, so both ran with whatever profiles.json happened to
+    say. That is the $25.51 five-round worst case -- the ceiling then stopped
+    the run mid-flight, after paying for the rounds already done, and a
+    partial panel has adjudicated nothing.
+
+    Planning moved into live_night so no caller can forget it.
+    """
+
+    def _profiles(self, tmp_path, cap=32000):
+        import json
+        p = tmp_path / "profiles.json"
+        p.write_text(json.dumps({
+            f"seat_{i}": {"vendor": v, "model": f"m{i}", "max_tokens": cap}
+            for i, v in enumerate(
+                ("openai", "google", "mistral", "xai", "anthropic"), start=1)}))
+        return str(p)
+
+    def test_configured_caps_read_the_same_file_the_seats_come_from(
+            self, tmp_path):
+        caps = NL.configured_caps(self._profiles(tmp_path))
+        assert caps == {f"seat_{i}": 32000 for i in range(1, 6)}
+        assert sorted(caps) == [f"seat_{i}" for i in range(1, 6)]
+
+    def test_a_ceiling_that_cannot_fund_the_run_refuses_before_any_call(
+            self, tmp_path):
+        """Refusing here is free. Refusing in round three is not: the rounds
+        already paid for are thrown away, because whatever survived the rounds
+        that happened to fit is not an adjudicated answer."""
+        import json
+
+        import cost_ledger as CL
+
+        # Relative to THIS FILE, not the working directory: pytest run from
+        # the repo root instead of this folder would otherwise fail on a
+        # missing rates.json and look like a bug in the refusal.
+        rates_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "rates.json")
+        with open(rates_path, encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=0.50)
+        out = str(tmp_path / "o")
+        with pytest.raises(NL.RunTooExpensive) as exc:
+            NL.live_night("ask", self._profiles(tmp_path), out, ledger=led)
+        assert "needs about" in str(exc.value)
+        assert led.spent == 0.0
+        # It refused before the panel was built, so no credential was read and
+        # no run directory was created for a run that never started.
+        assert not os.path.exists(out)
+
+    def test_an_explicit_caps_argument_skips_planning(self, tmp_path):
+        """The canary sizes its own caps for a short smoke test, so passing
+        them must bypass the plan rather than be overruled by it.
+
+        CHECKED BY BEHAVIOUR, NOT BY READING THE SOURCE. This asserted that a
+        particular line of code was spelled a particular way: it would have
+        broken on a harmless rename and passed on a rewrite that dropped the
+        condition entirely, which is the opposite of what a test is for.
+
+        A ceiling far too small to plan five rounds is used, so the planning
+        path would refuse. With caps supplied it gets past planning and fails
+        later, on the panel -- which is proof enough that planning was not
+        what stopped it."""
+        import json
+
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "rates.json"), encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=0.01)
+        profiles = self._profiles(tmp_path)
+
+        with pytest.raises(NL.RunTooExpensive):
+            NL.live_night("ask", profiles, str(tmp_path / "a"), ledger=led)
+
+        with pytest.raises(Exception) as caught:
+            NL.live_night("ask", profiles, str(tmp_path / "b"), ledger=led,
+                          caps={f"seat_{i}": 2048 for i in range(1, 6)})
+        # Anything BUT the planning refusal: with caps supplied the plan is
+        # never consulted, so the run gets as far as building the panel.
+        assert not isinstance(caught.value, NL.RunTooExpensive)
+
+
+class TestWhetherWeLookedIsSeparateFromWhatWeFound:
+    """An empty survivor list is falsey.
+
+    The test for "did this round observe the option set" was
+    `r.options_alive or r.options_created`, so a round that removed the LAST
+    standing options was indistinguishable from one that never reached the
+    bookkeeping at all. The verdict fell back to an earlier round's list and
+    reported "2 remain" after both had been eliminated -- the opposite of what
+    happened, printed with the confidence of a count.
+    """
+
+    def _round(self, n, alive, observed, created=0, removed=()):
+        r = NL.RoundResult(n, f"round {n}")
+        r.thinkers_ok = [f"seat_{i}" for i in range(1, 6)]
+        r.options_created = created
+        r.options_removed = list(removed)
+        r.options_alive = list(alive)
+        r.options_observed = observed
+        r.merged = "x"
+        return r
+
+    def test_removing_the_last_option_is_not_read_as_not_looking(self):
+        rounds = [self._round(1, ["opt_a", "opt_b"], True, created=2),
+                  self._round(2, [], True, removed=["opt_a", "opt_b"])]
+        run = NL.assess(rounds)
+        assert "2 remain" not in " ".join(run.reasons + run.caveats)
+
+    def test_a_round_that_never_looked_falls_back_to_one_that_did(self):
+        """A closer that raises takes its round out before the bookkeeping,
+        and that round genuinely knows nothing."""
+        rounds = [self._round(1, ["opt_a", "opt_b"], True, created=2,
+                              removed=["opt_c"]),
+                  self._round(2, [], False)]
+        run = NL.assess(rounds)
+        assert run.adjudication == "PARTIAL"
+        assert "2 remain" in " ".join(run.reasons)
+
+    def test_the_two_cases_say_different_things(self):
+        """Which is the point: they used to produce the same account."""
+        looked = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                        removed=["opt_b"]),
+                            self._round(2, [], True, removed=["opt_a"])])
+        did_not = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                         removed=["opt_b"]),
+                             self._round(2, [], False)])
+        assert "EVERY OPTION WAS REMOVED" in " ".join(looked.reasons)
+        assert "EVERY OPTION WAS REMOVED" not in " ".join(did_not.reasons)
+        assert "1 remain" in " ".join(did_not.reasons)
+
+    def test_eliminating_everything_does_not_read_as_settling_on_one(self):
+        """`len(alive) <= 1` is satisfied by zero, so a run that refuted every
+        answer reported completion in the same words as one that had narrowed
+        to a single survivor. There is nothing to act on, and the report must
+        not imply there is."""
+        run = NL.assess([self._round(1, ["opt_a"], True, created=2,
+                                     removed=["opt_b"]),
+                         self._round(2, [], True, removed=["opt_a"])])
+        assert "NOTHING SURVIVED" in " ".join(run.reasons)
+
+
+class TestTwoSeatsProposingOneAnswerAreTwoAdvocates:
+    """Identical wording collapsed to whichever seat sorted first, and the
+    other seat's reasoning vanished with it. So if the surviving seat's
+    arithmetic was wrong the answer was removed -- and renaming the seats
+    changed whether it survived.
+    """
+
+    GOOD = ("OPTION | Run all five rounds every time\n"
+            "PREDICATE | cost | = | 30 api calls\nFORMULA | 5 * 6\n")
+    BAD = ("OPTION | Run all five rounds every time\n"
+           "PREDICATE | cost | = | 30 api calls\nFORMULA | 5 * 7\n")
+
+    def _run(self, a, b):
+        pool = OS.parse_proposals({"seat_a": a, "seat_b": b})
+        rulings = P.adjudicate([pr for o in pool for pr in o.predicates], [])
+        return pool, rulings, OS.eliminate(pool, rulings, 1)
+
+    def test_both_proposers_are_recorded(self):
+        pool, _, _ = self._run(self.GOOD, self.BAD)
+        assert pool[0].proposers == ["seat_a", "seat_b"]
+
+    def test_both_rationales_are_kept(self):
+        pool, _, _ = self._run(self.GOOD, self.BAD)
+        pred = pool[0].predicates[0]
+        assert len(pred.alternates) == 1
+
+    def test_one_advocates_bad_arithmetic_does_not_refute_the_answer(self):
+        _, rulings, removed = self._run(self.GOOD, self.BAD)
+        assert removed == []
+        assert next(iter(rulings.values())).status == "pass"
+
+    def test_the_result_does_not_depend_on_seat_order(self):
+        """The decisive property. Reversing the seats used to reverse the
+        outcome, which means the seat names were deciding the answer."""
+        first = self._run(self.GOOD, self.BAD)[2]
+        second = self._run(self.BAD, self.GOOD)[2]
+        assert first == second == []
+
+    def test_an_answer_with_no_sound_route_is_still_removed(self):
+        """Retaining every advocate does not mean retaining every answer."""
+        _, _, removed = self._run(self.BAD, self.BAD.replace("5 * 7", "5 * 8"))
+        assert [o.text for o in removed] == ["Run all five rounds every time"]
+
+
+class TestAMergedOptionSurvivesItsKeeper:
+    """Absorbed members were always shown under their keeper, so when the
+    keeper was refuted and the member was not, the member appeared NOWHERE --
+    not in the next round's prompt, not in the packet. The run reported one
+    option remaining and COMPLETE while the option it was reporting had been
+    silently dropped from the conversation.
+
+    Grouping is a presentation convenience. It cannot decide what is on the
+    table.
+    """
+
+    def _pair(self):
+        a = OS.Option(id="opt_aaaaaa", text="Build the thing in house")
+        b = OS.Option(id="opt_bbbbbb", text="Build it ourselves internally")
+        b.merged_into = a.id
+        return a, b
+
+    def test_while_the_keeper_lives_the_member_is_shown_under_it(self):
+        a, b = self._pair()
+        working = OS.render_working([a, b])
+        assert "also proposed as" in working
+        assert working.count("1. [") == 1
+
+    def test_when_the_keeper_dies_the_member_stands_on_its_own(self):
+        a, b = self._pair()
+        a.eliminated_in_round, a.elimination_reason = 1, "its arithmetic failed"
+        working = OS.render_working([a, b])
+        assert "opt_bbbbbb" in working
+        assert "Build it ourselves internally" in working
+
+    def test_the_survivor_is_never_absent_from_the_prompt(self):
+        a, b = self._pair()
+        a.eliminated_in_round = 1
+        assert [o.id for o in OS.unexamined([a, b], {})] == ["opt_bbbbbb"]
+
+
+class TestACommitmentIsIdentifiedByWhatItIsAbout:
+    def test_two_quantities_sharing_a_value_are_two_commitments(self):
+        """"fatalities = 0 people" and "cost = 0 people" on one option
+        produced a single id, so ruling on either silently ruled on both --
+        and an option could be removed for the arithmetic of a quantity
+        nobody had checked."""
+        a = P.Predicate(option_id="o", subject="fatalities", relation="=",
+                        value=Fraction(0), unit="people")
+        b = P.Predicate(option_id="o", subject="cost", relation="=",
+                        value=Fraction(0), unit="people")
+        assert a.id != b.id
+
+    def test_the_same_quantity_written_differently_is_one_commitment(self):
+        a = P.Predicate(option_id="o", subject="Total  Cost", relation="=",
+                        value=Fraction(4), unit="")
+        b = P.Predicate(option_id="o", subject="total cost", relation="=",
+                        value=Fraction(4), unit="")
+        assert a.id == b.id
+
+
+class TestNothingIsLostWithoutSayingSo:
+    """Every one of these dropped something on the floor in silence, and a
+    silently incomplete option set or half-checked option is indistinguishable
+    from a complete one on the page.
+    """
+
+    def test_a_short_answer_is_still_an_answer(self):
+        """The floor was 12 characters and "Do nothing." is eleven. So were
+        "Wait." and "Ship it." -- short answers to exactly the kind of
+        question this tool is for, discarded without a word. Later rounds only
+        remove, so they were gone for good."""
+        got = OS.parse_options("OPTION | Do nothing.\nOPTION | Wait.\n")
+        assert [o.text for o in got] == ["Do nothing.", "Wait."]
+
+    QUANTITIES = (
+        ("$12.27", Fraction(1227, 100), "dollars"),
+        ("95%", Fraction(95), "percent"),
+        ("2.5 hours/day", Fraction(5, 2), "hours/day"),
+        ("1e3 dollars", Fraction(1000), "dollars"),
+        ("1,200 dollars", Fraction(1200), "dollars"),
+        ("$1,200", Fraction(1200), "dollars"),
+    )
+
+    @pytest.mark.parametrize("written,value,unit", QUANTITIES)
+    def test_a_figure_a_seat_would_actually_write_parses(self, written, value,
+                                                         unit):
+        """Each of these produced NO commitment, so the option carrying it
+        could never be checked and never removed -- a hole, not a refusal."""
+        assert P._quantity(written) == (value, unit)
+
+    def test_a_fenced_challenge_is_read(self):
+        """CORRECTED BY A LIVE RUN. Fences are skipped for OPTION and
+        PREDICATE, where an echoed example would invent a candidate or a
+        commitment out of the contract's own sample text. A challenge cannot
+        do that -- it must name a commitment that already exists.
+
+        Skipping them here bought nothing and cost real work: a seat wrote a
+        correct challenge, put it in a fenced block the way a model formats
+        anything code-shaped, and it was dropped in silence."""
+        assert P.parse_challenges("```\nCHALLENGE | pred_x | a = 1\n```") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_an_indented_challenge_is_read(self):
+        assert P.parse_challenges("    CHALLENGE | pred_x | a = 1") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_the_contracts_own_example_still_settles_nothing(self):
+        """What the fence rule was protecting against, handled where it
+        belongs: the placeholder names no commitment, so adjudicate discards
+        it with every other unknown id."""
+        pred = P.Predicate(
+            option_id="o", subject="cost", relation="=", value=Fraction(30),
+            unit="", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+        echoed = P.parse_challenges(
+            "```\nCHALLENGE | <paste a commitment id from the list above> "
+            "| per_round = 9\n```") * 3
+        assert echoed, "it parses"
+        assert P.adjudicate([pred], echoed)[pred.id].status == "pass"
+
+    def test_a_fenced_predicate_is_still_not_a_commitment(self):
+        """The protection that DOES matter stays: a fenced PREDICATE would
+        mint a commitment out of quoted sample text."""
+        assert P.parse_predicates(
+            "o", "```\nPREDICATE | q | = | 4\nFORMULA | 2 + 2\n```") == []
+
+    def test_a_real_challenge_still_lands(self):
+        assert P.parse_challenges("CHALLENGE | pred_x | a = 1") == [
+            ("pred_x", {"a": Fraction(1)})]
+
+    def test_too_many_commitments_is_refused_not_truncated(self):
+        """The fifth and later were dropped silently, so an option could be
+        checked against four figures while appearing to rest on six -- and
+        which four depended on the order they were written in."""
+        block = "".join(f"PREDICATE | q{i} | = | {i}\nFORMULA | {i}\n"
+                        for i in range(6))
+        with pytest.raises(P.TooManyCommitments):
+            P.parse_predicates("o", block)
+
+    def test_an_over_declared_option_survives_untested(self, tmp_path):
+        """Fail closed on the OPTION, not on the round. It carries no
+        commitment, is reported untested, and does not take the other seats'
+        answers down with it."""
+        block = "OPTION | An answer that over-declares\n" + "".join(
+            f"PREDICATE | q{i} | = | {i}\nFORMULA | {i}\n" for i in range(6))
+        got = OS.parse_options(block)
+        assert len(got) == 1
+        assert got[0].predicates == []
+        assert got[0].parse_note is not None
+        assert OS.unexamined(got, {}) == got
+
+
+class TestWhatTheLivePanelActuallyWrote:
+    """Both of these were found by paying five vendors $0.61 to answer one
+    round, and neither could have been found any other way: they are facts
+    about how real models write, not about how this code behaves.
+    """
+
+    def test_one_answer_written_twice_is_one_answer(self):
+        """A seat heads each answer AND restates it as an OPTION line -- a
+        heading for the reader, a machine line for the parser. Reading both
+        forms turned its four answers into eight.
+
+        The twins are not harmless. Commitments follow the OPTION line, so the
+        heading-derived copy carries none, cannot be checked, cannot be
+        removed, and survives to the end reported as untested. The panel would
+        have spent five rounds adjudicating phantoms."""
+        text = (
+            "### Option 1 - Keep the fixed five-round schedule, and log "
+            "per-round elimination counts\n"
+            "Some reasoning about it.\n"
+            "OPTION | keep the fixed five-round schedule and log per-round "
+            "eliminations\n"
+            "PREDICATE | total API calls | = | 30 api calls\n"
+            "FORMULA | rounds * calls_per_round\n"
+            "INPUT | rounds = 5\nINPUT | calls_per_round = 6\n"
+            "### Option 2 - Stop at the first round that eliminates nothing\n"
+            "OPTION | stop at the first round that eliminates nothing\n"
+            "PREDICATE | API calls if it stops at round one | = | 6 api calls\n"
+            "FORMULA | rounds * calls_per_round\n"
+            "INPUT | rounds = 1\nINPUT | calls_per_round = 6\n")
+        got = OS.parse_options(text)
+        assert len(got) == 2, [o.text for o in got]
+        assert all(o.predicates for o in got), "a twin would carry none"
+
+    def test_a_heading_with_no_option_line_still_counts(self):
+        """The other live style, and the reason both forms are read at all."""
+        text = ("### Option 1: stop at the first null round\n"
+                "PREDICATE | calls saved | = | 24 api calls\n"
+                "FORMULA | 4 * 6\n")
+        got = OS.parse_options(text)
+        assert [o.text for o in got] == ["stop at the first null round"]
+        assert len(got[0].predicates) == 1
+
+    ASSIGNMENTS = (
+        ("total_calls = rounds * calls_per_round",
+         (("rounds", 5), ("calls_per_round", 6)), 30),
+        ("saved_calls = full_run_calls - early_stop_calls",
+         (("full_run_calls", 30), ("early_stop_calls", 18)), 12),
+        ("rounds * calls_per_round",
+         (("rounds", 5), ("calls_per_round", 6)), 30),
+    )
+
+    @pytest.mark.parametrize("formula,inputs,expected", ASSIGNMENTS)
+    def test_a_formula_written_as_an_assignment_is_evaluated(
+            self, formula, inputs, expected):
+        """Four of five seats wrote "total_calls = rounds * calls_per_round".
+        Reading the whole line as an expression made the quantity's own name an
+        unbound variable, so five of six otherwise sound commitments came back
+        BLOCKED -- an option that could never be checked, removed or verified,
+        entirely because of where it put an equals sign."""
+        pred = P.Predicate(
+            option_id="o", subject="total API calls", relation="=",
+            value=Fraction(expected), unit="", formula=formula,
+            inputs=tuple((n, Fraction(v)) for n, v in inputs))
+        assert P.self_check(pred).status == "pass"
+
+    def test_a_comparison_is_not_mistaken_for_an_assignment(self):
+        """Only a bare name on the left is a name being defined."""
+        pred = P.Predicate(option_id="o", subject="q", relation="=",
+                           value=Fraction(1), unit="", formula="a >= b",
+                           inputs=(("a", Fraction(2)), ("b", Fraction(1))))
+        assert P.self_check(pred).status == "blocked"
+
+    def test_a_missing_input_is_still_blocked(self):
+        """The one live commitment that stays blocked, correctly: it named
+        cost_per_call and never gave it a value."""
+        pred = P.Predicate(
+            option_id="o", subject="threshold probability", relation="=",
+            value=Fraction(1), unit="",
+            formula="threshold = next_round_calls * cost_per_call",
+            inputs=(("next_round_calls", Fraction(6)),))
+        ruling = P.self_check(pred)
+        assert ruling.status == "blocked"
+        assert "cost_per_call" in ruling.detail
+
+
+class TestTheInventionWarningDoesNotFireOnTheClosersOwnJob:
+    """Measured on a live round: the merge came back CONTAMINATED with 16
+    sentences "no seat proposed", and the first three were its own MERGE
+    lines -- the exact format it is asked for, naming option ids this code
+    minted after the seats had answered, so no seat could ever have written
+    them. They are unsupported by construction.
+
+    A warning that fires on every correct run is worse than no warning. The
+    operator learns to skip it, and the sentence it exists to catch goes past
+    with the rest.
+    """
+
+    SEATS: ClassVar[dict] = {
+        "s1": "We should hold inventory until the market recovers next year.",
+        "s2": "Liquidating damaged stock this week limits the write-down.",
+    }
+
+    def test_a_merge_line_is_not_an_invention(self):
+        merged = ("MERGE | opt_f0ad27edc214 | opt_c7523ee2591f\n"
+                  "MERGE | opt_8268e09315bf | opt_39af187d2681\n")
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_heading_is_structure_and_not_an_assertion(self):
+        merged = "## Untrusted-material finding (report, not obey)\n"
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_list_item_restating_a_seat_is_not_an_invention(self):
+        """The marker is stripped and the sentence read on its merits, so a
+        faithful restatement passes for the same reason a bare one would."""
+        merged = ("- Liquidating damaged stock this week limits the "
+                  "write-down\n"
+                  "[Fact] Holding inventory until the market recovers next "
+                  "year was also proposed.\n")
+        assert NL.closer_introduced(merged, self.SEATS) == []
+
+    def test_a_real_invention_is_still_caught(self):
+        """The failure this exists to stop, unchanged: a substantive
+        assertion no seat made, carried into the deliverable by the one
+        component nothing reviews."""
+        merged = ("Recommendation: acquire the Zurich subsidiary before the "
+                  "regulatory filing deadline expires.\n")
+        assert NL.closer_introduced(merged, self.SEATS)
+
+    def test_an_invention_dressed_as_a_list_item_is_still_caught(self):
+        """Excluding list markers must not become a way to smuggle one in."""
+        merged = ("- Recommendation: acquire the Zurich subsidiary before "
+                  "the regulatory filing deadline expires.\n")
+        assert NL.closer_introduced(merged, self.SEATS)
+
+
+class TestOnlyCorroborationOutweighsTheProposer:
+    """Without this, rounds two through five cannot remove anything at all.
+
+    An option is checked against its own arithmetic when it is proposed, and
+    after that nothing could reach it: a challenge recorded a disagreement and
+    stopped there. Four of the five rounds were commentary with a cost.
+
+    A single challenger still decides nothing -- their figure has no more
+    standing than the proposer's, and preferring the later one lets any seat
+    delete any answer by disagreeing confidently. Two seats writing BLIND, in
+    the same round, arriving independently at the same value is a different
+    fact, and it is the one a five-seat panel exists to produce.
+    """
+
+    def _pred(self):
+        return P.Predicate(
+            option_id="o", subject="cost", relation="=", value=Fraction(30),
+            unit="api calls", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+
+    def _rule(self, *values):
+        pred = self._pred()
+        challenges = [(pred.id, {"per_round": Fraction(v)}) for v in values]
+        return pred, P.adjudicate([pred], challenges)[pred.id]
+
+    def test_no_challenge_leaves_it_standing(self):
+        assert self._rule()[1].status == "pass"
+
+    def test_one_seat_disagreeing_removes_nothing(self):
+        """The whole reason a challenge is not a refutation."""
+        assert self._rule(7)[1].status == "pass"
+
+    def test_two_seats_disagreeing_with_each_other_remove_nothing(self):
+        """Two objections are not agreement. Neither figure is corroborated,
+        and the option's own remains the only one anybody stood behind twice."""
+        assert self._rule(7, 8)[1].status == "pass"
+
+    def test_two_seats_agreeing_carry_it(self):
+        _, ruling = self._rule(7, 7)
+        assert ruling.status == "fail"
+        assert "agreed by 2 seats" in ruling.detail
+        assert "against 1 for 6" in ruling.detail
+
+    def test_the_removal_says_what_outweighed_what(self):
+        """A reader has to be able to see that this was agreement between
+        seats, not proof, and how narrow the margin was."""
+        _, ruling = self._rule(7, 7)
+        assert "NOBODY PROVED THE SEATS RIGHT" in ruling.detail
+        assert "rounds * per_round" in ruling.detail
+
+    def test_agreement_that_still_satisfies_the_commitment_removes_nothing(self):
+        """Corroborated inputs are recomputed, not assumed fatal. If the
+        answer survives its own formula on the agreed numbers, it survives."""
+        pred = P.Predicate(
+            option_id="o", subject="cost", relation="<=", value=Fraction(40),
+            unit="api calls", formula="rounds * per_round",
+            inputs=(("rounds", Fraction(5)), ("per_round", Fraction(6))))
+        ruling = P.adjudicate(
+            [pred], [(pred.id, {"per_round": Fraction(7)})] * 2)[pred.id]
+        assert ruling.status == "pass"
+        assert any("still holds" in d for d in ruling.disputes)
+
+    def test_seats_backing_the_option_are_counted_against_the_challengers(self):
+        """A seat that offers the SAME value the option declared is agreeing
+        with it, and that has to count -- otherwise two challengers could
+        outweigh four seats who had looked and found nothing wrong."""
+        pred = self._pred()
+        challenges = [(pred.id, {"per_round": Fraction(7)})] * 2 + \
+                     [(pred.id, {"per_round": Fraction(6)})] * 2
+        assert P.adjudicate([pred], challenges)[pred.id].status == "pass"
+
+    def test_a_challenge_naming_an_input_that_does_not_exist_is_ignored(self):
+        pred = self._pred()
+        challenges = [(pred.id, {"invented": Fraction(9)})] * 3
+        assert P.adjudicate([pred], challenges)[pred.id].status == "pass"
+
+    def test_the_threshold_is_stated_not_implied(self):
+        assert P.CORROBORATION_THRESHOLD == 2
+
+
+class TestASeatCanSeeWhatItIsAskedToChallenge:
+    """A challenge names an input:
+
+        CHALLENGE | <id> | per_round = 9
+
+    and the commitment was rendered as subject, relation and value only -- no
+    formula, no input names. So a seat had no way to learn what any input was
+    called, while the prompt told it it was being shown "the formula that
+    computes it, and the numbers put in".
+
+    Measured live: the one seat that attempted a challenge wrote
+    `saved_calls_per_run` against a commitment whose input is
+    `saving_per_run`. It named nothing and was correctly ignored, for a fault
+    entirely in what it had been shown.
+    """
+
+    def _pred(self, **kw):
+        base = {"option_id": "o", "subject": "cost", "relation": "=",
+                "value": Fraction(30), "unit": "api calls",
+                "formula": "rounds * per_round",
+                "inputs": (("rounds", Fraction(5)),
+                           ("per_round", Fraction(6)))}
+        base.update(kw)
+        return P.Predicate(**base)
+
+    def test_the_formula_is_shown(self):
+        assert "rounds * per_round" in self._pred().render()
+
+    def test_every_input_name_and_value_is_shown(self):
+        out = self._pred().render()
+        assert "rounds = 5" in out
+        assert "per_round = 6" in out
+
+    def test_a_seat_can_form_a_valid_challenge_from_what_it_sees(self):
+        """The property that matters: what is on the page is sufficient to
+        write a line the parser will bind."""
+        pred = self._pred()
+        shown = pred.render()
+        pid = re.search(r"\[(pred_[0-9a-f]{12})\]", shown).group(1)
+        name = re.search(r"with (\w+) = ", shown).group(1)
+        parsed = P.parse_challenges(f"CHALLENGE | {pid} | {name} = 9")
+        assert parsed == [(pid, {name: Fraction(9)})]
+        # And it binds to a real input rather than naming nothing.
+        assert name in dict(pred.inputs)
+
+    def test_an_alternate_route_is_shown_too(self):
+        """Another advocate's reasoning is challengeable on the same terms."""
+        pred = self._pred(alternates=(("a * b", (("a", Fraction(3)),
+                                                 ("b", Fraction(10)))),))
+        out = pred.render()
+        assert "a * b" in out and "a = 3" in out
+
+    def test_a_commitment_with_no_formula_says_so(self):
+        out = self._pred(formula="", inputs=()).render()
+        assert "no formula declared" in out
+
+
+class TestTheTwoContractsAgreeWithEachOther:
+    """Round one told seats "it does not remove anything" about another
+    seat's disagreement. Corroboration made that false, and round two says
+    the opposite -- so a seat proposing an answer was told one rule and a
+    seat challenging one was told another.
+
+    Caught in a pre-flight rather than by a test, which is why the pre-flight
+    exists: nothing here fails when two prompts disagree, because each is
+    correct on its own.
+    """
+
+    @staticmethod
+    def _flat(text):
+        """Whitespace-normalised, because these are WRAPPED paragraphs.
+
+        An assertion that happens to span a line break fails on a reflow that
+        changed nothing, and passes only by luck when it does not -- so it
+        tests the formatter rather than the wording."""
+        return " ".join(text.split())
+
+    def _round_one(self):
+        return self._flat(NL.thinker_prompt(NL.ROUNDS[0], "x", None,
+                                            persona=NL.PERSONAS[0]))
+
+    def _later(self):
+        return self._flat(NL.thinker_prompt(NL.ROUNDS[1], "x", "options here",
+                                            persona=NL.PERSONAS[0]))
+
+    def test_round_one_does_not_promise_immunity_from_other_seats(self):
+        one = self._round_one()
+        assert "it does not remove anything" not in one
+        assert "Nobody else's arithmetic can remove it" not in one
+
+    def test_round_one_names_both_ways_an_option_dies(self):
+        one = self._round_one()
+        assert "TWO OR MORE other seats" in one
+        assert "does not produce YOUR figure" in one
+
+    def test_both_rounds_say_one_dissenter_decides_nothing(self):
+        assert "A single seat disagreeing with you removes nothing" \
+            in self._round_one()
+        assert "ALONE DOES NOT REMOVE ANYTHING" in self._later()
+
+    def test_both_rounds_say_agreement_is_what_carries(self):
+        assert "agreement between seats who wrote blind" in self._round_one()
+        assert "WHAT DOES REMOVE IT is agreement" in self._later()
+
+    def test_the_threshold_the_prompts_describe_is_the_one_in_the_code(self):
+        """Two prompts saying "two or more" over a constant set to three
+        would be a lie nobody would notice until a run went wrong."""
+        assert P.CORROBORATION_THRESHOLD == 2
+
+
+# Twelve shapes, written the way the five seats actually format a line they
+# think of as data. Every one of them carries the SAME commitment, so any
+# shape that parses must produce the same predicate id as the plain form.
+MARKER_SHAPES: list[tuple[str, str]] = [
+    ("plain", "{L}"),
+    ("dash bullet", "- {L}"),
+    ("star bullet", "* {L}"),
+    ("plus bullet", "+ {L}"),
+    ("unicode bullet", "• {L}"),
+    ("ordered dot", "1. {L}"),
+    ("ordered paren", "3) {L}"),
+    ("blockquote", "> {L}"),
+    ("bold whole line", "**{L}**"),
+    ("bullet then bold", "- **{L}**"),
+    ("inline code", "`{L}`"),
+    ("table row", "| {L} |"),
+]
+
+
+class TestTheProtocolSurvivesHowAModelActuallyWritesIt:
+    """OPTION, PREDICATE, FORMULA, INPUT and CHALLENGE are the whole
+    machine-readable protocol, and every one of them was read with a regex
+    anchored at the start of the line.
+
+    Measured before this was fixed: eleven of the twelve shapes below lost the
+    PREDICATE entirely, ten of twelve lost the OPTION, and nine of ten lost
+    the CHALLENGE. Nothing was raised in any case.
+
+    This costs more than the same defect cost on CLAIM. A CLAIM removes
+    nothing, so losing one loses a report line. An OPTION line IS the answer.
+    A PREDICATE with its FORMULA and INPUT is the ONLY thing in this tool that
+    can remove an answer, so an option whose commitments were eaten by a
+    bullet character cannot be checked, cannot be refuted, and survives to the
+    end reported as untested -- which reads as an answer that withstood five
+    rounds of scrutiny and is in fact an answer nobody ever looked at.
+
+    A seat that follows the contract exactly and then formats its reply as a
+    list is the ordinary case, not the awkward one.
+    """
+
+    PLAIN_PREDICATE = "PREDICATE | annual accidents | = | 4 accidents"
+    PLAIN_OPTION = "OPTION | rent capacity for six months and decide after"
+    PLAIN_CHALLENGE = "CHALLENGE | pred_abc123 | incidents = 3"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_commitment_survives_its_formatting(self, name, shape):
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert len(got) == 1, f"{name}: the commitment was lost in silence"
+        assert got[0].subject == "annual accidents"
+        assert got[0].value == Fraction(4)
+        assert got[0].unit == "accidents"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_formatting_does_not_change_which_commitment_it_is(self, name,
+                                                               shape):
+        """The id is content-addressed, so a decorated line that parses into a
+        DIFFERENT id is no better than one that is dropped: the same figure
+        from two seats stops corroborating itself."""
+        plain = P.parse_predicates("opt_1", self.PLAIN_PREDICATE)
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert got[0].id == plain[0].id, f"{name}: same commitment, new id"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_an_answer_survives_its_formatting(self, name, shape):
+        got = OS.parse_options(shape.format(L=self.PLAIN_OPTION))
+        assert len(got) == 1, f"{name}: the answer was lost in silence"
+        assert got[0].text == "rent capacity for six months and decide after"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_challenge_survives_its_formatting(self, name, shape):
+        got = P.parse_challenges(shape.format(L=self.PLAIN_CHALLENGE))
+        assert got == [("pred_abc123", {"incidents": Fraction(3)})], name
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_decorated_option_still_carries_its_own_commitments(self, name,
+                                                                  shape):
+        """The whole point of the OPTION line surviving is that the figures
+        underneath it survive with it, bound to that option by position. An
+        option parsed without its commitments is worse than no option: it is
+        an answer that cannot be removed."""
+        block = "\n".join([
+            shape.format(L=self.PLAIN_OPTION),
+            shape.format(L="PREDICATE | total cost | = | 12 dollars"),
+            shape.format(L="FORMULA | months * per_month"),
+            shape.format(L="INPUT | months = 6"),
+            shape.format(L="INPUT | per_month = 2"),
+        ])
+        opts = OS.parse_options(block)
+        assert len(opts) == 1, f"{name}: the answer was lost"
+        preds = opts[0].predicates
+        assert len(preds) == 1, f"{name}: the commitment was lost"
+        assert preds[0].formula == "months * per_month"
+        assert dict(preds[0].inputs) == {"months": Fraction(6),
+                                         "per_month": Fraction(2)}
+
+    def test_a_starred_bullet_does_not_eat_the_multiplication_sign(self):
+        """The one way this fix could corrupt rather than recover. A star
+        bullet and a multiplication operator are the same character, and the
+        formula is the thing that decides whether an answer is refuted -- a
+        FORMULA silently reduced from "months * per_month" to "months
+        per_month" would not parse, the commitment would go untested, and the
+        cause would be invisible in the report."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "* PREDICATE | total cost | = | 12 dollars",
+            "* FORMULA | months * per_month",
+            "* INPUT | months = 6",
+            "* INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        assert preds[0].formula == "months * per_month"
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.status == "pass", ruling.detail
+        assert not ruling.refutes
+
+    def test_the_contracts_own_indented_example_still_makes_no_commitment(
+            self):
+        """The negative control this fix must not break. OPTION_CONTRACT
+        prints its worked example INDENTED, not fenced, and a seat quoting it
+        back must not manufacture a commitment its option never made. The
+        indent guard reads the raw line for exactly this reason, so
+        undecorating first cannot blind it."""
+        echoed = ("    PREDICATE | API calls a five-round run costs "
+                  "| = | 30 api calls")
+        assert P.parse_predicates("opt_1", echoed) == []
+        assert P.parse_predicates("opt_1", "    - " + echoed.strip()) == []
+
+    def test_a_fenced_example_still_makes_no_commitment(self):
+        assert P.parse_predicates("opt_1", "\n".join([
+            "```",
+            self.PLAIN_PREDICATE,
+            "```",
+        ])) == []
+
+    def test_a_bulleted_predicate_can_still_be_refuted_by_its_own_numbers(
+            self):
+        """End to end, on the path that matters: a commitment written as a
+        list item is recomputed and removed when its own formula on its own
+        inputs does not produce its own figure. Before the fix this option
+        survived the round untested."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "- PREDICATE | total cost | = | 15 dollars",
+            "- FORMULA | months * per_month",
+            "- INPUT | months = 6",
+            "- INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.refutes, ruling.detail
+
+
+class TestTheUntestedCaveatNamesTheRealReason:
+    """Three different facts land in options_unexamined, and the run summary
+    described them with one sentence that named two:
+
+        "They declared no commitment this code could compute, or none was
+         ruled on."
+
+    Neither is true of the case the first full five-round run actually
+    produced on every surviving option. Eighteen of its twenty-one
+    commitments PASSED -- each one a seat computing 5 * 6 and committing to
+    30 -- so a figure WAS declared and it WAS ruled. What never happened is
+    anyone outside the proposing seat touching it.
+
+    A true conclusion supported by a false reason is worse than no caveat: an
+    operator goes looking for a missing PREDICATE that is sitting right
+    there, and the fact that matters never reaches them.
+    """
+
+    def _option(self, predicates):
+        opt = OS.Option(id="opt_1", text="rent for six months and decide")
+        opt.predicates = list(predicates)
+        return opt
+
+    def _committed(self, figure="12 dollars"):
+        return P.parse_predicates("opt_1", "\n".join([
+            f"PREDICATE | total cost | = | {figure}",
+            "FORMULA | months * per_month",
+            "INPUT | months = 6",
+            "INPUT | per_month = 2",
+        ]))
+
+    def test_an_option_with_no_figure_says_so(self):
+        opt = self._option([])
+        assert OS.unexamined_reason(opt, {}) == OS.NO_COMMITMENT
+
+    def test_a_figure_nobody_settled_says_so(self):
+        preds = self._committed()
+        opt = self._option(preds)
+        assert OS.unexamined_reason(opt, {}) == OS.NOT_RULED
+
+    def test_a_figure_that_only_passed_its_own_arithmetic_says_so(self):
+        """The case the old sentence got wrong. It declared a figure, the
+        figure was ruled, and the ruling was a PASS -- and nothing outside
+        the seat that wrote it ever went near it."""
+        preds = self._committed()
+        opt = self._option(preds)
+        rulings = P.adjudicate(preds, [])
+        assert rulings[preds[0].id].status == "pass"
+        assert OS.unexamined_reason(
+            opt, rulings) == OS.ONLY_ITS_OWN_ARITHMETIC
+
+    def test_the_reason_and_the_list_cannot_disagree(self):
+        """One rule, read two ways, is two rules. unexamined() and
+        unexamined_reason() must always agree about the same option, or the
+        report counts one set and explains another."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            listed = [o.id for o in OS.unexamined([opt], verdicts)]
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert bool(listed) == (reason is not None)
+
+    def test_every_reason_it_can_give_is_one_it_declares(self):
+        """A reason the caveat prints but the module does not name is a
+        string nobody can grep for when a run says something surprising."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert reason in OS.UNEXAMINED_REASONS
+
+    def test_the_run_summary_prints_the_reason_it_recorded(self):
+        good = "\n".join([
+            "- **OPTION | rent capacity for six months and decide after**",
+            "  - PREDICATE | total cost | = | 12 dollars",
+            "  - FORMULA | months * per_month",
+            "  - INPUT | months = 6",
+            "  - INPUT | per_month = 2",
+        ])
+        bad = good.replace("rent capacity for six months and decide after",
+                           "buy the capacity outright now today").replace(
+                               "12 dollars", "15 dollars")
+        thinkers = {
+            f"seat_{i}": (lambda t: (lambda _p: t))(good if i % 2 else bad)
+            for i in range(1, 6)
+        }
+        import tempfile
+        with tempfile.TemporaryDirectory() as out:
+            results = NL.run_night(
+                "Rent or buy?", thinkers, lambda _p: good,
+                Orchestrator(gates=[ArithmeticGate()]), out)
+        assert results[-1].options_unexamined_why == {
+            results[-1].options_alive[0]: OS.ONLY_ITS_OWN_ARITHMETIC}
+        caveat = next(c for c in NL.assess(results).caveats
+                      if "NEVER TESTED" in c)
+        assert OS.ONLY_ITS_OWN_ARITHMETIC in caveat
+        assert "declared no commitment this code could compute" not in caveat
+
+
+class TestTheCloserIsAModelToo:
+    """Everything about how a seat formats its output applies to the closer,
+    and the closer is the one whose text becomes the deliverable.
+
+    Its MERGE lines were matched only when written bare. A closer that
+    correctly identified two seats proposing the same answer, and wrote it as
+    a list item, had the merge dropped -- and twins are not harmless: the
+    commitments follow the OPTION line, so the second copy carries none,
+    cannot be checked, cannot be removed, and survives to the end reported as
+    untested.
+    """
+
+    POOL_TEXT = "\n".join([
+        "OPTION | rent capacity for six months and decide after",
+        "PREDICATE | total cost | = | 12 dollars",
+        "FORMULA | months * per_month",
+        "INPUT | months = 6",
+        "INPUT | per_month = 2",
+        "",
+        "OPTION | lease the capacity for half a year then decide",
+    ])
+
+    def _pool(self):
+        return OS.parse_options(self.POOL_TEXT)
+
+    @pytest.mark.parametrize("shape", [
+        "MERGE | {a} | {b}",
+        "- MERGE | {a} | {b}",
+        "* MERGE | {a} | {b}",
+        "1. MERGE | {a} | {b}",
+        "**MERGE | {a} | {b}**",
+        "- **MERGE | {a} | {b}**",
+        "> MERGE | {a} | {b}",
+    ])
+    def test_a_merge_survives_how_the_closer_writes_it(self, shape):
+        pool = self._pool()
+        assert len(pool) == 2
+        merged = OS.apply_merges(
+            pool, shape.format(a=pool[0].id, b=pool[1].id))
+        by_id = {o.id: o for o in merged}
+        assert by_id[pool[1].id].merged_into == pool[0].id, (
+            "the duplicate was not folded into the answer it repeats")
+        assert by_id[pool[0].id].merged_into is None
+
+    def test_prose_still_merges_nothing(self):
+        """The negative control. Undecorating must not let the closer merge
+        by talking about it: only a MERGE line naming ids in the pool does
+        anything, and an id it invents is ignored."""
+        pool = self._pool()
+        prose = OS.apply_merges(
+            pool, "I think the first two options are really the same.")
+        assert all(o.merged_into is None for o in prose)
+        invented = OS.apply_merges(
+            self._pool(), f"MERGE | {pool[0].id} | opt_deadbeef")
+        assert all(o.merged_into is None for o in invented)
+
+    def test_a_bolded_merge_line_is_not_reported_as_an_invention(self):
+        """A warning that fires on every correct run is worse than no
+        warning: the operator learns to skip it, and the sentence it exists
+        to catch goes past with the rest. This already happened once on a
+        live round -- sixteen sentences flagged, the first three the closer's
+        own MERGE lines -- and bold was a second route to it."""
+        flagged = NL.closer_introduced(
+            "**MERGE | opt_3f9a2c | opt_88ab01**", {"seat_1": "some text"})
+        assert flagged == []
+
+    def test_a_bolded_invention_is_still_caught(self):
+        """The check this must not blind. Emphasis is not a way past it."""
+        flagged = NL.closer_introduced(
+            "**Recommendation: liquidate the Zurich subsidiary immediately.**",
+            {"seat_1": "the panel considered renting capacity for months"})
+        assert flagged, "an invented recommendation went unflagged"

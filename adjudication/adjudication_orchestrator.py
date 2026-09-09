@@ -212,6 +212,19 @@ class Candidate:
     id: str
     content: str
     claims: list[Claim] = field(default_factory=list)
+    unsupported_basis: list[str] = field(default_factory=list)
+    """Findings that took away this candidate's stated evidence.
+
+    A fabricated quote leaves the claims it was offered for standing on
+    nothing. That is worth knowing and it is not a refutation of the answer,
+    so it is recorded here rather than deleting the candidate.
+    """
+    predicates: list[object] = field(default_factory=list)
+    """The typed commitments this candidate made, and the ONLY way it can go.
+
+    Parsed from its OWN content, so a candidate can only ever be removed by
+    something it said about itself. See predicate.py.
+    """
     eliminated: bool = False
     elimination_reason: str | None = None
     elimination_kind: str | None = None
@@ -238,6 +251,28 @@ class GateStatus(str, Enum):
     # "nosec" as test ids and warns about each prose word.
     PASS = "pass"  # nosec B105
     FAIL = "fail"
+    WARRANT_HELD = "warrant_held"
+    """The warrant checked out. Whether it establishes the CLAIM is open.
+
+    A gate rules on evidence. "2 + 2 = 4" is true, and it is true whether the
+    sentence beside it reads "the launch is 4 and safe to proceed" or "the
+    launch is 4 and unsafe to proceed" -- both of which this recorded as PASS,
+    and printed to the operator as [PASS], for the same warrant. Two
+    contradictory propositions cannot both be established by one sum.
+
+    Every attempt to decide the question lexically failed, and each failure
+    looked like a gap in the rule rather than the wrong kind of rule. It is
+    the wrong kind of rule: a sentence can always assert more than its warrant
+    covers, and no amount of reading the sentence detects that reliably.
+
+    So the code stops claiming to know. The warrant held; the proposition is
+    open. That is exactly what was established and it is not nothing -- it is
+    simply not the claim.
+
+    NOT a finding, NOT a kill, and NOT an acceptance. Options are decided by
+    the typed commitments in predicate.py, where the comparison has no prose
+    in it at all.
+    """
     INAPPLICABLE = "inapplicable"
     BLOCKED = "blocked"
     """The check could not be performed. NOT a finding, and never a kill.
@@ -355,7 +390,81 @@ def _safe_eval(node: ast.AST, source: str | None = None) -> Fraction:
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
         return _bounded(_UNARY_OPS[type(node.op)](
             _safe_eval(node.operand, source)))
+    if isinstance(node, ast.Call):
+        return _safe_call(node, source)
     raise ValueError("unsupported expression")
+
+
+def _half_up(value: Fraction, places: Fraction = Fraction(0)) -> Fraction:
+    """round(), half away from zero, exact on Fractions.
+
+    NOT Python's round(), which is half-to-even: round(0.5) is 0 and
+    round(2.5) is 2. A seat writing round(x) means the schoolroom rule, and a
+    commitment ruled on a convention the seat did not intend is a refutation
+    of this code's reading rather than of the seat's arithmetic. Half-up also
+    matches _agrees_to_written_precision, so the evaluator and the comparison
+    round the same way."""
+    if places.denominator != 1:
+        raise ValueError("unsupported expression")
+    scale = Fraction(10) ** int(places)
+    scaled = value * scale
+    whole, rest = divmod(abs(scaled.numerator), scaled.denominator)
+    if rest * 2 >= scaled.denominator:
+        whole += 1
+    return Fraction(whole if scaled >= 0 else -whole) / scale
+
+
+_CALLABLE: dict[str, Any] = {
+    "floor": lambda *a: Fraction(math.floor(_one(a))),
+    "ceil": lambda *a: Fraction(math.ceil(_one(a))),
+    "abs": lambda *a: abs(_one(a)),
+    "min": lambda *a: min(_at_least_one(a)),
+    "max": lambda *a: max(_at_least_one(a)),
+    "round": lambda *a: _half_up(a[0], a[1] if len(a) > 1 else Fraction(0)),
+}
+"""The only functions an expression may call, and every one is exact on
+Fractions.
+
+WHY THEY EXIST. On the first full five-round run, two of twenty-one
+commitments came back BLOCKED with "unsupported expression" -- one used
+floor(cap / per_round_escalations) and one used min(maximum_rounds, ...).
+Those are ordinary arithmetic, and a blocked commitment is one that can never
+be verified OR refuted: the option carrying it survives marked untested. Two
+of twenty-one is a tenth of everything the panel committed to, lost because
+the evaluator could not do floor.
+
+NOTHING ELSE IS REACHABLE. The name must be a bare identifier in this map --
+no attribute access, no keywords, no *args -- so there is no route from an
+expression to any other callable, and the evaluator still never uses eval().
+"""
+
+
+def _one(args: tuple[Fraction, ...]) -> Fraction:
+    if len(args) != 1:
+        raise ValueError("unsupported expression")
+    return args[0]
+
+
+def _at_least_one(args: tuple[Fraction, ...]) -> tuple[Fraction, ...]:
+    if not args:
+        raise ValueError("unsupported expression")
+    return args
+
+
+def _safe_call(node: ast.Call, source: str | None) -> Fraction:
+    """One allowlisted arithmetic function, on already-evaluated arguments."""
+    if (not isinstance(node.func, ast.Name)
+            or node.func.id not in _CALLABLE
+            or node.keywords
+            or any(isinstance(a, ast.Starred) for a in node.args)):
+        raise ValueError("unsupported expression")
+    args = tuple(_safe_eval(a, source) for a in node.args)
+    try:
+        return _bounded(Fraction(_CALLABLE[node.func.id](*args)))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("unsupported expression") from exc
 
 
 _NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
@@ -416,263 +525,74 @@ that is precisely how "under 4", "about 4" and "5000 dollars" passed as
 restatements of arithmetic that established none of them."""
 
 
-def _content_words(text: str) -> list[str]:
-    return [w for w in _WORDISH.findall((text or "").casefold()) if len(w) > 1]
-
-
-_PER_PHRASE = re.compile(r"\bper\s+\w+", re.IGNORECASE)
-
-_LINKING = re.compile(
-    r"\b(?:is|are|was|were|totals|totalling|comes to|come to|amounts to|"
-    r"equals|costs?|adds up to|works out to|will be|would be|uses?|requires?|"
-    r"takes?|needs?|avoids?|saves?|spends?|consumes?|yields?|produces?|"
-    r"means?|gives?|leaves?|returns?)\b",
-    re.IGNORECASE)
-"""Verbs that introduce what a quantity claim ASSERTS.
-
-The list was six verbs long and real model output does not oblige. A live
-canary produced "At six API calls per round, a five-round run USES 30 API
-calls" -- a textbook restatement of arithmetic that had just passed -- and no
-verb matched, so the whole sentence counted as the assertion and it was
-rejected for mentioning five, round and run.
-
-Bare "total" is still deliberately absent: it matched "in total" at the end of
-an ordinary cost sentence and left the assertion empty."""
-"""Verbs that introduce what a quantity claim ASSERTS.
-
-Bare "total" is deliberately absent. It matched "in total" at the end of an
-ordinary cost sentence, so the assertion after the last linking verb was the
-empty string and every genuine claim was rejected."""
-
-
-def _leading_token(assertion: str) -> str:
-    """The first content token of an assertion, normalised if numeric.
-
-    Articles and prepositions are skipped: "the 30 API calls" and "30 API
-    calls" assert the same thing.
-    """
-    skip = {"a", "an", "the", "of", "at", "in", "to", "for", "about", "only",
-            "just", "some", "around", "roughly"}
-    text = (assertion or "").strip()
-
-    # Drop leading articles and prepositions, then look for a number FIRST.
-    # Tokenising by word split "1,200" into "1" and "200", so a perfectly
-    # ordinary formatted figure looked like an assertion about 1.
-    while True:
-        m = re.match(r"\s*([A-Za-z]+)\b", text)
-        if not m or m.group(1).casefold() not in skip:
-            break
-        text = text[m.end():]
-
-    number = _NUMBER.match(text.strip())
-    if number:
-        nums = _numbers(number.group(0))
-        if nums:
-            return next(iter(nums))
-
-    # Raw tokens, not _content_words: that drops single characters, so an
-    # assertion of exactly "4" had no leading token at all and the plainest
-    # possible restatement -- "the total is 4" -- was rejected.
-    for word in _WORDISH.findall(text.casefold()):
-        if word in skip:
-            continue
-        nums = _numbers(word)
-        return next(iter(nums)) if nums else word
-    return ""
-
-
-def _quantity_claim_unsupported(claim: Claim, warrant: str,
-                                text: str) -> str | None:
-    """Whether a verified quantity establishes what this claim asserts.
-
-    THE RULE IS POSITIONAL: the checked value must be what the sentence
-    ASSERTS, not merely a token it contains.
-
-    Everything before the linking verb NAMES the quantity and may say
-    anything -- "the vendor licence", "two engineers for two quarters",
-    "renting for six months". Everything after it is the assertion, and must
-    be the computed value plus quantity words.
-
-    An earlier rule required the whole sentence to contain nothing outside a
-    fixed vocabulary. It was safe and useless: a five-round dry run with three
-    genuine cost claims eliminated NOTHING, because "the vendor licence is
-    47000 per year in total" mentions a vendor and a licence. A tool that
-    cannot rule on an ordinary cost claim produces a reading list rather than
-    an answer, which is the other way to be worthless.
-
-    It still catches the case it was built for. "The launch is SAFE to
-    proceed, code 4" carries 4, but what it ASSERTS after the verb is being
-    safe -- and arithmetic settles nothing about that.
-    """
-    # THE MOST LITERAL RESTATEMENT: the claim IS the warrant. A seat writing
-    # "CLAIM | arithmetic | 2 + 2 = 4 | 2 + 2 = 4" has asserted exactly what
-    # was checked and nothing else, and every positional rule below is about
-    # sentences, which this is not.
-    squeeze = " ".join((text or "").split()).casefold()
-    if squeeze and squeeze == " ".join(warrant.split()).casefold():
-        return None
-
-    _, _, rhs = warrant.rpartition("=")
-    results = _numbers(rhs)
-    claimed = _numbers(text)
-    if results and not (results & claimed):
-        return (
-            f"WARRANT DOES NOT BEAR ON THE CLAIM: the check verified "
-            f"{warrant.strip()!r}, and the claim text does not mention "
-            f"{' or '.join(sorted(results))}."
-        )
-
-    verbs = list(_LINKING.finditer(text))
-    assertion = text[verbs[-1].end():] if verbs else text
-
-    # "per year", "per seat", "per request" name what the quantity is PER.
-    # That is the same labelling job the words before the verb do, and it is
-    # stripped for the same reason: rejecting it made every ordinary rate --
-    # "the licence is 47000 dollars per year" -- unusable, while the number
-    # asserted is exactly the one that was computed.
-    assertion_core = _PER_PHRASE.sub(" ", assertion)
-    asserted = _content_words(assertion_core)
-
-    hedges = sorted(set(asserted) & _QUALIFIERS)
-    if hedges:
-        return (
-            f"THE CLAIM QUALIFIES THE NUMBER: "
-            f"{', '.join(repr(h) for h in hedges)}. The check confirmed a "
-            f"value; it established nothing about being under, over, or near "
-            f"it."
-        )
-
-    if results and not (results & _numbers(assertion)):
-        return (
-            f"THE NUMBER IS NOT WHAT THE CLAIM ASSERTS: it says "
-            f"{assertion.strip()[:60]!r}, and mentions "
-            f"{' or '.join(sorted(results))} elsewhere. A verified quantity "
-            f"settles the quantity, not whatever else the sentence says."
-        )
-
-    # A unit the warrant does not measure means a different quantity. "5 km =
-    # 5000 m" is a true conversion and establishes nothing about 5000 dollars.
-    warrant_units = set(_content_words(warrant)) & _UNIT_WORDS
-    foreign = sorted((set(asserted) & _UNIT_WORDS) - warrant_units)
-    if foreign:
-        return (
-            f"THE CLAIM IS ABOUT A DIFFERENT QUANTITY: it asserts "
-            f"{', '.join(repr(u) for u in foreign)}, which the warrant "
-            f"{warrant.strip()!r} does not measure. A number without its "
-            f"dimension is not the same claim."
-        )
-
-    # THE VALUE MUST LEAD THE ASSERTION.
-    #
-    # Requiring the assertion to contain ONLY quantity words rejected every
-    # real claim: "30 API calls per item at six calls per round" mentions
-    # items and rounds, and is exactly a restatement of the arithmetic. What
-    # actually separates it from "SAFE to proceed, code 4" is WHERE the number
-    # sits. In a restatement the value is what the predicate is about, so it
-    # comes first; in the other the predicate is about being safe and the
-    # number trails as an aside.
-    lead = _leading_token(assertion_core)
-    if results and lead not in results:
-        return (
-            f"THE NUMBER IS NOT WHAT THE CLAIM ASSERTS: after the verb it "
-            f"says {assertion.strip()[:60]!r}, which is about "
-            f"{lead or 'something else'} rather than "
-            f"{' or '.join(sorted(results))}. A verified quantity settles the "
-            f"quantity, not whatever else the sentence says."
-        )
-    return None
-
-
-def warrant_supports(claim: Claim) -> str | None:
-    """None if the warrant ESTABLISHES this proposition; else why it does not.
-
-    A GATE CHECKS A WARRANT. IT DOES NOT CHECK THE PROPOSITION.
-
-    An earlier version of this function used shared words and shared numbers
-    as a test of relevance. That was wrong in the way that matters: token
-    overlap is not entailment. Both of these were accepted on the warrant
-    "2 + 2 = 4", because both contain the token 4:
-
-        "The launch is SAFE to proceed, code 4"
-        "The launch is NOT SAFE to proceed, code 4"
-
-    An equation establishes neither. The check confirmed that 2 + 2 is 4 and
-    said nothing whatever about a launch.
-
-    So lexical similarity no longer ACCEPTS anything. A verified warrant
-    accepts a claim only when the claim is a RESTATEMENT of that warrant --
-    when the checked object and the accepted proposition are the same object.
-    Everything else escalates to a person: not eliminated, because it may well
-    be true, and not accepted, because nothing here established it.
-
-    That is deliberately strict and it will escalate more. The alternative is
-    a system that stamps [PASS] on prose nothing examined, which is the one
-    failure that makes every other safeguard pointless.
-    """
-    text = claim.text or ""
-    warrant = claim.warrant or ""
-
-    # A negation or contrast marker anywhere means the proposition is not a
-    # plain restatement, and no token comparison can tell which way it points.
-    negations = sorted(set(_content_words(text)) & _NEGATION)
-    if negations:
-        return (
-            f"NOT A RESTATEMENT OF THE WARRANT: the claim contains "
-            f"{', '.join(repr(n) for n in negations)}, so what it asserts is "
-            f"not what the check confirmed. A verified warrant cannot settle "
-            f"a proposition that qualifies or reverses it."
-        )
-
-    if claim.kind in (ClaimKind.ARITHMETIC, ClaimKind.UNIT):
-        return _quantity_claim_unsupported(claim, warrant, text)
-
-    if claim.kind is ClaimKind.CITATION:
-        return (
-            "SOURCE VERIFIED, PROPOSITION NOT ESTABLISHED: the citation "
-            "resolves and matches the work named, which rules out a fabricated "
-            "reference. It does not establish that the work SUPPORTS this "
-            "claim -- misrepresenting a real paper is invisible to every "
-            "mechanical check and needs a person who has read it."
-        )
-
-    if claim.kind is ClaimKind.SCHEMA:
-        return (
-            "SHAPE VALID, PROPOSITION NOT ESTABLISHED: the document parsed "
-            "and matched its schema. Schema validity is a fact about "
-            "structure and carries no information about any assertion made "
-            "alongside it."
-        )
-
-    if claim.kind is ClaimKind.QUOTE_VERIFICATION:
-        # The quote is present at the URL. Whether the source SAYS what the
-        # claim says is a reading, and a shared-word test cannot make it: a
-        # page reading "revenue tripled" shares every content word with
-        # "revenue did not triple". The negation check above catches the
-        # reversal; the rest is a person's judgement.
-        return (
-            "QUOTE FOUND, PROPOSITION NOT ESTABLISHED: the quoted text is "
-            "present at the cited URL, which rules out a fabricated quote. "
-            "Whether it supports this claim is a reading, and no string "
-            "comparison settles it."
-        )
-
-    if claim.kind is ClaimKind.CODE_BEHAVIOR:
-        ct = {w for w in _content_words(warrant) if len(w) > 2}
-        tt = {w for w in _content_words(text) if len(w) > 2}
-        if ct and tt and not (ct & tt):
-            return (
-                f"COMMAND DOES NOT BEAR ON THE CLAIM: {warrant.strip()!r} "
-                f"exited zero, which establishes that it exited zero. The "
-                f"claim text is about something else."
-            )
-        return None
-
-    return None
+# ---------------------------------------------------------------------------
+# THE LEXICAL WARRANT-TO-PROPOSITION RULE WAS DELETED HERE, NOT DISABLED.
+#
+# It read a claim's sentence and decided whether an attached warrant
+# established it. Roughly 250 lines: content words, linking verbs, positional
+# assertion splitting, leading-token extraction, per-phrase handling. Every
+# version of it was defeated by a sentence it had not anticipated, and the
+# decisive pair was this one, which it accepted BOTH of:
+#
+#     warrant "2 + 2 = 4"  claim "The launch is 4 and safe to proceed"
+#     warrant "2 + 2 = 4"  claim "The launch is 4 and unsafe to proceed"
+#
+# One sum cannot establish a proposition and its negation. Each repair looked
+# like closing a gap in the rule; the rule itself was the defect, because a
+# sentence can always assert more than its warrant covers and no amount of
+# reading the sentence detects that reliably.
+#
+# What replaced it is not a better rule. A gate now reports WARRANT_HELD --
+# the evidence checked out, the proposition is open -- and elimination runs
+# entirely on the typed commitments in predicate.py, where the comparison has
+# no prose in it to be fooled by.
+#
+# It is deleted rather than left unused so nothing calls it back. Kept around,
+# it reads like a working control, and the next person to need "does this
+# warrant support this claim" would find a function that answers confidently
+# and wrongly.
+# ---------------------------------------------------------------------------
 
 
 MAX_AST_NODES = 200
 MAX_EXPONENT = 64
 MAX_INT_DIGITS = 100
+
+
+def text_is_self_checking(claim: Claim, gates: Sequence[object]) -> bool:
+    """Whether the claim's TEXT is itself an assertion this gate can check.
+
+    THE ONE WAY A CLAIM STILL REACHES PASS, and it is not a rule about words.
+
+    A gate rules on the warrant. When the text says more than the warrant --
+    "The launch is 4 and safe to proceed" -- the extra is not established, and
+    every attempt to detect that by reading the sentence failed. But a claim
+    whose text IS a checkable assertion is a different case entirely: there is
+    nothing to infer, because the gate can rule on the text directly.
+
+    So the text is fed to the same gate as its own warrant. "2 + 2 = 4" parses
+    and holds, so the claim is verified. "The launch is 4 and safe to proceed"
+    is not an arithmetic assertion at all -- it does not parse, the gate
+    cannot rule on it, and no amount of prose can make it parse. That is what
+    makes this safe where a lexical test was not: the check is the evaluator,
+    and the evaluator has no opinion about launches.
+    """
+    text = (claim.text or "").strip()
+    if not text:
+        return False
+    probe = Claim(id="probe", kind=claim.kind, text=text, warrant=text)
+    ruled = False
+    for gate in gates:
+        try:
+            if not gate.applies_to(probe):    # type: ignore[attr-defined]
+                continue
+            result = gate.check(probe)        # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - a probe that raises settles nothing
+            return False
+        if result.status is not GateStatus.PASS:
+            return False                      # every applicable gate must hold
+        ruled = True
+    return ruled
 
 
 def _reject_unbounded(tree: ast.AST) -> str | None:
@@ -752,7 +672,17 @@ def _agrees_to_written_precision(actual: Fraction, claimed: str) -> bool:
         return False
 
 
-_UNIT_AFTER_NUMBER = re.compile(r"(?<=[\d)])\s*([A-Za-z][A-Za-z ]*)")
+_UNIT_AFTER_NUMBER = re.compile(
+    r"(?<=[\d)])\s*(?!e[-+]?\d)([A-Za-z][A-Za-z ]*(?:/[A-Za-z]+)?)")
+"""A unit label following a number.
+
+Allows a rate written with a slash -- "2.5 hours/day" -- which seats write
+constantly and which used to leave the value unparseable, so the commitment
+carrying it silently did not exist.
+
+The exponent guard keeps scientific notation intact: "1e3 dollars" was read
+as 1 in units of "e", and the exponent vanished into the unit label.
+"""
 
 
 def _split_unit(side: str) -> tuple[str, str]:
@@ -944,6 +874,33 @@ class ArithmeticGate:
             f"claimed {expected}, recomputed {actual}")
 
 
+def _citation_identifier(warrant: str | None) -> str | None:
+    """The identifier out of a citation warrant, in either accepted shape.
+
+    A citation may be written bare -- "10.1038/x" or a URL -- or in the fuller
+    form the claim contract asks for, which appends the author, year and title
+    so a second gate can check the identifier resolves to THAT paper:
+
+        10.1038/s41586-020-2649-2 :: Harris ;; 2020 ;; Array programming
+
+    Returns None when neither shape is present. Parsing it in one place is
+    what stops two gates from disagreeing about what a citation looks like.
+    """
+    if not warrant:
+        return None
+    ident = warrant.strip()
+    if "::" in ident:
+        ident = ident.partition("::")[0].strip()
+    if not ident:
+        return None
+    if _DOI_PATTERN.match(ident) or ident.startswith("http"):
+        return ident
+    return None
+
+
+_DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$")
+
+
 class CitationResolutionGate:
     """
     Confirms a cited identifier actually resolves. Magesh et al. (2025, JELS
@@ -954,7 +911,6 @@ class CitationResolutionGate:
     a confirmed record. A resolver that returns True by default defeats the gate.
     """
     name = "citation_resolution"
-    _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 
     def __init__(self, resolver_fn: Callable[[str], bool]):
         self.resolver_fn = resolver_fn
@@ -967,8 +923,17 @@ class CitationResolutionGate:
         if not warrant:
             return GateResult(self.name, GateStatus.FAIL,
                               "no warrant supplied")
-        ident = warrant.strip()
-        if not (self._DOI.match(ident) or ident.startswith("http")):
+        # ONE CITATION FORMAT, READ THE SAME WAY BY BOTH GATES.
+        #
+        # The claim contract asks for "<doi> :: <surname> ;; <year> ;; <title>"
+        # so the field-matching gate can check the DOI resolves to the paper
+        # the seat named. This gate read the WHOLE string as a bare
+        # identifier, so a correctly formatted citation came back FAIL
+        # "malformed identifier" -- a valid source called fabricated, its
+        # resolver never invoked, by the gate that exists to confirm sources
+        # exist. The two gates were rejecting each other's required format.
+        ident = _citation_identifier(warrant)
+        if ident is None:
             return GateResult(self.name, GateStatus.FAIL, "malformed identifier")
         try:
             ok = self.resolver_fn(ident)
@@ -1561,19 +1526,30 @@ _EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
 _ORDERED_MARKER = re.compile(r"^\s*\d+[.)]\s+")
 _TRAILING_EMPHASIS = re.compile(r"[*`]+\s*$")
 _LEADING_EMPHASIS = re.compile(r"^\s*(?:[>\-+\u2022]\s*)*[*`]")
+_TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+_TRAILING_CELL = re.compile(r"\s*\|\s*$")
 
 
-def undecorate_claim_line(line: str) -> str:
-    """Strip list and emphasis decoration from a claim line, fields untouched.
+def undecorate_marker_line(line: str) -> str:
+    """Strip list and emphasis decoration from a marker line, fields untouched.
 
-    WHY THE REAL PATH NEEDS THIS. The extractor below only considers a line
-    that STARTS WITH "CLAIM". A model that writes its findings as a markdown
-    list -- which is what a model asked for a list of findings does -- produces
-    "- CLAIM | ..." or "**CLAIM | ...**" or "1. CLAIM | ...", none of which
-    start with CLAIM. Those lines were not malformed-and-escalated; they were
-    skipped before the fail-closed branch could see them, and the claim
-    vanished with nothing counted and nothing raised. Measured on the four
-    commonest list shapes, all four lost the claim entirely.
+    EVERY MACHINE-READABLE LINE THE PROTOCOL DEFINES NEEDS THIS, not just
+    CLAIM. A model that writes its findings as a markdown list -- which is
+    what a model asked for a list of findings does -- produces "- CLAIM | ..."
+    or "**CLAIM | ...**" or "1. CLAIM | ...", none of which start with CLAIM.
+    Those lines were not malformed-and-escalated; they were skipped before the
+    fail-closed branch could see them, and the claim vanished with nothing
+    counted and nothing raised. Measured on the four commonest list shapes,
+    all four lost the claim entirely.
+
+    THE SAME LOSS WAS MEASURED ON OPTION, PREDICATE, FORMULA, INPUT AND
+    CHALLENGE, and it costs more there. A CLAIM removes nothing, so losing one
+    loses a report line. An OPTION line IS the answer, and PREDICATE with its
+    FORMULA and INPUT is the only thing in the tool that can remove an answer
+    -- an option whose commitments were eaten by a bullet character cannot be
+    checked, cannot be refuted, and survives to the end reported as untested.
+    Eleven of twelve shapes a model actually writes lost the commitment
+    entirely, in silence.
 
     Only the segment BEFORE the first pipe is de-emphasised, so an asterisk
     inside a multiplication expression is never disturbed. Ordered-list markers
@@ -1606,6 +1582,15 @@ def undecorate_claim_line(line: str) -> str:
     if _LEADING_EMPHASIS.match(after_marker):
         stripped = _TRAILING_EMPHASIS.sub("", stripped)
 
+    # A MARKDOWN TABLE ROW IS A LIST SHAPE TOO. "| PREDICATE | subject | = |
+    # 4 accidents |" loses its leading pipe to _DECORATION above, but keeps
+    # the closing one, which lands on the LAST field: the value arrives as
+    # "4 accidents |" and fails to parse as a quantity, so the whole
+    # commitment is dropped. The closing pipe is stripped only when the line
+    # OPENED with one, which no marker line ever does on its own.
+    if _TABLE_ROW.match(after_marker):
+        stripped = _TRAILING_CELL.sub("", stripped)
+
     head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
     if not head:
         return stripped
@@ -1623,7 +1608,7 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     malformed claim is never silently dropped -- dropping it would let a model
     smuggle an unverified assertion past the gates by writing it badly.
 
-    Each line is undecorated first (see undecorate_claim_line). Without that
+    Each line is undecorated first (see undecorate_marker_line). Without that
     the fail-closed guarantee above had a hole: it only ever applied to lines
     STARTING with "CLAIM", so a claim written as a markdown list item was
     skipped before the guarantee could reach it and disappeared silently.
@@ -1633,7 +1618,7 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
         # Undecorate BEFORE the startswith test, not after. A decorated line
         # fails that test and is skipped outright, which is a silent drop --
         # the one outcome this extractor's fail-closed design exists to avoid.
-        line = undecorate_claim_line(raw_line)
+        line = undecorate_marker_line(raw_line)
         if not line.strip().upper().startswith("CLAIM"):
             continue
         m = _CLAIM_LINE.match(line)
@@ -2240,8 +2225,22 @@ class Orchestrator:
 
         Returns the ids of claims newly adjudicated here.
         """
+        from predicate import parse_predicates
+
         ruled: list[str] = []
         for cand in candidates:
+            # A CANDIDATE'S COMMITMENTS COME FROM ITS OWN CONTENT, read once,
+            # here, before anything can be ruled on. That is what makes them
+            # candidate-owned: nothing added later can attach a dependency to
+            # a candidate that a rival wants removed.
+            if not cand.predicates:
+                try:
+                    cand.predicates = list(
+                        parse_predicates(cand.id, cand.content))
+                except Exception:  # noqa: BLE001 - see option_set: an option
+                    # that over-declared carries nothing and is reported
+                    # untested; it does not take the run down.
+                    cand.predicates = []
             for claim in cand.claims:
                 if claim.id in self.verdicts or claim.id in self._seen_claims:
                     continue
@@ -2261,15 +2260,19 @@ class Orchestrator:
                 # place a candidate's own assertions are ruled on, applying a
                 # weaker rule than the one seats are held to.
                 if result.status is GateStatus.PASS:
-                    unsupported = warrant_supports(claim)
-                    if unsupported is not None:
-                        self.verdicts[claim.id] = ClaimVerdict(
-                            claim.id, "intake", None, result.gate,
-                            f"{unsupported} (the warrant itself checked out: "
-                            f"{result.detail})",
-                        )
-                        self.escalation_queue.append(claim)
-                        continue
+                    # A prose claim never reaches PASS here either. See the
+                    # same point in run_pass: one warrant was accepting a
+                    # proposition and its negation, so the gate reports what
+                    # it actually established and stops there.
+                    self.verdicts[claim.id] = ClaimVerdict(
+                        claim.id, "intake", GateStatus.WARRANT_HELD,
+                        result.gate,
+                        f"WARRANT HELD, PROPOSITION OPEN: {result.detail}. "
+                        f"This confirms the evidence, not the sentence it was "
+                        f"offered for.",
+                    )
+                    self.escalation_queue.append(claim)
+                    continue
                 self.verdicts[claim.id] = ClaimVerdict(
                     claim.id, "intake", result.status, result.gate, result.detail
                 )
@@ -2322,42 +2325,94 @@ class Orchestrator:
                 if edge and not _edge_is_own(claim.id, unsupported, own):
                     continue
                 if edge:
+                    # RECORDED, NOT REMOVED, AND THIS IS A CHANGE.
+                    #
+                    # A fabricated quote is a serious finding and it stays a
+                    # finding: the claim loses its stated basis, the conduct
+                    # ledger records it against the seat, and the packet
+                    # carries it. What it does not do is delete the answer.
+                    #
+                    # Refuting a quote refutes the EVIDENCE. Whether the
+                    # answer it was offered for is wrong is a separate
+                    # question, and this path was answering it by assumption
+                    # -- the same non-sequitur as removing an option because
+                    # a sum attached to it came out wrong.
+                    #
+                    # It also bypassed the one function that removes
+                    # candidates, so this engine could delete an answer by a
+                    # rule the other engine did not have.
                     _quote_id, why = edge
-                    cand.eliminated = True
-                    cand.elimination_reason = f"{p.name}: {why}"
-                    cand.elimination_kind = "earned"
-                    rec.eliminated_candidates.append(cand.id)
+                    cand.unsupported_basis.append(f"{p.name}: {why}")
                     break
 
     def _sweep_standing_verdicts(
         self, candidates: list[Candidate], p: Pass, rec: PassRecord
     ) -> None:
-        """Remove any candidate leaning on a claim already ruled FAIL.
+        """Remove any candidate whose OWN DECLARED COMMITMENT is refuted.
 
-        run_pass eliminates on claims proposed IN THAT PASS. That leaves two
-        gaps, both of which let a false candidate through: a claim ruled at
-        intake and never re-proposed by a seat, and a claim ruled in an earlier
-        pass whose candidate was not checked against it. Claim ids are
-        content-addressed, so a standing FAIL is a fact about the claim itself
-        and applies to every candidate carrying it, whenever it was ruled.
+        THE SAME RULE THE FIVE-ROUND ENGINE USES, from predicate.py, so the
+        two cannot answer the same question differently.
+
+        This used to remove a candidate leaning on any claim ruled FAIL, with
+        no test that the refuted warrant bore on the claim's proposition --
+        the weaker of two rules, and the one that decided whenever it ran. A
+        candidate could be deleted by a false sum about something else
+        entirely.
+
+        A candidate that declared no commitment is never removed here. It
+        survives and is reported as untested, which is the intended direction
+        of failure: a false acceptance leaves a wrong answer among the
+        candidates and says so, a false removal deletes the right one and
+        makes whatever remains look earned.
         """
+        from predicate import (
+            adjudicate,
+            parse_challenges,
+            parse_predicates,
+            refuted_commitment,
+        )
+
+        # PARSED HERE AS WELL AS AT INTAKE. gate_candidate_claims is not the
+        # only way into a pass -- run_pass is called directly by the night
+        # engine and by callers that never staged candidates -- and a
+        # candidate whose commitments were never read cannot be removed by
+        # them, which reads as "nothing was refuted" rather than "nothing was
+        # looked at". Parsing is idempotent and content-addressed.
+        for cand in candidates:
+            if not cand.predicates:
+                try:
+                    cand.predicates = list(
+                        parse_predicates(cand.id, cand.content))
+                except Exception:  # noqa: BLE001 - see option_set: an option
+                    # that over-declared carries nothing and is reported
+                    # untested; it does not take the run down.
+                    cand.predicates = []
+
+        standing = [pr for cand in candidates if not cand.eliminated
+                    for pr in cand.predicates]
+        if not standing:
+            return
+        challenges: list[tuple[str, Mapping[str, Fraction]]] = []
+        for cand in candidates:
+            challenges.extend(parse_challenges(cand.content))
+            for claim in cand.claims:
+                challenges.extend(parse_challenges(claim.warrant or ""))
+        rulings = adjudicate(standing, challenges)  # type: ignore[arg-type]
+        if not rulings:
+            return
         for cand in candidates:
             if cand.eliminated:
                 continue
-            for claim in cand.claims:
-                v = self.verdicts.get(claim.id)
-                # ONLY a FAIL eliminates. A BLOCKED claim means the check did
-                # not happen -- a firewall, a rate limit, a paywall -- and
-                # letting that remove a candidate would make a network outage
-                # indistinguishable from a refutation.
-                if v is not None and v.status is GateStatus.FAIL:
-                    cand.eliminated = True
-                    cand.elimination_reason = (
-                        f"{p.name}: {v.gate} failed -- {v.detail}"
-                    )
-                    cand.elimination_kind = "earned"
-                    rec.eliminated_candidates.append(cand.id)
-                    break
+            ruling = refuted_commitment(cand, rulings)
+            if ruling is None:
+                continue
+            cand.eliminated = True
+            cand.elimination_reason = (
+                f"{p.name}: a commitment this candidate declared was "
+                f"mechanically refuted -- {ruling.detail}"
+            )
+            cand.elimination_kind = "earned"
+            rec.eliminated_candidates.append(cand.id)
 
     def claim_coverage(self, cand: Candidate) -> tuple[int, int]:
         """How many of a candidate's own claims actually reached a gate.
@@ -2444,23 +2499,41 @@ class Orchestrator:
             )
 
             if result.status is GateStatus.PASS:
-                # THE GATE CHECKED THE WARRANT. Does the warrant bear on the
-                # PROPOSITION? If that cannot be established, the claim is not
-                # accepted -- it escalates. Not eliminated either: an
-                # unestablished claim could still be true, and killing it here
-                # would break the rule this whole system runs on.
-                unsupported = warrant_supports(claim)
-                if unsupported is not None:
-                    self.verdicts[claim.id] = ClaimVerdict(
-                        claim.id, p.id, None, result.gate,
-                        f"{unsupported} (the warrant itself checked out: "
-                        f"{result.detail})",
-                    )
-                    self.escalation_queue.append(claim)
-                    rec.escalated += 1
-                    rec.warrant_only += 1
+                # THE GATE CHECKED THE WARRANT, AND THAT IS ALL IT CHECKED.
+                #
+                # This used to ask a lexical rule whether the warrant bore on
+                # the claim's sentence, and accept the claim outright when the
+                # rule said yes. The rule said yes to both of these:
+                #
+                #   "2 + 2 = 4"  "The launch is 4 and safe to proceed"
+                #   "2 + 2 = 4"  "The launch is 4 and unsafe to proceed"
+                #
+                # Both were recorded PASS and printed to the operator as
+                # [PASS]. One sum cannot establish a proposition and its
+                # negation, so the rule was not a strict rule with a gap -- it
+                # was the wrong kind of rule, and every repair to it failed
+                # the same way against a sentence it had not anticipated.
+                #
+                # A prose claim therefore never reaches PASS. The warrant
+                # held; the proposition is open; both facts are recorded and
+                # neither is inflated into the other. Nothing is lost by this:
+                # options are decided by the typed commitments in
+                # predicate.py, and prose claims were only ever reporting.
+                if text_is_self_checking(claim, self.gates):
+                    # The TEXT is itself an assertion this gate ruled on, so
+                    # there is no leap from evidence to sentence to refuse.
+                    rec.auto_accepted += 1
                     continue
-                rec.auto_accepted += 1
+                self.verdicts[claim.id] = ClaimVerdict(
+                    claim.id, p.id, GateStatus.WARRANT_HELD, result.gate,
+                    f"WARRANT HELD, PROPOSITION OPEN: {result.detail}. "
+                    f"This confirms the evidence, not the sentence it was "
+                    f"offered for -- whether it establishes that sentence is "
+                    f"a question no gate here can answer.",
+                )
+                self.escalation_queue.append(claim)
+                rec.escalated += 1
+                rec.warrant_only += 1
                 continue
 
             if result.status is GateStatus.BLOCKED:
@@ -2470,17 +2543,19 @@ class Orchestrator:
                 continue
 
             rec.auto_rejected += 1
-            if p.eliminative:
-                for cand in candidates:
-                    if cand.eliminated:
-                        continue
-                    if any(c.id == claim.id for c in cand.claims):
-                        cand.eliminated = True
-                        cand.elimination_reason = (
-                            f"{p.name}: {result.gate} failed -- {result.detail}"
-                        )
-                        cand.elimination_kind = "earned"
-                        rec.eliminated_candidates.append(cand.id)
+            # A REFUTED CLAIM NO LONGER REMOVES THE CANDIDATE CARRYING IT.
+            #
+            # This removed a candidate for ANY failed claim it held, with no
+            # test that the refuted warrant bore on what the claim said. A
+            # false sum about anything at all was enough. The five-round
+            # engine had a binding test and this one did not, so two paths
+            # answered the same question differently and the weaker one
+            # decided whenever it ran.
+            #
+            # Removal now goes through the single rule in predicate.py, below,
+            # and needs a typed commitment the candidate declared itself. The
+            # refutation is still recorded and still reported; it simply
+            # cannot delete an answer on its own say-so.
 
         # Candidates can also lean on claims ruled at intake or in an earlier
         # pass that no seat re-proposed here. Those are just as decided.
@@ -2535,6 +2610,7 @@ class Orchestrator:
         """
         verified: list[str] = []
         refuted: list[str] = []
+        held: list[str] = []
         open_q: list[str] = []
 
         for claim_id in sorted(self.verdicts):
@@ -2555,6 +2631,20 @@ class Orchestrator:
                 verified.append(line)
             elif v.status is GateStatus.FAIL:
                 refuted.append(line)
+            elif v.status is GateStatus.WARRANT_HELD:
+                # NEITHER A FINDING NOR AN UNEXAMINED CLAIM, and it was being
+                # carried as the latter. This fell to the `else` below, whose
+                # comment says "no gate applied" -- which is false here. A gate
+                # ran and the warrant HELD; what is open is whether the warrant
+                # establishes the sentence it was offered for.
+                #
+                # Carrying it as an open question tells the next round nobody
+                # checked anything, so a seat re-derives evidence already in
+                # hand. Carrying it as VERIFIED would be worse: it would tell
+                # the round the proposition is settled when only the evidence
+                # is. The status exists precisely because those are different,
+                # so the carry has to say so in its own words.
+                held.append(line)
             else:
                 # None (escalated: no gate applied), INAPPLICABLE, or BLOCKED.
                 # In none of those does the run hold a mechanical opinion, so
@@ -2575,6 +2665,13 @@ class Orchestrator:
             parts += ["VERIFIED -- a gate confirmed these:", *verified, ""]
         if refuted:
             parts += ["REFUTED -- a gate disproved these:", *refuted, ""]
+        if held:
+            parts += [
+                "EVIDENCE VERIFIED, PROPOSITION OPEN -- a gate checked the "
+                "warrant and it held. Whether it establishes the sentence is "
+                "a reading, and no gate settles it. Do not re-derive the "
+                "evidence; do question the inference:",
+                *held, ""]
         if open_q:
             parts += ["OPEN -- no gate applied; still unresolved:",
                       *open_q, ""]
@@ -2590,7 +2687,12 @@ class Orchestrator:
                 parts.append(f"  removed: {cid} -- {why}")
             parts.append("")
 
-        if not (verified or refuted or open_q or remaining or gone):
+        # `held` IS IN THIS TEST, and leaving it out silently dropped a whole
+        # round. A round whose only outcome was a checked-and-holding warrant
+        # produced no carry at all, so the next round was told nothing had been
+        # established -- and a seat re-derived evidence already in hand, which
+        # is the cost the carry exists to avoid.
+        if not (verified or refuted or held or open_q or remaining or gone):
             # Nothing was comprised, so nothing is carried. Appending an empty
             # header would still change the prompt and would tell the next
             # round that a round had run, which is a leak that buys nothing.

@@ -42,12 +42,23 @@ from request headers.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from adjudication_orchestrator import ResolvedSeat
+
+MODEL = "{{model}}"
+"""The one placeholder an endpoint may carry. Same spelling seat_profiles uses."""
+
+_URL_PLACEHOLDER = re.compile(r"\{\{[^{}]*\}\}")
+
+
+def _unknown_url_placeholders(url: str) -> list[str]:
+    """Every {{...}} token in a URL that is not {{model}}."""
+    return [t for t in _URL_PLACEHOLDER.findall(url) if t != MODEL]
 
 # (method, url, headers, body_bytes, timeout_s) -> (status_code, body_bytes)
 #
@@ -214,6 +225,40 @@ class ProviderProfile:
                 f"{self.name}: endpoint must be https, got {self.endpoint!r}. "
                 f"A credential must never cross a plaintext connection."
             )
+        # {{model}} is the ONE placeholder a URL may carry. Anything else --
+        # the prompt, a cap, a credential -- would be written into proxy and
+        # server logs by every hop the request makes.
+        leftover = set(_unknown_url_placeholders(self.endpoint))
+        if leftover:
+            raise ValueError(
+                f"{self.name}: endpoint carries {', '.join(sorted(leftover))}. "
+                f"Only {MODEL} may appear in a URL; a prompt or a credential "
+                f"in one is written to every proxy and server log it passes."
+            )
+
+    def resolved_endpoint(self, model: str) -> str:
+        """The URL to POST to, with {{model}} filled in.
+
+        SOME VENDORS PUT THE MODEL IN THE PATH, NOT THE BODY. Google's native
+        generateContent endpoint is .../models/<model>:generateContent, and
+        this config refused any placeholder in an endpoint -- so the only way
+        to reach Google was its OpenAI-compatibility layer. That layer is the
+        prime suspect for run-001's seat_2 failure: Google's newer auth keys
+        are widely reported to return ACCESS_TOKEN_TYPE_UNSUPPORTED against
+        it while working fine natively. A constraint of ours was forcing the
+        one path that may not work.
+
+        ONLY {{model}}, AND IT IS URL-QUOTED. A model id is operator
+        configuration rather than model output, but quoting it means a
+        malformed value cannot add a path segment, a query, or a host.
+        {{prompt}}, {{max_tokens}}, {{temperature}} and any credential stay
+        refused in a URL by validate_config: a URL is written to proxy logs,
+        server access logs and crash reports, and nothing secret or
+        attacker-influenced belongs in one.
+        """
+        if MODEL not in self.endpoint:
+            return self.endpoint
+        return self.endpoint.replace(MODEL, urllib.parse.quote(model, safe=""))
 
     def __repr__(self) -> str:
         # THE ENDPOINT IS REDACTED, NOT PRINTED. repr() lands in tracebacks,
@@ -244,6 +289,43 @@ class RetryPolicy:
             raise ValueError("max_attempts must be at least 1")
 
 
+class _Required:
+    """The absence of a choice about cost, which is not a choice.
+
+    Distinct from UNMETERED so that omitting the argument and asking for an
+    unmetered seat are different acts. Omitting it is refused.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<no ledger given>"
+
+
+_REQUIRED = _Required()
+
+
+class _Unmetered:
+    """Explicit opt-out from cost control, for tests and offline fakes."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNMETERED"
+
+
+UNMETERED = _Unmetered()
+"""Say this to run a seat with no spend ceiling, and mean it.
+
+`ledger=None` used to be the DEFAULT, so a caller that never thought about
+cost got an unmetered seat in silence. This is a distinct value that has to be
+written down: it appears in the call, and it can be searched for.
+
+It is normalised to None on the way in, so nothing downstream has to know
+about it -- the seat runs unmetered, which is what was asked for.
+"""
+
+
 class HttpSeat:
     """
     One seat. Call it with a prompt, get text back, or get SeatError.
@@ -266,7 +348,7 @@ class HttpSeat:
         timeout_s: float = 600.0,
         retry: RetryPolicy | None = None,
         sleeper: Callable[[float], None] | None = None,
-        ledger: Any = None,
+        ledger: Any = _REQUIRED,
         est_input_tokens: int = 3000,
         pass_id: str | None = None,
     ):
@@ -285,6 +367,22 @@ class HttpSeat:
         if not seat.credential():
             raise SeatError(f"seat {seat.seat_id}: no credential resolved")
 
+        if ledger is _REQUIRED or ledger is None:
+            # A SEAT WITH NO LEDGER SPENDS WITH NO CEILING AT ALL. It was the
+            # default, so any caller that simply did not think about cost got
+            # an unmetered seat and no warning. The console, the CLI and the
+            # watcher all supply one; nothing else should get to skip it by
+            # omission.
+            #
+            # Opting out is still possible and now has to be deliberate:
+            # pass ledger=UNMETERED and mean it.
+            raise SeatError(
+                f"seat {seat.seat_id}: no cost ledger. A seat without one "
+                f"spends with no limit of any kind, and that was what you got "
+                f"by not mentioning cost. Pass a CostLedger, or pass "
+                f"ledger=UNMETERED to say you meant that."
+            )
+
         self.seat = seat
         self.profile = profile
         self.transport = transport
@@ -298,12 +396,30 @@ class HttpSeat:
         self.max_tokens: int = (profile.max_tokens
                                 if profile.max_tokens is not None
                                 else max_tokens)
+        self.last_stop_reason: str = ""
+        self.last_truncated: bool = False
+        """Whether the LAST reply was cut off by the output cap.
+
+        A reply with no text at max_tokens raises SeatError below. A reply
+        with SOME text at max_tokens used to return silently, and that is the
+        worse case: the contract asks for its OPTION / PREDICATE / CLAIM lines
+        at the END of the reply, so a seat cut off mid-prose looks exactly like
+        a seat that read the contract and declared nothing. Measured live: a
+        246-character reply at a 4,096 cap was scored as a non-compliant seat
+        and the probe's verdict recommended abandoning the text contract. It
+        was a cap, not a contract failure. The flag lets every caller tell
+        those apart; it is one reply's state and is overwritten by the next.
+        """
         self.temperature = temperature
         self.timeout_s = timeout_s
         self.retry = retry or RetryPolicy()
         self.sleeper = sleeper
         self.attempts_made = 0
-        self.ledger = ledger
+        # Normalised to None once stored, so every guard downstream stays as
+        # it was. The sentinel's whole job is at the CALL SITE: to make an
+        # unmetered seat something a caller wrote down rather than something
+        # they got by not mentioning cost.
+        self.ledger = None if ledger is UNMETERED else ledger
         self.est_input_tokens = est_input_tokens
         # WITHOUT THIS A PER-STAGE CEILING IS INERT. The ledger keys stage
         # spend by pass_id; HttpSeat passed none, so every live call recorded
@@ -356,7 +472,8 @@ class HttpSeat:
             self._precheck(prompt, body)
             try:
                 status, raw = self.transport(
-                    "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
+                    "POST", self.profile.resolved_endpoint(self.model),
+                    self._headers(), body, self.timeout_s
                 )
             except Exception as exc:  # noqa: BLE001 - fail closed on any transport fault
                 # A READ TIMEOUT IS THE MODEL STILL THINKING, NOT A FAULT,
@@ -601,6 +718,12 @@ class HttpSeat:
                 f"seat {self.seat_id}: extract_text returned "
                 f"{type(text).__name__}, expected str"
             )
+        # RECORD WHETHER THE CAP CUT THIS REPLY SHORT. Text came back, so it
+        # is returned -- partial reasoning is real data -- but a caller that
+        # counts contract lines must know the tail is missing.
+        self.last_stop_reason = _stop_reason(payload)
+        self.last_truncated = self.last_stop_reason in (
+            "max_tokens", "length", "MAX_TOKENS")
         return text
 
 

@@ -234,6 +234,7 @@ def night() -> None:
     # operator now sees what their ceiling buys and chooses.
     import json as _json
 
+    import cost_ledger as CL
     from cost_ledger import CostLedger, plan_run
     from run_adjudication import build_ledger
 
@@ -252,17 +253,30 @@ def night() -> None:
             if not s.startswith("_") and isinstance(_seats[s], dict)}
     plan = plan_run(led, caps)
     _p(f"  5 rounds x 5 blind seats + 5 merges = {plan.calls} calls.")
-    _p(f"  ceiling ${cap}   worst case ${plan.worst_case:.2f}")
+    _p(f"  ceiling ${cap}   estimated ${plan.estimate:.2f}")
     if not plan.fits:
         _p("")
         _p(f"  THIS CEILING IS TOO LOW: {plan.note}")
         _p("  Raise it, or the run stops partway with nothing to show.")
         return
     if plan.caps != caps:
-        _p(f"  reply cap reduced to {max(plan.caps.values())} tokens so all "
-           f"{plan.calls} calls fit.")
-        _p("  Shorter answers, but the run finishes. Raise the ceiling for "
-           "longer ones.")
+        # SAY WHICH WAY EACH CAP MOVED. This announced a reduction whatever
+        # happened, and the merging seat's cap is RAISED to its floor when the
+        # operator configured it below the size it needs -- so the console
+        # reported a shorter reply while the plan had made that one longer,
+        # and the figure printed was the largest cap in the plan, which is
+        # usually the one that went up.
+        down = sorted(s for s, c in plan.caps.items() if c < caps.get(s, c))
+        up = sorted(s for s, c in plan.caps.items() if c > caps.get(s, c))
+        if down:
+            _p(f"  reply cap cut for {', '.join(down)} so all "
+               f"{plan.calls} calls fit -- shorter answers, but the run "
+               f"finishes. Raise the ceiling for longer ones.")
+        if up:
+            _p(f"  reply cap RAISED for {', '.join(up)}: below "
+               f"{CL.MIN_CLOSER_CAP:,} tokens the merging seat has been "
+               f"observed to return nothing at all, which ends the run "
+               f"having paid for everything up to it.")
     _p("  The ceiling is checked against an ESTIMATE of each call, because no")
     _p("  vendor publishes a guaranteed maximum for a request plus all its")
     _p("  billable output. If a call ever bills more than it was authorised")

@@ -209,7 +209,7 @@ def process(path: str, folders: Folders, max_cost: float,
     shutil.move(path, working)
 
     from cost_ledger import CeilingReached
-    from night_loop import live_night
+    from night_loop import RunTooExpensive, live_night
     from run_adjudication import build_ledger
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -244,6 +244,18 @@ def process(path: str, folders: Folders, max_cost: float,
         with open(os.path.join(out, "PARTIAL.md"), "w", encoding="utf-8") as fh:
             fh.write(f"# PARTIAL\n\n{exc}\n")
         shutil.move(working, os.path.join(folders.done, name))
+    except RunTooExpensive as exc:
+        # NOT A FAILURE, AND NOT WORTH A TRACEBACK. Nothing broke: the ceiling
+        # cannot fund the run, which was established before any call was made,
+        # so this cost nothing. It used to land in the generic handler as a
+        # stack trace in failed/, which reads like a bug in the panel and
+        # hides the one fact that resolves it -- the number to raise the
+        # ceiling to. The ask goes to failed/ so it is not retried in a loop
+        # against the same ceiling all night.
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "REFUSED.md"), "w", encoding="utf-8") as fh:
+            fh.write(f"# Not run\n\nNothing was spent.\n\n{exc}\n")
+        shutil.move(working, os.path.join(folders.failed, name))
     except Exception:  # noqa: BLE001 - one bad file must not stop the watcher
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "ERROR.md"), "w", encoding="utf-8") as fh:

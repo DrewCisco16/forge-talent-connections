@@ -42,14 +42,21 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from adjudication_orchestrator import (
     BudgetExceeded,
     Claim,
+    GateStatus,
     Orchestrator,
     line_claim_extractor,
+    undecorate_marker_line,
 )
+from convergence import analyse
+from convergence import divergence as seat_divergence
+from convergence import render as render_convergence
+from option_set import NOT_RULED as OS_NOT_RULED
 from option_set import (
     Option,
     TooManyOptions,
@@ -60,8 +67,11 @@ from option_set import (
     render_pool,
     render_record,
     render_working,
+    silent_seats,
     unexamined,
+    unexamined_reason,
 )
+from predicate import Ruling, adjudicate, parse_challenges, refuted_commitment
 from seat_conduct import ConductLedger
 from seat_independence import (
     confidence_ceiling,
@@ -78,6 +88,27 @@ class Round:
     name: str
     lens: str
     invents: bool = False
+    eliminates: bool = True
+    """Whether this round may remove an option.
+
+    SOP v1.2 section 2.3 is explicit and this code contradicted it: "five
+    passes, FOUR OF WHICH CAN ELIMINATE. The fifth calibrates confidence and
+    CANNOT RULE ANYTHING OUT." Section 8.4 repeats it, and the worked example
+    in 2.4 prints "PASS 5 Bayesian + MCMC  calibration only, eliminates
+    nothing".
+
+    Round five was written with the lens "Kill options that require numbers
+    nobody can derive" and `eliminate()` ran on it like any other round, so
+    the calibration pass could and would remove an answer. That is not a
+    stricter reading of the manual, it is a different instrument: a pass whose
+    job is to say HOW SURE we are was deciding WHAT SURVIVES.
+
+    A commitment refuted in a calibration round is not discarded. It is ruled,
+    recorded, and reported as a caveat against the surviving answer -- so the
+    finding lowers confidence in the survivor instead of removing it. That is
+    the same fail-closed direction the rest of the design takes: fail closed
+    on the conclusion, never on the candidate.
+    """
 
 
 ROUNDS: tuple[Round, ...] = (
@@ -96,8 +127,11 @@ ROUNDS: tuple[Round, ...] = (
           "create, and what does its framing exclude? Kill options that "
           "compromise instead of resolving."),
     Round(5, "Bayesian + MCMC",
-          "For each surviving option: what would move belief, and by how "
-          "much? Kill options that require numbers nobody can derive."),
+          "For each surviving option: what would move belief about it, and by "
+          "how much? State the figure your confidence rests on, the formula "
+          "behind it, and the numbers going in. This round removes nothing -- "
+          "it measures how sure anyone may be about what is left.",
+          eliminates=False),
 )
 
 CLOSER_SYSTEM_PROMPT = os.path.join(
@@ -166,38 +200,165 @@ def wrap_untrusted(text: str) -> str:
     return UNTRUSTED_OPEN + text + UNTRUSTED_CLOSE
 
 
+CALIBRATION_CHALLENGE_CONTRACT = """
+
+THE LINE TO WRITE IF ONE OF THE NUMBERS IS WRONG:
+
+    CHALLENGE | <paste a commitment id from the list above> | per_round = 9
+
+IT WILL NOT REMOVE ANYTHING, AND THAT IS NOT A REASON TO SKIP IT. This is the
+calibration round. Whatever is standing now is what the run reports, and no
+line you can write changes that -- the panel decided what survives in the
+earlier rounds.
+
+WHAT YOUR LINE DOES DO. It is recomputed exactly as it would be in any other
+round: your value goes into the answer's own formula, and if that no longer
+produces the figure the answer committed to, the finding is RECORDED AGAINST
+THAT ANSWER and printed beside it in the deliverable. A reader then has the
+surviving answer and, in the same place, the arithmetic that does not support
+it. That is what lowering confidence in an answer means here, and it is the
+whole job of this round.
+
+The same rule about standing applies. Your figure has no more standing than
+the proposer's, and it is AGREEMENT between seats writing blind that carries
+weight -- so write the number you actually believe rather than the one you
+think will land.
+
+If none of the numbers is wrong, write no CHALLENGE line. Saying so is a
+result, and on this round in particular it is the result that matters: an
+answer nobody could fault after four rounds of attack is what the run exists
+to find.
+"""
+"""The challenge contract for a round that may not remove anything (SOP 2.3).
+
+THE PROBLEM THIS FIXES, CAUGHT IN PRE-FLIGHT AND NOT BY ANY TEST. The ordinary
+contract opens "THE ONE LINE THAT CAN REMOVE AN ANSWER THIS ROUND" and closes
+"the answer goes if it no longer produces what it committed to". Both are
+false in a calibration round, and it was being issued there verbatim -- so the
+pass the manual says cannot rule anything out was telling five models exactly
+how to rule something out.
+
+Telling seats the truth about what a round does is not a courtesy. A seat that
+believes it is eliminating writes to eliminate, and what it writes is what
+gets recomputed.
+"""
+
+
+CHALLENGE_CONTRACT = """
+THE ONE LINE THAT CAN REMOVE AN ANSWER THIS ROUND:
+
+    CHALLENGE | <paste a commitment id from the list above> | per_round = 9
+
+You are shown every surviving answer with the commitments it made: a
+quantity, the formula that computes it, and the numbers put in. If you think
+one of those NUMBERS is wrong, write the line with the value you believe is
+right. You may change the inputs and nothing else -- a seat that could supply
+the formula could delete any answer it disliked by attaching arithmetic of
+its own choosing.
+
+YOUR CHALLENGE ALONE DOES NOT REMOVE ANYTHING, and you should know that
+before you decide whether to bother. Your figure has no more standing than
+the proposer's: neither has been established, and preferring yours because
+it came later would let any seat delete any answer by disagreeing confidently.
+
+WHAT DOES REMOVE IT is agreement. You are writing blind, without seeing the
+other seats this round. If another seat independently arrives at the same
+value for the same input, the two of you outweigh the one figure the answer
+was resting on, the formula is recomputed on the corroborated numbers, and
+the answer goes if it no longer produces what it committed to. That
+agreement, between separated observers who could not coordinate, is the one
+thing this panel produces that a single model cannot.
+
+So write the number you actually believe, not the number you think will
+carry. A figure invented to win is a figure no honest seat will match.
+
+WRITE THE LINE. A whole round of seats once concluded that two answers should
+die, wrote "Kill" in their own tables, put the arithmetic in CLAIM lines, and
+removed nothing -- because a CLAIM is checked and reported and does not touch
+the answer set. The analysis was right and it had no effect.
+
+If none of the numbers is wrong, write no CHALLENGE line. Saying so is a
+result; a challenge you do not mean is worse than none.
+
+"""
+
+OPTION_CONTRACT = """
+Every answer you are putting forward gets an OPTION line of its own:
+
+    OPTION | rent capacity for six months and decide afterwards
+
+ONLY OPTION LINES BECOME ANSWERS. Write the reasoning around them however you
+like -- the premises you stand on, the attack on each proposal, what would
+settle it. None of that is read as an answer. If you also head a section
+"Option 3", still write the OPTION line; the heading is a courtesy to a reader
+and this line is what the panel actually carries forward.
+
+A NUMBERED LIST OF YOUR PREMISES IS NOT A LIST OF ANSWERS. Four of five seats
+once wrote their proposals as headings and their setup as a numbered list, and
+the setup is what got adjudicated. State the answers here and there is nothing
+to guess.
+
+## What makes an answer checkable
+
+Under each OPTION line, state what it rests on QUANTITATIVELY -- the figure,
+how it is computed, and the numbers you are putting in:
+
+    OPTION | stop at the first round that eliminates nothing
+    PREDICATE | API calls a five-round run costs | = | 30 api calls
+    FORMULA | rounds * per_round
+    INPUT | rounds = 5
+    INPUT | per_round = 6
+
+    PREDICATE | <what quantity> | <one of = != < <= > >=> | <value and unit>
+    FORMULA   | <an expression in named variables>
+    INPUT     | <name> = <number and unit>
+
+ALL FOUR PARTS, OR IT CANNOT BE CHECKED. The figure alone cannot be
+recomputed, so it can never be verified and it can never be ruled out; it
+survives to the end marked untested, which is not the same as surviving
+scrutiny.
+
+WHAT THIS EXPOSES YOU TO, IN FULL. Two things can remove your option, and
+nothing else can:
+
+  1. YOUR formula with YOUR inputs does not produce YOUR figure. Your own
+     arithmetic, checked the moment you write it.
+
+  2. In a later round, TWO OR MORE other seats independently give the same
+     different value for one of your inputs, that outnumbers the support your
+     figure has, and your own formula on those numbers no longer produces
+     what you committed to.
+
+A single seat disagreeing with you removes nothing: their number has no more
+standing than yours. What outweighs you is agreement between seats who wrote
+blind and could not coordinate. You are one such seat when you read someone
+else's option, and the same rule protects you and binds you.
+
+So the risk of writing this down is that your own numbers have to add up AND
+have to survive other people checking them. Check them before you commit, and
+put down the figure you actually believe rather than the one that is hardest
+to attack -- a number chosen to be safe is a number no honest seat will
+match, and it will not save the answer.
+
+State the figure that actually decides the answer. If nothing quantitative
+decides it, write no PREDICATE line rather than a decorative one: a commitment
+you do not mean is worse than none, and this one is checked.
+
+"""
+
 CLAIM_CONTRACT = """
 ## Required output
-
-Write your analysis normally. Then end with claim lines, one per line, and
-nothing after them:
+{options}{challenges}
+Write your analysis normally. Then end with the lines above, one per line.
 
     CLAIM | <kind> | <warrant> | <text>
 
 <kind> is one of: arithmetic, citation, code_behavior, schema, unit,
 quote_verification, judgment
 
-## Saying which option a claim is about
-
-From round two on you are shown the surviving options, each with a bracketed
-id. If a claim bears on one of them, copy that id in front of the claim text,
-exactly as it appears in the list above:
-
-    CLAIM | arithmetic | 12 * 50 = 600 | <paste an id from the list> | the build option totals 600
-
-COPY A REAL ID. Do not write the placeholder above and do not invent one that
-looks like an id -- an id that is not in the list names no option, so the claim
-cannot remove anything and the work of making it is wasted.
-
-THIS IS THE ONLY WAY A CLAIM CAN REMOVE AN OPTION. Nothing infers the link
-from wording. Describing an option does not connect a claim to it, and a claim
-that borrowed an option's words while asserting the OPPOSITE used to remove
-that very option. A claim with no id is still checked and still reported; it
-simply cannot eliminate anything, because nobody said what it was about.
-
-An option is removed only when a claim declared it is about that option, the
-claim was mechanically refuted, and the refuting warrant actually bears on
-what the claim says.
+A CLAIM is READ AND CHECKED AND REPORTED, AND IT REMOVES NOTHING. A sentence
+can assert more than its warrant covers, so no sentence decides which answers
+survive. If you want an answer gone, the line that does it is above.
 
 <warrant> is the mechanically checkable evidence:
     arithmetic          an expression and its result, as "3 * 4 = 12".
@@ -273,9 +434,24 @@ pushes everything else toward a kind that a gate can rule on unattended.
 
 
 def claim_contract(max_claims: int = MAX_CLAIMS_PER_THINKER,
-                   max_judgment: int = MAX_JUDGMENT_CLAIMS) -> str:
-    """The claim contract with its ceilings filled in."""
-    return CLAIM_CONTRACT.format(max_claims=max_claims, max_judgment=max_judgment)
+                   max_judgment: int = MAX_JUDGMENT_CLAIMS,
+                   invents: bool = False,
+                   eliminates: bool = True) -> str:
+    """The claim contract with its ceilings filled in.
+
+    OPTIONS RIDE IN THE SAME BLOCK AS CLAIMS DELIBERATELY. On a live canary
+    every seat obeyed the CLAIM convention and not one seat wrote an OPTION
+    line, because options were asked for in a mid-prompt section while this
+    block said "write your analysis normally, then end with claim lines".
+    The seats followed the output contract, which is what an output contract
+    is for. So the option line lives in the contract too.
+    """
+    return CLAIM_CONTRACT.format(
+        max_claims=max_claims, max_judgment=max_judgment,
+        options=OPTION_CONTRACT if invents else "",
+        challenges=("" if invents
+                    else CHALLENGE_CONTRACT if eliminates
+                    else CALIBRATION_CHALLENGE_CONTRACT))
 
 
 # --------------------------------------------------------------------------
@@ -413,19 +589,47 @@ def thinker_prompt(r: Round, ask: str, merged: str | None,
         )
     if r.invents:
         parts.append(
+            "## Proposing answers\n"
+            "This round invents the options; later rounds only eliminate "
+            "from what you and the other seats put up now. An answer nobody "
+            "proposed here can never be chosen, so put up the ones worth "
+            "considering, including the one you expect to lose.\n\n"
             "You are working alone. Do not speculate about what anyone else "
             "might say, and do not assume anyone else exists.\n"
             "For EVERY option you propose, state plainly what evidence would "
             "knock it down. An option nobody could disprove is not an option, "
             "it is a preference.\n"
         )
-    else:
+    elif r.eliminates:
         parts.append(
             "## The working answer so far\n"
             + wrap_untrusted(merged or "(nothing yet)")
             + "\n\nDo not invent new options. This round only eliminates.\n"
         )
-    parts.append(claim_contract())
+    else:
+        # THE CALIBRATION ROUND, AND THE SEATS ARE TOLD SO.
+        #
+        # It was given the same "this round only eliminates" line as rounds
+        # two to four while its lens said "Kill options" -- so the pass the
+        # manual defines as unable to rule anything out was asking five models
+        # to rule things out. Telling them the truth about what this round
+        # does is not a courtesy: a seat that believes it is eliminating
+        # writes to eliminate, and what it writes is what gets recomputed.
+        parts.append(
+            "## The working answer so far\n"
+            + wrap_untrusted(merged or "(nothing yet)")
+            + "\n\nDo not invent new options, and do not try to remove one. "
+            "THIS ROUND REMOVES NOTHING. Whatever is standing now is what the "
+            "run reports. Your job is to say how much confidence each "
+            "surviving answer has earned and what the remaining doubt rests "
+            "on. If one of the numbers a surviving answer rests on is wrong, "
+            "write the CHALLENGE line described below anyway: it is "
+            "recomputed exactly as in any other round, and what it produces "
+            "here is a finding recorded against that answer rather than a "
+            "removal.\n"
+        )
+    parts.append(claim_contract(invents=r.invents,
+                                eliminates=r.eliminates))
     return "\n".join(parts)
 
 
@@ -512,10 +716,19 @@ def confidence_clause(n_seats: int, rho: float | None) -> str:
             "Use Low, Medium, or High. Never a percentage: a percentage "
             "implies a dataset, an outcome variable, and a base rate, and this "
             "panel has none of the three -- it has models that agreed.\n\n"
-            "Error correlation across the seats has NOT been measured yet, so "
-            "the ceiling this round is LOW. Unmeasured independence is not "
-            "high independence. Agreement between seats that have not been "
-            "shown to fail differently is not corroboration.\n"
+            "Error correlation across the seats is NOT MEASURED. Say exactly "
+            "that if you say anything about corroboration -- the word is "
+            "UNMEASURED, and it is the word the run's own verdict uses.\n\n"
+            "DO NOT WRITE THAT CORROBORATION IS LOW. Low is what a "
+            "measurement earns when it finds the seats correlated. Nobody "
+            "measured, so reporting Low would describe a finding that does "
+            "not exist, and it would disagree with the verdict printed above "
+            "your text -- leaving a reader unable to tell whether these seats "
+            "were checked and found dependent or never checked at all.\n\n"
+            "The ceiling on any confidence you claim FOR AN ANSWER is still "
+            "Low, for the same reason: agreement between seats that have not "
+            "been shown to fail differently is not corroboration, and "
+            "unmeasured independence is not high independence.\n"
         )
     ceiling = confidence_ceiling(n_seats, rho)
     n_eff = effective_seats(n_seats, rho)
@@ -643,8 +856,23 @@ def closer_prompt(r: Round, ask: str, thinker_texts: Mapping[str, str],
 class RoundResult:
     n: int
     name: str
+    eliminative: bool = True
+    """Whether this round was allowed to remove an option (SOP 2.3).
+
+    Read by the decay fit, which must not count a calibration round as a round
+    that found nothing: it is a round that could not look."""
     thinkers_ok: list[str] = field(default_factory=list)
     thinkers_failed: dict[str, str] = field(default_factory=dict)
+    thinkers_truncated: dict[str, str] = field(default_factory=dict)
+    """Seats whose reply came back but was cut off by the output cap.
+
+    A THIRD CASE, and the two it sits between are opposite facts. A seat that
+    failed was never reached. A seat that declared nothing read the contract
+    and chose not to. A seat cut off at the cap did neither: it was reached,
+    it was writing, and the cap fell before the contract lines it puts at the
+    end. Counting it as silent told a live run that a seat had nothing to say
+    when the seat had been interrupted, which is the corruption rule 5 of the
+    dispatch brief names."""
     claims: int = 0
     passed: int = 0
     failed: int = 0
@@ -659,6 +887,65 @@ class RoundResult:
     options_removed: list[str] = field(default_factory=list)
     options_alive: list[str] = field(default_factory=list)
     options_unexamined: list[str] = field(default_factory=list)
+    options_unexamined_why: dict[str, str] = field(default_factory=dict)
+    """option id -> why that survivor counts as untested.
+
+    THE IDS ALONE COULD NOT BE REPORTED HONESTLY. Three different facts land
+    in options_unexamined -- an option that declared no figure, one whose
+    figure nothing settled, and one whose figure passed its own arithmetic
+    and was never touched from outside -- and the run summary described them
+    with a single sentence that named the first two. The third is the one the
+    first full five-round run actually produced, on every surviving option.
+    """
+    option_text: dict[str, str] = field(default_factory=dict)
+    """option id -> the answer it stands for.
+
+    options_alive carried IDS ONLY, so what survived was machine-readable as a
+    hash and human-readable only by finding it again in the rendered record.
+    Anything measuring whether the survivor was RIGHT -- which is the one
+    experiment that can produce an accuracy figure -- needs the text, and
+    parsing it back out of prose is the kind of fragile round-trip this
+    codebase has been bitten by twice."""
+    options_observed: bool = False
+    """Whether option state was actually READ this round.
+
+    An empty survivor list is falsey, so a round that removed the last
+    standing options was indistinguishable from a round that never looked.
+    The packet kept the previous round's list and reported "2 remain" after
+    both had been eliminated. Whether we looked and what we found are two
+    different facts and are now stored as two.
+    """
+    challenges: int = 0
+    challenges_ruled: int = 0
+    calibration_findings: list[str] = field(default_factory=list)
+    """Commitments refuted in a round that is not allowed to remove anything.
+
+    SOP 2.3 makes pass five calibration-only. A refutation landed there is a
+    real finding about a surviving answer and must not vanish because the pass
+    that found it cannot act on it -- so it is carried here and printed as a
+    caveat against the survivor."""
+    rulings: dict[str, Ruling] = field(default_factory=dict)
+    """What every commitment was ruled, with the arithmetic behind it."""
+    silent_seats: list[str] = field(default_factory=list)
+    """Seats that answered but declared no option. A permanent hole."""
+    challenges_by_seat: dict[str, list[str]] = field(default_factory=dict)
+    """seat_id -> commitment ids that seat challenged this round.
+
+    SOP 6.2 needs to know WHO caught WHAT: f1 counts errors found by exactly
+    one seat, f2 by exactly two. A bare challenge count cannot produce either.
+    """
+    divergence: float | None = None
+    """Mean pairwise Jaccard over seat claim sets, compared on (kind, warrant).
+
+    SOP 6.5. None means it could not be measured -- fewer than two seats
+    answered -- which is not the same as zero."""
+    unanimous: bool = False
+    all_seats_silent: bool = False
+    collapse_warning: str | None = None
+    """Set only when the seats were unanimous AND not all silent (SOP 6.5).
+
+    "Silence is not collapse": an empty claim set from every seat is trivially
+    identical, and that is the marginal-yield signal, not a monoculture one."""
     """Surviving options no claim was ever attached to.
 
     They survived because nothing tested them, which is a completely different
@@ -712,6 +999,20 @@ def _check_summary(orch: Orchestrator, claims: Sequence[Claim]) -> str:
     lines: list[str] = []
     for c in claims:
         v = orch.verdicts.get(c.id)
+        if v is not None and v.status is GateStatus.WARRANT_HELD:
+            # SPELLED OUT, NOT ABBREVIATED TO A STATUS WORD. This used to
+            # render as [PASS], and the same [PASS] appeared for "the launch
+            # is 4 and safe to proceed" and for its negation. The closer reads
+            # this block and treats it as what the gates established, so the
+            # line has to say what was established and what was not.
+            lines.append(
+                f"  WARRANT HELD, PROPOSITION OPEN\n"
+                f"             {c.text}\n"
+                f"             The {v.gate} check ran and held. That confirms "
+                f"the EVIDENCE. Whether the evidence establishes the sentence "
+                f"above is open, and no gate here can settle it.\n"
+                f"             {v.detail}")
+            continue
         if v is None or v.status is None:
             # TWO DIFFERENT THINGS SHARE status None, and printing both as
             # "no gate applied" loses the more useful one.
@@ -785,6 +1086,30 @@ def run_night(
     # THE SURVIVOR SET, OWNED BY CODE. Round one fills it from the closer's
     # list; every round after that only removes from it, on gate verdicts.
     options: list[Option] = []
+    # Every commitment ruled on so far, carried between rounds. A check that
+    # happened in round two is still a check in round five.
+    settled: dict[str, Ruling] = {}
+    standing_challenges: list[tuple[str, Mapping[str, Fraction], str]] = []
+    """Every challenge any seat has written, across all rounds so far.
+
+    ACCUMULATED FOR THE SAME REASON RULINGS ARE, and it was not. Each round
+    ruled on its OWN challenges only, so two seats disputing the same input in
+    DIFFERENT rounds never met: corroboration needs two seats to agree, it
+    checked one round at a time, and a dispute raised in round two was gone by
+    round four.
+
+    They are still blind to each other across rounds -- what carries forward
+    is the surviving option list and its commitments, never anyone's
+    challenge -- so two seats agreeing in different rounds is exactly the
+    independent agreement the rule is built on. Nothing about it requires the
+    two to have written in the same round.
+
+    Measured on the first full five-round run, replaying its own eight
+    challenges: ruled round by round they removed NOTHING, and ruled together
+    they remove one option on a corroborated dispute. That is the difference
+    between an engine whose only output was a false positive and one that
+    refuted something.
+    """
 
     # Fixed for the whole run. A persona that moved between rounds would make
     # measured rho meaningless: the correlation would be between shuffled
@@ -794,7 +1119,7 @@ def run_night(
     for r in rounds:
         rd = os.path.join(out_dir, f"round-{r.n}")
         os.makedirs(rd, exist_ok=True)
-        res = RoundResult(r.n, r.name)
+        res = RoundResult(r.n, r.name, eliminative=r.eliminates)
         emit(f"ROUND {r.n}/{len(rounds)}  {r.name}")
 
         # 1-4: the thinkers, each in isolation
@@ -836,6 +1161,14 @@ def run_night(
                  f"({len(raw):,} chars)")
             texts[seat_id] = raw
             res.thinkers_ok.append(seat_id)
+            if getattr(fn, "last_truncated", False):
+                why = (f"cut off at the {getattr(fn, 'max_tokens', '?')}-token "
+                       f"cap (stop reason "
+                       f"{getattr(fn, 'last_stop_reason', '')!r})")
+                res.thinkers_truncated[seat_id] = why
+                emit(f"  {label}: {why} -- its contract lines are at the end "
+                     f"of a reply that has no end; not a seat that declared "
+                     f"nothing")
             with open(os.path.join(rd, f"thinker-{seat_id}.md"), "w",
                       encoding="utf-8") as fh:
                 fh.write(raw)
@@ -875,6 +1208,116 @@ def run_night(
                 emit(f"  {exc}")
                 pool = []
             emit(f"  {len(pool)} distinct option(s) proposed by the seats")
+            # WHICH SEATS SAID NOTHING USABLE, BY NAME. Later rounds only
+            # remove, so an answer no seat put up now can never be chosen.
+            # A seat that answered and declared no option is a permanent hole
+            # in the candidate set, and the run has to name it rather than
+            # quietly proceeding with four seats' worth of answers.
+            # A truncated seat is not silent. Its OPTION lines are in the part
+            # of the reply the cap removed.
+            res.silent_seats = [sid for sid in silent_seats()
+                                if sid not in res.thinkers_truncated]
+            if res.silent_seats:
+                emit(f"  {len(res.silent_seats)} seat(s) declared no option: "
+                     f"{', '.join(res.silent_seats)}")
+
+        # THE CHALLENGES, RULED ON BEFORE THE CLOSER IS ASKED ANYTHING.
+        #
+        # Elimination used to run AFTER the merge, so a closer that raised
+        # took the whole round's removals down with it: a commitment had been
+        # mechanically refuted, its FAIL was in the record, and the option it
+        # refuted was still standing in the next round's prompt. Nothing about
+        # ruling on a challenge needs the closer -- the commitments were fixed
+        # when the options were proposed and the arithmetic is the seats'.
+        #
+        # Round one has nothing standing to challenge yet; it is the round
+        # that creates the commitments.
+        standing = [pr for o in options if o.alive for pr in o.predicates]
+        # THE SEAT IS ATTACHED HERE, and it is load-bearing. Corroboration
+        # weighs agreement between observers who could not coordinate, so it
+        # counts distinct SEATS; a challenge with no seat on it cannot be
+        # weighed against another and is treated as its own lone observer.
+        challenges: list[tuple[str, Mapping[str, Fraction], str]] = []
+        for seat_id, raw in texts.items():
+            mine = parse_challenges(raw)
+            challenges.extend((pid, b, seat_id) for pid, b in mine)
+            # WHO challenged WHAT, not merely how many (SOP 6.2). f1 counts
+            # errors found by exactly one seat and f2 by exactly two, and
+            # neither is recoverable from a total.
+            if mine:
+                res.challenges_by_seat[seat_id] = [pid for pid, _ in mine]
+        # ACCUMULATED ACROSS ROUNDS, NOT RECOMPUTED FROM SCRATCH.
+        #
+        # A commitment settled in round two was forgotten by round three, so
+        # an option whose two commitments were each ruled -- in different
+        # rounds -- never counted as examined, and the run reported it as
+        # untested to the end. Whether something was checked does not stop
+        # being true because a later round did not check it again.
+        # RULED AGAINST EVERY CHALLENGE EVER WRITTEN, not only this round's.
+        # Two seats disputing the same input in different rounds are still two
+        # seats who could not see each other, and per-round adjudication threw
+        # that agreement away.
+        standing_challenges.extend(challenges)
+        rulings = {**settled, **adjudicate(standing, standing_challenges)}
+        settled.update(rulings)
+        res.challenges = len(challenges)
+        # NAMING A COMMITMENT THAT EXISTS, which is not the same as the
+        # number of rulings. This reported len(rulings) -- every commitment
+        # the panel holds, whether anyone challenged it or not -- so a live
+        # round with ONE challenge printed "1 challenge(s), 18 naming a
+        # commitment that exists". The second figure was seventeen higher than
+        # the first and measured something else entirely.
+        standing_ids = {pr.id for pr in standing}
+        res.challenges_ruled = sum(1 for c in challenges
+                                   if c[0] in standing_ids)
+        if challenges:
+            emit(f"  {len(challenges)} challenge(s), "
+                 f"{res.challenges_ruled} naming a commitment that exists")
+        if r.eliminates:
+            removed = eliminate(options, rulings, r.n)
+            res.options_removed = [o.id for o in removed]
+            if removed:
+                emit(f"  removed {len(removed)} option(s) on refuted "
+                     f"commitments")
+        else:
+            # THE CALIBRATION ROUND RULES, AND RULES NOTHING OUT (SOP 2.3).
+            #
+            # `refuted_commitment` is a pure query -- `eliminate` is what
+            # mutates -- so the finding is still computed in full and still
+            # recorded. It just does not take the answer with it. A refutation
+            # landed here lowers confidence in a survivor instead of removing
+            # it, which is the only reading that leaves this pass calibrating
+            # rather than deciding.
+            res.calibration_findings = [
+                f"{o.id}: {rul.detail}"
+                for o in options if o.alive
+                for rul in [refuted_commitment(o, rulings)] if rul is not None
+            ]
+            if res.calibration_findings:
+                emit(f"  {len(res.calibration_findings)} refutation(s) in the "
+                     f"calibration round -- RECORDED AGAINST the surviving "
+                     f"answer, not removed (SOP 2.3: this pass cannot rule "
+                     f"anything out)")
+        # RECORDED HERE, BEFORE THE CLOSER IS ASKED ANYTHING.
+        #
+        # The bookkeeping sat after the merge, so a closer that raised took
+        # the whole round's record with it: an option had been removed, the
+        # ruling that removed it was in hand, and the round reported no option
+        # state at all -- the packet then fell back to an earlier round and
+        # listed the removed option as still standing.
+        #
+        # None of this needs the closer. Round one is the exception: its
+        # options do not exist yet, and it records below once they do.
+        if options:
+            res.options_alive = [o.id for o in options if o.alive]
+            res.options_unexamined = [
+                o.id for o in unexamined(options, rulings)]
+            res.options_unexamined_why = {
+                o.id: why for o in options if o.alive
+                for why in [unexamined_reason(o, rulings)] if why}
+            res.option_text = {o.id: o.text for o in options}
+            res.rulings = dict(rulings)
+            res.options_observed = True
 
         summary = _check_summary(orch, claims)
 
@@ -883,6 +1326,14 @@ def run_night(
         # fail together" is not grounds for confidence.
         rho, rho_note = measure_rho(seat_claims, orch.verdicts)
         res.rho, res.rho_note = rho, rho_note
+        # SOP 6.5, measured every round rather than never. Unanimity is an
+        # ALARM, not a result: independently-failing seats do not produce
+        # identical claim sets, and if they do the panel is worth roughly one
+        # effective seat. Silence is exempt -- see convergence.divergence.
+        (res.divergence, res.unanimous, res.all_seats_silent,
+         res.collapse_warning) = seat_divergence(seat_claims)
+        if res.collapse_warning:
+            emit(f"  COLLAPSE FLAG: {res.collapse_warning}")
         repeat_note = (f", {rec.repeats} already ruled in an earlier round"
                        if rec.repeats else "")
         emit(f"  checked {res.claims} claim(s): {res.passed} pass, "
@@ -1014,16 +1465,49 @@ def run_night(
                 options = []
             attach_claims(options, claims)
             res.options_created = len(options)
+            # SELF-CHECK THE MOMENT THE OPTIONS EXIST. Round one creates them
+            # after the merge, so the elimination pass earlier in this round
+            # had nothing to look at -- and an option whose own arithmetic
+            # does not add up would have survived the round that proposed it,
+            # then gone into every later prompt as a live candidate.
+            #
+            # Nothing here needs another seat: it is the option's own formula
+            # with the option's own inputs.
+            first_rulings = adjudicate(
+                [pr for o in options for pr in o.predicates], [])
+            rulings = {**rulings, **first_rulings}
+            settled.update(rulings)
+            gone = eliminate(options, first_rulings, r.n)
+            if gone:
+                res.options_removed = [o.id for o in gone]
+                emit(f"  removed {len(gone)} option(s) whose own arithmetic "
+                     f"does not add up")
+            if not options:
+                # STOP. Later rounds only ELIMINATE, so with nothing to
+                # eliminate from they cannot reach an answer however many
+                # times they run. This carried on and made all thirty calls
+                # across five rounds against an empty set, then reported that
+                # nothing could be adjudicated -- an hour and the whole
+                # budget spent to establish what was already known here.
+                res.options_unparsed = True
+                emit("  round one produced no option set. Stopping: later "
+                     "rounds only remove, so there is nothing for them to do "
+                     "and no answer they could reach.")
+                results.append(res)
+                _write_status(out_dir, results)
+                break
         else:
             attach_claims(options, claims)
-        removed = eliminate(options, orch.verdicts, r.n,
-                            {c.id: c for c in claims})
-        res.options_removed = [o.id for o in removed]
+        # Elimination already ran, before the closer. What is left here is
+        # recording the state it produced.
         res.options_alive = [o.id for o in options if o.alive]
-        res.options_unexamined = [o.id for o in unexamined(options,
-                                                            orch.verdicts)]
-        if removed:
-            emit(f"  removed {len(removed)} option(s) on refuted claims")
+        res.options_unexamined = [o.id for o in unexamined(options, rulings)]
+        res.options_unexamined_why = {
+            o.id: why for o in options if o.alive
+            for why in [unexamined_reason(o, rulings)] if why}
+        res.option_text = {o.id: o.text for o in options}
+        res.rulings = dict(rulings)
+        res.options_observed = True
 
         if options:
             # The closer's text is COMMENTARY on the survivor list, not the
@@ -1084,9 +1568,20 @@ def run_night(
     emit(f"conduct: {conduct.total_findings()} claim(s) ruled false across "
          f"{len(conduct.seats)} seat(s) -- conduct.md")
 
-    if merged is not None:
+    # THE PACKET IS WRITTEN ON EVERY PATH THAT RAN AT ALL.
+    #
+    # It was written only when a merge had succeeded, so the runs that most
+    # need explaining produced nothing to explain them: a round one that
+    # yielded no options, or a closer that failed, left the operator with a
+    # run directory and no account of what happened or what it cost.
+    if results:
         write_verifier_packet(
-            out_dir, ask, merged, orch,
+            out_dir, ask,
+            merged if merged is not None else
+            "(no merged text -- the run stopped before any round produced "
+            "one. The rounds that did run are recorded above and in "
+            "status.md.)",
+            orch,
             [r.n for r in results if r.closer_contaminated],
             results,
         )
@@ -1193,6 +1688,30 @@ def check_panel_is_five_vendors(identity: Mapping[str, tuple[str, str]]) -> None
         )
 
 
+class RunTooExpensive(RuntimeError):
+    """The ceiling cannot fund the run, established before the first call.
+
+    Refusing here costs nothing. Discovering it in round three means the
+    rounds already paid for are thrown away, because a partial panel has not
+    adjudicated anything -- the answer it would print is whatever survived the
+    rounds that happened to fit.
+    """
+
+
+def configured_caps(profiles_path: str) -> dict[str, int]:
+    """The reply caps as configured, before any ceiling is applied.
+
+    Read from the same file the seats are built from, so planning and running
+    cannot disagree about what the panel is.
+    """
+    with open(profiles_path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    raw = raw.get("seats", raw)
+    return {s: int(raw[s].get("max_tokens") or 4096)
+            for s in sorted(raw)
+            if not s.startswith("_") and isinstance(raw[s], dict)}
+
+
 def live_night(ask: str, profiles_path: str, out_dir: str,
                gates: Sequence[Any] | None = None,
                ledger: Any = None,
@@ -1212,21 +1731,61 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     order already protects.
     """
     from adjudication_orchestrator import Orchestrator
-
-    # LOAD .env HERE, not in a caller that may not do it. Only the CLI's
-    # main() called load_env_file, so the console and the watcher -- the two
-    # ways this is actually started -- reached this point with no models and
-    # no credentials in the environment at all. Idempotent, and override=False
-    # means a real shell export still wins over a possibly-stale file.
     from run_adjudication import live_seats, load_env_file, night_gates
-    load_env_file()
 
+    # REPLY CAPS SIZED TO THE OPERATOR'S CEILING, PLANNED HERE RATHER THAN IN
+    # EACH CALLER. Only the canary planned, and it does not come through this
+    # function -- so the console and the watcher, the two ways a real run is
+    # actually started, ran with whatever profiles.json happened to say. That
+    # is the $25.51 five-round worst case the ceiling then refused mid-run,
+    # after paying for the rounds already done, and it left the merging seat
+    # below the floor it needs to produce anything at all.
+    #
+    # Planning here means every entry point gets the same sizing and a run
+    # that cannot fit its ceiling refuses BEFORE the first call, when refusing
+    # is still free. An explicit caps= argument overrides, for the canary and
+    # for tests.
+    #
+    # It runs BEFORE the panel is built. Planning needs the configured caps
+    # and the prices, never a credential, so a run nobody can afford is turned
+    # away without loading a key at all.
+    if caps is None and ledger is not None:
+        from cost_ledger import plan_run
+        plan = plan_run(ledger, configured_caps(profiles_path),
+                        rounds=len(ROUNDS), ask_chars=len(ask or ""))
+        if on_event is not None:
+            on_event(f"plan: {plan.calls} calls, estimated "
+                     f"${plan.estimate:.2f}")
+        if not plan.fits:
+            raise RunTooExpensive(plan.note)
+        caps = plan.caps
+
+    # LOAD .env ONLY ONCE THE RUN IS AFFORDABLE, and here rather than in a
+    # caller that may not do it. Only the CLI's main() called this, so the
+    # console and the watcher -- the two ways a run is actually started --
+    # reached this point with no models and no credentials in the environment
+    # at all. Idempotent, and override=False means a real shell export still
+    # wins over a possibly-stale file.
+    #
+    # AFTER the plan: the comment above claimed a run nobody can afford is
+    # refused without reading a key, and it was not -- the file was read
+    # first. Planning needs the configured caps and the prices and nothing
+    # else, so there is no reason to touch credentials before knowing whether
+    # the run can happen at all.
+    load_env_file()
     identity = panel_identity(profiles_path)
     check_panel_is_five_vendors(identity)
+    # THE CEILING IS ONLY AS GOOD AS THE PRICE IT IS COMPUTED FROM. Every
+    # limit in this run comes from rates.json; the seats call whatever the
+    # environment says. Nothing compared the two, so a seat pointed at a
+    # different model spent against the old model's price with the limit
+    # enforced to four decimal places on a number that did not apply.
+    from cost_ledger import check_models_are_priced
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "rates.json"), encoding="utf-8") as _fh:
+        check_models_are_priced(identity, json.load(_fh))
     seats = live_seats(profiles_path, ledger=ledger)
 
-    # Reply caps sized to the operator's ceiling. Without this the configured
-    # caps decide the cost and a sensible ceiling simply refuses to start.
     for seat_id, cap in (caps or {}).items():
         seat = seats.get(seat_id)
         if seat is not None and hasattr(seat, "max_tokens"):
@@ -1264,7 +1823,8 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
     """
     payload = [
         {"round": r.n, "name": r.name, "thinkers_ok": r.thinkers_ok,
-         "thinkers_failed": r.thinkers_failed, "claims": r.claims,
+         "thinkers_failed": r.thinkers_failed,
+         "thinkers_truncated": r.thinkers_truncated, "claims": r.claims,
          "passed": r.passed, "failed": r.failed, "blocked": r.blocked,
          "escalated": r.escalated, "degraded": r.degraded,
          "closer_failed": r.closer_failed, "merged": bool(r.merged),
@@ -1277,10 +1837,41 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "options_removed": r.options_removed,
          "options_alive": r.options_alive,
          "options_unexamined": r.options_unexamined,
+         "options_unexamined_why": r.options_unexamined_why,
+         "option_text": r.option_text,
+         # THE RULINGS THEMSELVES, not only the counts. status.md carried
+         # how many commitments were ruled and never what any of them said,
+         # so a run could not be audited after the fact: an operator reading
+         # it could see that something was blocked without ever learning
+         # what, or which figure a dispute was about.
+         "rulings": [
+             {"predicate": k, "status": v.status, "detail": v.detail,
+              "disputes": list(v.disputes)}
+             for k, v in sorted(r.rulings.items())],
+         "silent_seats": r.silent_seats,
+         # THE CHALLENGE COUNTS WERE NEVER DURABLE. The field existed on the
+         # round and reached the progress line, and status.md -- the file a
+         # later reader actually has -- carried no trace of whether any seat
+         # had disputed anything. A round that produced no challenges and a
+         # round nobody recorded looked identical afterwards.
+         "challenges": r.challenges,
+         "challenges_ruled": r.challenges_ruled,
          "closer_invented": r.closer_invented,
          "rho": r.rho, "rho_note": r.rho_note,
          "closer_contaminated": r.closer_contaminated,
-         "closer_unparsed": r.closer_unparsed}
+         "closer_unparsed": r.closer_unparsed,
+         # SOP 6.5 AND 6.2, ON DISK. The divergence and the collapse flag are
+         # computed every round and were reaching only the progress line; a
+         # later reader had no way to tell a panel that agreed exactly from
+         # one that did not. `challenges_by_seat` is what makes f1 and f2
+         # recoverable at all -- a total cannot say who caught what.
+         "eliminative": r.eliminative,
+         "divergence": r.divergence,
+         "unanimous": r.unanimous,
+         "all_seats_silent": r.all_seats_silent,
+         "collapse_warning": r.collapse_warning,
+         "challenges_by_seat": r.challenges_by_seat,
+         "calibration_findings": r.calibration_findings}
         for r in results
     ]
     tmp = os.path.join(out_dir, "status.md.tmp")
@@ -1345,6 +1936,30 @@ Not two: at two words the check starts flagging the closer naming a hole
 """
 
 
+_CLOSERS_OWN_LINE = re.compile(
+    r"^\s*(?:#{1,6}\s|MERGE\s*\||CLAIM\s*\||OPEN\b|KILLED\b)",
+    re.IGNORECASE)
+"""Lines that are the closer's PROTOCOL, carrying no assertion of their own.
+
+Its MERGE lines name option ids this code minted after the seats answered, so
+no seat could ever have written them: they are unsupported by construction,
+and flagging them says nothing at all.
+
+DELIBERATELY SHORT. A list marker or an evidence label is decoration on a
+sentence, not a substitute for one, and skipping those lines outright would
+have made the marker a way to smuggle an invention past the check -- my own
+regression caught exactly that: "- Recommendation: acquire the Zurich
+subsidiary" went unflagged. Those prefixes are stripped instead, and what
+follows is read like any other sentence.
+"""
+
+_DECORATION = re.compile(
+    r"^\s*(?:[-*\u2022]\s+|\d+[.)]\s+|"
+    r"\[(?:Fact|Inference|Assumption|Unknown)\]\s*)+",
+    re.IGNORECASE)
+"""Markers that dress a sentence. Stripped, never a reason to skip it."""
+
+
 def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str]:
     """Sentences in the merge whose content appears in no seat's answer.
 
@@ -1379,6 +1994,32 @@ def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str
     out: list[str] = []
     for raw in _SENTENCE.findall(merged or ""):
         sentence = raw.strip()
+        sentence = _DECORATION.sub("", sentence).strip()
+        # BOLD IS DECORATION THE LOCAL RULE ABOVE DOES NOT COVER: it strips
+        # "- ", "* " and "1. ", each of which needs a space after it, so
+        # "**MERGE | opt_a | opt_b**" reached the check as prose and was
+        # reported as a sentence no seat proposed. That is the same false
+        # contamination warning this branch was written to stop, arriving by
+        # a different route.
+        #
+        # Only PROTOCOL RECOGNITION reads the undecorated form. A sentence is
+        # still read and flagged on its own words, so a marker remains no way
+        # to smuggle an invention past the check: "**Recommendation: acquire
+        # the Zurich subsidiary**" is not protocol in either form.
+        if (_CLOSERS_OWN_LINE.match(sentence)
+                or _CLOSERS_OWN_LINE.match(undecorate_marker_line(sentence))):
+            # THE CLOSER'S REQUIRED OUTPUT IS NOT AN INVENTION.
+            #
+            # Measured on a live round: the merge was flagged CONTAMINATED
+            # with 16 sentences "no seat proposed", and the first three were
+            # its own MERGE lines -- the exact format it is asked for, made of
+            # option ids no seat could have written because this code minted
+            # them after the seats had answered.
+            #
+            # A warning that fires on every correct run is worse than no
+            # warning. The operator learns to skip it, and the sentence it
+            # exists to catch goes past with the rest.
+            continue
         words = [w for w in _CONTENT.findall(sentence.casefold())
                  if w not in _CONNECTIVE]
         if len(words) < MIN_WORDS_WHEN_WHOLLY_UNSUPPORTED:
@@ -1403,6 +2044,15 @@ part a reader will act on.
 """
 
 
+MEASURED_AND_SUFFICIENT = frozenset({"MEDIUM", "HIGH"})
+"""Confidence values that reflect a measurement AND clear the low bar.
+
+UNMEASURED means nobody looked. LOW means somebody looked and found the seats
+correlated enough that their agreement carries little more than one seat's.
+Neither supports presenting a result as established.
+"""
+
+
 @dataclass
 class RunVerdict:
     """What the run established, as TWO facts rather than one label.
@@ -1418,9 +2068,17 @@ class RunVerdict:
     """
 
     adjudication: str          # NONE | PARTIAL | COMPLETE
-    confidence: str            # UNMEASURED | LOW | MEASURED
+    confidence: str            # UNMEASURED | LOW | MEDIUM | HIGH
     reasons: list[str]
     caveats: list[str]
+    survivors_examined: bool = False
+    """Whether every surviving answer had all its commitments settled.
+
+    Separate from `adjudication`, which says whether the machinery removed
+    anything. A run can remove four options and leave a fifth that nothing
+    ever computed, and that fifth is not an adjudicated answer -- it is the
+    last one standing.
+    """
 
     @property
     def headline(self) -> str:
@@ -1440,9 +2098,25 @@ class RunVerdict:
 
         Unmeasured independence means nobody knows whether these seats fail
         together. An answer they agreed on, in that state, is not established.
+
+        IT ASKED FOR THE LITERAL STRING "MEASURED", WHICH NO RUN PRODUCES.
+        The unmeasured path reports UNMEASURED and the measured path reports
+        the ceiling the correlation supports -- LOW, MEDIUM or HIGH. So the
+        test could never be satisfied. It failed closed, which is why it went
+        unnoticed, but a control that cannot pass is not a control.
+
+        AND IT IS NOT A CLAIM THAT THE ANSWER IS CORRECT. Measured
+        independence gives a CEILING on corroboration -- it says the seats are
+        not clones, not that what they left standing is true. What this
+        reports is narrower and it is worth being exact about: the mechanical
+        process ran to completion, removed something, left one answer, settled
+        every commitment that answer made, and nothing was flagged against it.
+        A reader may act on that the way they would act on a passing test
+        suite, which is to say: it is evidence, and it is not proof.
         """
-        return (self.adjudication != "NONE"
-                and self.confidence == "MEASURED"
+        return (self.adjudication == "COMPLETE"
+                and bool(self.survivors_examined)
+                and self.confidence in MEASURED_AND_SUFFICIENT
                 and not self.caveats)
 
 
@@ -1480,14 +2154,22 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
     # remain" made a run with two live options report COMPLETE. Completion is
     # a fact about the option set, so it has to be read from the last result
     # that observed one.
-    alive: list[str] = []
-    for r in results:
-        if r.options_alive or r.options_created:
-            alive = r.options_alive
+    # WHETHER WE LOOKED IS RECORDED SEPARATELY FROM WHAT WE FOUND.
+    #
+    # The test was `if r.options_alive or r.options_created`, and an empty
+    # survivor list is falsey -- so a round that removed the LAST standing
+    # options was indistinguishable from a round that never reached the
+    # bookkeeping at all. The packet kept the previous round's list and
+    # reported "2 remain" after both had been eliminated, which is the
+    # opposite of what happened.
+    observed = [r for r in results if r.options_observed]
+    alive: list[str] = observed[-1].options_alive if observed else []
     created = sum(r.options_created for r in results)
     claims = sum(r.passed + r.failed + r.escalated + r.blocked for r in results)
     escalated = sum(r.escalated for r in results)
-    unexamined_now = results[-1].options_unexamined
+    # From the last round that actually observed the set, for the same reason.
+    unexamined_now = observed[-1].options_unexamined if observed else []
+    unexamined_why = observed[-1].options_unexamined_why if observed else {}
 
     # -- mechanical adjudication ------------------------------------------
     if any(r.options_unparsed for r in results):
@@ -1505,7 +2187,23 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
             f"rests on. The text below is what the panel agreed on, not what "
             f"survived being attacked."
         )
-    elif len(alive) <= 1:
+    elif not alive:
+        # EVERY ANSWER WAS REFUTED. This fell into the branch below and
+        # reported "1 remain" style completion, because the test was
+        # `len(alive) <= 1` and zero satisfies it -- so a run that eliminated
+        # everything read as a run that had settled on something.
+        #
+        # It is a real and useful outcome: the panel proposed answers and
+        # mechanically refuted all of them. But there is nothing to act on,
+        # and the one thing the report must not do is imply there is.
+        adjudication = "COMPLETE"
+        reasons.append(
+            f"EVERY OPTION WAS REMOVED. All {created} answer(s) the panel "
+            f"proposed had a commitment they declared mechanically refuted, "
+            f"so NOTHING SURVIVED. That is a finding about the answers that "
+            f"were proposed, not an answer: the right one may simply never "
+            f"have been put forward, and later rounds only remove.")
+    elif len(alive) == 1:
         adjudication = "COMPLETE"
         reasons.append(
             f"{removed} option(s) were removed by mechanical refutation and "
@@ -1545,11 +2243,55 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
 
     # -- caveats: things that make either figure untrustworthy -------------
     if unexamined_now:
+        # ONE SENTENCE FOR THREE DIFFERENT FACTS, AND IT NAMED TWO OF THEM.
+        #
+        # It read "they declared no commitment this code could compute, or
+        # none was ruled on". Neither is true of the case the first full
+        # five-round run actually produced on every surviving option: a figure
+        # WAS declared, it WAS ruled, and it passed the seat's own
+        # multiplication with nothing from outside ever touching it. A true
+        # conclusion supported by a false reason sends the reader looking for
+        # a missing PREDICATE that is sitting right there, and the real fact
+        # -- nobody but the proposing seat has been near this number -- never
+        # reaches them. Each reason is now named, with its own count.
+        by_reason: dict[str, int] = {}
+        for oid in unexamined_now:
+            reason = unexamined_why.get(oid, OS_NOT_RULED)
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        detail = "; ".join(
+            f"{n} {reason}" for reason, n in sorted(by_reason.items()))
         caveats.append(
-            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED. No "
-            f"claim was ever attached to them, so they survived because "
-            f"nothing examined them -- which on the page looks identical to "
-            f"surviving scrutiny.")
+            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED "
+            f"({detail}). Surviving because nothing examined them looks "
+            f"identical on the page to surviving scrutiny.")
+    # A REFUTED CLAIM NO LONGER REMOVES AN OPTION, so it has to be visible.
+    #
+    # Removal needs a typed commitment the option declared itself, because
+    # the rule that removed on any refuted claim also removed on claims the
+    # warrant said nothing about. That is the safer direction, but it means a
+    # seat can assert something demonstrably false about a surviving answer
+    # and nothing in the tally would show it: the option is not eliminated
+    # and not unexamined, and the failure count is a global number that names
+    # no option. Silence there is exactly the fail-open this design exists to
+    # avoid.
+    # COUNTED PER ROUND, NOT SUPPRESSED BY ANY REMOVAL ANYWHERE.
+    #
+    # The test was "were claims refuted AND was nothing removed in the whole
+    # run", so one legitimate removal in round one silenced this for every
+    # refuted claim in every later round. A claim that was proven false and
+    # took nothing with it is exactly what a reader needs to see, and one
+    # unrelated removal is no reason to stop saying so.
+    refuted_total = sum(r.failed for r in results
+                        if not r.options_removed)
+    if refuted_total:
+        caveats.append(
+            f"{refuted_total} CLAIM(S) WERE MECHANICALLY REFUTED AND REMOVED "
+            f"NOTHING. A claim is refuted on its warrant; removing the answer "
+            f"it was written beside needs the answer to have declared that "
+            f"number itself, and none of these did. Read them before treating "
+            f"any survivor as sound -- a false statement made about an answer "
+            f"is not the same as a false answer, and it is not nothing "
+            f"either.")
     if claims and escalated / claims > MAX_ESCALATION_FRACTION:
         caveats.append(
             f"MOST OF IT IS UNCHECKED. {escalated} of {claims} distinct "
@@ -1570,6 +2312,30 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
         caveats.append(
             f"THE CLOSER WROTE CLAIM-LIKE PROSE THAT PARSED TO NOTHING, in "
             f"round(s) {', '.join(str(n) for n in unparsed)}.")
+    # A REFUTATION THE CALIBRATION PASS WAS NOT ALLOWED TO ACT ON.
+    #
+    # SOP 2.3 forbids pass five from ruling anything out, so a commitment it
+    # refutes cannot remove the answer that made it. Dropping the finding on
+    # that ground would be the worst of both: the pass may not act, so nobody
+    # hears about it. It is a caveat -- which is exactly what lowering
+    # confidence in a survivor means.
+    calibration = [(r.n, f) for r in results for f in r.calibration_findings]
+    if calibration:
+        caveats.append(
+            f"{len(calibration)} COMMITMENT(S) OF A SURVIVING ANSWER WERE "
+            f"REFUTED IN THE CALIBRATION ROUND, which under SOP 2.3 cannot "
+            f"rule anything out -- so the answer stands and the refutation "
+            f"stands with it. Read these before acting on any survivor: "
+            + "; ".join(f"round {n}: {f}" for n, f in calibration))
+    truncated = [(r.n, sid, why) for r in results
+                 for sid, why in r.thinkers_truncated.items()]
+    if truncated:
+        caveats.append(
+            f"{len(truncated)} SEAT REPLY(IES) WERE CUT OFF BY THE OUTPUT CAP: "
+            + "; ".join(f"round {n} {sid} {why}" for n, sid, why in truncated)
+            + ". Whatever those seats would have committed to is missing, "
+              "not declined. Raise that seat's max_tokens, and the ceiling "
+              "with it, before reading their silence as a finding.")
     degraded = [r.n for r in results if r.degraded]
     if degraded:
         caveats.append(
@@ -1589,7 +2355,8 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
             f"frameworks the remaining rounds apply were never brought to "
             f"bear.")
 
-    return RunVerdict(adjudication, confidence, reasons, caveats)
+    return RunVerdict(adjudication, confidence, reasons, caveats,
+                      survivors_examined=bool(alive) and not unexamined_now)
 
 
 def write_verifier_packet(out_dir: str, ask: str, merged: str,
@@ -1667,6 +2434,14 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
     for cid, v in orch.verdicts.items():
         if v.status is None:
             continue          # escalated; it belongs under "still open", below
+        if v.status is GateStatus.WARRANT_HELD:
+            # It has a gate verdict but it is NOT a ruling on the claim, and
+            # this section is what a reader takes as rulings. It appears in
+            # full under "Evidence verified, proposition open" below. Listing
+            # it here as well -- which it was, as [WARRANT_HELD] beside real
+            # PASS and FAIL lines -- invites reading it as a third grade of
+            # settled rather than as not settled.
+            continue
         # The claim TEXT, not only the gate's message. "[PASS] 2 + 2 = 4
         # recomputed" tells a verifier that some arithmetic held without
         # saying what it was offered to support, which is the only thing they
@@ -1729,6 +2504,16 @@ def write_verifier_packet(out_dir: str, ask: str, merged: str,
                   "largely not addressing the same points, so whether they fail",
                   "together is unknown -- and agreement between seats that have",
                   "not been shown to fail differently is not corroboration."]
+
+    # SOP 9.1 steps 9 and 10 tell the operator to read the residual, the
+    # singleton fraction and the per-pass divergence BEFORE committing, and
+    # 9.3 makes the holes part of the answer. None of it was reachable from
+    # this engine, so a packet could report a survivor while the manual's own
+    # stop rule said DO NOT COMMIT and nothing on the page said so.
+    if rounds_run:
+        conv = analyse(rounds_run,
+                       escalations_pending=len(orch.escalation_queue))
+        lines += ["", *render_convergence(conv)]
 
     lines += ["", "---", "",
               "BLOCKED means a check could not be performed -- a paywall, a",

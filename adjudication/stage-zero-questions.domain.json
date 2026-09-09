@@ -1,0 +1,150 @@
+{
+  "_README": [
+    "STAGE 0 SET FOR THE OPERATOR'S ACTUAL DECISION DOMAIN.",
+    "",
+    "Task class: deciding between courses of action in government-contracting",
+    "capture, talent-acquisition operations, and capital allocation across",
+    "FORGE LINK LLC, Alpha Beta Omega Enterprises, and Just4Veterans.",
+    "",
+    "EVERY ANSWER IS DERIVABLE FROM THE FACTS STATED IN THE QUESTION. That is",
+    "deliberate and it is the only way this set can have a defensible key.",
+    "",
+    "WHAT IS DELIBERATELY ABSENT: questions whose answer depends on FAR, 13",
+    "CFR, SBA size standards, SDVOSB eligibility, or any other regulation.",
+    "Those have authoritative answers, and the authority is not this file.",
+    "Writing a threshold from memory into an answer key would put an invented",
+    "number into the measurement that decides whether the whole tool gets",
+    "built -- and in a compliance domain it would be worse than useless.",
+    "Add those yourself from the regulation, with the citation, or route them",
+    "to counsel. See the companion note in the operator brief.",
+    "",
+    "Set kinds: numeric compares as a number within tolerance; oneof accepts",
+    "any listed form. Nothing is graded by a model."
+  ],
+  "questions": [
+
+    {"id": "ta01-time-to-fill", "kind": "numeric", "tolerance": "0.1",
+     "answer": "35",
+     "question": "A requisition opened on day 0 and the accepted offer was signed on day 35. What is the time-to-fill in days? Give the number."},
+
+    {"id": "ta02-time-to-fill-reduction", "kind": "numeric", "tolerance": "0.1",
+     "answer": "75",
+     "question": "Average time-to-fill was 120 days and is now 30 days. What is the percentage reduction? Give the number without a percent sign."},
+
+    {"id": "ta03-cost-per-hire", "kind": "numeric", "tolerance": "1",
+     "answer": "4500",
+     "question": "Recruiting spend for a quarter was 225,000 dollars across job boards, agency fees and referral bonuses. Fifty hires were made. What is the cost per hire in dollars? Give the number."},
+
+    {"id": "ta04-offer-acceptance", "kind": "numeric", "tolerance": "0.1",
+     "answer": "95",
+     "question": "Twenty offers were extended and nineteen were accepted. What is the offer acceptance rate as a percentage? Give the number without a percent sign."},
+
+    {"id": "ta05-funnel-conversion", "kind": "numeric", "tolerance": "0.1",
+     "answer": "4",
+     "question": "A recruiter conducts 5 in-person interviews per week with an 80% conversion to the next round. How many candidates advance per week? Give the number."},
+
+    {"id": "ta06-pipeline-coverage", "kind": "numeric", "tolerance": "0.1",
+     "answer": "3",
+     "question": "Twelve roles must be filled this quarter. The historical ratio is 25 qualified candidates sourced per hire. The active qualified pipeline holds 900 candidates. What is the pipeline coverage ratio, that is, pipeline divided by candidates required? Give the number."},
+
+    {"id": "ta07-agency-savings", "kind": "numeric", "tolerance": "1",
+     "answer": "18000",
+     "question": "Annual agency spend is 120,000 dollars. A renegotiated contract reduces it by 15%. What is the annual saving in dollars? Give the number."},
+
+    {"id": "ta08-which-metric", "kind": "oneof", "accept": ["cost per hire", "cost-per-hire", "cost_per_hire"],
+     "answer": "cost per hire",
+     "question": "A hiring manager wants to know whether switching from agency sourcing to direct sourcing saved money per position filled. Which single metric answers that: time-to-fill, cost per hire, or offer acceptance rate? Answer with the metric name only."},
+
+    {"id": "ta09-attrition-net", "kind": "numeric", "tolerance": "0.1",
+     "answer": "6",
+     "question": "A team of 100 hires 14 people in a year and loses 8 to attrition in the same year. What is the net headcount change? Give the number."},
+
+    {"id": "ta10-quality-vs-speed", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Time-to-fill dropped 40% while 90-day new-hire attrition rose from 5% to 22%. Considered alone, does the faster time-to-fill establish that the recruiting process improved? Answer yes or no."},
+
+    {"id": "cap01-expected-value", "kind": "numeric", "tolerance": "1",
+     "answer": "600000",
+     "question": "An opportunity has a total contract value of 2,000,000 dollars and an assessed win probability of 30%. What is the probability-weighted pipeline value in dollars? Give the number."},
+
+    {"id": "cap02-bp-breakeven", "kind": "numeric", "tolerance": "0.1",
+     "answer": "5",
+     "question": "Bid and proposal cost for one pursuit is 20,000 dollars. Expected profit on a win is 400,000 dollars. Ignoring all other factors, what is the minimum win probability as a percentage at which expected profit equals bid cost? Give the number without a percent sign."},
+
+    {"id": "cap03-pipeline-shortfall", "kind": "numeric", "tolerance": "1",
+     "answer": "12000000",
+     "question": "A revenue target is 3,000,000 dollars. The historical win rate is 25%. What total contract value must be in the pipeline to expect to meet the target? Give the number in dollars."},
+
+    {"id": "cap04-two-pursuits", "kind": "oneof", "accept": ["b", "opportunity b", "second", "2"],
+     "answer": "b",
+     "question": "Opportunity A: 5,000,000 dollars value, 10% win probability, 60,000 dollars bid cost. Opportunity B: 1,500,000 dollars value, 50% win probability, 25,000 dollars bid cost. Using probability-weighted value minus bid cost, which has the higher expected return? Answer A or B."},
+
+    {"id": "cap05-burdened-rate", "kind": "numeric", "tolerance": "0.5",
+     "answer": "128.70",
+     "question": "A direct labor rate is 60 dollars per hour. Fringe is 30% of direct labor. Overhead is 50% applied to direct labor plus fringe. G and A is 10% applied to the total of direct labor, fringe and overhead. What is the fully burdened hourly rate in dollars? Give the number."},
+
+    {"id": "cap06-fee-on-cost", "kind": "numeric", "tolerance": "1",
+     "answer": "84000",
+     "question": "A cost-plus-fixed-fee contract has an estimated cost of 1,200,000 dollars and a fixed fee of 7%. What is the fee in dollars? Give the number."},
+
+    {"id": "cap07-runway", "kind": "numeric", "tolerance": "0.1",
+     "answer": "8",
+     "question": "Cash on hand is 240,000 dollars. Net monthly burn is 30,000 dollars with no new revenue. How many months of runway remain? Give the number."},
+
+    {"id": "cap08-allocate-scarce", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Three entities each request the same 100,000 dollars of discretionary capital. Only one allocation can be funded. Does funding the entity that submitted its request first make it the highest-return allocation? Answer yes or no."},
+
+    {"id": "cap09-sunk-cost", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A pursuit has already consumed 45,000 dollars in bid and proposal cost. New information drops the assessed win probability to 3%. Should the 45,000 dollars already spent count toward the decision to continue? Answer yes or no."},
+
+    {"id": "cap10-margin", "kind": "numeric", "tolerance": "0.1",
+     "answer": "20",
+     "question": "A contract bills 500,000 dollars and costs 400,000 dollars to deliver. What is the gross margin as a percentage? Give the number without a percent sign."},
+
+    {"id": "cap11-two-contracts-margin", "kind": "oneof", "accept": ["b", "second", "2"],
+     "answer": "b",
+     "question": "Contract A bills 2,000,000 dollars at a cost of 1,800,000 dollars. Contract B bills 400,000 dollars at a cost of 280,000 dollars. Which has the higher gross margin percentage? Answer A or B."},
+
+    {"id": "cap12-discount-effect", "kind": "numeric", "tolerance": "0.1",
+     "answer": "11.11",
+     "question": "A bid priced at 1,000,000 dollars carries a 200,000 dollar profit. To win, the price is cut by 100,000 dollars with no change in cost. What is the new profit margin as a percentage of the new price? Give the number without a percent sign."},
+
+    {"id": "gc01-teaming-capacity", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A solicitation requires 40,000 labor hours in twelve months. The firm can supply 22,000 hours and has no teaming partner. Can the firm meet the requirement alone? Answer yes or no."},
+
+    {"id": "gc02-past-performance-gap", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "An RFP requires three past-performance references of similar scope within the last five years. The firm has one. Does submitting alone satisfy the stated requirement? Answer yes or no."},
+
+    {"id": "gc03-bid-no-bid", "kind": "oneof", "accept": ["no", "false", "no-bid", "no bid"],
+     "answer": "no",
+     "question": "An opportunity fails two of the firm's three mandatory bid gates: no past-performance match and no capacity to staff. The third gate, strategic fit, passes. Under a policy requiring all mandatory gates to pass, should the firm bid? Answer yes or no."},
+
+    {"id": "gc04-incumbent-signal", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "An RFP's stated requirements match the incumbent's existing solution in unusual detail. Considered alone, does that establish that the procurement is improper? Answer yes or no."},
+
+    {"id": "gc05-deadline-arithmetic", "kind": "numeric", "tolerance": "0.1",
+     "answer": "9",
+     "question": "A proposal is due in 21 days. Internal policy requires 7 days for pink and red team review and 5 days for production and submission checks. How many days remain for writing? Give the number."},
+
+    {"id": "gc06-jv-workshare", "kind": "numeric", "tolerance": "1",
+     "answer": "1350000",
+     "question": "A joint venture wins a 3,000,000 dollar contract. The operating agreement assigns 45% of the work to this firm. What is this firm's workshare in dollars? Give the number."},
+
+    {"id": "gc07-compliance-refusal", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A proposal omits a document the solicitation lists as mandatory for responsiveness. Does a strong technical approach make the submission responsive? Answer yes or no."},
+
+    {"id": "prod01-roadmap-tradeoff", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A mobile product has 4 engineering weeks before a launch commitment. Feature A needs 3 weeks, feature B needs 3 weeks, and neither can be partially shipped. Can both ship by the commitment? Answer yes or no."},
+
+    {"id": "prod02-metric-not-proof", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Weekly active users rose 40% in the same week a paid acquisition campaign launched. Considered alone, does that establish the product change caused the rise? Answer yes or no."}
+  ]
+}
