@@ -615,6 +615,20 @@ class CostLedger:
         if pass_id is not None and charge:
             self._stage_spent[pass_id] = \
                 self._stage_spent.get(pass_id, 0.0) + charge
+        # RECONCILE THE SHARED DAY AS SOON AS THE BILL IS KNOWN.
+        #
+        # _reserve_day claims the worst case before the call and the release
+        # arithmetic in _persist_day_locked gives back whatever the call did
+        # not use -- but nothing called it, so the reservation stood forever.
+        # Measured live: two calls billing $0.024 between them held $0.68 of
+        # the day.
+        #
+        # Only when the call was MEASURED. A vendor that returned no usage
+        # block told us nothing about what it charged, so its authorisation
+        # stays claimed; releasing it would hand the next run a budget that
+        # may already be spent.
+        if measured and self.day_state_path:
+            self.persist_day()
         return cc
 
     @contextmanager
@@ -720,9 +734,30 @@ class CostLedger:
         # ONLY WHAT HAS NOT ALREADY BEEN RESERVED. Every dispatch claims its
         # estimate in this file before the call, so adding the run's whole
         # committed figure again at the end would double-count it.
-        blob[today] = float(blob.get(today, 0.0)) + max(
-            0.0, self.committed - self._day_reserved)
-        self._day_reserved = max(self._day_reserved, self.committed)
+        # RELEASE THE UNUSED RESERVATION once the bill is known.
+        #
+        # Every dispatch claims its WORST CASE in this file before the call --
+        # correctly, because an in-flight call could cost that much. What was
+        # missing is the other half: when the call comes back measured and
+        # cheaper, the difference has to go back to the day.
+        #
+        # Without it the file carried reservations forever. Measured on the
+        # first live runs: two one_model calls that billed $0.0108 and $0.0134
+        # consumed $0.68 of a $25 day, because each had reserved $0.33. That
+        # is a thirtyfold over-count, and it is not merely wasteful -- an
+        # operator blocked at "$25 spent" having actually spent seventy cents
+        # cannot tell a working limit from a broken one, and the natural fix
+        # is to raise or disable the ceiling.
+        #
+        # This run's contribution to the day is replaced rather than added to,
+        # so the file holds what the run has ACTUALLY committed: real dollars
+        # for measured calls, full authorisation for unmeasured ones -- which
+        # keeps the fail-closed behaviour that reservation existed for, since
+        # `committed` still counts an unmeasured call at its estimate.
+        mine_now = max(0.0, self.committed)
+        blob[today] = max(
+            0.0, float(blob.get(today, 0.0)) - self._day_reserved + mine_now)
+        self._day_reserved = mine_now
         # A UNIQUE temporary name per writer. Two processes sharing
         # "<path>.tmp" raced: one os.replace moved the file out from under the
         # other, which then raised FileNotFoundError, and one day's spend was

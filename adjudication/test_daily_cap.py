@@ -18,6 +18,7 @@ import json
 import os
 import re
 from datetime import date
+from typing import ClassVar
 
 import pytest
 
@@ -146,7 +147,7 @@ class TestTheCeilingIsComputedFromTheRightModelsPrice:
     defect `stale_rates` and `is_priced_for` already refuse in their own
     dimensions, through the one door left open."""
 
-    CFG = {"seat_1": {"_model": "gpt-5.6-sol", "input_per_mtok": 4.0,
+    CFG: ClassVar[dict] = {"seat_1": {"_model": "gpt-5.6-sol", "input_per_mtok": 4.0,
                       "output_per_mtok": 20.0}}
 
     def test_a_matching_model_is_allowed(self):
@@ -193,6 +194,20 @@ class TestTheCeilingIsComputedFromTheRightModelsPrice:
                     if not s.startswith("_") and isinstance(c, dict)}
         CL.check_models_are_priced(identity, cfg)
 
+    def test_the_single_seat_tool_checks_it_too(self):
+        """one_model.py spends, so it must check. It calls ONE seat, so it
+        checks that seat only -- refusing a seat_1 run because seat_3's id is
+        stale would be a control firing on something the command cannot spend
+        against."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "one_model.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        assert "check_models_are_priced(" in src, (
+            "one_model spends and does not verify the price is for the model "
+            "it calls")
+        assert "if k == SEAT" in src, (
+            "it must scope the check to the seat in play, not the whole panel")
+
     def test_a_live_run_checks_it_before_spending(self):
         """Read from the source: the check is worthless if nothing calls it."""
         import inspect
@@ -202,3 +217,99 @@ class TestTheCeilingIsComputedFromTheRightModelsPrice:
         assert "check_models_are_priced" in src
         assert src.index("check_models_are_priced(identity") < src.index(
             "live_seats("), "it must refuse BEFORE the panel is built"
+
+
+# ---------------------------------------------------------------------------
+# the day must count what was SPENT, not what was reserved
+# ---------------------------------------------------------------------------
+
+class TestReservationsAreReleasedOnceTheBillIsKnown:
+    """MEASURED ON THE FIRST LIVE RUNS. Two one_model calls that billed $0.0108
+    and $0.0134 consumed $0.68 of a $25 day, because each reserved its worst
+    case of $0.33 before the call and nothing ever gave the difference back.
+
+    A thirtyfold over-count is not merely wasteful. An operator blocked at
+    "$25 spent" having actually spent seventy cents cannot tell a working
+    limit from a broken one, and the natural response is to raise or disable
+    the ceiling -- so an over-tight cap ends up as no cap at all.
+    """
+
+    @staticmethod
+    def _led(state, per_day=25.0):
+        return CL.operator_ledger(_rates(), per_run=100.0, per_day=per_day,
+                                  day_state_path=str(state))
+
+    def test_a_cheap_measured_call_leaves_the_day_near_its_real_cost(
+            self, tmp_path):
+        state = tmp_path / "day.json"
+        led = self._led(state)
+        led.check_before_call("seat_1", 2000, 16384)      # reserves worst case
+        reserved = json.load(open(state))[date.today().isoformat()]
+        assert reserved > 0.2, "the pre-call reservation should be large"
+        led.record("seat_1", 500, 400)                     # bills far less
+        after = json.load(open(state))[date.today().isoformat()]
+        assert after < 0.02, (
+            f"the day kept {after:.4f} for a call that billed "
+            f"{led.spent:.4f}; the reservation was never released")
+        assert after == pytest.approx(led.spent, abs=1e-6)
+
+    def test_an_unmeasured_call_keeps_its_full_authorisation(self, tmp_path):
+        """THE HALF THAT MUST NOT CHANGE. A vendor that returns no usage block
+        told us nothing about what it charged, so releasing that reservation
+        would hand the next run a budget already spent. Fail closed."""
+        state = tmp_path / "day.json"
+        led = self._led(state)
+        led.check_before_call("seat_1", 2000, 16384)
+        led.record("seat_1", None, None, estimated_dollars=0.30)
+        after = json.load(open(state))[date.today().isoformat()]
+        assert after >= 0.30, (
+            "an unmeasured call must keep at least its estimate claimed")
+        assert after > 0.0, "it must never be released to nothing"
+
+    def test_many_cheap_calls_do_not_exhaust_the_day(self, tmp_path):
+        """The operator-visible symptom: at $0.01 a call, a $25 day should
+        allow far more than the seventy-five the reservation arithmetic did."""
+        state = tmp_path / "day.json"
+        led = self._led(state)
+        for _ in range(200):
+            led.check_before_call("seat_1", 500, 400)
+            led.record("seat_1", 500, 400)
+        after = json.load(open(state))[date.today().isoformat()]
+        assert after < 5.0, f"200 cheap calls consumed {after:.2f} of the day"
+
+    def test_an_unmeasured_call_with_no_estimate_keeps_its_reservation(
+            self, tmp_path):
+        """THE DANGEROUS CASE, and the one the release could break. A vendor
+        returns no usage block AND the caller passed no estimate, so
+        `committed` counts the call at zero. Releasing on that would set the
+        day back to nothing after a call that may have cost real money -- the
+        exact defect the reservation exists to prevent, reintroduced by the
+        code that gives reservations back."""
+        state = tmp_path / "day.json"
+        led = self._led(state)
+        led.check_before_call("seat_1", 2000, 16384)
+        reserved = json.load(open(state))[date.today().isoformat()]
+        led.record("seat_1", None, None)          # unmeasured, no estimate
+        after = json.load(open(state))[date.today().isoformat()]
+        assert after == pytest.approx(reserved, abs=1e-9), (
+            f"the day fell from {reserved:.4f} to {after:.4f} after a call "
+            f"nobody could price")
+
+    def test_the_day_total_never_goes_negative(self, tmp_path):
+        """A negative day silently GRANTS budget: the next run reads it, adds
+        its own spend, and starts below zero."""
+        state = tmp_path / "day.json"
+        led = self._led(state)
+        for _ in range(5):
+            led.check_before_call("seat_1", 500, 400)
+            led.record("seat_1", 500, 400)
+        assert json.load(open(state))[date.today().isoformat()] >= 0.0
+
+    def test_the_ceiling_still_refuses_when_real_spend_reaches_it(
+            self, tmp_path):
+        """Releasing reservations must not release the LIMIT."""
+        state = tmp_path / "day.json"
+        state.write_text(json.dumps({date.today().isoformat(): 24.99}))
+        led = self._led(state)
+        with pytest.raises(CL.CeilingReached):
+            led.check_before_call("seat_1", 2000, 16384)

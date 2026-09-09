@@ -179,6 +179,28 @@ class TestTheReadOrderAndTheExitCode:
         assert len(r.options_standing) == 2
         assert r.resolved is False
 
+    def test_a_recomputed_commitment_is_reported_in_the_gate_section(self):
+        """FOUND ON THE FIRST LIVE RUN, at $0.0108. The instrument recomputed
+        3 + 1 = 4 against a note claiming 5 -- exactly what it exists to do --
+        and section 1 printed NOTHING WAS MECHANICALLY CHECKED directly above
+        section 3 showing the check.
+
+        The guard counted CLAIM lines and removals only. A commitment that is
+        recomputed and holds is this instrument's PRIMARY output, and it was
+        the one thing section 1 could not see."""
+        r = OM.check("q", lambda p: SOUND, gates=_gates())
+        assert r.commitments_held, "the held commitment must be recorded"
+        text = "\n".join(OM.render(r))
+        assert "NOTHING WAS MECHANICALLY CHECKED" not in text
+        assert "RECOMPUTED AND HELD" in text
+        assert "10000" in text, "and it must show the arithmetic, not just a count"
+
+    def test_a_removed_option_has_no_held_commitment_reported(self):
+        """A refuted commitment must not appear under RECOMPUTED AND HELD."""
+        r = OM.check("q", lambda p: BROKEN, gates=_gates())
+        assert r.commitments_held == []
+        assert "RECOMPUTED AND HELD" not in "\n".join(OM.render(r))
+
     def test_nothing_checkable_says_so_rather_than_reading_as_clean(self):
         r = OM.check("q", lambda p: "I think you should just proceed.",
                      gates=_gates())

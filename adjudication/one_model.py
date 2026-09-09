@@ -116,6 +116,15 @@ class Checked:
     options_standing: list[str] = field(default_factory=list)
     options_removed: list[tuple[str, str]] = field(default_factory=list)
     options_untested: list[str] = field(default_factory=list)
+    commitments_held: list[str] = field(default_factory=list)
+    """Commitments recomputed from their own formula and inputs, and held.
+
+    THE PRIMARY OUTPUT OF THIS INSTRUMENT, and section 1 did not report it.
+    The "nothing was mechanically checked" guard counted CLAIM lines and
+    removals only, so the first live run -- which recomputed 3 + 1 = 4 against
+    a note claiming 5, exactly what it exists to do -- printed NOTHING WAS
+    MECHANICALLY CHECKED above a section showing the check.
+    """
     record: str = ""
     passed: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
@@ -171,6 +180,10 @@ def check(artifact: str,
     removed = eliminate(options, rulings, 1)
     out.options_removed = [(o.id, o.elimination_reason or "") for o in removed]
     out.options_standing = [o.id for o in options if o.alive]
+    out.commitments_held = [
+        (rulings[p.id].detail or p.render())
+        for o in options if o.alive for p in o.predicates
+        if getattr(rulings.get(p.id), "status", None) == "pass"]
     # THE DISTINCTION ONE SEAT FORCES, and a test caught me collapsing it.
     #
     # `unexamined` counts an option as untested unless something OUTSIDE it
@@ -247,6 +260,11 @@ def render(c: Checked) -> list[str]:
         out.append("  ANSWERS REMOVED on their own arithmetic:")
         for oid, why in c.options_removed:
             out += [f"    - {oid}", f"        {why}"]
+    if c.commitments_held:
+        out.append(f"  RECOMPUTED AND HELD -- {len(c.commitments_held)} "
+                   f"commitment(s), each on its own formula and inputs:")
+        for detail in c.commitments_held[:10]:
+            out.append(f"    - {detail}")
     if c.passed:
         out.append(f"  VERIFIED -- {len(c.passed)} claim(s) recomputed and held:")
         for text, detail in c.passed[:10]:
@@ -263,8 +281,11 @@ def render(c: Checked) -> list[str]:
                 "    expression this evaluator cannot handle is not a refutation."]
         for text, detail in c.blocked[:10]:
             out += [f"    - {text}", f"        {detail[:100]}"]
+    # `commitments_held` IS IN THIS TEST. Without it the guard fired on the
+    # instrument's own main path: a note whose arithmetic was recomputed and
+    # held reported that nothing had been checked.
     if not (c.failed or c.passed or c.blocked or c.warrant_held
-            or c.options_removed):
+            or c.options_removed or c.commitments_held):
         out.append("  NOTHING WAS MECHANICALLY CHECKED. The reply carried no "
                    "claim or commitment any gate could reach.")
 
@@ -360,7 +381,8 @@ def main() -> int:
     from run_adjudication import live_seats, load_env_file, night_gates
     print(load_env_file())
     with open(os.path.join(HERE, "rates.json"), encoding="utf-8") as fh:
-        rates = rates_from_config(json.load(fh))
+        rates_cfg = json.load(fh)
+    rates = rates_from_config(rates_cfg)
     # COUNTS AGAINST THE DAY, and it did not. The comment here used to say
     # a single checked answer must not consume the panel's daily budget --
     # true about allocation, and it left the operator with no daily limit at
@@ -372,6 +394,19 @@ def main() -> int:
     if SEAT not in seats:
         print(f"  no seat {SEAT!r}; configured: {sorted(seats)}")
         return 2
+    # THE PRICE MUST BE FOR THE MODEL THIS SEAT ACTUALLY CALLS, or the
+    # ceiling above is enforced against a number that does not apply.
+    #
+    # SCOPED TO THE SEAT IN PLAY, deliberately. live_night checks all five
+    # because it calls all five; this calls one, and refusing a seat_1 run
+    # because seat_3's id is stale would be a control that fires on something
+    # this command cannot spend against.
+    from cost_ledger import check_models_are_priced
+    from night_loop import panel_identity
+    identity = panel_identity(os.path.join(HERE, "profiles.json"))
+    check_models_are_priced({k: v for k, v in identity.items() if k == SEAT},
+                            rates_cfg)
+
     seat = seats[SEAT]
     if hasattr(seat, "max_tokens"):
         seat.max_tokens = CAP
