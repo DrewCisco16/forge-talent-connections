@@ -57,9 +57,16 @@ before this branch, the results are not comparable.
 
 ## 2. Settle seats 1 and 2 — the cheapest step, do it first
 
-Two of five seats have never answered. Run-001 failed them 5 of 5 identically,
-which is a deterministic config or credential fault, not a blip. The error
-message was discarded by the old code, so nobody knows which. That is fixed.
+> **SETTLED, 2026-09-09.** `diagnose-seats.py` was run with real credentials
+> and **every seat probed returned HTTP 200 with `text_path` resolving**.
+> `profiles.json` was not changed. The five-of-five failure below is run-001
+> in **August**, and it no longer describes this panel. This section is kept
+> because the diagnostic is still the right first move after any settings
+> change, and because the failure table is still how to read its output.
+
+Run-001 failed seats 1 and 2 five of five identically, which is a deterministic
+config or credential fault rather than a blip. The error message was discarded
+by the old code, so nobody could tell which. That is fixed.
 
 ```bash
 .venv/bin/python diagnose-seats.py
@@ -81,7 +88,13 @@ That single output decides between all the competing hypotheses. Read it, then:
 
 ### seat_2 (Google, `gemini-3.1-pro-preview`)
 
-The leading hypothesis: `profiles.run001.json` points this seat at Google's
+> **THE HYPOTHESIS BELOW WAS WRONG, and the diagnostic settled it.** This seat
+> answers through the compatibility endpoint. Nothing here needs changing. The
+> `{{model}}`-in-a-URL capability described next is real and still useful if
+> this seat ever has to move to the native endpoint, but it is not a fix for
+> anything currently broken.
+
+The hypothesis was: `profiles.run001.json` points this seat at Google's
 OpenAI-**compatibility** endpoint, and Google's newer auth keys are reported to
 be rejected by that layer while working against the native endpoint. The stored
 key is 53 characters where an older-style `AIza` key is 39.
