@@ -129,7 +129,7 @@ fetch now. The marketing name on the box is never the ID the API wants.
 |---|---|---|
 | 1 | OpenAI | their current flagship reasoning model |
 | 2 | Google | the **Pro** tier — explicitly **not** Flash |
-| 3 | Mistral | `mistral-medium-latest` — the Magistral line is **retired** |
+| 3 | Mistral | Mistral Medium 3.5 (`mistral-medium-3504`) — the **Magistral** reasoning line is retired; this is the vendor's named replacement and it is NOT a reasoning model. Verify the id and price before use. |
 | 4 | xAI | their current flagship Grok |
 | 5 | Anthropic | their current flagship Opus |
 
