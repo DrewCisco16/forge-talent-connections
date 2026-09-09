@@ -67,7 +67,7 @@
     "auth_header": "authorization",
     "auth_template": "Bearer {key}",
     "extra_headers": {},
-    "_note": "run-001: FAILED 5/5, cause unrecorded. OpenAI-compat endpoint used because seat_profiles rejects a model placeholder in the URL. Suspect key type.",
+    "_note": "run-001: FAILED 5/5, cause unrecorded. This is the OpenAI-COMPATIBILITY endpoint, and it was chosen only because seat_profiles used to reject a model placeholder in a URL. THAT CONSTRAINT IS GONE: an endpoint may now carry {{model}} and nothing else, so Google's NATIVE generateContent endpoint is expressible here. That matters because the compatibility layer is the leading suspect for this seat's failure -- Google's newer auth keys are reported to be rejected by it while working natively, and the stored key is 53 characters where an AIza key is 39. TO SWITCH: copy the endpoint, the request body and the reply path from Google's own API reference, writing '{{model}}' where the URL names the model. Do NOT write them from memory -- a stale endpoint returns a well-formed 200 with nothing usable, which this tool records as a seat that had nothing to say rather than a seat that was never reached. Run diagnose-seats.py first: it prints the actual status and vendor message for well under a cent and settles which hypothesis is right.",
     "body": {
       "model": "{{model}}",
       "messages": [

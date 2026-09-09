@@ -39,6 +39,7 @@ interpolates as text, which is how a system-prompt prefix is written.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -49,6 +50,9 @@ PROMPT = "{{prompt}}"
 MODEL = "{{model}}"
 MAX_TOKENS = "{{max_tokens}}"
 TEMPERATURE = "{{temperature}}"
+
+_URL_PLACEHOLDER = re.compile(r"\{\{[^{}]*\}\}")
+"""Any {{...}} token, for checking what an endpoint carries."""
 PLACEHOLDERS = (PROMPT, MODEL, MAX_TOKENS, TEMPERATURE)
 
 REQUIRED_FIELDS = ("endpoint", "auth_header", "auth_template", "body", "text_path")
@@ -246,11 +250,30 @@ def validate_config(raw: Any) -> list[str]:
                 f"{where}: endpoint must be https, got {endpoint!r} -- a credential "
                 f"must never cross a plaintext connection"
             )
-        if isinstance(endpoint, str) and "{{" in endpoint:
-            problems.append(
-                f"{where}: endpoint still contains a placeholder; fill it in from "
-                f"the vendor's API reference"
-            )
+        if isinstance(endpoint, str):
+            # {{model}} IS ALLOWED IN A URL, AND ONLY {{model}}.
+            #
+            # Some vendors put the model in the path rather than the body:
+            # Google's native endpoint is .../models/<model>:generateContent.
+            # Refusing every placeholder here left Google reachable only
+            # through its OpenAI-compatibility layer, and that layer is the
+            # prime suspect for run-001's seat_2 failure -- Google's newer
+            # auth keys are reported to return ACCESS_TOKEN_TYPE_UNSUPPORTED
+            # against it while working natively. A rule of ours was forcing
+            # the one path that may not work.
+            #
+            # Everything else stays refused, and not merely as a typo guard:
+            # a URL is written to proxy logs, server access logs and crash
+            # reports by every hop it makes, so a prompt, a cap or a
+            # credential in one is disclosed by design.
+            stray = sorted(set(_URL_PLACEHOLDER.findall(endpoint)) - {MODEL})
+            if stray:
+                problems.append(
+                    f"{where}: endpoint carries {', '.join(stray)}. Only "
+                    f"{MODEL} may appear in a URL -- a prompt or a credential "
+                    f"in one is written to every proxy and server log it "
+                    f"passes. Fill the rest in from the vendor's API reference"
+                )
 
         auth = cfg.get("auth_template")
         if isinstance(auth, str) and "{key}" not in auth:

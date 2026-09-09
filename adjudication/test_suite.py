@@ -5758,3 +5758,115 @@ class TestProseNeverReachesPass:
         become a mark against its author."""
         v, _ = self._verdict("the total is 4", "2 + 2 = 4")
         assert v.verified_true is not False
+
+
+class TestAVendorMayPutTheModelInTheURL:
+    """Some vendors name the model in the path rather than the body. Google's
+    native endpoint is `.../models/<model>:generateContent`.
+
+    This config refused ANY placeholder in an endpoint, so the only way to
+    reach Google was its OpenAI-compatibility layer -- and that layer is the
+    prime suspect for run-001's seat_2 failure, since Google's newer auth keys
+    are reported to return ACCESS_TOKEN_TYPE_UNSUPPORTED against it while
+    working natively. Two of five seats have never answered, and one of them
+    was being forced down the one path that may not work by a rule of ours
+    rather than by the vendor.
+    """
+
+    NATIVE = ("https://generativelanguage.googleapis.test/v1beta/"
+              "models/{{model}}:generateContent")
+
+    def test_the_model_is_filled_into_the_path(self):
+        p = _profile(endpoint=self.NATIVE)
+        assert p.resolved_endpoint("gemini-3.1-pro") == (
+            "https://generativelanguage.googleapis.test/v1beta/"
+            "models/gemini-3.1-pro:generateContent")
+
+    def test_an_endpoint_without_a_placeholder_is_untouched(self):
+        p = _profile(endpoint="https://api.example.test/v1/messages")
+        assert p.resolved_endpoint("anything") == (
+            "https://api.example.test/v1/messages")
+
+    def test_the_seat_posts_to_the_filled_in_url(self):
+        rec = []
+        s = HttpSeat(_resolved_seat(model="m-9"), _profile(endpoint=self.NATIVE),
+                     _transport(record=rec), ledger=SA.UNMETERED)
+        s("PROMPT-BODY")
+        assert rec[0]["url"] == (
+            "https://generativelanguage.googleapis.test/v1beta/"
+            "models/m-9:generateContent")
+
+    def test_a_malformed_model_id_cannot_reshape_the_url(self):
+        """A model id is operator configuration, not model output, so this is
+        defence in depth rather than a live threat -- but a value that could
+        add a path segment, a query or a host would turn a config typo into a
+        request somewhere nobody intended."""
+        p = _profile(endpoint=self.NATIVE)
+        got = p.resolved_endpoint("../../admin?x=1")
+        assert got.startswith(
+            "https://generativelanguage.googleapis.test/v1beta/models/")
+        assert "?" not in got.split("models/")[1].split(":")[0]
+        assert "/" not in got.split("models/")[1].split(":")[0]
+
+    @pytest.mark.parametrize("token", [
+        "{{prompt}}", "{{key}}", "{{max_tokens}}", "{{temperature}}",
+        "{{promt}}",
+    ])
+    def test_no_other_placeholder_may_appear_in_a_url(self, token):
+        """Not merely a typo guard. A URL is written to proxy logs, server
+        access logs and crash reports by every hop it makes, so a prompt or a
+        credential in one is disclosed by design."""
+        with pytest.raises(ValueError, match="may appear in a URL"):
+            _profile(endpoint=f"https://api.example.test/v1/{token}")
+
+    def test_the_model_placeholder_does_not_excuse_the_others(self):
+        with pytest.raises(ValueError, match=r"\{\{prompt\}\}"):
+            _profile(endpoint=f"{self.NATIVE}?q={{{{prompt}}}}")
+
+
+class TestTheSettingsFileAllowsAModelInTheURL:
+    """The other half of the same fix. profiles_from_config builds the
+    ProviderProfile, and validate_config is what an operator runs with
+    --check-profiles BEFORE spending anything -- so if the validator refuses
+    a native Google endpoint, the adapter accepting it changes nothing.
+    """
+
+    NATIVE = ("https://generativelanguage.googleapis.test/v1beta/"
+              "models/{{model}}:generateContent")
+
+    def test_a_model_in_the_path_is_accepted(self):
+        assert validate_config(_cfg(endpoint=self.NATIVE)) == []
+
+    def test_it_survives_into_a_built_profile(self):
+        prof = profiles_from_config(_cfg(endpoint=self.NATIVE))["seat_1"]
+        assert prof.resolved_endpoint("gemini-3.1-pro").endswith(
+            "/models/gemini-3.1-pro:generateContent")
+
+    @pytest.mark.parametrize("token", [
+        "{{prompt}}", "{{key}}", "{{max_tokens}}", "{{temperature}}",
+        "{{promt}}",
+    ])
+    def test_every_other_placeholder_is_still_refused(self, token):
+        problems = validate_config(
+            _cfg(endpoint=f"https://api.acme.invalid/v1/{token}"))
+        assert any("may appear in a URL" in p for p in problems), problems
+
+    def test_the_refusal_says_why_rather_than_calling_it_a_typo(self):
+        """A URL is written to proxy logs, server access logs and crash
+        reports by every hop it makes. An operator who reads this as a typo
+        guard may work around it; one who reads the real reason will not."""
+        problems = validate_config(
+            _cfg(endpoint="https://api.acme.invalid/v1/{{prompt}}"))
+        joined = " ".join(problems)
+        assert "proxy" in joined and "log" in joined
+
+    def test_the_shipped_settings_still_validate(self):
+        """profiles.run001.json is the reconstructed live panel. This change
+        loosened a rule it depends on, so it has to still pass."""
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(here, "profiles.run001.json")
+        with open(path, encoding="utf-8") as fh:
+            cfg = {k: v for k, v in _json.load(fh).items()
+                   if not k.startswith("_")}
+        assert validate_config(cfg) == []

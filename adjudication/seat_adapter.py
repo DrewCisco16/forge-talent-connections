@@ -42,12 +42,23 @@ from request headers.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from adjudication_orchestrator import ResolvedSeat
+
+MODEL = "{{model}}"
+"""The one placeholder an endpoint may carry. Same spelling seat_profiles uses."""
+
+_URL_PLACEHOLDER = re.compile(r"\{\{[^{}]*\}\}")
+
+
+def _unknown_url_placeholders(url: str) -> list[str]:
+    """Every {{...}} token in a URL that is not {{model}}."""
+    return [t for t in _URL_PLACEHOLDER.findall(url) if t != MODEL]
 
 # (method, url, headers, body_bytes, timeout_s) -> (status_code, body_bytes)
 #
@@ -214,6 +225,40 @@ class ProviderProfile:
                 f"{self.name}: endpoint must be https, got {self.endpoint!r}. "
                 f"A credential must never cross a plaintext connection."
             )
+        # {{model}} is the ONE placeholder a URL may carry. Anything else --
+        # the prompt, a cap, a credential -- would be written into proxy and
+        # server logs by every hop the request makes.
+        leftover = set(_unknown_url_placeholders(self.endpoint))
+        if leftover:
+            raise ValueError(
+                f"{self.name}: endpoint carries {', '.join(sorted(leftover))}. "
+                f"Only {MODEL} may appear in a URL; a prompt or a credential "
+                f"in one is written to every proxy and server log it passes."
+            )
+
+    def resolved_endpoint(self, model: str) -> str:
+        """The URL to POST to, with {{model}} filled in.
+
+        SOME VENDORS PUT THE MODEL IN THE PATH, NOT THE BODY. Google's native
+        generateContent endpoint is .../models/<model>:generateContent, and
+        this config refused any placeholder in an endpoint -- so the only way
+        to reach Google was its OpenAI-compatibility layer. That layer is the
+        prime suspect for run-001's seat_2 failure: Google's newer auth keys
+        are widely reported to return ACCESS_TOKEN_TYPE_UNSUPPORTED against
+        it while working fine natively. A constraint of ours was forcing the
+        one path that may not work.
+
+        ONLY {{model}}, AND IT IS URL-QUOTED. A model id is operator
+        configuration rather than model output, but quoting it means a
+        malformed value cannot add a path segment, a query, or a host.
+        {{prompt}}, {{max_tokens}}, {{temperature}} and any credential stay
+        refused in a URL by validate_config: a URL is written to proxy logs,
+        server access logs and crash reports, and nothing secret or
+        attacker-influenced belongs in one.
+        """
+        if MODEL not in self.endpoint:
+            return self.endpoint
+        return self.endpoint.replace(MODEL, urllib.parse.quote(model, safe=""))
 
     def __repr__(self) -> str:
         # THE ENDPOINT IS REDACTED, NOT PRINTED. repr() lands in tracebacks,
@@ -413,7 +458,8 @@ class HttpSeat:
             self._precheck(prompt, body)
             try:
                 status, raw = self.transport(
-                    "POST", self.profile.endpoint, self._headers(), body, self.timeout_s
+                    "POST", self.profile.resolved_endpoint(self.model),
+                    self._headers(), body, self.timeout_s
                 )
             except Exception as exc:  # noqa: BLE001 - fail closed on any transport fault
                 # A READ TIMEOUT IS THE MODEL STILL THINKING, NOT A FAULT,
