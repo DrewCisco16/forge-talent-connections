@@ -211,3 +211,64 @@ class TestTheReadOrderAndTheExitCode:
     def test_an_unparseable_reply_does_not_crash(self):
         r = OM.check("q", lambda p: "OPTION |\nPREDICATE | | | \n", gates=_gates())
         assert r.exit_code == 1
+
+
+class TestTheModeStageZeroMeasuredUsIntoReadsARealReply:
+    """Stage 0 measured one model at 0.968 and 1.000 on the operator's two
+    task classes, both intervals entirely above SOP 6.4's 0.45, so this module
+    is the primary instrument rather than a fallback. Every fixture in this
+    file writes its markers bare, and a model does not.
+
+    Run against the same reply written as a markdown list -- which is how a
+    model formats anything it thinks of as data -- this parsed no option,
+    removed nothing, held nothing, and reported unresolved. The wrong figure
+    went unchallenged and the reply looked like a model that had declined to
+    commit. The two live runs on record happened to come back undecorated.
+    """
+
+    DECORATED = "\n".join([
+        "I read the note. Two answers are worth putting forward.",
+        "",
+        "### Option 1 -- the note's own figure",
+        "",
+        "- **OPTION | ship five units in Q4 as the note states**",
+        "  - PREDICATE | Q4 units | = | 5 units",
+        "  - FORMULA | october + november",
+        "  - INPUT | october = 2",
+        "  - INPUT | november = 2",
+        "",
+        "### Option 2 -- what the months actually add to",
+        "",
+        "- **OPTION | ship four units in Q4 instead**",
+        "  - PREDICATE | Q4 units | = | 4 units",
+        "  - FORMULA | october + november",
+        "  - INPUT | october = 2",
+        "  - INPUT | november = 2",
+        "",
+        "1. **CLAIM | arithmetic | 2 + 2 = 4 | october and november are four**",
+    ])
+
+    def _checked(self):
+        return OM.check("The Q4 note says we ship 5 units.",
+                        lambda _p: self.DECORATED, gates=_gates())
+
+    def test_the_refuted_answer_is_removed(self):
+        r = self._checked()
+        assert len(r.options_removed) == 1
+        why = r.options_removed[0][1]
+        assert "gives 4 units" in why
+        assert "committed that Q4 units equals 5 units" in why
+
+    def test_the_sound_answer_stands_and_was_actually_computed(self):
+        r = self._checked()
+        assert len(r.options_standing) == 1
+        assert len(r.commitments_held) == 1
+        assert r.options_untested == []
+
+    def test_it_resolves_rather_than_reporting_a_model_that_said_nothing(self):
+        """The failure this replaces was silent in the worst direction: an
+        empty option set is indistinguishable from a model that declined to
+        commit, so the report blamed the model for the parser."""
+        r = self._checked()
+        assert r.resolved
+        assert r.exit_code == 0
