@@ -10,6 +10,8 @@ import pytest
 
 import seeded_rho as S
 
+SR = S
+
 
 def _m(pattern, n_seats=5):
     m = S.Measurement(seats=[f"seat_{i}" for i in range(1, n_seats + 1)],
@@ -128,3 +130,63 @@ class TestTheItemsThemselves:
         for item in S.ITEMS:
             if not item.id.endswith("c"):
                 assert item.has_error, f"{item.id} should carry a defect"
+
+
+class TestTheVerdictSurvivesHowASeatWritesIt:
+    """decide() anchors ANSWER at the start of a line, and a model writes
+    "**ANSWER: yes**" or "- ANSWER: yes" for a line it thinks of as its
+    verdict. Seven of eight shapes measured returned None.
+
+    None is handled correctly: matrix() drops any item not every seat decided,
+    so a lost verdict never becomes a wrong one and rho is not inflated by it.
+    The damage is quieter. It SHRINKS the sample, and it shrinks it toward the
+    items where all five seats happened to write bare -- a subset selected by
+    formatting. rho over nine items is already thin, and nothing in the output
+    would show why the count fell.
+    """
+
+    @pytest.mark.parametrize("shape", [
+        "ANSWER: yes",
+        "**ANSWER: yes**",
+        "- ANSWER: yes",
+        "* ANSWER: yes",
+        "1. ANSWER: yes",
+        "> ANSWER: yes",
+        "`ANSWER: yes`",
+        "**ANSWER:** yes",
+        "- **ANSWER: yes**",
+        "ANSWER | yes",
+    ])
+    def test_a_yes_is_read_however_it_is_dressed(self, shape):
+        assert SR.decide(f"Here is my working.\n\n{shape}") is True
+
+    @pytest.mark.parametrize("shape", [
+        "ANSWER: no",
+        "**ANSWER: no**",
+        "- ANSWER: no",
+        "1. ANSWER: no",
+        "- **ANSWER: no**",
+    ])
+    def test_a_no_is_read_however_it_is_dressed(self, shape):
+        assert SR.decide(f"I checked it.\n\n{shape}") is False
+
+    def test_a_seat_that_did_not_answer_is_still_missing_not_wrong(self):
+        """The negative control, and the one that keeps rho honest.
+        Undecorating must not manufacture a verdict out of prose: scoring a
+        non-answer as an error is exactly the missing-data mistake that
+        fabricates a correlation."""
+        assert SR.decide("I am not confident either way about this.") is None
+        assert SR.decide("") is None
+        assert SR.decide("The answer depends on how you read it.") is None
+
+    def test_an_undecided_item_is_dropped_from_the_matrix(self):
+        """End to end on the property that matters: an item one seat did not
+        decide contributes to no seat's score, rather than counting against
+        the seat that skipped it."""
+        m = SR.Measurement(seats=["seat_1", "seat_2"],
+                           items=["i1", "i2"],
+                           correct={"seat_1": {"i1": True, "i2": True},
+                                    "seat_2": {"i1": True, "i2": None}})
+        common, _seats, X = m.matrix()
+        assert common == ["i1"]
+        assert X == [[1, 1]]

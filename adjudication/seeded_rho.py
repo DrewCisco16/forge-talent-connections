@@ -47,6 +47,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+from adjudication_orchestrator import undecorate_marker_line  # noqa: E402
+
 ANSWER = re.compile(r"(?mi)^\s*ANSWER\s*[:|]\s*(?P<v>yes|no)\b")
 
 CONTRACT = (
@@ -118,7 +120,22 @@ def decide(reply: str) -> bool | None:
     wrong, and scoring it as an error is exactly the missing-data mistake that
     makes a fabricated correlation.
     """
-    m = ANSWER.search(reply or "")
+    # UNDECORATED FIRST, THE WAY EVERY OTHER PARSER HERE READS A MARKER.
+    #
+    # This pattern anchors at the start of a line, and a model writes
+    # "**ANSWER: yes**" or "- ANSWER: yes" for a line it thinks of as its
+    # verdict. Seven of eight shapes measured returned None.
+    #
+    # None is handled correctly -- matrix() drops any item not every seat
+    # decided, so a lost answer never becomes a wrong answer and rho is not
+    # inflated by it. What it does instead is quieter: it SHRINKS the sample,
+    # and it shrinks it toward the items where all five seats happened to
+    # write bare. A correlation over nine items is already thin; measuring it
+    # on a subset selected by formatting is worse, and nothing in the output
+    # would show why the count fell.
+    text = "\n".join(undecorate_marker_line(ln)
+                     for ln in (reply or "").splitlines())
+    m = ANSWER.search(text)
     return None if m is None else m.group("v").lower() == "yes"
 
 
