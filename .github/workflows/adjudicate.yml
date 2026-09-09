@@ -1,0 +1,200 @@
+name: adjudicate
+
+# THE BUTTON. Type a question, get the five-round answer back on your phone.
+#
+# MANUAL ONLY, LIKE calibrate.yml, AND FOR THE SAME REASON: this spends money
+# at five vendors with real credentials. No push trigger, no schedule. A run is
+# something a person decided to start, at a moment they chose, with a ceiling
+# they set and a confirmation they typed.
+#
+# workflow_dispatch is what puts a "Run workflow" button in the GitHub mobile
+# app and the web UI. It only appears for a workflow that is on the DEFAULT
+# branch, which is why this file has to be merged before it does anything.
+#
+# It uses exactly the secrets calibrate.yml already uses. If calibration runs
+# from your phone, this does too; nothing new to set up.
+on:
+  workflow_dispatch:
+    inputs:
+      ask:
+        description: "The question, decision, or artifact to adjudicate. Everything you type here is what all five seats see. Paste the whole thing."
+        required: true
+        type: string
+      max_cost_usd:
+        description: "Hard ceiling for this run in USD. Plans before it spends; refuses before the first call if the plan does not fit. A full five-round run has measured $4.96 and bounded $16.82."
+        required: true
+        default: "17.00"
+      confirm:
+        description: "Type SPEND to confirm this run may call the paid vendor APIs."
+        required: true
+        default: ""
+
+# Never two panels at once. They would bill in parallel against one ceiling,
+# and the ledger on this runner cannot see spend from another.
+concurrency:
+  group: adjudicate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: adjudication
+
+jobs:
+  adjudicate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # Checked before checkout and before any secret touches disk. A mis-tap
+      # on a phone costs nothing at all.
+      - name: Require explicit spend confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "SPEND" ]; then
+            echo "::error::Not confirmed. Type SPEND in the confirm box to authorise paid vendor calls."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: adjudication/requirements-dev.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # profiles.json is gitignored, so it is not in the checkout. It travels
+      # as a secret because that is the only channel that reaches a runner
+      # without putting vendor endpoints in the repository. It holds no key.
+      - name: Materialise settings file
+        env:
+          PROFILES_JSON: ${{ secrets.ADJ_PROFILES_JSON }}
+        run: |
+          if [ -z "$PROFILES_JSON" ]; then
+            echo "::error::Secret ADJ_PROFILES_JSON is not set. See adjudication/CALIBRATING.md step 1."
+            exit 1
+          fi
+          printf '%s' "$PROFILES_JSON" > profiles.json
+          python run_adjudication.py --check-profiles profiles.json
+
+      # Written with printf from the environment, never as a command argument:
+      # arguments are visible in a process listing, environment variables are
+      # not. GitHub masks registered secrets in logs, but this must not depend
+      # on that masking to be safe.
+      - name: Materialise credentials
+        env:
+          K1: ${{ secrets.ADJ_SEAT_1_API_KEY }}
+          K2: ${{ secrets.ADJ_SEAT_2_API_KEY }}
+          K3: ${{ secrets.ADJ_SEAT_3_API_KEY }}
+          K4: ${{ secrets.ADJ_SEAT_4_API_KEY }}
+          K5: ${{ secrets.ADJ_SEAT_5_API_KEY }}
+          M1: ${{ secrets.ADJ_SEAT_1_MODEL }}
+          M2: ${{ secrets.ADJ_SEAT_2_MODEL }}
+          M3: ${{ secrets.ADJ_SEAT_3_MODEL }}
+          M4: ${{ secrets.ADJ_SEAT_4_MODEL }}
+          M5: ${{ secrets.ADJ_SEAT_5_MODEL }}
+        run: |
+          umask 077
+          : > .env
+          missing=""
+          for n in 1 2 3 4 5; do
+            eval "k=\$K$n"; eval "m=\$M$n"
+            [ -n "$k" ] || missing="$missing ADJ_SEAT_${n}_API_KEY"
+            [ -n "$m" ] || missing="$missing ADJ_SEAT_${n}_MODEL"
+            printf 'ADJ_SEAT_%s_API_KEY=%s\n' "$n" "$k" >> .env
+            printf 'ADJ_SEAT_%s_MODEL=%s\n' "$n" "$m" >> .env
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          echo "5 seats configured (values not shown)."
+
+      # The ask goes to disk from the environment for the same reason the
+      # keys do. It is the operator's own material; it should still never be
+      # a command-line argument.
+      - name: Write the ask
+        env:
+          ASK: ${{ inputs.ask }}
+        run: |
+          printf '%s\n' "$ASK" > ask.md
+          echo "ask: $(wc -c < ask.md) characters"
+
+      # Exit codes, from full_run.py:
+      #   0  resolved -- one candidate survives, every stop condition holds,
+      #      no hole remains.
+      #   1  NOT resolved -- the honest result for most runs. Survivors with
+      #      open holes, or several survivors the evidence does not separate.
+      #      That is an ANSWER, not a failure, and the job must not go red on
+      #      it or the operator learns to ignore red.
+      #   2  refused before spending anything -- the plan did not fit the
+      #      ceiling. Nothing was billed. Red is right.
+      #
+      # The daily ledger on a fresh runner starts empty, so it cannot see spend
+      # from a laptop or another runner. The per-run ceiling is the real
+      # control here; the daily one is set to the same figure so it is not
+      # decorative, and it is pointed at a runner-local file so nothing on this
+      # machine is mistaken for the operator's own ledger.
+      - name: Run the five-round panel
+        id: run
+        env:
+          FULL_RUN_ASK: ask.md
+          FULL_RUN_CEILING: ${{ inputs.max_cost_usd }}
+          ADJUDICATION_DAY_CEILING: ${{ inputs.max_cost_usd }}
+          ADJUDICATION_DAY_STATE: .spend-by-day.runner.json
+        run: |
+          set +e
+          python -u full_run.py | tee full_run.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          case "$code" in
+            0) echo "::notice::RESOLVED. One candidate survives, every stop condition holds, no hole remains." ;;
+            1) echo "::warning::NOT RESOLVED. Read section 2 (the answer) and section 5 (what to do next) in the report. This is a result, not an error." ;;
+            2) echo "::error::REFUSED BEFORE SPENDING ANYTHING. The plan did not fit the ceiling. Raise max_cost_usd or shorten the ask."; exit 2 ;;
+            *) echo "::error::full_run.py exited $code"; exit "$code" ;;
+          esac
+
+      # THE ANSWER ON THE PHONE, without downloading anything. The report is
+      # printed in the order SOP 9.1 specifies -- gates first, then the
+      # answer, then the holes -- and the summary keeps that order.
+      - name: Put the report in the job summary
+        if: always()
+        run: |
+          {
+            echo "## Adjudication report"
+            echo
+            echo "Exit: **${{ steps.run.outputs.exit }}** (0 resolved, 1 not resolved, 2 refused before spending)"
+            echo
+            echo '```'
+            cat full_run.txt 2>/dev/null || echo "(no report -- the run did not reach the reporting stage)"
+            echo '```'
+            echo
+            echo "The full record -- every seat's reply per round, the verifier packet, the judgment queue -- is in the **adjudication-run** artifact on this page."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ALWAYS, INCLUDING ON FAILURE. A run that spent money and then failed is
+      # exactly the run whose partial output is worth reading. The run
+      # directory holds the ask, every seat's raw reply per round, status.md,
+      # panel.md, the verifier packet and the conduct ledger. No credential:
+      # .env and profiles.json are outside it and shredded below.
+      - name: Upload the run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjudication-run
+          path: |
+            adjudication/full_run.txt
+            adjudication/runs/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Shred credentials
+        if: always()
+        run: rm -f .env profiles.json .spend-by-day.runner.json

@@ -191,6 +191,20 @@ This never contacts any company. It cannot cost you money.
 
 ## Step 5 — The real run
 
+### From your phone (no Mac needed once the secrets are set)
+
+**Actions → adjudicate → Run workflow.** Paste your question in `ask`, leave
+`max_cost_usd` at `17.00`, type `SPEND` in `confirm`, tap Run. The report
+appears in the run's Summary tab about an hour later, gates first, then the
+answer. `USING.md` is the whole procedure on one page, including what the
+run's colour means — green with a warning is the ordinary result, not a
+fault.
+
+It uses the same three secrets as the calibration button, so if that runs,
+this runs.
+
+### From the Mac
+
 ```bash
 .venv/bin/python run_adjudication.py YOUR-FILE.txt \
   --profiles profiles.json \
