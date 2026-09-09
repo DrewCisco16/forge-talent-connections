@@ -378,7 +378,7 @@ class CalibrationResult:
 # the orchestrator and this is an alias. Two copies would drift, and the copy
 # that fell behind would be the one deciding whether a paid run's evidence
 # survived parsing.
-_undecorate = AO.undecorate_claim_line
+_undecorate = AO.undecorate_marker_line
 
 
 def _canonical_key(s: str) -> str:

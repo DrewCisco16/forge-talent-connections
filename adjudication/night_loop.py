@@ -51,10 +51,12 @@ from adjudication_orchestrator import (
     GateStatus,
     Orchestrator,
     line_claim_extractor,
+    undecorate_marker_line,
 )
 from convergence import analyse
 from convergence import divergence as seat_divergence
 from convergence import render as render_convergence
+from option_set import NOT_RULED as OS_NOT_RULED
 from option_set import (
     Option,
     TooManyOptions,
@@ -67,6 +69,7 @@ from option_set import (
     render_working,
     silent_seats,
     unexamined,
+    unexamined_reason,
 )
 from predicate import Ruling, adjudicate, parse_challenges, refuted_commitment
 from seat_conduct import ConductLedger
@@ -874,6 +877,16 @@ class RoundResult:
     options_removed: list[str] = field(default_factory=list)
     options_alive: list[str] = field(default_factory=list)
     options_unexamined: list[str] = field(default_factory=list)
+    options_unexamined_why: dict[str, str] = field(default_factory=dict)
+    """option id -> why that survivor counts as untested.
+
+    THE IDS ALONE COULD NOT BE REPORTED HONESTLY. Three different facts land
+    in options_unexamined -- an option that declared no figure, one whose
+    figure nothing settled, and one whose figure passed its own arithmetic
+    and was never touched from outside -- and the run summary described them
+    with a single sentence that named the first two. The third is the one the
+    first full five-round run actually produced, on every surviving option.
+    """
     option_text: dict[str, str] = field(default_factory=dict)
     """option id -> the answer it stands for.
 
@@ -1278,6 +1291,9 @@ def run_night(
             res.options_alive = [o.id for o in options if o.alive]
             res.options_unexamined = [
                 o.id for o in unexamined(options, rulings)]
+            res.options_unexamined_why = {
+                o.id: why for o in options if o.alive
+                for why in [unexamined_reason(o, rulings)] if why}
             res.option_text = {o.id: o.text for o in options}
             res.rulings = dict(rulings)
             res.options_observed = True
@@ -1465,6 +1481,9 @@ def run_night(
         # recording the state it produced.
         res.options_alive = [o.id for o in options if o.alive]
         res.options_unexamined = [o.id for o in unexamined(options, rulings)]
+        res.options_unexamined_why = {
+            o.id: why for o in options if o.alive
+            for why in [unexamined_reason(o, rulings)] if why}
         res.option_text = {o.id: o.text for o in options}
         res.rulings = dict(rulings)
         res.options_observed = True
@@ -1796,6 +1815,7 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "options_removed": r.options_removed,
          "options_alive": r.options_alive,
          "options_unexamined": r.options_unexamined,
+         "options_unexamined_why": r.options_unexamined_why,
          "option_text": r.option_text,
          # THE RULINGS THEMSELVES, not only the counts. status.md carried
          # how many commitments were ruled and never what any of them said,
@@ -1953,7 +1973,19 @@ def closer_introduced(merged: str, thinker_texts: Mapping[str, str]) -> list[str
     for raw in _SENTENCE.findall(merged or ""):
         sentence = raw.strip()
         sentence = _DECORATION.sub("", sentence).strip()
-        if _CLOSERS_OWN_LINE.match(sentence):
+        # BOLD IS DECORATION THE LOCAL RULE ABOVE DOES NOT COVER: it strips
+        # "- ", "* " and "1. ", each of which needs a space after it, so
+        # "**MERGE | opt_a | opt_b**" reached the check as prose and was
+        # reported as a sentence no seat proposed. That is the same false
+        # contamination warning this branch was written to stop, arriving by
+        # a different route.
+        #
+        # Only PROTOCOL RECOGNITION reads the undecorated form. A sentence is
+        # still read and flagged on its own words, so a marker remains no way
+        # to smuggle an invention past the check: "**Recommendation: acquire
+        # the Zurich subsidiary**" is not protocol in either form.
+        if (_CLOSERS_OWN_LINE.match(sentence)
+                or _CLOSERS_OWN_LINE.match(undecorate_marker_line(sentence))):
             # THE CLOSER'S REQUIRED OUTPUT IS NOT AN INVENTION.
             #
             # Measured on a live round: the merge was flagged CONTAMINATED
@@ -2115,6 +2147,7 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
     escalated = sum(r.escalated for r in results)
     # From the last round that actually observed the set, for the same reason.
     unexamined_now = observed[-1].options_unexamined if observed else []
+    unexamined_why = observed[-1].options_unexamined_why if observed else {}
 
     # -- mechanical adjudication ------------------------------------------
     if any(r.options_unparsed for r in results):
@@ -2188,11 +2221,27 @@ def assess(results: Sequence[RoundResult]) -> RunVerdict:
 
     # -- caveats: things that make either figure untrustworthy -------------
     if unexamined_now:
+        # ONE SENTENCE FOR THREE DIFFERENT FACTS, AND IT NAMED TWO OF THEM.
+        #
+        # It read "they declared no commitment this code could compute, or
+        # none was ruled on". Neither is true of the case the first full
+        # five-round run actually produced on every surviving option: a figure
+        # WAS declared, it WAS ruled, and it passed the seat's own
+        # multiplication with nothing from outside ever touching it. A true
+        # conclusion supported by a false reason sends the reader looking for
+        # a missing PREDICATE that is sitting right there, and the real fact
+        # -- nobody but the proposing seat has been near this number -- never
+        # reaches them. Each reason is now named, with its own count.
+        by_reason: dict[str, int] = {}
+        for oid in unexamined_now:
+            reason = unexamined_why.get(oid, OS_NOT_RULED)
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        detail = "; ".join(
+            f"{n} {reason}" for reason, n in sorted(by_reason.items()))
         caveats.append(
-            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED. "
-            f"They declared no commitment this code could compute, or none "
-            f"was ruled on, so they survived because nothing examined them -- "
-            f"which on the page looks identical to surviving scrutiny.")
+            f"{len(unexamined_now)} SURVIVING OPTION(S) WERE NEVER TESTED "
+            f"({detail}). Surviving because nothing examined them looks "
+            f"identical on the page to surviving scrutiny.")
     # A REFUTED CLAIM NO LONGER REMOVES AN OPTION, so it has to be visible.
     #
     # Removal needs a typed commitment the option declared itself, because

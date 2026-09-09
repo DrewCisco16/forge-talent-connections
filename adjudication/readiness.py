@@ -45,6 +45,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+sys.path.insert(0, HERE)
+from adjudication_orchestrator import undecorate_marker_line  # noqa: E402
+
 
 class Check:
     """One measurable fact about the build, and how it was established."""
@@ -83,6 +86,17 @@ def _tool_clean(cmd: list[str]) -> bool:
     # cmd comes only from checks() below, where every element is a literal.
     return subprocess.run(cmd, cwd=HERE, capture_output=True,  # nosec B603
                           timeout=900, check=False).returncode == 0
+
+
+def _flatten(text: str) -> str:
+    """A reply with its list and emphasis decoration stripped, line by line.
+
+    The counters below anchor on the start of a line, and a model writing a
+    line it thinks of as data puts a bullet, a number or a pair of asterisks
+    in front of it. Same undecorator the engine uses, so what this tracker
+    counts is what a real run would actually get.
+    """
+    return "\n".join(undecorate_marker_line(ln) for ln in text.splitlines())
 
 
 class Round:
@@ -139,7 +153,16 @@ def _compliance() -> tuple[int, int]:
         except OSError:
             continue
         seen += 1
-        if all(re.search(rf"(?mi)^\s*{k}\s*\|", text)
+        # READ THE WAY THE ENGINE READS IT. This matched only a line that
+        # STARTS with the keyword, and a model writes "- OPTION | ..." or
+        # "**PREDICATE | ...**". This module's own history is two rounds of
+        # the same error -- a fully compliant panel counted at 15 of 32, a
+        # passing check reported as failing -- and this is the third: a seat
+        # that followed the contract exactly and used bullets counted as
+        # having ignored it, on a tracker whose whole purpose is to say what
+        # has been established.
+        flat = _flatten(text)
+        if all(re.search(rf"(?mi)^\s*{k}\s*\|", flat)
                for k in ("OPTION", "PREDICATE", "FORMULA")):
             full += 1
     return full, seen
@@ -157,7 +180,8 @@ def _challenges_seen() -> int:
         for f in glob.glob(os.path.join(HERE, "runs", pattern, "round-*",
                                         "thinker-*.md")):
             with open(f, encoding="utf-8") as fh:
-                total += len(re.findall(r"(?mi)^\s*CHALLENGE\s*\|", fh.read()))
+                total += len(re.findall(r"(?mi)^\s*CHALLENGE\s*\|",
+                                        _flatten(fh.read())))
     return total
 
 

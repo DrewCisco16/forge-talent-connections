@@ -460,3 +460,70 @@ class TestTheWatcherAlwaysLeavesACostRecord:
         monkeypatch.setattr(W, "candidates", flaky)
         W.watch(str(tmp_path), 1.0, interval=0.0, once=True)
         assert calls["n"] == 1
+
+
+class TestTheComplianceProbeMeasuresWhatTheEngineWouldRead:
+    """compliance_probe.py calls five paid seats to answer one question: do
+    live models emit the contract's lines at all? Its answer authorises or
+    cancels every paid run after it, and its own verdict text offers to
+    abandon text prompting for provider-enforced structured output.
+
+    It counted with a regex anchored at the start of the RAW line, so a seat
+    that wrote "- OPTION | ..." and "**PREDICATE | ...**" -- which is how a
+    model formats anything it thinks of as data -- counted zero on every
+    column. Not a parse loss: a false measurement, reporting perfect
+    compliance as total silence, on a probe that costs money to repeat.
+    """
+
+    DECORATED = "\n".join([
+        "Here is my analysis.",
+        "",
+        "- **OPTION | rent capacity for six months and decide after**",
+        "  - PREDICATE | total cost | = | 12 dollars",
+        "  - FORMULA | months * per_month",
+        "  - INPUT | months = 6",
+        "  - INPUT | per_month = 2",
+        "1. CLAIM | arithmetic | 6 * 2 = 12 | the six months cost 12 dollars",
+    ])
+
+    def _counts(self, capsys, tmp_path, reply):
+        import compliance_probe as CP
+        CP._report({"seat_1": reply}, {}, str(tmp_path))
+        return capsys.readouterr().out
+
+    def test_a_seat_writing_a_list_is_not_reported_as_silent(self, capsys,
+                                                             tmp_path):
+        out = self._counts(capsys, tmp_path, self.DECORATED)
+        assert "fully compliant: 1/1" in out
+        assert "nothing usable" not in out
+
+    def test_the_verdict_does_not_call_for_structured_output(self, capsys,
+                                                             tmp_path):
+        """The probe's own remedy for silence is to abandon the text contract
+        for each vendor's structured-output mode. Recommending that because a
+        seat used bullets would trade a working design for a rewrite."""
+        out = self._counts(capsys, tmp_path, self.DECORATED)
+        assert "NO seat declared a checkable commitment" not in out
+        assert "VERDICT: PARTIAL" not in out
+
+    def test_the_raw_reply_is_saved_undecorated_nowhere(self, tmp_path,
+                                                       capsys):
+        """Counting on a stripped copy must not change what is written to
+        disk. The saved reply is the evidence, and it has to be what the
+        vendor actually returned."""
+        import compliance_probe as CP
+        CP._report({"seat_1": self.DECORATED}, {}, str(tmp_path))
+        capsys.readouterr()
+        saved = list(tmp_path.glob("runs/probe-*/seat_1.md"))
+        assert len(saved) == 1
+        assert saved[0].read_text(encoding="utf-8") == self.DECORATED
+
+    def test_a_seat_that_really_said_nothing_is_still_reported_silent(
+            self, capsys, tmp_path):
+        """The negative control. Undecorating must not turn prose into
+        compliance -- a seat that answered in paragraphs still has to show up
+        as having declared nothing checkable."""
+        out = self._counts(capsys, tmp_path,
+                           "I think renting is wiser than buying, on balance.")
+        assert "nothing usable:  seat_1" in out
+        assert "NO seat declared a checkable commitment" in out

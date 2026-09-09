@@ -65,6 +65,30 @@ A value that is *exactly* one placeholder takes its native type, so
 placeholder inside a longer string interpolates as text, which is how you add a
 system-prompt prefix.
 
+#### When the vendor names the model in the URL
+
+Some vendors put the model in the path rather than the body. Google's native
+call is `.../models/<model>:generateContent`. Write `{{model}}` in the endpoint
+and it is filled in per call, URL-quoted:
+
+```json
+"endpoint": "https://<from Google's API reference>/models/{{model}}:generateContent"
+```
+
+**`{{model}}` is the only token an endpoint may carry.** `{{prompt}}`,
+`{{max_tokens}}`, `{{temperature}}` and anything credential-shaped are refused
+in a URL, and not as a typo guard: a URL is written to proxy logs, server
+access logs and crash reports by every hop the request makes, so a prompt or a
+key in one is disclosed by design.
+
+This matters for seat 2 specifically. `profiles.run001.json` uses Google's
+OpenAI-**compatibility** endpoint, which was chosen only because this rule used
+to forbid a model placeholder. That layer is the leading suspect for that
+seat's five-of-five failure: Google's newer auth keys are reported to be
+rejected by it while working against the native endpoint. The native path is
+now expressible. Copy its URL, body and reply path from Google's own reference
+— not from here, and not from memory.
+
 ### `text_path`
 
 A list walking the parsed JSON response. Strings are object keys, integers are

@@ -1526,19 +1526,30 @@ _EMPHASIS_BEFORE_FIRST_PIPE = re.compile(r"^([^|]*)")
 _ORDERED_MARKER = re.compile(r"^\s*\d+[.)]\s+")
 _TRAILING_EMPHASIS = re.compile(r"[*`]+\s*$")
 _LEADING_EMPHASIS = re.compile(r"^\s*(?:[>\-+\u2022]\s*)*[*`]")
+_TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+_TRAILING_CELL = re.compile(r"\s*\|\s*$")
 
 
-def undecorate_claim_line(line: str) -> str:
-    """Strip list and emphasis decoration from a claim line, fields untouched.
+def undecorate_marker_line(line: str) -> str:
+    """Strip list and emphasis decoration from a marker line, fields untouched.
 
-    WHY THE REAL PATH NEEDS THIS. The extractor below only considers a line
-    that STARTS WITH "CLAIM". A model that writes its findings as a markdown
-    list -- which is what a model asked for a list of findings does -- produces
-    "- CLAIM | ..." or "**CLAIM | ...**" or "1. CLAIM | ...", none of which
-    start with CLAIM. Those lines were not malformed-and-escalated; they were
-    skipped before the fail-closed branch could see them, and the claim
-    vanished with nothing counted and nothing raised. Measured on the four
-    commonest list shapes, all four lost the claim entirely.
+    EVERY MACHINE-READABLE LINE THE PROTOCOL DEFINES NEEDS THIS, not just
+    CLAIM. A model that writes its findings as a markdown list -- which is
+    what a model asked for a list of findings does -- produces "- CLAIM | ..."
+    or "**CLAIM | ...**" or "1. CLAIM | ...", none of which start with CLAIM.
+    Those lines were not malformed-and-escalated; they were skipped before the
+    fail-closed branch could see them, and the claim vanished with nothing
+    counted and nothing raised. Measured on the four commonest list shapes,
+    all four lost the claim entirely.
+
+    THE SAME LOSS WAS MEASURED ON OPTION, PREDICATE, FORMULA, INPUT AND
+    CHALLENGE, and it costs more there. A CLAIM removes nothing, so losing one
+    loses a report line. An OPTION line IS the answer, and PREDICATE with its
+    FORMULA and INPUT is the only thing in the tool that can remove an answer
+    -- an option whose commitments were eaten by a bullet character cannot be
+    checked, cannot be refuted, and survives to the end reported as untested.
+    Eleven of twelve shapes a model actually writes lost the commitment
+    entirely, in silence.
 
     Only the segment BEFORE the first pipe is de-emphasised, so an asterisk
     inside a multiplication expression is never disturbed. Ordered-list markers
@@ -1571,6 +1582,15 @@ def undecorate_claim_line(line: str) -> str:
     if _LEADING_EMPHASIS.match(after_marker):
         stripped = _TRAILING_EMPHASIS.sub("", stripped)
 
+    # A MARKDOWN TABLE ROW IS A LIST SHAPE TOO. "| PREDICATE | subject | = |
+    # 4 accidents |" loses its leading pipe to _DECORATION above, but keeps
+    # the closing one, which lands on the LAST field: the value arrives as
+    # "4 accidents |" and fails to parse as a quantity, so the whole
+    # commitment is dropped. The closing pipe is stripped only when the line
+    # OPENED with one, which no marker line ever does on its own.
+    if _TABLE_ROW.match(after_marker):
+        stripped = _TRAILING_CELL.sub("", stripped)
+
     head = _EMPHASIS_BEFORE_FIRST_PIPE.match(stripped)
     if not head:
         return stripped
@@ -1588,7 +1608,7 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
     malformed claim is never silently dropped -- dropping it would let a model
     smuggle an unverified assertion past the gates by writing it badly.
 
-    Each line is undecorated first (see undecorate_claim_line). Without that
+    Each line is undecorated first (see undecorate_marker_line). Without that
     the fail-closed guarantee above had a hole: it only ever applied to lines
     STARTING with "CLAIM", so a claim written as a markdown list item was
     skipped before the guarantee could reach it and disappeared silently.
@@ -1598,7 +1618,7 @@ def line_claim_extractor(raw: str, seat_id: str, pass_id: str) -> list[Claim]:
         # Undecorate BEFORE the startswith test, not after. A decorated line
         # fails that test and is skipped outright, which is a silent drop --
         # the one outcome this extractor's fail-closed design exists to avoid.
-        line = undecorate_claim_line(raw_line)
+        line = undecorate_marker_line(raw_line)
         if not line.strip().upper().startswith("CLAIM"):
             continue
         m = _CLAIM_LINE.match(line)

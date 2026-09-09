@@ -49,7 +49,7 @@
   "seat_3": {
     "_vendor": "Mistral",
     "_model": "mistral-medium-latest",
-    "_note_model_UNVERIFIED": "MAGISTRAL IS RETIRED AND THIS IS NOT MAGISTRAL. Mistral the company retired its Magistral REASONING line (magistral-medium-2509, magistral-small-2509) on 2026-07-31 and names Mistral Medium 3.5 as the replacement, so this seat is a general-purpose model rather than the stepwise reasoner the panel design asked for. TWO THINGS ARE UNCONFIRMED: Mistral documents the id as 'mistral-medium-3504' and does not list '-latest' aliases, and the prices below could not be re-verified against the pricing page on 2026-09-09. Neither was changed for you -- a guessed id and a guessed price are both worse than a flagged one. Confirm both on Mistral's own pages before the next paid run; a ceiling computed from an unchecked price bounds nothing.",
+    "model_unverified": "MAGISTRAL IS RETIRED AND THIS IS NOT MAGISTRAL. Mistral the company retired its Magistral REASONING line (magistral-medium-2509, magistral-small-2509) on 2026-07-31 and names Mistral Medium 3.5 as the replacement, so this seat is a general-purpose model rather than the stepwise reasoner the panel design asked for. TWO THINGS ARE UNCONFIRMED: Mistral documents the id as 'mistral-medium-3504' and does not list '-latest' aliases, and the prices below could not be re-verified against the pricing page on 2026-09-09. Neither was changed for you -- a guessed id and a guessed price are both worse than a flagged one. Confirm both on Mistral's own pages before the next paid run; a ceiling computed from an unchecked price bounds nothing.",
     "_source": "https://docs.mistral.ai/inference/pricing",
     "_note": "Mistral Medium 3.5, standard regional inference tier.",
     "input_per_mtok": 1.5,

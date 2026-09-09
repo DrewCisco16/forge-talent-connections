@@ -33,7 +33,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
-from adjudication_orchestrator import Claim
+from adjudication_orchestrator import Claim, undecorate_marker_line
 from predicate import (
     Predicate,
     Ruling,
@@ -242,7 +242,19 @@ def parse_options(text: str) -> list[Option]:
             continue
         if fenced:
             continue
-        m = _OPTION_LINE.match(line)
+        # THE EXPLICIT MARKER, READ THROUGH WHATEVER THE MODEL DRESSED IT IN.
+        # "- OPTION | ...", "**OPTION | ...**" and "1. OPTION | ..." all
+        # failed this test, and _DECLARED_OPTION did not catch them either --
+        # it wants a colon or a dash after the word, not a pipe. So a seat
+        # that followed the contract exactly and then formatted its answer as
+        # a list had that answer disappear: ten of twelve shapes measured
+        # produced no option at all.
+        #
+        # Only this test reads the undecorated form. _SECTION_HEADING and
+        # _DECLARED_OPTION keep reading the raw line, because both are about
+        # markdown structure -- a heading level, a bold run -- and stripping
+        # that structure first is exactly what would blind them.
+        m = _OPTION_LINE.match(undecorate_marker_line(line))
         explicit = m is not None
         if m is None and _SECTION_HEADING.match(line):
             # Everything after an OPEN or KILLED heading is commentary about
@@ -529,21 +541,52 @@ def unexamined(options: Sequence[Option],
     """
     if verdicts is None:
         return [o for o in options if o.alive and not o.predicates]
-    out: list[Option] = []
-    for opt in options:
-        if not opt.alive:
-            continue
-        if not opt.predicates:
-            out.append(opt)          # nothing to rule on; nothing was ruled
-            continue
-        settled = all(
-            getattr(verdicts.get(getattr(pred, "id", "")), "status", None)
-            in ("pass", "fail")
-            for pred in opt.predicates
-        )
-        if not settled or not externally_tested(opt, verdicts):
-            out.append(opt)
-    return out
+    return [o for o in options
+            if o.alive and unexamined_reason(o, verdicts) is not None]
+
+
+NO_COMMITMENT = "declared no figure this code could compute"
+NOT_RULED = "declared a figure no check ever settled"
+ONLY_ITS_OWN_ARITHMETIC = "checked only against its own arithmetic"
+
+UNEXAMINED_REASONS: tuple[str, ...] = (
+    NO_COMMITMENT, NOT_RULED, ONLY_ITS_OWN_ARITHMETIC)
+
+
+def unexamined_reason(opt: Option,
+                      verdicts: Mapping[str, object]) -> str | None:
+    """WHY this surviving option counts as untested, or None if it does not.
+
+    THREE DIFFERENT FACTS WERE BEING REPORTED AS ONE SENTENCE, and the report
+    named only two of them:
+
+        "They declared no commitment this code could compute, or none was
+         ruled on, so they survived because nothing examined them."
+
+    The third is the one `externally_tested` was written for, and the one the
+    first full five-round run actually produced: eighteen of twenty-one
+    commitments PASSED their self-check, every one of them a seat computing
+    5 * 6 and committing to 30. Those options DID declare a figure and it WAS
+    ruled on, so both halves of that sentence are false about them -- while
+    the conclusion it draws is true. An operator reading it goes looking for a
+    missing PREDICATE that is sitting right there, and never learns the actual
+    fact: nobody outside the proposing seat ever touched the number.
+
+    A true conclusion supported by a false reason is worse than no caveat,
+    because it is checkable and it does not check out.
+    """
+    if not opt.predicates:
+        return NO_COMMITMENT
+    settled = all(
+        getattr(verdicts.get(getattr(pred, "id", "")), "status", None)
+        in ("pass", "fail")
+        for pred in opt.predicates
+    )
+    if not settled:
+        return NOT_RULED
+    if not externally_tested(opt, verdicts):
+        return ONLY_ITS_OWN_ARITHMETIC
+    return None
 
 
 def externally_tested(opt: Option,
@@ -731,8 +774,14 @@ def apply_merges(pool: Sequence[Option], closer_text: str) -> list[Option]:
     """
     by_id = {o.id: o for o in pool}
     absorbed: dict[str, str] = {}
-    for line in (closer_text or "").splitlines():
-        m = _MERGE.match(line)
+    for raw_line in (closer_text or "").splitlines():
+        # THE CLOSER IS A MODEL TOO, AND IT FORMATS ITS OUTPUT. A MERGE line
+        # written as "- MERGE | opt_a | opt_b" or bolded never matched, so the
+        # duplicates it correctly identified were not collapsed -- and twins
+        # are not harmless here: the commitments follow the OPTION line, so
+        # the second copy carries none, cannot be checked, cannot be removed,
+        # and survives to the end reported as untested.
+        m = _MERGE.match(undecorate_marker_line(raw_line))
         if not m:
             continue
         ids = [i.lower() for i in _OPT_ID.findall(m.group(1))

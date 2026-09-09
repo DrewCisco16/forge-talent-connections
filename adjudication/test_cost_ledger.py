@@ -1463,3 +1463,75 @@ class TestTheSuiteNeverSpendsTheOperatorsBudget:
         after = snapshot(shared)
         assert after == before, (
             "the test suite changed the operator's real daily spend ledger")
+
+
+class TestAnUncheckedModelIdentifierIsSaidOutLoud:
+    """rates.json carried "this model id could not be verified" in an
+    underscore-prefixed comment key, which rates_from_config skips by design.
+    So the one seat whose identifier nobody had confirmed ran exactly like
+    the four that had been, and nothing anywhere said so.
+
+    It is a different fact from an unchecked PRICE and not a smaller one. A
+    wrong price makes the ceiling decorative, which is why an unusable price
+    refuses the run. A wrong model id can return a well-formed 200 from a
+    vendor's fallback and be recorded as a seat that had nothing to say
+    rather than one that was never reached -- opposite facts, and the second
+    silently corrupts the statistics this tool exists to produce.
+    """
+
+    PRICED: ClassVar[dict[str, object]] = {
+        "input_per_mtok": 1.5, "output_per_mtok": 7.5,
+        "verified_on": "2099-01-01"}
+
+    def _ledger(self, extra):
+        rates = CL.rates_from_config({
+            "seat_1": dict(self.PRICED),
+            "seat_3": {**self.PRICED, **extra},
+        })
+        return CL.CostLedger(rates=rates, per_run=1.0)
+
+    def test_a_seat_with_a_checked_identifier_is_not_listed(self):
+        assert self._ledger({}).unverified_models() == {}
+
+    def test_the_reason_is_read_and_kept_verbatim(self):
+        why = "Mistral retired the Magistral line; this id is not confirmed."
+        assert self._ledger({"model_unverified": why}).unverified_models() == {
+            "seat_3": why}
+
+    def test_a_comment_key_is_still_a_comment(self):
+        """The failure this replaces. An underscore-prefixed key is skipped
+        by design -- that is how rates.json carries _vendor and _source -- so
+        a flag written there is documentation, not a control."""
+        assert self._ledger(
+            {"_note_model_UNVERIFIED": "not confirmed"}).unverified_models() == {}
+
+    def test_a_blank_flag_is_not_a_warning(self):
+        for blank in ("", "   ", None, True, 1):
+            assert self._ledger({"model_unverified": blank}
+                                ).unverified_models() == {}, blank
+
+    def test_the_price_being_fresh_does_not_clear_the_identifier(self):
+        """The two facts are independent, and conflating them is how this
+        went unreported: seat_3's price carries a verified_on date."""
+        led = self._ledger({"model_unverified": "not confirmed"})
+        assert led.stale_rates() == []
+        assert "seat_3" in led.unverified_models()
+
+    def test_the_report_names_the_seat_and_the_reason(self):
+        why = "Magistral is retired and this is not Magistral."
+        text = "\n".join(self._ledger({"model_unverified": why}).render())
+        assert "MODEL IDENTIFIER NOT VERIFIED for: seat_3" in text
+        assert why in text
+        assert "never reached" in text
+
+    def test_the_shipped_settings_still_flag_the_seat_they_describe(self):
+        """rates.json's own note says seat_3's id is unconfirmed. If that
+        note ever stops being readable by this code, the warning disappears
+        and nothing fails -- which is the state this test exists to end."""
+        import json
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "rates.json"), encoding="utf-8") as fh:
+            rates = CL.rates_from_config(json.load(fh))
+        led = CL.CostLedger(rates=rates, per_run=1.0)
+        assert "seat_3" in led.unverified_models()

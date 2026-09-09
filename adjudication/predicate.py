@@ -75,6 +75,7 @@ from adjudication_orchestrator import (
     _safe_eval,
     _show,
     _split_unit,
+    undecorate_marker_line,
 )
 
 # The relations a predicate may assert. Deliberately small: each maps to one
@@ -305,13 +306,28 @@ def parse_predicates(option_id: str, block: str) -> list[Predicate]:
     """
     out: list[Predicate] = []
     seen: set[str] = set()
-    lines = (block or "").splitlines()
+    raw_lines = (block or "").splitlines()
+    # UNDECORATED ONCE, UP FRONT, AND THE GUARDS BELOW STILL READ THE RAW
+    # LINE. A model writes its commitments as a list -- "- PREDICATE | ...",
+    # "**PREDICATE | ...**", "1. PREDICATE | ..." -- and none of those start
+    # with PREDICATE, so eleven of the twelve shapes measured lost the
+    # commitment in silence. The option then carried no checkable figure and
+    # survived every round marked untested, which is the failure this module
+    # exists to prevent.
+    #
+    # The fence and indent guards keep matching against the ORIGINAL text
+    # because they are about WHERE a line sits, not how it is dressed: the
+    # required-output contract shows its worked example indented, and a seat
+    # echoing that example back must not manufacture a commitment its option
+    # never made.
+    lines = [undecorate_marker_line(line) for line in raw_lines]
     fenced = False
     for i, line in enumerate(lines):
-        if _FENCE.match(line):
+        raw = raw_lines[i]
+        if _FENCE.match(raw):
             fenced = not fenced
             continue
-        if fenced or _INDENTED_EXAMPLE.match(line):
+        if fenced or _INDENTED_EXAMPLE.match(raw):
             continue
         m = _PREDICATE_LINE.match(line)
         if m is None:
@@ -709,7 +725,12 @@ def parse_challenges(text: str) -> list[tuple[str, dict[str, Fraction]]]:
     # of three challenges that round survived; the third was as valid as the
     # others and simply better formatted.
     out: list[tuple[str, dict[str, Fraction]]] = []
-    for line in (text or "").splitlines():
+    for raw_line in (text or "").splitlines():
+        # SAME LIST DECORATION, SAME SILENT LOSS. A challenge written as
+        # "- CHALLENGE | ..." or bolded never matched, so the one line a
+        # later seat has for recording a disputed input was dropped by the
+        # formatting a model applies to anything that looks like data.
+        line = undecorate_marker_line(raw_line)
         m = _CHALLENGE_LINE.match(line)
         if m is None:
             continue

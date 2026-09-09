@@ -28,6 +28,19 @@ ENTRY_POINTS = ("one_model.py", "stage_zero.py", "full_run.py",
                 "accuracy.py", "canary_run.py", "compliance_probe.py")
 
 
+def _day_total(state):
+    """Today's entry in the day file.
+
+    A helper because seven assertions below read exactly this, and
+    `json.load(open(state))` leaks the handle every time -- ruff SIM115. In a
+    test that writes a day file inside a tmp_path this is harmless; the reason
+    to fix it is that these are the tests standing guard over the spend
+    ceiling, and a lint error in them is a lint error CI fails on.
+    """
+    with open(state, encoding="utf-8") as fh:
+        return json.load(fh)[date.today().isoformat()]
+
+
 def _rates():
     return {"seat_1": CL.Rate(4.0, 20.0,
                               verified_on=date.today().isoformat())}
@@ -244,10 +257,10 @@ class TestReservationsAreReleasedOnceTheBillIsKnown:
         state = tmp_path / "day.json"
         led = self._led(state)
         led.check_before_call("seat_1", 2000, 16384)      # reserves worst case
-        reserved = json.load(open(state))[date.today().isoformat()]
+        reserved = _day_total(state)
         assert reserved > 0.2, "the pre-call reservation should be large"
         led.record("seat_1", 500, 400)                     # bills far less
-        after = json.load(open(state))[date.today().isoformat()]
+        after = _day_total(state)
         assert after < 0.02, (
             f"the day kept {after:.4f} for a call that billed "
             f"{led.spent:.4f}; the reservation was never released")
@@ -261,7 +274,7 @@ class TestReservationsAreReleasedOnceTheBillIsKnown:
         led = self._led(state)
         led.check_before_call("seat_1", 2000, 16384)
         led.record("seat_1", None, None, estimated_dollars=0.30)
-        after = json.load(open(state))[date.today().isoformat()]
+        after = _day_total(state)
         assert after >= 0.30, (
             "an unmeasured call must keep at least its estimate claimed")
         assert after > 0.0, "it must never be released to nothing"
@@ -274,7 +287,7 @@ class TestReservationsAreReleasedOnceTheBillIsKnown:
         for _ in range(200):
             led.check_before_call("seat_1", 500, 400)
             led.record("seat_1", 500, 400)
-        after = json.load(open(state))[date.today().isoformat()]
+        after = _day_total(state)
         assert after < 5.0, f"200 cheap calls consumed {after:.2f} of the day"
 
     def test_an_unmeasured_call_with_no_estimate_keeps_its_reservation(
@@ -288,9 +301,9 @@ class TestReservationsAreReleasedOnceTheBillIsKnown:
         state = tmp_path / "day.json"
         led = self._led(state)
         led.check_before_call("seat_1", 2000, 16384)
-        reserved = json.load(open(state))[date.today().isoformat()]
+        reserved = _day_total(state)
         led.record("seat_1", None, None)          # unmeasured, no estimate
-        after = json.load(open(state))[date.today().isoformat()]
+        after = _day_total(state)
         assert after == pytest.approx(reserved, abs=1e-9), (
             f"the day fell from {reserved:.4f} to {after:.4f} after a call "
             f"nobody could price")
@@ -303,7 +316,7 @@ class TestReservationsAreReleasedOnceTheBillIsKnown:
         for _ in range(5):
             led.check_before_call("seat_1", 500, 400)
             led.record("seat_1", 500, 400)
-        assert json.load(open(state))[date.today().isoformat()] >= 0.0
+        assert _day_total(state) >= 0.0
 
     def test_the_ceiling_still_refuses_when_real_spend_reaches_it(
             self, tmp_path):

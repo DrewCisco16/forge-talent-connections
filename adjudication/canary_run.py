@@ -105,8 +105,16 @@ def _report_compliance(out_dir: str,
         seat = os.path.basename(path)[len("thinker-"):-len(".md")]
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
+        # UNDECORATED FIRST, THE WAY THE ENGINE READS IT. Anchored at the
+        # start of the raw line, a seat that wrote "- OPTION | ..." or
+        # "**PREDICATE | ...**" counted as zero on every column -- so this
+        # measurement, the one thing no offline test can establish, would
+        # have reported perfect compliance as total silence.
+        from adjudication_orchestrator import undecorate_marker_line
+        flat = "\n".join(undecorate_marker_line(ln)
+                         for ln in text.splitlines())
         counts[seat] = {
-            kind: len(re.findall(rf"(?mi)^\s*{kind}\s*\|", text))
+            kind: len(re.findall(rf"(?mi)^\s*{kind}\s*\|", flat))
             for kind in ("OPTION", "PREDICATE", "FORMULA", "INPUT", "CLAIM")
         }
         counts[seat]["chars"] = len(text)

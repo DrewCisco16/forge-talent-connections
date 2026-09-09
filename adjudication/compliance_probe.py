@@ -36,6 +36,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from adjudication_orchestrator import undecorate_marker_line
 from cost_ledger import operator_ledger, plan_run, rates_from_config
 from night_loop import PERSONAS, ROUNDS, thinker_prompt
 from run_adjudication import live_seats, load_env_file
@@ -137,10 +138,24 @@ def _report(replies: dict[str, str], failures: dict[str, str],
             print(f"    {seat_id}: {why}")
         return
 
+    # COUNTED ON THE UNDECORATED LINE, THE WAY THE ENGINE READS IT.
+    #
+    # This probe exists to answer one question -- do live seats emit the
+    # contract's lines at all -- and its answer authorises or cancels a paid
+    # run. Anchored at the start of the raw line it would have reported a seat
+    # that wrote "- OPTION | ..." and "**PREDICATE | ...**" as SILENT: not a
+    # parse loss but a false measurement, telling the operator the models
+    # cannot follow the contract when they had followed it exactly.
+    #
+    # Same undecorator the engine uses, so what this probe counts is what a
+    # real run would actually get.
+    stripped = {seat_id: "\n".join(undecorate_marker_line(line)
+                                   for line in text.splitlines())
+                for seat_id, text in replies.items()}
     counts = {
         seat_id: {kind: len(re.findall(rf"(?mi)^\s*{kind}\s*\|", text))
                   for kind in WANTED}
-        for seat_id, text in replies.items()
+        for seat_id, text in stripped.items()
     }
     head = "  {:10}" + " {:>9}" * len(WANTED)
     print(head.format("seat", *WANTED))

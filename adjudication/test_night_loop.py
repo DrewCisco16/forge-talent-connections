@@ -2709,3 +2709,332 @@ class TestTheTwoContractsAgreeWithEachOther:
         """Two prompts saying "two or more" over a constant set to three
         would be a lie nobody would notice until a run went wrong."""
         assert P.CORROBORATION_THRESHOLD == 2
+
+
+# Twelve shapes, written the way the five seats actually format a line they
+# think of as data. Every one of them carries the SAME commitment, so any
+# shape that parses must produce the same predicate id as the plain form.
+MARKER_SHAPES: list[tuple[str, str]] = [
+    ("plain", "{L}"),
+    ("dash bullet", "- {L}"),
+    ("star bullet", "* {L}"),
+    ("plus bullet", "+ {L}"),
+    ("unicode bullet", "• {L}"),
+    ("ordered dot", "1. {L}"),
+    ("ordered paren", "3) {L}"),
+    ("blockquote", "> {L}"),
+    ("bold whole line", "**{L}**"),
+    ("bullet then bold", "- **{L}**"),
+    ("inline code", "`{L}`"),
+    ("table row", "| {L} |"),
+]
+
+
+class TestTheProtocolSurvivesHowAModelActuallyWritesIt:
+    """OPTION, PREDICATE, FORMULA, INPUT and CHALLENGE are the whole
+    machine-readable protocol, and every one of them was read with a regex
+    anchored at the start of the line.
+
+    Measured before this was fixed: eleven of the twelve shapes below lost the
+    PREDICATE entirely, ten of twelve lost the OPTION, and nine of ten lost
+    the CHALLENGE. Nothing was raised in any case.
+
+    This costs more than the same defect cost on CLAIM. A CLAIM removes
+    nothing, so losing one loses a report line. An OPTION line IS the answer.
+    A PREDICATE with its FORMULA and INPUT is the ONLY thing in this tool that
+    can remove an answer, so an option whose commitments were eaten by a
+    bullet character cannot be checked, cannot be refuted, and survives to the
+    end reported as untested -- which reads as an answer that withstood five
+    rounds of scrutiny and is in fact an answer nobody ever looked at.
+
+    A seat that follows the contract exactly and then formats its reply as a
+    list is the ordinary case, not the awkward one.
+    """
+
+    PLAIN_PREDICATE = "PREDICATE | annual accidents | = | 4 accidents"
+    PLAIN_OPTION = "OPTION | rent capacity for six months and decide after"
+    PLAIN_CHALLENGE = "CHALLENGE | pred_abc123 | incidents = 3"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_commitment_survives_its_formatting(self, name, shape):
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert len(got) == 1, f"{name}: the commitment was lost in silence"
+        assert got[0].subject == "annual accidents"
+        assert got[0].value == Fraction(4)
+        assert got[0].unit == "accidents"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_formatting_does_not_change_which_commitment_it_is(self, name,
+                                                               shape):
+        """The id is content-addressed, so a decorated line that parses into a
+        DIFFERENT id is no better than one that is dropped: the same figure
+        from two seats stops corroborating itself."""
+        plain = P.parse_predicates("opt_1", self.PLAIN_PREDICATE)
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert got[0].id == plain[0].id, f"{name}: same commitment, new id"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_an_answer_survives_its_formatting(self, name, shape):
+        got = OS.parse_options(shape.format(L=self.PLAIN_OPTION))
+        assert len(got) == 1, f"{name}: the answer was lost in silence"
+        assert got[0].text == "rent capacity for six months and decide after"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_challenge_survives_its_formatting(self, name, shape):
+        got = P.parse_challenges(shape.format(L=self.PLAIN_CHALLENGE))
+        assert got == [("pred_abc123", {"incidents": Fraction(3)})], name
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_decorated_option_still_carries_its_own_commitments(self, name,
+                                                                  shape):
+        """The whole point of the OPTION line surviving is that the figures
+        underneath it survive with it, bound to that option by position. An
+        option parsed without its commitments is worse than no option: it is
+        an answer that cannot be removed."""
+        block = "\n".join([
+            shape.format(L=self.PLAIN_OPTION),
+            shape.format(L="PREDICATE | total cost | = | 12 dollars"),
+            shape.format(L="FORMULA | months * per_month"),
+            shape.format(L="INPUT | months = 6"),
+            shape.format(L="INPUT | per_month = 2"),
+        ])
+        opts = OS.parse_options(block)
+        assert len(opts) == 1, f"{name}: the answer was lost"
+        preds = opts[0].predicates
+        assert len(preds) == 1, f"{name}: the commitment was lost"
+        assert preds[0].formula == "months * per_month"
+        assert dict(preds[0].inputs) == {"months": Fraction(6),
+                                         "per_month": Fraction(2)}
+
+    def test_a_starred_bullet_does_not_eat_the_multiplication_sign(self):
+        """The one way this fix could corrupt rather than recover. A star
+        bullet and a multiplication operator are the same character, and the
+        formula is the thing that decides whether an answer is refuted -- a
+        FORMULA silently reduced from "months * per_month" to "months
+        per_month" would not parse, the commitment would go untested, and the
+        cause would be invisible in the report."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "* PREDICATE | total cost | = | 12 dollars",
+            "* FORMULA | months * per_month",
+            "* INPUT | months = 6",
+            "* INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        assert preds[0].formula == "months * per_month"
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.status == "pass", ruling.detail
+        assert not ruling.refutes
+
+    def test_the_contracts_own_indented_example_still_makes_no_commitment(
+            self):
+        """The negative control this fix must not break. OPTION_CONTRACT
+        prints its worked example INDENTED, not fenced, and a seat quoting it
+        back must not manufacture a commitment its option never made. The
+        indent guard reads the raw line for exactly this reason, so
+        undecorating first cannot blind it."""
+        echoed = ("    PREDICATE | API calls a five-round run costs "
+                  "| = | 30 api calls")
+        assert P.parse_predicates("opt_1", echoed) == []
+        assert P.parse_predicates("opt_1", "    - " + echoed.strip()) == []
+
+    def test_a_fenced_example_still_makes_no_commitment(self):
+        assert P.parse_predicates("opt_1", "\n".join([
+            "```",
+            self.PLAIN_PREDICATE,
+            "```",
+        ])) == []
+
+    def test_a_bulleted_predicate_can_still_be_refuted_by_its_own_numbers(
+            self):
+        """End to end, on the path that matters: a commitment written as a
+        list item is recomputed and removed when its own formula on its own
+        inputs does not produce its own figure. Before the fix this option
+        survived the round untested."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "- PREDICATE | total cost | = | 15 dollars",
+            "- FORMULA | months * per_month",
+            "- INPUT | months = 6",
+            "- INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.refutes, ruling.detail
+
+
+class TestTheUntestedCaveatNamesTheRealReason:
+    """Three different facts land in options_unexamined, and the run summary
+    described them with one sentence that named two:
+
+        "They declared no commitment this code could compute, or none was
+         ruled on."
+
+    Neither is true of the case the first full five-round run actually
+    produced on every surviving option. Eighteen of its twenty-one
+    commitments PASSED -- each one a seat computing 5 * 6 and committing to
+    30 -- so a figure WAS declared and it WAS ruled. What never happened is
+    anyone outside the proposing seat touching it.
+
+    A true conclusion supported by a false reason is worse than no caveat: an
+    operator goes looking for a missing PREDICATE that is sitting right
+    there, and the fact that matters never reaches them.
+    """
+
+    def _option(self, predicates):
+        opt = OS.Option(id="opt_1", text="rent for six months and decide")
+        opt.predicates = list(predicates)
+        return opt
+
+    def _committed(self, figure="12 dollars"):
+        return P.parse_predicates("opt_1", "\n".join([
+            f"PREDICATE | total cost | = | {figure}",
+            "FORMULA | months * per_month",
+            "INPUT | months = 6",
+            "INPUT | per_month = 2",
+        ]))
+
+    def test_an_option_with_no_figure_says_so(self):
+        opt = self._option([])
+        assert OS.unexamined_reason(opt, {}) == OS.NO_COMMITMENT
+
+    def test_a_figure_nobody_settled_says_so(self):
+        preds = self._committed()
+        opt = self._option(preds)
+        assert OS.unexamined_reason(opt, {}) == OS.NOT_RULED
+
+    def test_a_figure_that_only_passed_its_own_arithmetic_says_so(self):
+        """The case the old sentence got wrong. It declared a figure, the
+        figure was ruled, and the ruling was a PASS -- and nothing outside
+        the seat that wrote it ever went near it."""
+        preds = self._committed()
+        opt = self._option(preds)
+        rulings = P.adjudicate(preds, [])
+        assert rulings[preds[0].id].status == "pass"
+        assert OS.unexamined_reason(
+            opt, rulings) == OS.ONLY_ITS_OWN_ARITHMETIC
+
+    def test_the_reason_and_the_list_cannot_disagree(self):
+        """One rule, read two ways, is two rules. unexamined() and
+        unexamined_reason() must always agree about the same option, or the
+        report counts one set and explains another."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            listed = [o.id for o in OS.unexamined([opt], verdicts)]
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert bool(listed) == (reason is not None)
+
+    def test_every_reason_it_can_give_is_one_it_declares(self):
+        """A reason the caveat prints but the module does not name is a
+        string nobody can grep for when a run says something surprising."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert reason in OS.UNEXAMINED_REASONS
+
+    def test_the_run_summary_prints_the_reason_it_recorded(self):
+        good = "\n".join([
+            "- **OPTION | rent capacity for six months and decide after**",
+            "  - PREDICATE | total cost | = | 12 dollars",
+            "  - FORMULA | months * per_month",
+            "  - INPUT | months = 6",
+            "  - INPUT | per_month = 2",
+        ])
+        bad = good.replace("rent capacity for six months and decide after",
+                           "buy the capacity outright now today").replace(
+                               "12 dollars", "15 dollars")
+        thinkers = {
+            f"seat_{i}": (lambda t: (lambda _p: t))(good if i % 2 else bad)
+            for i in range(1, 6)
+        }
+        import tempfile
+        with tempfile.TemporaryDirectory() as out:
+            results = NL.run_night(
+                "Rent or buy?", thinkers, lambda _p: good,
+                Orchestrator(gates=[ArithmeticGate()]), out)
+        assert results[-1].options_unexamined_why == {
+            results[-1].options_alive[0]: OS.ONLY_ITS_OWN_ARITHMETIC}
+        caveat = next(c for c in NL.assess(results).caveats
+                      if "NEVER TESTED" in c)
+        assert OS.ONLY_ITS_OWN_ARITHMETIC in caveat
+        assert "declared no commitment this code could compute" not in caveat
+
+
+class TestTheCloserIsAModelToo:
+    """Everything about how a seat formats its output applies to the closer,
+    and the closer is the one whose text becomes the deliverable.
+
+    Its MERGE lines were matched only when written bare. A closer that
+    correctly identified two seats proposing the same answer, and wrote it as
+    a list item, had the merge dropped -- and twins are not harmless: the
+    commitments follow the OPTION line, so the second copy carries none,
+    cannot be checked, cannot be removed, and survives to the end reported as
+    untested.
+    """
+
+    POOL_TEXT = "\n".join([
+        "OPTION | rent capacity for six months and decide after",
+        "PREDICATE | total cost | = | 12 dollars",
+        "FORMULA | months * per_month",
+        "INPUT | months = 6",
+        "INPUT | per_month = 2",
+        "",
+        "OPTION | lease the capacity for half a year then decide",
+    ])
+
+    def _pool(self):
+        return OS.parse_options(self.POOL_TEXT)
+
+    @pytest.mark.parametrize("shape", [
+        "MERGE | {a} | {b}",
+        "- MERGE | {a} | {b}",
+        "* MERGE | {a} | {b}",
+        "1. MERGE | {a} | {b}",
+        "**MERGE | {a} | {b}**",
+        "- **MERGE | {a} | {b}**",
+        "> MERGE | {a} | {b}",
+    ])
+    def test_a_merge_survives_how_the_closer_writes_it(self, shape):
+        pool = self._pool()
+        assert len(pool) == 2
+        merged = OS.apply_merges(
+            pool, shape.format(a=pool[0].id, b=pool[1].id))
+        by_id = {o.id: o for o in merged}
+        assert by_id[pool[1].id].merged_into == pool[0].id, (
+            "the duplicate was not folded into the answer it repeats")
+        assert by_id[pool[0].id].merged_into is None
+
+    def test_prose_still_merges_nothing(self):
+        """The negative control. Undecorating must not let the closer merge
+        by talking about it: only a MERGE line naming ids in the pool does
+        anything, and an id it invents is ignored."""
+        pool = self._pool()
+        prose = OS.apply_merges(
+            pool, "I think the first two options are really the same.")
+        assert all(o.merged_into is None for o in prose)
+        invented = OS.apply_merges(
+            self._pool(), f"MERGE | {pool[0].id} | opt_deadbeef")
+        assert all(o.merged_into is None for o in invented)
+
+    def test_a_bolded_merge_line_is_not_reported_as_an_invention(self):
+        """A warning that fires on every correct run is worse than no
+        warning: the operator learns to skip it, and the sentence it exists
+        to catch goes past with the rest. This already happened once on a
+        live round -- sixteen sentences flagged, the first three the closer's
+        own MERGE lines -- and bold was a second route to it."""
+        flagged = NL.closer_introduced(
+            "**MERGE | opt_3f9a2c | opt_88ab01**", {"seat_1": "some text"})
+        assert flagged == []
+
+    def test_a_bolded_invention_is_still_caught(self):
+        """The check this must not blind. Emphasis is not a way past it."""
+        flagged = NL.closer_introduced(
+            "**Recommendation: liquidate the Zurich subsidiary immediately.**",
+            {"seat_1": "the panel considered renting capacity for months"})
+        assert flagged, "an invented recommendation went unflagged"
