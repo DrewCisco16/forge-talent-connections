@@ -2709,3 +2709,153 @@ class TestTheTwoContractsAgreeWithEachOther:
         """Two prompts saying "two or more" over a constant set to three
         would be a lie nobody would notice until a run went wrong."""
         assert P.CORROBORATION_THRESHOLD == 2
+
+
+# Twelve shapes, written the way the five seats actually format a line they
+# think of as data. Every one of them carries the SAME commitment, so any
+# shape that parses must produce the same predicate id as the plain form.
+MARKER_SHAPES: list[tuple[str, str]] = [
+    ("plain", "{L}"),
+    ("dash bullet", "- {L}"),
+    ("star bullet", "* {L}"),
+    ("plus bullet", "+ {L}"),
+    ("unicode bullet", "• {L}"),
+    ("ordered dot", "1. {L}"),
+    ("ordered paren", "3) {L}"),
+    ("blockquote", "> {L}"),
+    ("bold whole line", "**{L}**"),
+    ("bullet then bold", "- **{L}**"),
+    ("inline code", "`{L}`"),
+    ("table row", "| {L} |"),
+]
+
+
+class TestTheProtocolSurvivesHowAModelActuallyWritesIt:
+    """OPTION, PREDICATE, FORMULA, INPUT and CHALLENGE are the whole
+    machine-readable protocol, and every one of them was read with a regex
+    anchored at the start of the line.
+
+    Measured before this was fixed: eleven of the twelve shapes below lost the
+    PREDICATE entirely, ten of twelve lost the OPTION, and nine of ten lost
+    the CHALLENGE. Nothing was raised in any case.
+
+    This costs more than the same defect cost on CLAIM. A CLAIM removes
+    nothing, so losing one loses a report line. An OPTION line IS the answer.
+    A PREDICATE with its FORMULA and INPUT is the ONLY thing in this tool that
+    can remove an answer, so an option whose commitments were eaten by a
+    bullet character cannot be checked, cannot be refuted, and survives to the
+    end reported as untested -- which reads as an answer that withstood five
+    rounds of scrutiny and is in fact an answer nobody ever looked at.
+
+    A seat that follows the contract exactly and then formats its reply as a
+    list is the ordinary case, not the awkward one.
+    """
+
+    PLAIN_PREDICATE = "PREDICATE | annual accidents | = | 4 accidents"
+    PLAIN_OPTION = "OPTION | rent capacity for six months and decide after"
+    PLAIN_CHALLENGE = "CHALLENGE | pred_abc123 | incidents = 3"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_commitment_survives_its_formatting(self, name, shape):
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert len(got) == 1, f"{name}: the commitment was lost in silence"
+        assert got[0].subject == "annual accidents"
+        assert got[0].value == Fraction(4)
+        assert got[0].unit == "accidents"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_formatting_does_not_change_which_commitment_it_is(self, name,
+                                                               shape):
+        """The id is content-addressed, so a decorated line that parses into a
+        DIFFERENT id is no better than one that is dropped: the same figure
+        from two seats stops corroborating itself."""
+        plain = P.parse_predicates("opt_1", self.PLAIN_PREDICATE)
+        got = P.parse_predicates("opt_1", shape.format(L=self.PLAIN_PREDICATE))
+        assert got[0].id == plain[0].id, f"{name}: same commitment, new id"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_an_answer_survives_its_formatting(self, name, shape):
+        got = OS.parse_options(shape.format(L=self.PLAIN_OPTION))
+        assert len(got) == 1, f"{name}: the answer was lost in silence"
+        assert got[0].text == "rent capacity for six months and decide after"
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_challenge_survives_its_formatting(self, name, shape):
+        got = P.parse_challenges(shape.format(L=self.PLAIN_CHALLENGE))
+        assert got == [("pred_abc123", {"incidents": Fraction(3)})], name
+
+    @pytest.mark.parametrize("name,shape", MARKER_SHAPES)
+    def test_a_decorated_option_still_carries_its_own_commitments(self, name,
+                                                                  shape):
+        """The whole point of the OPTION line surviving is that the figures
+        underneath it survive with it, bound to that option by position. An
+        option parsed without its commitments is worse than no option: it is
+        an answer that cannot be removed."""
+        block = "\n".join([
+            shape.format(L=self.PLAIN_OPTION),
+            shape.format(L="PREDICATE | total cost | = | 12 dollars"),
+            shape.format(L="FORMULA | months * per_month"),
+            shape.format(L="INPUT | months = 6"),
+            shape.format(L="INPUT | per_month = 2"),
+        ])
+        opts = OS.parse_options(block)
+        assert len(opts) == 1, f"{name}: the answer was lost"
+        preds = opts[0].predicates
+        assert len(preds) == 1, f"{name}: the commitment was lost"
+        assert preds[0].formula == "months * per_month"
+        assert dict(preds[0].inputs) == {"months": Fraction(6),
+                                         "per_month": Fraction(2)}
+
+    def test_a_starred_bullet_does_not_eat_the_multiplication_sign(self):
+        """The one way this fix could corrupt rather than recover. A star
+        bullet and a multiplication operator are the same character, and the
+        formula is the thing that decides whether an answer is refuted -- a
+        FORMULA silently reduced from "months * per_month" to "months
+        per_month" would not parse, the commitment would go untested, and the
+        cause would be invisible in the report."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "* PREDICATE | total cost | = | 12 dollars",
+            "* FORMULA | months * per_month",
+            "* INPUT | months = 6",
+            "* INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        assert preds[0].formula == "months * per_month"
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.status == "pass", ruling.detail
+        assert not ruling.refutes
+
+    def test_the_contracts_own_indented_example_still_makes_no_commitment(
+            self):
+        """The negative control this fix must not break. OPTION_CONTRACT
+        prints its worked example INDENTED, not fenced, and a seat quoting it
+        back must not manufacture a commitment its option never made. The
+        indent guard reads the raw line for exactly this reason, so
+        undecorating first cannot blind it."""
+        echoed = ("    PREDICATE | API calls a five-round run costs "
+                  "| = | 30 api calls")
+        assert P.parse_predicates("opt_1", echoed) == []
+        assert P.parse_predicates("opt_1", "    - " + echoed.strip()) == []
+
+    def test_a_fenced_example_still_makes_no_commitment(self):
+        assert P.parse_predicates("opt_1", "\n".join([
+            "```",
+            self.PLAIN_PREDICATE,
+            "```",
+        ])) == []
+
+    def test_a_bulleted_predicate_can_still_be_refuted_by_its_own_numbers(
+            self):
+        """End to end, on the path that matters: a commitment written as a
+        list item is recomputed and removed when its own formula on its own
+        inputs does not produce its own figure. Before the fix this option
+        survived the round untested."""
+        preds = P.parse_predicates("opt_1", "\n".join([
+            "- PREDICATE | total cost | = | 15 dollars",
+            "- FORMULA | months * per_month",
+            "- INPUT | months = 6",
+            "- INPUT | per_month = 2",
+        ]))
+        assert len(preds) == 1
+        ruling = P.adjudicate(preds, [])[preds[0].id]
+        assert ruling.refutes, ruling.detail

@@ -33,7 +33,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
-from adjudication_orchestrator import Claim
+from adjudication_orchestrator import Claim, undecorate_marker_line
 from predicate import (
     Predicate,
     Ruling,
@@ -242,7 +242,19 @@ def parse_options(text: str) -> list[Option]:
             continue
         if fenced:
             continue
-        m = _OPTION_LINE.match(line)
+        # THE EXPLICIT MARKER, READ THROUGH WHATEVER THE MODEL DRESSED IT IN.
+        # "- OPTION | ...", "**OPTION | ...**" and "1. OPTION | ..." all
+        # failed this test, and _DECLARED_OPTION did not catch them either --
+        # it wants a colon or a dash after the word, not a pipe. So a seat
+        # that followed the contract exactly and then formatted its answer as
+        # a list had that answer disappear: ten of twelve shapes measured
+        # produced no option at all.
+        #
+        # Only this test reads the undecorated form. _SECTION_HEADING and
+        # _DECLARED_OPTION keep reading the raw line, because both are about
+        # markdown structure -- a heading level, a bold run -- and stripping
+        # that structure first is exactly what would blind them.
+        m = _OPTION_LINE.match(undecorate_marker_line(line))
         explicit = m is not None
         if m is None and _SECTION_HEADING.match(line):
             # Everything after an OPEN or KILLED heading is commentary about
