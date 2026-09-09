@@ -541,21 +541,52 @@ def unexamined(options: Sequence[Option],
     """
     if verdicts is None:
         return [o for o in options if o.alive and not o.predicates]
-    out: list[Option] = []
-    for opt in options:
-        if not opt.alive:
-            continue
-        if not opt.predicates:
-            out.append(opt)          # nothing to rule on; nothing was ruled
-            continue
-        settled = all(
-            getattr(verdicts.get(getattr(pred, "id", "")), "status", None)
-            in ("pass", "fail")
-            for pred in opt.predicates
-        )
-        if not settled or not externally_tested(opt, verdicts):
-            out.append(opt)
-    return out
+    return [o for o in options
+            if o.alive and unexamined_reason(o, verdicts) is not None]
+
+
+NO_COMMITMENT = "declared no figure this code could compute"
+NOT_RULED = "declared a figure no check ever settled"
+ONLY_ITS_OWN_ARITHMETIC = "checked only against its own arithmetic"
+
+UNEXAMINED_REASONS: tuple[str, ...] = (
+    NO_COMMITMENT, NOT_RULED, ONLY_ITS_OWN_ARITHMETIC)
+
+
+def unexamined_reason(opt: Option,
+                      verdicts: Mapping[str, object]) -> str | None:
+    """WHY this surviving option counts as untested, or None if it does not.
+
+    THREE DIFFERENT FACTS WERE BEING REPORTED AS ONE SENTENCE, and the report
+    named only two of them:
+
+        "They declared no commitment this code could compute, or none was
+         ruled on, so they survived because nothing examined them."
+
+    The third is the one `externally_tested` was written for, and the one the
+    first full five-round run actually produced: eighteen of twenty-one
+    commitments PASSED their self-check, every one of them a seat computing
+    5 * 6 and committing to 30. Those options DID declare a figure and it WAS
+    ruled on, so both halves of that sentence are false about them -- while
+    the conclusion it draws is true. An operator reading it goes looking for a
+    missing PREDICATE that is sitting right there, and never learns the actual
+    fact: nobody outside the proposing seat ever touched the number.
+
+    A true conclusion supported by a false reason is worse than no caveat,
+    because it is checkable and it does not check out.
+    """
+    if not opt.predicates:
+        return NO_COMMITMENT
+    settled = all(
+        getattr(verdicts.get(getattr(pred, "id", "")), "status", None)
+        in ("pass", "fail")
+        for pred in opt.predicates
+    )
+    if not settled:
+        return NOT_RULED
+    if not externally_tested(opt, verdicts):
+        return ONLY_ITS_OWN_ARITHMETIC
+    return None
 
 
 def externally_tested(opt: Option,

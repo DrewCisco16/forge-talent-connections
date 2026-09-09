@@ -2859,3 +2859,108 @@ class TestTheProtocolSurvivesHowAModelActuallyWritesIt:
         assert len(preds) == 1
         ruling = P.adjudicate(preds, [])[preds[0].id]
         assert ruling.refutes, ruling.detail
+
+
+class TestTheUntestedCaveatNamesTheRealReason:
+    """Three different facts land in options_unexamined, and the run summary
+    described them with one sentence that named two:
+
+        "They declared no commitment this code could compute, or none was
+         ruled on."
+
+    Neither is true of the case the first full five-round run actually
+    produced on every surviving option. Eighteen of its twenty-one
+    commitments PASSED -- each one a seat computing 5 * 6 and committing to
+    30 -- so a figure WAS declared and it WAS ruled. What never happened is
+    anyone outside the proposing seat touching it.
+
+    A true conclusion supported by a false reason is worse than no caveat: an
+    operator goes looking for a missing PREDICATE that is sitting right
+    there, and the fact that matters never reaches them.
+    """
+
+    def _option(self, predicates):
+        opt = OS.Option(id="opt_1", text="rent for six months and decide")
+        opt.predicates = list(predicates)
+        return opt
+
+    def _committed(self, figure="12 dollars"):
+        return P.parse_predicates("opt_1", "\n".join([
+            f"PREDICATE | total cost | = | {figure}",
+            "FORMULA | months * per_month",
+            "INPUT | months = 6",
+            "INPUT | per_month = 2",
+        ]))
+
+    def test_an_option_with_no_figure_says_so(self):
+        opt = self._option([])
+        assert OS.unexamined_reason(opt, {}) == OS.NO_COMMITMENT
+
+    def test_a_figure_nobody_settled_says_so(self):
+        preds = self._committed()
+        opt = self._option(preds)
+        assert OS.unexamined_reason(opt, {}) == OS.NOT_RULED
+
+    def test_a_figure_that_only_passed_its_own_arithmetic_says_so(self):
+        """The case the old sentence got wrong. It declared a figure, the
+        figure was ruled, and the ruling was a PASS -- and nothing outside
+        the seat that wrote it ever went near it."""
+        preds = self._committed()
+        opt = self._option(preds)
+        rulings = P.adjudicate(preds, [])
+        assert rulings[preds[0].id].status == "pass"
+        assert OS.unexamined_reason(
+            opt, rulings) == OS.ONLY_ITS_OWN_ARITHMETIC
+
+    def test_the_reason_and_the_list_cannot_disagree(self):
+        """One rule, read two ways, is two rules. unexamined() and
+        unexamined_reason() must always agree about the same option, or the
+        report counts one set and explains another."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            listed = [o.id for o in OS.unexamined([opt], verdicts)]
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert bool(listed) == (reason is not None)
+
+    def test_every_reason_it_can_give_is_one_it_declares(self):
+        """A reason the caveat prints but the module does not name is a
+        string nobody can grep for when a run says something surprising."""
+        preds = self._committed()
+        for opt, verdicts in (
+            (self._option([]), {}),
+            (self._option(preds), {}),
+            (self._option(preds), P.adjudicate(preds, [])),
+        ):
+            reason = OS.unexamined_reason(opt, verdicts)
+            assert reason in OS.UNEXAMINED_REASONS
+
+    def test_the_run_summary_prints_the_reason_it_recorded(self):
+        good = "\n".join([
+            "- **OPTION | rent capacity for six months and decide after**",
+            "  - PREDICATE | total cost | = | 12 dollars",
+            "  - FORMULA | months * per_month",
+            "  - INPUT | months = 6",
+            "  - INPUT | per_month = 2",
+        ])
+        bad = good.replace("rent capacity for six months and decide after",
+                           "buy the capacity outright now today").replace(
+                               "12 dollars", "15 dollars")
+        thinkers = {
+            f"seat_{i}": (lambda t: (lambda _p: t))(good if i % 2 else bad)
+            for i in range(1, 6)
+        }
+        import tempfile
+        with tempfile.TemporaryDirectory() as out:
+            results = NL.run_night(
+                "Rent or buy?", thinkers, lambda _p: good,
+                Orchestrator(gates=[ArithmeticGate()]), out)
+        assert results[-1].options_unexamined_why == {
+            results[-1].options_alive[0]: OS.ONLY_ITS_OWN_ARITHMETIC}
+        caveat = next(c for c in NL.assess(results).caveats
+                      if "NEVER TESTED" in c)
+        assert OS.ONLY_ITS_OWN_ARITHMETIC in caveat
+        assert "declared no commitment this code could compute" not in caveat
