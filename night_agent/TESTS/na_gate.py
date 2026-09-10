@@ -215,6 +215,9 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
         st = stages(run)
         if not st or not os.path.exists(j(st[-1], "close.md")):
             reasons.append("G-6 last close.md missing")
+        rv = [x for x in (jload(j("registry.json"), {}) or {}).get("seats", []) if x.get("id") == "REVIEWER"]
+        if rv and not (rv[0].get("ready") and not rv[0].get("retired")):
+            reasons.append("G-6 REVIEWER seat is not READY: skip REVIEW and set NO_OUTSIDE_REVIEW (spec 7)")
         log = log_lines(run)
         hs = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") == "handshake"]
         if len(hs) != 1:
@@ -233,6 +236,8 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
         for f in ("kills-all.md", "metrics-summary.json"):
             if not os.path.exists(j("final", f)):
                 reasons.append(f"G-7 final/{f} missing")
+        if os.path.exists(j("final", "metrics-summary.json")) and jload(j("final", "metrics-summary.json")) is None:
+            reasons.append("G-7 final/metrics-summary.json is not valid JSON; the closer would receive nothing usable")
         if os.path.exists(j("final", "kills-all.md")):
             ka = read(j("final", "kills-all.md"))
             for d in stages(run):
@@ -251,6 +256,9 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
     elif stage == "VERIFY":  # G-8
         if not os.path.exists(j("final", "DELIVERABLE.md")):
             reasons.append("G-8 DELIVERABLE.md missing")
+        vf = [x for x in (jload(j("registry.json"), {}) or {}).get("seats", []) if x.get("id") == "VERIFIER"]
+        if not vf or not (vf[0].get("ready") and not vf[0].get("retired")):
+            reasons.append("G-8 no READY VERIFIER seat: skip VERIFY and set NO_VERIFIER (spec 2)")
         if os.path.exists(j("final", "verifier.md")):
             reasons.append("G-8 verifier.md already exists")
         if os.path.exists(j("final", "DELIVERABLE.md")):

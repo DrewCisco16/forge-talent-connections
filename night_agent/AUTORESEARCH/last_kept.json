@@ -11,11 +11,11 @@
  },
  "guard": {
   "DEV": {
-   "blocked": 9,
+   "blocked": 10,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 8,
+   "blocked": 10,
    "total": 10
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 13.37,
+  "runtime_s": 12.95,
   "within_budget": true
  },
  "secondary": {
@@ -971,8 +971,8 @@
     "spec": "7, 15 G-6",
     "desc": "REVIEW when the REVIEWER seat is not READY",
     "stage": "REVIEW",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-6 REVIEWER seat is not READY: skip REVIEW and set NO_OUTSIDE_REVIEW (spec 7)"
    },
    {
     "id": "GA09a",
@@ -991,8 +991,8 @@
     "spec": "4.7, 15 G-7",
     "desc": "FINAL when metrics-summary.json is not valid JSON",
     "stage": "FINAL",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-7 final/metrics-summary.json is not valid JSON; the closer would receive nothing usable"
    },
    {
     "id": "GA10a",
@@ -1001,8 +1001,8 @@
     "spec": "4.8, 15 G-8",
     "desc": "VERIFY when no VERIFIER seat is READY",
     "stage": "VERIFY",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-8 no READY VERIFIER seat: skip VERIFY and set NO_VERIFIER (spec 2)"
    },
    {
     "id": "GA15b",
