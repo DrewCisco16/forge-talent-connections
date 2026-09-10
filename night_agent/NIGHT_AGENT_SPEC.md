@@ -223,7 +223,7 @@ Written to RUN INTEGRITY and shown on the scorecard. A flag requires human revie
 - CONTAMINATION: a reused conversation sat in a stage. CAPTURE_PARTIAL: a stage was closed with a partial capture excluded from the crew count. PAYLOAD_BLOCKED: a send was withheld by the data boundary and narrowed.
 - EMPTY_OPEN_LIST: suspicion flag. Every real question usually leaves something unsettled; bounded questions may not.
 - ALL_CLEAN: every check in every stage passed. Suspicion flag: vague claims survive checks because there is nothing in them to check.
-- REDUCED_CREW, NO_OUTSIDE_REVIEW, NO_VERIFIER, NO_EXECUTOR, REVIEW_UNCHECKABLE, CLOSER_SWAPPED.
+- REDUCED_CREW, NO_OUTSIDE_REVIEW, NO_VERIFIER, NO_EXECUTOR, REVIEW_UNCHECKABLE, CLOSER_SWAPPED, GATE_DEFAULTED (the gate reply lacked a required field twice and defaults were applied, DISPATCH 2.2).
 - PROVISIONAL: the verifier found a CONTRADICTION.
 - LEAK_SUSPECTED: two GENERATE files share an unusual phrase, structure, or example. Human decides whether to discard the run.
 

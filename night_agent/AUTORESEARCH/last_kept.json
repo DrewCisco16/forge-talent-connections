@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 14.12,
+  "runtime_s": 13.2,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 8,
+  "package_assertions_passing": 9,
   "total": 15
  },
  "detail": {
@@ -1168,7 +1168,7 @@
     "id": "PA04",
     "spec": "10",
     "desc": "flag list in spec section 10 equals SCHEMA flags",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA05",
