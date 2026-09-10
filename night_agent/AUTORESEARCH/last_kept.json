@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 9,
+   "caught": 10,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 9,
+   "caught": 10,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.85,
+  "runtime_s": 8.72,
   "within_budget": true
  },
  "secondary": {
@@ -240,8 +240,10 @@
     "base": "hybrid",
     "spec": "4.3",
     "desc": "KILLS entry names no FAILED claim and no constraint",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "KILL-EARNED-stage-03-idov"
+    ]
    },
    {
     "id": "O02b",
@@ -249,8 +251,10 @@
     "base": "hybrid",
     "spec": "4.3",
     "desc": "KILLS entry cites a claim that is PASSED, not FAILED",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "KILL-EARNED-stage-03-idov"
+    ]
    },
    {
     "id": "O03a",

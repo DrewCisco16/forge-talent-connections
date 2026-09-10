@@ -62,7 +62,7 @@ def conforming(root):
         sha = w(root, f"stage-02-fmea/seat-{s}.md", t); L(s, "send", file=f"stage-02-fmea/seat-{s}.md", stage="OPERATE", sha=sha)
     check2 = 'CLAIM 5 [G1] "Option 2 leaves no seat outside the rounds"\n  METHOD     document\n  ACTION     read SCHEMA.json registry isolated_after_handshake\n  RETRIEVED  REVIEWER isolated_after_handshake true; option 2 assigns Astra to closer\n  RESULT     PASSED\n  SETTLE     \n  SOURCE     provenance=standards or official technical documentation grade=A quote_present=yes support=SUPPORTED scope="registry field" retrieved=2026-09-09 retraction=unchecked age=ok\n'
     sha = w(root, "stage-02-fmea/check.md", check2); L("DISPATCH", "write", file="stage-02-fmea/check.md", stage="CHECK", sha=sha)
-    close2 = ("MERGED\n- Fable closes and Astra reviews; the reviewer stays outside the rounds. [G1][G3] {C1,C3,C5}\nKILLS\n- Option 2 killed by claim 5, EARNED\nDEPRIORITIZED\nnone\nOPEN\n- Claim 4 judgement call: settle with a fidelity benchmark\nCONFLICT\nnone\nOPTIONS STANDING\n1. Fable closes, Astra reviews.\nMETRICS\noptions_created=0 options_standing=1 claims_total=1 claims_checkable=1 passed=1 failed=0 judgement=0 not_testable=0 blocked=0 inconclusive=0 earned_kills=1 structural_kills=0 decision_changed=yes\n")
+    close2 = ("MERGED\n- Fable closes and Astra reviews; the reviewer stays outside the rounds. [G1][G3] {C1,C3,C5}\nKILLS\n- Option 2 killed by hard constraint (the reviewer must sit outside the rounds), established by claim 5, EARNED\nDEPRIORITIZED\nnone\nOPEN\n- Claim 4 judgement call: settle with a fidelity benchmark\nCONFLICT\nnone\nOPTIONS STANDING\n1. Fable closes, Astra reviews.\nMETRICS\noptions_created=0 options_standing=1 claims_total=1 claims_checkable=1 passed=1 failed=0 judgement=0 not_testable=0 blocked=0 inconclusive=0 earned_kills=1 structural_kills=0 decision_changed=yes\n")
     sha = w(root, "stage-02-fmea/close.md", close2); L("CLOSER", "send", file="stage-02-fmea/close.md", stage="CLOSE", sha=sha)
 
     pkg = "MERGED\n- The closer stays on the fidelity seat and the reviewer stays outside the rounds. [1][3][5]\nCLAIMS\nCLAIM 1 PASSED ... CLAIM 5 PASSED\nOPTIONS STANDING\n1. closer on the fidelity seat, reviewer outside\nOPEN\n- Claim 4 judgement call\nCONFLICT\nnone\n"
@@ -172,7 +172,7 @@ GUARD_TESTS = [
     ("G6_block_reviewer_contacted", lambda r: append_log(r, {"t": "x", "seat": "REVIEWER", "action": "send", "result": "OK", "stage": "OPERATE"}), "REVIEW", [], True),
     ("G7_block_final_exists", lambda r: None, "FINAL", [], True),
     ("G7_allow_final_fresh", lambda r: (os.remove(os.path.join(r, "final/DELIVERABLE.md")), os.remove(os.path.join(r, "final/DELIVERABLE_ASSEMBLED.md")), os.remove(os.path.join(r, "final/verifier.md")),
-                                          open(os.path.join(r, "final/kills-all.md"), "w").write("KILLS\n- Option 2, claim 5, EARNED\n"),
+                                          open(os.path.join(r, "final/kills-all.md"), "w").write("KILLS\n- Option 2 killed by hard constraint (the reviewer must sit outside the rounds), established by claim 5, EARNED\n"),
                                           open(os.path.join(r, "final/metrics-summary.json"), "w").write("{}")), "FINAL", [], False),
     ("G8_block_verifier_exists", lambda r: None, "VERIFY", [], True),
     ("G9_allow_keep_with_repeat", lambda r: None, "DECIDE", ["--record", "exp-001"], False),

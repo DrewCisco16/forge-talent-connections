@@ -110,6 +110,35 @@ def passed_claim_ids(run, upto_stage_dir=None):
     return ids
 
 
+def failed_claim_ids(run, upto_stage_dir):
+    """Normalised ids (leading C dropped) of claims marked FAILED in check files up to and including upto_stage_dir."""
+    ids = set()
+    for d in sorted(d for d in os.listdir(run) if re.match(r"stage-\d\d-", d)):
+        if upto_stage_dir and d > upto_stage_dir:
+            continue
+        p = os.path.join(run, d, "check.md")
+        if os.path.exists(p):
+            ids |= {c["id"].upper().lstrip("C") for c in parse_claims(read(p)) if c["result"] == "FAILED"}
+    return ids
+
+
+def check_kills_earned(path, tag, run, upto):
+    """Every KILLS entry names a FAILED claim or an explicit hard constraint (spec 4.3: only those two things kill)."""
+    text = read(path)
+    m = re.search(r"^KILLS\b[^\n]*\n(.*?)(?=^(?:\d+ )?[A-Z][A-Z \-]{3,}\s*$|\Z)", text, re.S | re.M)
+    body = m.group(1) if m else ""
+    failed = failed_claim_ids(run, upto)
+    bad = []
+    for l in body.splitlines():
+        if not l.strip().startswith(("-", "*")) and not re.match(r"^\s*\d+[\.\)]", l):
+            continue
+        cited = {x.upper().lstrip("C") for x in re.findall(r"\bclaim\s+(C?\w+)", l, re.I)} | {x.lstrip("C") for x in re.findall(r"\bC\d+\b", l)}
+        cited |= {x.strip().upper().lstrip("C") for grp in CIDS.findall(l) for x in grp.split(",") if x.strip()}
+        if "constraint" not in l.lower() and not (cited & failed):
+            bad.append(l.strip()[:60])
+    rep(len(bad) == 0, f"KILL-EARNED-{tag}", f"{path} KILLS: every entry names a FAILED claim or a hard constraint ({bad})")
+
+
 def check_provenance_in_text(path, section_names, tag, run=None, upto=None):
     text = read(path)
     allowed = passed_claim_ids(run, upto) if run else None
@@ -171,6 +200,7 @@ def audit_run(run):
             need = ["OPTIONS", "KILLS", "OPEN", "METRICS"] if st.endswith("generate") else ["MERGED", "KILLS", "OPEN", "CONFLICT", "METRICS"]
             for h in need:
                 rep(re.search(rf"^{h}\b", close, re.M) is not None, f"CLOSE-{st}-{h}", f"close.md has heading {h}")
+            check_kills_earned(j(st, "close.md"), st, run, st)
             if "MERGED" in need:
                 check_provenance_in_text(j(st, "close.md"), ["MERGED"], st, run=run, upto=st)
         elif not st.endswith("-direct"):
