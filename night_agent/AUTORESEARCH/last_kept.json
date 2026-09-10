@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 7,
+   "caught": 8,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 7,
+   "caught": 8,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.2,
+  "runtime_s": 12.54,
   "within_budget": true
  },
  "secondary": {
@@ -196,8 +196,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "MERGED line with empty claim-id braces",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CID-stage-02-fmea-MERGED"
+    ]
    },
    {
     "id": "E09b",
@@ -205,8 +207,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "MERGED line with whitespace-only claim-id braces",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CID-stage-02-fmea-MERGED"
+    ]
    },
    {
     "id": "O01a",

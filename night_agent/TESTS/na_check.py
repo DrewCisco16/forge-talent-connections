@@ -123,7 +123,7 @@ def check_provenance_in_text(path, section_names, tag, run=None, upto=None):
             early_r = [l for l in lines if "[R]" in l]
             rep(len(early_r) == 0, f"PROV-R-{tag}", f"{path} MERGED: {len(early_r)} line(s) carry [R] before REVIEW ran")
         if allowed is not None and sec in ("MERGED", "3 WHY IT SURVIVED"):
-            nocid = [l for l in lines if not CIDS.search(l)]
+            nocid = [l for l in lines if not any(g.strip() for g in CIDS.findall(l))]
             rep(len(nocid) == 0, f"CID-{tag}-{sec.split()[0]}", f"{path} {sec}: {len(nocid)} line(s) without claim ids in braces")
             bad = []
             for l in lines:
