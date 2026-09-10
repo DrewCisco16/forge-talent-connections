@@ -11,7 +11,7 @@
  },
  "guard": {
   "DEV": {
-   "blocked": 0,
+   "blocked": 1,
    "total": 10
   },
   "HOLDOUT": {
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 10.48,
+  "runtime_s": 11.46,
   "within_budget": true
  },
  "secondary": {
@@ -811,8 +811,8 @@
     "spec": "3, 15 G-4",
     "desc": "CLOSE with a PASSED source claim whose SOURCE says support=PARTIAL",
     "stage": "CLOSE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-4 claim C2 PASSED source/document claim without support=SUPPORTED grade=A on its SOURCE line"
    },
    {
     "id": "GA07b",

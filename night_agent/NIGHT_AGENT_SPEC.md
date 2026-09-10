@@ -273,7 +273,7 @@ DISPATCH.md is prose and prose is forgettable under compaction. Every stage tran
 | G-1 | to GATE | ask.md missing, or registry.json has fewer READY generators than MIN_CREW or no READY CLOSER |
 | G-2 | to GENERATE, BASELINE, or DIRECT | gate/gate.json missing or without CLASS |
 | G-3 | to CHECK of a stage | fewer than MIN_CREW seat files with a valid stamp line and a complete capture in that stage; a DIRECT stage needs one |
-| G-4 | to CLOSE of a stage | check.md missing, a PASSED or FAILED line without RETRIEVED, a PASSED or FAILED line whose METHOD is none, a status outside the six, or an OPEN status without SETTLE |
+| G-4 | to CLOSE of a stage | check.md missing, a PASSED or FAILED line without RETRIEVED, a PASSED or FAILED line whose METHOD is none, a PASSED source or document claim whose SOURCE line does not say support=SUPPORTED grade=A, a status outside the six, or an OPEN status without SETTLE |
 | G-5 | to OPERATE(op) | previous close.md missing, a stop reason already recorded, or op already run tonight |
 | G-6 | to REVIEW | last close.md missing, reviewer handshake count not exactly one, or any reviewer send logged after the handshake |
 | G-7 | to FINAL | final/DELIVERABLE.md already exists, or kills-all.md or metrics-summary.json missing, or neither (review.md and check-review.md) nor the NO_OUTSIDE_REVIEW flag present |
