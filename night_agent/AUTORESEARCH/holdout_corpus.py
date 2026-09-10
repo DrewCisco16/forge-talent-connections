@@ -465,6 +465,8 @@ def clone_stage(root, src_dir, dst_dir, src_num, dst_num, src_name, dst_name):
     for fn in os.listdir(os.path.join(root, dst_dir)):
         p = os.path.join(root, dst_dir, fn)
         s = read(p).replace(f"STAGE {src_num} {src_name}", f"STAGE {dst_num} {dst_name}").replace(f"d-{src_num}-", f"d-{dst_num}-")
+        # a repeated operator would check new claims; give the clone fresh claim ids so only the repetition itself is the fault
+        s = re.sub(r"\bC(\d+)\b", lambda m: f"C{int(m.group(1)) + 100}", s)
         write(p, s)
     disp = [json.loads(l) for l in read(os.path.join(root, "dispatch.jsonl")).splitlines() if l.strip()]
     caps = [json.loads(l) for l in read(os.path.join(root, "capture.jsonl")).splitlines() if l.strip()]
@@ -603,7 +605,7 @@ FAULTS = [
      R(lambda r: edit(r, "stage-01-generate/close.md", "KILLS\nnone\n", "MERGED\n- The importer is fast enough today. [G1] {C1}\nKILLS\nnone\n"))),
     ("O04a", "DEV", "hybrid", "4.4, 15 G-5", "the same operator ran twice in one night",
      lambda r: clone_stage(r, "stage-02-fmea", "stage-04-fmea", "02", "04", "FMEA", "FMEA")),
-    ("O04b", "HOLDOUT", "hybrid", "6", "more operator stages than gate max_operators",
+    ("O07b", "HOLDOUT", "hybrid", "6", "more operator stages than gate max_operators",
      R(lambda r: json_edit(r, "gate/gate.json", lambda d: d["budget"].__setitem__("max_operators", 1)))),
     ("O05a", "DEV", "hybrid", "4.4", "v10-fixed profile skipped IDOV (FMEA then TRIZ)",
      lambda r: (json_edit(r, "gate/gate.json", lambda d: d.__setitem__("profile", "v10-fixed")), rename_stage(r, "stage-03-idov", "stage-03-triz", "STAGE 03 IDOV", "STAGE 03 TRIZ"))),
