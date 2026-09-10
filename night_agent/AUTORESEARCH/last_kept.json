@@ -1,21 +1,21 @@
 {
  "primary": {
   "DEV": {
-   "caught": 18,
+   "caught": 20,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 18,
+   "caught": 19,
    "total": 34
   }
  },
  "guard": {
   "DEV": {
-   "blocked": 3,
+   "blocked": 4,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 4,
+   "blocked": 5,
    "total": 10
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.85,
+  "runtime_s": 13.02,
   "within_budget": true
  },
  "secondary": {
@@ -372,8 +372,10 @@
     "base": "hybrid",
     "spec": "7 stamp",
     "desc": "stamp names a different operator than the stage folder",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "STAMP-OP-stage-02-fmea-seat-G2.md"
+    ]
    },
    {
     "id": "S02b",
@@ -381,8 +383,12 @@
     "base": "hybrid",
     "spec": "2, 7",
     "desc": "stamp names a seat id that is not in the registry",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "STAMP-FILE-stage-03-idov-seat-G2.md",
+     "STAMP-READY-stage-03-idov-seat-G2.md",
+     "STAMP-REG-stage-03-idov-seat-G2.md"
+    ]
    },
    {
     "id": "S03a",
@@ -390,8 +396,10 @@
     "base": "hybrid",
     "spec": "7",
     "desc": "a seat that is not READY in the registry has a reply file counted in a stage",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "STAMP-READY-stage-02-fmea-seat-G4.md"
+    ]
    },
    {
     "id": "S10b",
@@ -847,8 +855,8 @@
     "spec": "7, 15 G-3",
     "desc": "CHECK counting seat files whose stamp stage number mismatches the folder",
     "stage": "CHECK",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-3 seat-G3.md: stamp 03 FMEA is not this stage (not counted)"
    },
    {
     "id": "GA06b",
@@ -857,8 +865,8 @@
     "spec": "2, 15 G-3",
     "desc": "CHECK counting seat files stamped with seat ids not in the registry",
     "stage": "CHECK",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-3 seat-G3.md: seat G9 is not a READY registered seat (not counted)"
    },
    {
     "id": "GA07a",

@@ -202,6 +202,12 @@ def audit_run(run):
             rep(bool(m), f"STAMP-{st}-{s}", f"line 1 is a stamp ({first[:40]!r})")
             if m:
                 rep(m.group(1) == st[6:8], f"STAMP-MATCH-{st}-{s}", "stamp stage number matches folder")
+                rep(m.group(2) == st.split("-", 2)[2].upper(), f"STAMP-OP-{st}-{s}", f"stamp stage name matches folder ({m.group(2)} vs {st.split('-', 2)[2].upper()})")
+                rep(m.group(3) == s[5:-3], f"STAMP-FILE-{st}-{s}", f"stamp seat id matches file name ({m.group(3)})")
+                if seat_ids:
+                    ready = {x.get("id") for x in registry.get("seats", []) if x.get("ready")}
+                    rep(m.group(3) in seat_ids, f"STAMP-REG-{st}-{s}", f"stamp seat id is in the registry ({m.group(3)})")
+                    rep(m.group(3) in ready, f"STAMP-READY-{st}-{s}", f"stamp seat is READY in the registry ({m.group(3)})")
             check_headings(j(st, s), "generate" if st.endswith("-generate") else "direct" if st.endswith("-direct") else "operate", f"{st}-{s}")
         # completeness
         gate = json.load(open(j("gate/gate.json")))

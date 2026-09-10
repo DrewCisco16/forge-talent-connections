@@ -108,7 +108,15 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
                     txt = read(j(stage_dir, f))
                     lines = txt.splitlines()
                     first = lines[0] if txt.strip() else ""
-                    if not STAMP.match(first):
+                    sm = STAMP.match(first)
+                    if not sm:
+                        continue
+                    if sm.group(1) != stage_dir.rstrip("/")[6:8] or sm.group(2) != stage_dir.rstrip("/").split("-", 2)[2].upper():
+                        reasons.append(f"G-3 {f}: stamp {sm.group(1)} {sm.group(2)} is not this stage (not counted)")
+                        continue
+                    ready_ids = {x.get("id") for x in (jload(j("registry.json"), {}) or {}).get("seats", []) if x.get("ready")}
+                    if ready_ids and sm.group(3) not in ready_ids:
+                        reasons.append(f"G-3 {f}: seat {sm.group(3)} is not a READY registered seat (not counted)")
                         continue
                     did = lines[1].split()[1] if len(lines) > 1 and lines[1].startswith("DISPATCH ") else None
                     cap = captures.get(did) if did else None
