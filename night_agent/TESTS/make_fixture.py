@@ -192,6 +192,7 @@ if __name__ == "__main__":
     base = os.path.join(out, "conforming")
     conforming(base)
     rc, fails = run_check(base)
+    conforming_ok = rc == 0
     print(f"conforming fixture: exit {rc}, {len(fails)} FAIL lines")
     for f in fails:
         print("   ", f)
@@ -237,4 +238,4 @@ if __name__ == "__main__":
                 "skipped": 0, "errors": 0, "complete": True}
     open(os.path.join(out, "verification-manifest.json"), "w").write(json.dumps(manifest, indent=2))
     print("manifest written:", os.path.join(out, "verification-manifest.json"))
-    sys.exit(0 if caught == len(FAULTS) and gok == len(GUARD_TESTS) and sensitivity_ok else 1)
+    sys.exit(0 if conforming_ok and caught == len(FAULTS) and gok == len(GUARD_TESTS) and sensitivity_ok else 1)
