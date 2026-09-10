@@ -111,8 +111,9 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
                         reasons.append(f"G-3 {f}: capture incomplete or missing (not counted)")
                         continue
                     ok += 1
-            if ok < mincrew:
-                reasons.append(f"G-3 {ok} complete stamped seat files < MIN_CREW {mincrew}")
+            need = 1 if stage_dir.rstrip("/").endswith("-direct") else mincrew  # DISPATCH 5: DIRECT has one generator
+            if ok < need:
+                reasons.append(f"G-3 {ok} complete stamped seat files < MIN_CREW {need}")
 
     elif stage == "CLOSE":  # G-4
         cp = j(stage_dir or "", "check.md")

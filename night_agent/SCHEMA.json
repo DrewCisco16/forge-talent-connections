@@ -553,7 +553,7 @@
     "tool": "TESTS/na_gate.py",
     "G-1": "GATE: ask.md present; READY generators >= min_crew; READY closer",
     "G-2": "GENERATE/BASELINE/DIRECT: gate.json with CLASS",
-    "G-3": "CHECK: >= min_crew stamped seat files whose capture record says completion_signal_observed and not partial",
+    "G-3": "CHECK: >= min_crew stamped seat files whose capture record says completion_signal_observed and not partial; a DIRECT stage needs one",
     "G-4": "CLOSE: check.md present, six statuses only, RETRIEVED on PASSED/FAILED, SETTLE on the other four",
     "G-5": "OPERATE: previous close.md, no stop reason, operator not already run",
     "G-6": "REVIEW: last close.md, reviewer handshake exactly once, no reviewer sends after it",
