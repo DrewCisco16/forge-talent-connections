@@ -197,7 +197,7 @@ def audit_run(run):
             rep(False, f"FILE-{st}-check", "check.md exists")
         if os.path.exists(j(st, "close.md")):
             close = read(j(st, "close.md"))
-            need = ["OPTIONS", "KILLS", "OPEN", "METRICS"] if st.endswith("generate") else ["MERGED", "KILLS", "DEPRIORITIZED", "OPEN", "CONFLICT", "METRICS"]
+            need = ["OPTIONS", "KILLS", "OPEN", "METRICS"] if st.endswith("generate") else ["MERGED", "KILLS", "DEPRIORITIZED", "OPEN", "CONFLICT", "OPTIONS STANDING", "METRICS"]
             for h in need:
                 rep(re.search(rf"^{h}\b", close, re.M) is not None, f"CLOSE-{st}-{h}", f"close.md has heading {h}")
             if st.endswith("generate"):  # P4 LIST mode: the closer lists, it does not merge

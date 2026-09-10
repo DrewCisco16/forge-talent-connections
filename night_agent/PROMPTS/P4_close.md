@@ -20,7 +20,7 @@ METRICS - one line: options_created, options_standing, claims_total,
           claims_checkable, passed, failed, judgement, not_testable,
           blocked, inconclusive, earned_kills, structural_kills.
 
-If MODE is MERGE, write exactly these six sections.
+If MODE is MERGE, write exactly these seven sections.
 
 MERGED   - the working answer, built ONLY from claims marked PASSED.
            Never a FAILED claim. Never a BLOCKED, INCONCLUSIVE, NOT
@@ -39,6 +39,9 @@ OPEN     - everything unresolved, each with what would settle it.
 CONFLICT - where the reviewers disagreed and the check could not settle
            it. Do not resolve these by picking a side. Say the
            disagreement stands and name the evidence that would end it.
+OPTIONS STANDING - every option that still stands after this stage,
+           DEPRIORITIZED ones included, numbered exactly as in the
+           LIST close. This is what the next stage receives.
 METRICS  - one line, same fields as LIST mode, plus deprioritized and
            decision_changed (yes/no: did MERGED change materially).
 
