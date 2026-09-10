@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 34,
+   "caught": 35,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 32,
+   "caught": 33,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 10.84,
+  "runtime_s": 12.5,
   "within_budget": true
  },
  "secondary": {
@@ -731,8 +731,10 @@
     "base": "hybrid",
     "spec": "5 LOG",
     "desc": "experiment record with no line in experiments/log.jsonl",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-LOG-exp"
+    ]
    },
    {
     "id": "X03b",
@@ -740,8 +742,10 @@
     "base": "hybrid",
     "spec": "5 LOG",
     "desc": "experiment log decision disagrees with record.json",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-LOG-DEC-exp"
+    ]
    },
    {
     "id": "D01a",

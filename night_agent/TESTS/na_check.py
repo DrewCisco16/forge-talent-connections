@@ -485,6 +485,7 @@ def audit_run(run):
     # experiments: KEEP needs a repeat run
     expdir = j("experiments")
     if os.path.isdir(expdir):
+        xlog = {x.get("id"): x for x in jsonl(os.path.join(expdir, "log.jsonl"))}
         for d in sorted(os.listdir(expdir)):
             rp = os.path.join(expdir, d, "record.json")
             if os.path.exists(rp):
@@ -496,6 +497,10 @@ def audit_run(run):
                     defects = keep_defects(rec, base_, gate)
                     rep(len(defects) == 0, f"EXP-SOUND-{d}", f"KEEP improves beyond noise in the metric's direction on both runs, within budget, guardrails held ({defects})")
                 rep(rec.get("decision") in ("KEEP", "REVERT", "INCONCLUSIVE"), f"EXP-DEC-{d}", f"decision is one of three ({rec.get('decision')})")
+                xl = xlog.get(rec.get("id", d))  # spec 5 LOG: one line per experiment, and it says what the record says
+                rep(xl is not None, f"EXP-LOG-{d}", "experiment has a line in experiments/log.jsonl")
+                if xl is not None:
+                    rep(xl.get("decision") == rec.get("decision"), f"EXP-LOG-DEC-{d}", f"log decision equals record decision ({xl.get('decision')} vs {rec.get('decision')})")
     # architecture decisions: paired floor and predefined criterion
     ad = os.path.join(run, "..", "..", "architecture", "decisions.jsonl")
     if os.path.exists(ad):
