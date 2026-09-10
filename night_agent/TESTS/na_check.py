@@ -173,6 +173,15 @@ def audit_run(run):
         elif not st.endswith("-direct"):
             rep(False, f"FILE-{st}-close", "close.md exists")
 
+    # claim ids are unique across the run (otherwise a cited id is ambiguous and CIDP means nothing)
+    seen = {}
+    for pth in [j(st, "check.md") for st in stages] + [j("review", "check-review.md")]:
+        if os.path.exists(pth):
+            for c in parse_claims(read(pth)):
+                seen.setdefault(c["id"], []).append(os.path.relpath(pth, run))
+    dupes = {k: v for k, v in seen.items() if len(v) > 1}
+    rep(len(dupes) == 0, "CID-UNIQ", f"every claim id appears once across all check files ({dupes})")
+
     # no new options after generate
     if stages and not direct:
         gen_close = j(stages[0], "close.md")

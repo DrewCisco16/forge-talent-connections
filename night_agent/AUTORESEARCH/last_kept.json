@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 4,
+   "caught": 6,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 5,
+   "caught": 6,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.96,
+  "runtime_s": 11.7,
   "within_budget": true
  },
  "secondary": {
@@ -108,8 +108,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "claim id reused across stages with different text",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CID-UNIQ"
+    ]
    },
    {
     "id": "E04b",
@@ -117,8 +119,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "claim id duplicated inside one check file",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CID-UNIQ"
+    ]
    },
    {
     "id": "E05a",
@@ -258,11 +262,13 @@
     "base": "hybrid",
     "spec": "4.4, 15 G-5",
     "desc": "the same operator ran twice in one night",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CIDP-stage-04-fmea-MERGED"
+    ]
    },
    {
-    "id": "O04b",
+    "id": "O07b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "6",
