@@ -326,6 +326,26 @@ about it -- the seat runs unmetered, which is what was asked for.
 """
 
 
+
+def reported_model(raw: bytes) -> str | None:
+    """The model id named in a vendor reply, by STRUCTURE only.
+
+    Looks for a top-level string under "model" or "modelVersion" -- the two
+    shapes the five vendors' JSON replies use for it -- and returns None for
+    anything else. No vendor-specific parsing, no guessing from prose.
+    """
+    try:
+        payload = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    for key in ("model", "modelVersion"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
 class HttpSeat:
     """
     One seat. Call it with a prompt, get text back, or get SeatError.
@@ -398,6 +418,16 @@ class HttpSeat:
                                 else max_tokens)
         self.last_stop_reason: str = ""
         self.last_truncated: bool = False
+        self.last_reported_model: str | None = None
+        """The model id the vendor's reply names, when the reply names one.
+
+        THE CONFIGURED MODEL IS A REQUEST; THIS IS WHAT ANSWERED. The panel
+        record wrote down what profiles.json asked for and nothing compared
+        it with what came back, so a vendor alias that moved, or a routing
+        fallback, left the five-vendor independence claim resting on a model
+        that never ran. Not an attestation -- it is the vendor's own echo --
+        but it is the only identity signal the reply carries, and a mismatch
+        is a fact the run must not lose."""
         """Whether the LAST reply was cut off by the output cap.
 
         A reply with no text at max_tokens raises SeatError below. A reply
@@ -544,7 +574,9 @@ class HttpSeat:
         raise SeatError(f"seat {self.seat_id}: {last} (retries exhausted)")
 
     def _book(self, raw: bytes) -> None:
-        """Record what the call actually cost, from the vendor's own count."""
+        """Record what the call actually cost, from the vendor's own count,
+        and which model the vendor says produced it."""
+        self.last_reported_model = reported_model(raw)
         if self.ledger is None:
             return
         tin = tout = None

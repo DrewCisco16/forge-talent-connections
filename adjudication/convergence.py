@@ -82,6 +82,7 @@ class Convergence:
     rho_by_round: dict[int, float | None]
     divergence_by_round: dict[int, float | None]
     collapse_rounds: list[int]
+    nesting_rounds: list[int] = field(default_factory=list)
     holes: list[Hole] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
     tolerance: float = 0.5
@@ -156,6 +157,50 @@ def divergence(
     return mean_j, unanimous, silent, warning
 
 
+def nested(sets: Sequence[frozenset[object]]) -> bool:
+    """True when every pair of claim sets nests and they are not all equal.
+
+    Nesting is the padding signature: one seat's claims are a superset of
+    another's. Identical sets are unanimity and reported by that name.
+    """
+    if len(sets) < 2 or len(set(sets)) == 1:
+        return False
+    # A SILENT SEAT IS NOT A SMALLER SET. The empty set is contained in every
+    # set, so one seat that said nothing next to one that spoke read as
+    # "nested" -- and silence is reported by its own name (SOP 6.5), not as
+    # padding. Found by an existing test the first version of this broke.
+    if any(not s for s in sets):
+        return False
+    return all(a <= b or b <= a for a, b in itertools.combinations(sets, 2))
+
+
+def nesting_warning(
+    seat_claims: Mapping[str, Sequence[object]],
+) -> str | None:
+    """ASTRA-02. PADDING BOUGHT DIVERSITY, and it is reported SEPARATELY.
+
+    Ten shared claims plus twenty irrelevant additions took the mean Jaccard
+    from 1.0 to 0.56 and switched the collapse warning off, without one seat
+    challenging anything. Jaccard measures set size as much as disagreement.
+    When every pair NESTS -- the smaller set is contained in the larger --
+    the seats agree on everything the smaller one said, and the extra claims
+    are volume, not independence.
+
+    Its own field, not the collapse warning. A collapse warning means the
+    seats were unanimous, and code and tests rely on that meaning; a nesting
+    warning means they were NOT unanimous and the difference is padding.
+    Folding the two together would make "collapse" mean two opposite things.
+    """
+    sets = _content_sets(seat_claims)
+    if not nested(sets):
+        return None
+    return (f"The {len(sets)} seats' claim sets NEST: every smaller set is "
+            f"contained in a larger one, so they agree on every shared claim "
+            f"and differ only by what one seat added. Extra claims on one "
+            f"seat do not make it independent. Treat this as a monoculture "
+            f"signal with padding, not as disagreement.")
+
+
 def _new_failures_per_round(
     results: Sequence[object],
 ) -> list[tuple[int, bool, int]]:
@@ -226,6 +271,8 @@ def analyse(
                            for r in results}
     collapse_rounds = [getattr(r, "n", 0) for r in results
                        if getattr(r, "collapse_warning", None)]
+    nesting_rounds = [getattr(r, "n", 0) for r in results
+                      if getattr(r, "nesting_warning", None)]
 
     holes: list[Hole] = []
     blockers: list[str] = []
@@ -236,6 +283,29 @@ def analyse(
                   if observed else [])
 
     # -- SOP 9.3, row by row ----------------------------------------------
+    # ASTRA-09. A CLAIM REFUTED AGAINST A SURVIVOR IS A HOLE, NOT A FOOTNOTE.
+    #
+    # assess() prints "N CLAIM(S) WERE MECHANICALLY REFUTED AND REMOVED
+    # NOTHING" as a caveat and sets trustworthy False. This function, which
+    # owns the EXIT CODE, never saw it: with yields decaying and the alarm
+    # armed, a run carrying a refuted claim about its one survivor exited 0.
+    # Two verdict surfaces disagreed, and the one a script acts on was the
+    # permissive one. SOP 9.1 step 11 commits only when no hole remains; a
+    # false statement made about the answer is a hole until a person reads it.
+    refuted_standing = [
+        getattr(r, "n", 0) for r in results
+        if int(getattr(r, "failed", 0) or 0) > 0
+        and not (getattr(r, "options_removed", None) or [])]
+    if refuted_standing and alive:
+        holes.append(Hole(
+            "refuted claim stands against a survivor",
+            f"In round(s) {', '.join(str(n) for n in refuted_standing)} a "
+            f"gate refuted a claim and no option was removed, so the "
+            f"refuted statement was made about an answer still standing.",
+            "Read those refuted claims before committing. If one is about "
+            "the surviving answer, the answer has an unrebutted defect; "
+            "either the seat should have declared it as a commitment, or "
+            "the claim needs a person's adjudication."))
     if observed and not alive:
         holes.append(Hole(
             "every candidate eliminated",
@@ -278,6 +348,24 @@ def analyse(
             f"Round {n}: every seat produced an identical claim set.",
             "Change seat composition and re-run that round. Check rho before "
             "trusting anything it produced."))
+    mismatch_rounds = [(getattr(r, "n", 0), getattr(r, "model_mismatch", {}))
+                       for r in results if getattr(r, "model_mismatch", None)]
+    for n, by_seat in mismatch_rounds:
+        holes.append(Hole(
+            "panel identity",
+            f"Round {n}: " + "; ".join(f"{s}: {w}" for s, w in sorted(by_seat.items())),
+            "The independence claim rests on which model ran. Fix the "
+            "settings file so the configured id names what the vendor "
+            "serves, or record the served model as the panel, and re-run."))
+    for n in nesting_rounds:
+        holes.append(Hole(
+            "nesting warning",
+            f"Round {n}: the seats' claim sets nest -- they agree on every "
+            f"shared claim and differ only by what one seat added.",
+            "Read the extra claims before crediting the divergence figure: "
+            "padding on one seat is volume, not independence. Change seat "
+            "composition and re-run that round if the shared core is all "
+            "that matters."))
     if all(v is None for v in rho_by_round.values()):
         holes.append(Hole(
             "convergence not measurable",
@@ -327,7 +415,8 @@ def analyse(
     return Convergence(
         yields=yields, fit=fit, residual=residual, capture=capture,
         rho_by_round=rho_by_round, divergence_by_round=divergence_by_round,
-        collapse_rounds=collapse_rounds, holes=holes, blockers=blockers,
+        collapse_rounds=collapse_rounds, nesting_rounds=nesting_rounds,
+        holes=holes, blockers=blockers,
         tolerance=tolerance, singleton_alarm=singleton_alarm)
 
 
@@ -385,6 +474,11 @@ def render(c: Convergence) -> list[str]:
         out.append(f"- COLLAPSE FLAG in round(s) "
                    f"{', '.join(str(n) for n in c.collapse_rounds)}: the seats "
                    f"agreed exactly, which is an alarm and not a result.")
+    if c.nesting_rounds:
+        out.append(f"- PADDING FLAG in round(s) "
+                   f"{', '.join(str(n) for n in c.nesting_rounds)}: the seats' "
+                   f"claim sets nest, so the divergence figure is set size, "
+                   f"not disagreement.")
 
     out += ["", "### The stop rule (SOP 6.3 -- a CONJUNCTION)", ""]
     if c.blockers:

@@ -67,8 +67,10 @@ Run:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import os
 import random
 import re
 import sys
@@ -1007,11 +1009,19 @@ def verdict_line(reading: RhoReading) -> str:
             f"replace them with more different ones rather than adding more.")
 
 
-def render_calibration(res: CalibrationResult) -> str:
+def render_calibration(res: CalibrationResult,
+                       provenance: str | None = None) -> str:
     out: list[str] = []
     out.append("=" * 72)
     out.append("SEAT INDEPENDENCE CALIBRATION")
     out.append("=" * 72)
+    if provenance:
+        # ASTRA-12: said at the top, where a reader who copies the figure
+        # into a summary will see it, not in a footer.
+        out.append(f"  {provenance}")
+        out.append("  These replies were already counted once. This is NOT a "
+                   "new observation; it is the same measurement read again.")
+        out.append("")
     n_true = sum(1 for i in res.items if i.is_true)
     out.append(f"items          : {len(res.items)} "
                f"({n_true} true, {len(res.items) - n_true} false)")
@@ -1160,6 +1170,66 @@ def render_calibration(res: CalibrationResult) -> str:
 # demo seats -- no network, no spend
 # ---------------------------------------------------------------------------
 
+def _load_rescore(path: str | None, seat_list: str | None):  # type: ignore[no-untyped-def]
+    """(items, seats to score, full panel or None) from a transcript, or None.
+
+    Every refusal prints why and returns None; nothing here can spend.
+    """
+    if seat_list and not path:
+        print("--seats only applies to --rescore: a subset of a LIVE panel "
+              "would spend money to measure fewer seats than were paid for. "
+              "Record the full run, then re-score subsets for free.",
+              file=sys.stderr)
+        return None
+    if not path:
+        print("--rescore needs a transcript path.", file=sys.stderr)
+        return None
+    try:
+        items, seats = load_transcript(path)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"CALIBRATION NOT SCORED: {exc}", file=sys.stderr)
+        print("Nothing was sent and nothing was spent.", file=sys.stderr)
+        return None
+    if not seat_list:
+        return items, seats, None
+    # ASTRA-10. THE CHEAPEST SEAT-COUNT MEASUREMENT IS A REPLAY. The transcript
+    # holds every seat's reply to every item, so "what do the extra seats add"
+    # is answered without a call: score the subset, score the whole panel, put
+    # them side by side. Both rest on the same replies and the same oracle,
+    # which is what makes them comparable -- and it is narrower than
+    # superiority: it says what these seats added on this item set, no more.
+    wanted = [s.strip() for s in seat_list.split(",") if s.strip()]
+    unknown = [s for s in wanted if s not in seats]
+    if unknown:
+        print(f"CALIBRATION NOT SCORED: --seats names {', '.join(unknown)}, "
+              f"not in the transcript ({', '.join(sorted(seats))}).",
+              file=sys.stderr)
+        return None
+    return items, {k: v for k, v in seats.items() if k in wanted}, dict(seats)
+
+
+def render_seat_cut(full: CalibrationResult, subset: CalibrationResult) -> str:
+    """The full panel beside the retained seats, on the same replies.
+
+    SOP 6.7 says cut seats, never passes. This is the number that decision
+    reads from: if effective seats barely move when seats are cut, the cut
+    seats were not adding independence. It says nothing about which seats
+    would be worth more on a different item set.
+    """
+    def line(label: str, r: CalibrationResult) -> str:
+        rho = "n/a" if r.rho is None else f"{r.rho:+.4f}"
+        eff = "n/a" if r.effective_seats is None else f"{r.effective_seats:.2f}"
+        return (f"  {label:16} seats={len(r.seats):<2} rho={rho:>8} "
+                f"effective={eff:>5}  {'MEASURABLE' if r.report.get('measurable') else 'NOT MEASURABLE'}")
+    cut = sorted(set(full.seats) - set(subset.seats))
+    out = ["", "-" * 72, "SEAT CUT -- same replies, same oracle, fewer seats (SOP 6.7)", "-" * 72,
+           line("full panel", full), line("retained", subset),
+           f"  cut: {', '.join(cut) if cut else 'none'}",
+           "  What the cut seats added is the difference between the two rows.",
+           "  It is a fact about THIS item set, not a ranking of the seats."]
+    return "\n".join(out)
+
+
 def _demo_seat(items: Sequence[Item], wrong_on: set[str]) -> Callable[[str], str]:
     """A synthetic seat that confirms every true item except those it is
     scripted to miss, and wrongly confirms every false item in `wrong_on`."""
@@ -1266,6 +1336,7 @@ def write_transcript(
     """
     payload = {
         "schema": TRANSCRIPT_SCHEMA,
+        "scorer_sha256": scorer_identity(),
         "seed": seed,
         "n_items": len(items),
         "items": [
@@ -1279,6 +1350,45 @@ def write_transcript(
     }
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, sort_keys=True)
+
+
+def scorer_identity() -> str:
+    """sha256 of this module's source: the code that scored a transcript.
+
+    A RE-SCORE IS THE SAME REPLIES UNDER THE SAME SCORER, or it is a
+    different measurement. The transcript recorded the replies and the quiz
+    and nothing about the code that turned them into rho, so a re-score
+    after a scoring change printed a new figure next to the old one as if
+    only the seats could have moved. The Night Agent's protocol freezes
+    runner hashes with the suite for the same reason.
+    """
+    with open(os.path.abspath(__file__), "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def transcript_scorer(path: str) -> str | None:
+    """The scorer hash a transcript was written under, or None if it
+    predates the field."""
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    value = raw.get("scorer_sha256") if isinstance(raw, dict) else None
+    return str(value) if value else None
+
+
+def scorer_note(path: str) -> str | None:
+    """One line for the re-score banner when the scorer has changed."""
+    recorded = transcript_scorer(path)
+    current = scorer_identity()
+    if recorded is None:
+        return ("SCORER UNKNOWN: this transcript predates the scorer hash, "
+                "so whether the scoring code has changed since it was "
+                "written cannot be told from the file.")
+    if recorded != current:
+        return (f"SCORER CHANGED: recorded {recorded[:12]}, this build "
+                f"{current[:12]}. The replies are the same; the code that "
+                f"scores them is not, so this figure and the original are "
+                f"not the same measurement.")
+    return None
 
 
 def load_transcript(
@@ -1443,6 +1553,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--rescore", metavar="PATH",
                     help="score a saved transcript instead of calling any "
                          "seat. No network, no credentials, no cost.")
+    ap.add_argument("--seats", metavar="ID,ID,...",
+                    help="with --rescore: score only these seats, and print "
+                         "the full panel beside them so cutting seats can be "
+                         "judged on the same replies (SOP 6.7: cut seats, "
+                         "never passes). Free: it is a replay.")
     ap.add_argument("--json", metavar="PATH",
                     help="also write the raw report as JSON")
     ap.add_argument("--ignore-preflight", action="store_true",
@@ -1463,13 +1578,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Replay first: a re-score must not touch credentials, settings, or the
     # network, so it is decided before any of that is loaded.
-    if args.rescore:
-        try:
-            items, seats = load_transcript(args.rescore)
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            print(f"CALIBRATION NOT SCORED: {exc}", file=sys.stderr)
-            print("Nothing was sent and nothing was spent.", file=sys.stderr)
+    full_panel: dict[str, Callable[[str], str]] | None = None
+    if args.rescore or args.seats:
+        loaded = _load_rescore(args.rescore, args.seats)
+        if loaded is None:
             return 2
+        items, seats, full_panel = loaded
     elif args.demo or args.demo_collapsed:
         seats = (_collapsed_demo_seats(items) if args.demo_collapsed
                  else _demo_seats(items))
@@ -1533,7 +1647,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"WARNING: transcript not written: {exc}",
                       file=sys.stderr)
 
-    print(render_calibration(res))
+    provenance = (f"RE-SCORE of {args.rescore}" if args.rescore else None)
+    if args.rescore:
+        note = scorer_note(args.rescore)
+        if note:
+            provenance = f"{provenance}\n{note}"
+    print(render_calibration(res, provenance=provenance))
+    if full_panel is not None:
+        full = run_calibration(full_panel, items)
+        print(render_seat_cut(full, res))
 
     if args.json:
         payload = {
@@ -1546,6 +1668,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             "blockers": res.report.get("blockers", []),
             "seat_errors": res.seat_errors,
             "unmatched_claims": res.unmatched_claims,
+            # ASTRA-12. A RE-SCORE IS NOT A SECOND OBSERVATION. The same
+            # replies scored twice are one measurement, and a report that
+            # could not be told from a fresh paid run would be counted twice.
+            "rescored_from": args.rescore,
+            "new_observation": args.rescore is None,
+            "seats_retained": (list(res.seats) if full_panel is not None
+                               else None),
         }
         with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, sort_keys=True)

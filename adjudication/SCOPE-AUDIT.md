@@ -70,7 +70,7 @@ the claim can be refused. Nothing here is asserted from memory.
 | 9.1 step 4 | Read GATE RESULTS before any model prose | BUILT | `full_run.py` prints gates first, by construction |
 | 9.1 steps 9–10 | rho, effective seats, residual, singleton fraction, per-pass divergence | BUILT | `convergence.render` |
 | 9.1 step 11 | Commit ONLY when one candidate survives AND no holes remain | BUILT | `full_run` section 4 |
-| 9.1 step 12 | Log the run, verify the audit chain | BUILT | `audit_log.verify` |
+| 9.1 step 12 | Log the run, verify the audit chain | BUILT | `run_adjudication` calls `audit.verify()` at the end of every run and prints the result; a chain that does not verify is a hole, so the run cannot commit. Was overstated: until this row was corrected only the `verify` function existed and no run path called it. The check is a local hash chain plus sidecar, not an external attestation. |
 | 9.2 | Six abort signals | BUILT | `should_stop` blockers + `convergence.blockers` |
 | 9.3 | Holes are part of the answer; each names its own remedy | BUILT | `test_every_hole_names_what_would_close_it` |
 | 9.3 | Exit non-zero while any hole remains | BUILT | `Convergence.exit_code`, `full_run` return value |

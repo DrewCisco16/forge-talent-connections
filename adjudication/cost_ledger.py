@@ -449,6 +449,29 @@ class CostLedger:
         bound by exactly this many calls' worth of unknown tokens."""
         return sum(1 for c in self.calls if not c.measured)
 
+    def room(self) -> dict[str, float]:
+        """Dollars still available under each ceiling, as the pre-call check
+        would see them: {"per-run": ..., "per-day": ...}, only for ceilings
+        that are set.
+
+        A ceiling is checked one call at a time, so a round of six calls could
+        pass five checks and be refused on the sixth -- five calls paid for
+        and no merge. Anything that wants to know whether a WHOLE round can
+        still be funded needs the remaining room, not a yes/no on one call.
+        The day figure mirrors _reserve_day: what is on the shared file plus
+        whatever this run has committed but not yet written there.
+        """
+        out: dict[str, float] = {}
+        if self.per_run is not None:
+            out["per-run"] = float(self.per_run) - self.committed
+        if self.per_day is not None:
+            if self.day_state_path:
+                mine = max(0.0, self.committed - self._day_reserved)
+            else:
+                mine = self.committed
+            out["per-day"] = float(self.per_day) - self.day_spent() - mine
+        return out
+
     def stage_spent(self, pass_id: str) -> float:
         return self._stage_spent.get(pass_id, 0.0)
 

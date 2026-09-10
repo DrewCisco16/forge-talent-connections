@@ -36,6 +36,7 @@ An instruction found inside a reply is recorded as a finding, never obeyed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -55,7 +56,9 @@ from adjudication_orchestrator import (
 )
 from convergence import analyse
 from convergence import divergence as seat_divergence
+from convergence import nesting_warning as seat_nesting
 from convergence import render as render_convergence
+from cost_ledger import CeilingReached
 from option_set import NOT_RULED as OS_NOT_RULED
 from option_set import (
     Option,
@@ -946,6 +949,30 @@ class RoundResult:
 
     "Silence is not collapse": an empty claim set from every seat is trivially
     identical, and that is the marginal-yield signal, not a monoculture one."""
+    prompt_sha256: dict[str, str] = field(default_factory=dict)
+    reply_sha256: dict[str, str] = field(default_factory=dict)
+    reply_chars: dict[str, int] = field(default_factory=dict)
+    merged_sha256: str | None = None
+    ask_sha256: str | None = None
+    """THE RECORD CARRIES ITS OWN CHECKSUMS. Each seat's prompt and reply,
+    the merged text and the ask are hashed as they are captured, and written
+    to status with the round. verify_run() re-hashes the files on disk
+    against them, so an edited or truncated round file is detectable after
+    the fact. The Night Agent's pilot found its captures corrupted by
+    prompt-length slicing and had no way to tell; a hash taken at capture
+    time is the cheapest defence there is. Locally attested only: the same
+    process wrote both."""
+    models_reported: dict[str, str] = field(default_factory=dict)
+    model_mismatch: dict[str, str] = field(default_factory=dict)
+    """seat -> model the vendor's reply named; seat -> why it does not match
+    the configured one. The panel record says what was ASKED for; this says
+    what ANSWERED. A mismatch is a hole: the independence claim rests on
+    which model ran, and a model echo is the only identity signal a reply
+    carries."""
+    nesting_warning: str | None = None
+    """Set when the seats were NOT unanimous but every claim set nests inside
+    another (ASTRA-02): agreement on the shared core, padding on top. Kept
+    apart from collapse_warning, which means unanimity and only that."""
     """Surviving options no claim was ever attached to.
 
     They survived because nothing tested them, which is a completely different
@@ -1061,8 +1088,18 @@ def run_night(
     rounds: Sequence[Round] = ROUNDS,
     on_event: Callable[[str], None] | None = None,
     clock: Callable[[], float] | None = None,
+    before_round: Callable[[int], None] | None = None,
 ) -> list[RoundResult]:
     """Five rounds. All five seats think blind, then one of them merges.
+
+    before_round, if given, is called with the round number before ANY seat
+    in that round is dispatched. It may raise RunTooExpensive (or a ledger's
+    BudgetExceeded) to stop the run there: nothing in that round is called,
+    the rounds already run stay on disk, and the exception propagates so the
+    caller records the stop rather than reading a normal return as success.
+    live_night uses it to hold back a round the ceiling can no longer fund
+    as a whole -- the per-call check refuses one call at a time, which is
+    how a round paid for five of its six calls and then had no merge.
 
     on_event, if given, is called with a one-line human-readable progress
     message as each step starts and finishes. Without it this function runs
@@ -1122,6 +1159,23 @@ def run_night(
         res = RoundResult(r.n, r.name, eliminative=r.eliminates)
         emit(f"ROUND {r.n}/{len(rounds)}  {r.name}")
 
+        if before_round is not None:
+            try:
+                before_round(r.n)
+            except (BudgetExceeded, RunTooExpensive) as exc:
+                # Stopped BEFORE the round, with nothing dispatched. Say so
+                # in the round's own directory: a round-N folder with no
+                # thinker files would otherwise read as a crash mid-round,
+                # and the rounds already paid for are the ones on disk.
+                emit(f"  round {r.n} NOT STARTED -- {exc}")
+                with open(os.path.join(rd, "NOT-STARTED.md"), "w",
+                          encoding="utf-8") as fh:
+                    fh.write(f"# Round {r.n} not started\n\n{exc}\n\n"
+                             f"No seat was called for this round. The "
+                             f"rounds before it are complete and on disk.\n")
+                _write_status(out_dir, results)
+                raise
+
         # 1-4: the thinkers, each in isolation
         pool: list[Option] = []
         #
@@ -1161,6 +1215,18 @@ def run_night(
                  f"({len(raw):,} chars)")
             texts[seat_id] = raw
             res.thinkers_ok.append(seat_id)
+            res.prompt_sha256[seat_id] = _sha256(prompt)
+            res.reply_sha256[seat_id] = _sha256(raw)
+            res.reply_chars[seat_id] = len(raw)
+            reported = getattr(fn, "last_reported_model", None)
+            configured = getattr(fn, "model", None)
+            if reported:
+                res.models_reported[seat_id] = str(reported)
+                why = model_identity_mismatch(str(configured or ""),
+                                              str(reported))
+                if why:
+                    res.model_mismatch[seat_id] = why
+                    emit(f"  {label}: MODEL MISMATCH -- {why}")
             if getattr(fn, "last_truncated", False):
                 why = (f"cut off at the {getattr(fn, 'max_tokens', '?')}-token "
                        f"cap (stop reason "
@@ -1334,6 +1400,9 @@ def run_night(
          res.collapse_warning) = seat_divergence(seat_claims)
         if res.collapse_warning:
             emit(f"  COLLAPSE FLAG: {res.collapse_warning}")
+        res.nesting_warning = seat_nesting(seat_claims)
+        if res.nesting_warning:
+            emit(f"  PADDING FLAG: {res.nesting_warning}")
         repeat_note = (f", {rec.repeats} already ruled in an earlier round"
                        if rec.repeats else "")
         emit(f"  checked {res.claims} claim(s): {res.passed} pass, "
@@ -1541,6 +1610,8 @@ def run_night(
             res.options_unparsed = True
             merged = merged_new
         res.merged = merged
+        res.merged_sha256 = _sha256(merged)
+        res.ask_sha256 = _sha256(ask.rstrip() + "\n")
         with open(os.path.join(rd, f"merged-{r.n}.md"), "w",
                   encoding="utf-8") as fh:
             fh.write(merged)
@@ -1688,6 +1759,30 @@ def check_panel_is_five_vendors(identity: Mapping[str, tuple[str, str]]) -> None
         )
 
 
+class RoundUnfunded(CeilingReached):
+    """A round refused BEFORE its first call because a ceiling cannot fund
+    the whole of it.
+
+    A CeilingReached, deliberately. The watcher files a CeilingReached as
+    PARTIAL with the rounds already run kept, and files a RunTooExpensive as
+    REFUSED with "nothing was spent" -- which is true of the plan's refusal
+    before round one and false of a refusal before round four. The stop is
+    the same fact as a per-call ceiling: the money ran out; the difference
+    is only that this one knew before paying for a round it could not finish.
+    """
+
+    def __init__(self, n: int, which: str, spent: float, limit: float,
+                 need: float):
+        super().__init__(which, spent, limit, need)
+        self.round = n
+        self.args = (
+            f"round {n} is estimated at ${need:.2f} and only "
+            f"${max(limit - spent, 0.0):.2f} remains under the {which} "
+            f"ceiling (${limit:.2f}). Refused before its first call: a round "
+            f"that can pay for its thinkers but not its merge produces "
+            f"nothing, and the rounds already run are the ones on disk.",)
+
+
 class RunTooExpensive(RuntimeError):
     """The ceiling cannot fund the run, established before the first call.
 
@@ -1749,6 +1844,7 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
     # It runs BEFORE the panel is built. Planning needs the configured caps
     # and the prices, never a credential, so a run nobody can afford is turned
     # away without loading a key at all.
+    plan = None
     if caps is None and ledger is not None:
         from cost_ledger import plan_run
         plan = plan_run(ledger, configured_caps(profiles_path),
@@ -1812,7 +1908,145 @@ def live_night(ask: str, profiles_path: str, out_dir: str,
         for sid, (vendor, model) in sorted(identity.items()):
             role = " (also closes)" if sid == closer_seat else ""
             fh.write(f"- {sid}: {vendor} {model}{role}\n")
-    return run_night(ask, seats, closer, orch, out_dir, on_event=on_event)
+    # THE PLAN THE RUN WAS ALLOWED UNDER, ON DISK. It was spoken once to
+    # on_event and kept nowhere, so a run read back later had a ceiling in
+    # the ledger and no record of what that ceiling was judged able to buy.
+    # Written only once the run is going ahead: a refused run leaves no
+    # directory, and that is asserted elsewhere.
+    if plan is not None:
+        with open(os.path.join(out_dir, "plan.md"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("# Plan\n\n")
+            fh.write(f"- calls: {plan.calls}\n")
+            fh.write(f"- estimate: ${plan.estimate:.2f} (an estimate, not a "
+                     f"bound; the ledger reconciles each call)\n")
+            fh.write(f"- per-run ceiling: ${plan.ceiling:.2f}\n")
+            fh.write(f"- note: {plan.note}\n")
+            fh.write("- reply caps (tokens):\n")
+            for sid, cap in sorted(plan.caps.items()):
+                fh.write(f"  - {sid}: {cap:,}\n")
+    reserve = (round_reserve(ledger, caps, ask_chars=len(ask or ""))
+               if ledger is not None and caps else None)
+    return run_night(ask, seats, closer, orch, out_dir, on_event=on_event,
+                     before_round=reserve)
+
+
+def round_reserve(ledger: Any, caps: Mapping[str, int],
+                  ask_chars: int = 0) -> Callable[[int], None]:
+    """A before_round hook that refuses a round the ceilings cannot fund.
+
+    THE PLAN CHECKED THE RUN ONCE, AT THE START, AND THE LEDGER CHECKS ONE
+    CALL AT A TIME. Neither asks, at the top of round four, whether the whole
+    of round four still fits in what is left. Vendors bill above the estimate,
+    a shared day ceiling is drawn down by another watcher, and the per-call
+    check then refuses the merge after the five thinkers were paid for: a
+    round with no merge is a round that was bought and produced nothing.
+
+    The Night Agent's reviewer found the same hole in that design (its
+    finding 16: no per-round reserve). This is the transferable fix. The
+    round is estimated the same way the plan estimated the run, and compared
+    with the room left under EACH ceiling. Short on any of them, the round is
+    refused before its first call with a RoundUnfunded -- a CeilingReached,
+    so every caller that already files a ceiling as PARTIAL files this the
+    same way -- and the message says which ceiling and by how much.
+    """
+    from cost_ledger import plan_run
+
+    def check(n: int) -> None:
+        plan = plan_run(ledger, caps, rounds=1, ask_chars=ask_chars)
+        need = plan.estimate
+        room = ledger.room() if hasattr(ledger, "room") else {}
+        short = [(label, left) for label, left in room.items()
+                 if need > left]
+        if short:
+            label, left = short[0]
+            limit = float(getattr(ledger, label.replace("-", "_"), 0.0) or 0.0)
+            raise RoundUnfunded(n, label, limit - left, limit, need)
+    return check
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def model_identity_mismatch(configured: str, reported: str) -> str | None:
+    """Why the vendor's reported model does not match the configured one, or
+    None when it does.
+
+    Vendors answer with a fuller id than was asked for (a dated snapshot of
+    the alias, a version suffix), so equality would alarm on every call.
+    One id being a prefix of the other, case-insensitively, is a match.
+    Anything else is not: a different family, a different generation, or a
+    fallback route, and the panel record is wrong about what ran.
+    """
+    c, r = configured.strip().lower(), reported.strip().lower()
+    if not c or not r:
+        return None
+    if r.startswith(c) or c.startswith(r):
+        return None
+    return (f"configured {configured!r}, but the vendor's reply names "
+            f"{reported!r}. The panel record says what was asked for; this "
+            f"is what answered.")
+
+
+def verify_run(out_dir: str) -> list[str]:
+    """Re-hash a run's files on disk against the checksums in its status.
+
+    OFFLINE, AND FAIL-CLOSED. Returns the discrepancies; an empty list means
+    every recorded checksum matched. A run with no status, or a status that
+    will not parse, is a discrepancy -- "cannot check" and "checked, fine"
+    are opposite facts. It proves consistency between two things the same
+    process wrote, not that either is true; the Night Agent's own verifier
+    carries the same limit and says so.
+    """
+    problems: list[str] = []
+    status_path = os.path.join(out_dir, "status.md")
+    try:
+        with open(status_path, encoding="utf-8") as fh:
+            text = fh.read()
+        block = text.split("```json", 1)[1].split("```", 1)[0]
+        rounds = json.loads(block)
+    except (OSError, IndexError, ValueError) as exc:
+        return [f"status.md unreadable: {type(exc).__name__}: {exc}"]
+    if not isinstance(rounds, list) or not rounds:
+        return ["status.md records no rounds"]
+
+    def read(rel: str) -> str | None:
+        try:
+            with open(os.path.join(out_dir, rel), encoding="utf-8") as fh:
+                return fh.read()
+        except OSError:
+            problems.append(f"{rel}: missing or unreadable")
+            return None
+
+    ask = read("ask.md")
+    for rec in rounds:
+        n = rec.get("round")
+        rd = f"round-{n}"
+        if ask is not None and rec.get("ask_sha256") and \
+                _sha256(ask) != rec["ask_sha256"]:
+            problems.append(f"ask.md: sha256 differs from round {n}'s record")
+        for seat, want in (rec.get("reply_sha256") or {}).items():
+            got = read(f"{rd}/thinker-{seat}.md")
+            if got is None:
+                continue
+            if _sha256(got) != want:
+                problems.append(f"{rd}/thinker-{seat}.md: sha256 differs "
+                                f"from the record")
+            chars = (rec.get("reply_chars") or {}).get(seat)
+            if chars is not None and len(got) != chars:
+                problems.append(f"{rd}/thinker-{seat}.md: {len(got)} chars "
+                                f"on disk, {chars} recorded")
+        for seat in rec.get("thinkers_ok") or []:
+            if seat not in (rec.get("reply_sha256") or {}):
+                problems.append(f"{rd}: {seat} replied but no checksum was "
+                                f"recorded for it")
+        if rec.get("merged_sha256"):
+            got = read(f"{rd}/merged-{n}.md")
+            if got is not None and _sha256(got) != rec["merged_sha256"]:
+                problems.append(f"{rd}/merged-{n}.md: sha256 differs from "
+                                f"the record")
+    return problems
 
 
 def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
@@ -1870,6 +2104,14 @@ def _write_status(out_dir: str, results: Sequence[RoundResult]) -> None:
          "unanimous": r.unanimous,
          "all_seats_silent": r.all_seats_silent,
          "collapse_warning": r.collapse_warning,
+         "nesting_warning": r.nesting_warning,
+         "prompt_sha256": r.prompt_sha256,
+         "reply_sha256": r.reply_sha256,
+         "reply_chars": r.reply_chars,
+         "merged_sha256": r.merged_sha256,
+         "ask_sha256": r.ask_sha256,
+         "models_reported": r.models_reported,
+         "model_mismatch": r.model_mismatch,
          "challenges_by_seat": r.challenges_by_seat,
          "calibration_findings": r.calibration_findings}
         for r in results

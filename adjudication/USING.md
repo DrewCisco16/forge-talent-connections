@@ -54,6 +54,21 @@ The **adjudication-run** artifact on the same page is the full record: your
 ask, every seat's raw reply for every round, the verifier packet you can hand
 to a fresh model, and the judgment queue. Kept 90 days.
 
+The record carries its own checksums: every seat's prompt and reply, each
+round's merged text and the ask are hashed as they are captured and written
+into `status.md`. The panel record says which model was *asked for*; each
+round's `models_reported` says which model the vendor's reply *named*, and a
+mismatch is a hole. `plan.md` is the cost plan the run was allowed under. To
+check a downloaded run has not been edited or truncated since, from the
+`adjudication` folder:
+
+```
+python -c "import night_loop, sys; p = night_loop.verify_run(sys.argv[1]); print(p or 'consistent')" path/to/the/run
+```
+
+It prints every file whose bytes no longer match the record, or `consistent`.
+This checks the record against itself; it cannot show that either is true.
+
 ## Two things it will not do
 
 **It will not choose between survivors.** If two answers survive, it reports
