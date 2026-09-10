@@ -275,6 +275,10 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
         else:
             reg = jload(j("registry.json"), {}) or {}
             seats = {x.get("id"): x for x in reg.get("seats", [])}
+            if seats and (seat not in seats or not seats[seat].get("ready") or seats[seat].get("retired")):
+                reasons.append(f"G-11 seat {seat} is not a READY registered seat")
+            if seat == "REVIEWER" and (stage_dir or "").rstrip("/").split("/")[-1] != "review":
+                reasons.append("G-11 the REVIEWER receives nothing between its handshake and REVIEW (spec 4.6)")
             ids = [d.get("dispatch_id") for d in dispatches]
             dupes = {x for x in ids if ids.count(x) > 1}
             if dupes:

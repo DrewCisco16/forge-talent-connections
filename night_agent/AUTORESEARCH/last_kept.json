@@ -11,11 +11,11 @@
  },
  "guard": {
   "DEV": {
-   "blocked": 8,
+   "blocked": 9,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 7,
+   "blocked": 8,
    "total": 10
   }
  },
@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.88,
+  "runtime_s": 13.37,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 7,
+  "package_assertions_passing": 8,
   "total": 15
  },
  "detail": {
@@ -821,8 +821,8 @@
     "spec": "4.6, 15 G-11",
     "desc": "send to REVIEWER during an operator stage",
     "stage": "SEND",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-11 the REVIEWER receives nothing between its handshake and REVIEW (spec 4.6)"
    },
    {
     "id": "GA11b",
@@ -831,8 +831,8 @@
     "spec": "7, 15 G-11",
     "desc": "send to a seat that is not READY",
     "stage": "SEND",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-11 seat G4 is not a READY registered seat"
    },
    {
     "id": "GA02a",
@@ -1160,7 +1160,7 @@
     "id": "PA03",
     "spec": "15, 19",
     "desc": "spec section 15 has a G-11 row",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA04",

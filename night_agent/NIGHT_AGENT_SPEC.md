@@ -280,6 +280,7 @@ DISPATCH.md is prose and prose is forgettable under compaction. Every stage tran
 | G-8 | to VERIFY | DELIVERABLE.md missing, verifier.md already exists, or section 14 of DELIVERABLE.md already has content |
 | G-9 | DECIDE = KEEP | record.json lacks repeat_value, the metric direction is unknown, delta is not an improvement in that direction beyond noise (or MIN_DELTA when noise unknown), the repeat run does not improve on the baseline beyond the same threshold, the run exceeded EXPERIMENT_BUDGET_S, any guardrail exceeds tolerance, or any hard constraint unchecked |
 | G-10 | any MERGED line | no provenance tag, or a cited claim id that is not PASSED in a check file of this or an earlier stage (enforced post hoc by na_check.py PROV rules) |
+| G-11 | SEND to a seat | the seat is not a READY registered seat, the seat is the REVIEWER and the stage is not REVIEW, a dispatch_id is duplicated, the observed conversation URL differs from the registry, the seat's previous slot has no complete capture, or the reservation cannot cover this send plus the tail (Section 7) |
 
 The guards implement the spec; they do not extend it. A guard that disagrees with the spec is a bug in the guard.
 
