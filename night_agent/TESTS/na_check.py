@@ -302,6 +302,10 @@ def audit_run(run):
     hs = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") == "handshake"]
     if "REVIEWER" in seat_ids:
         rep(len(hs) == 1, "ISO-3", f"reviewer handshaked exactly once ({len(hs)})")
+        first_gen = next((i for i, l in enumerate(log) if l.get("stage") == "GENERATE" and l.get("action") in ("send", "prompt")), None)
+        hs_idx = next((i for i, l in enumerate(log) if l.get("seat") == "REVIEWER" and l.get("action") == "handshake"), None)
+        if first_gen is not None and hs_idx is not None:
+            rep(hs_idx < first_gen, "ISO-5", "reviewer handshake precedes the first GENERATE send (isolation starts before the run has content)")
     rep(len(before_review) == 0, "ISO-2", f"reviewer received no run content before REVIEW ({len(before_review)} violations)")
 
     # review package must not contain seat files or kills

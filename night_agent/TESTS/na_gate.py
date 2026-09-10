@@ -179,6 +179,10 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
         sends = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") in ("send", "prompt")]
         if sends:
             reasons.append(f"G-6 reviewer already received {len(sends)} send(s) after handshake")
+        first_gen = next((i for i, l in enumerate(log) if l.get("stage") == "GENERATE" and l.get("action") in ("send", "prompt")), None)
+        hs_idx = next((i for i, l in enumerate(log) if l.get("seat") == "REVIEWER" and l.get("action") == "handshake"), None)
+        if first_gen is not None and hs_idx is not None and hs_idx > first_gen:
+            reasons.append("G-6 reviewer handshake was logged after GENERATE began; the window did not sit outside the run")
 
     elif stage == "FINAL":  # G-7
         if os.path.exists(j("final", "DELIVERABLE.md")):

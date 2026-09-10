@@ -1,7 +1,7 @@
 {
  "primary": {
   "DEV": {
-   "caught": 21,
+   "caught": 22,
    "total": 36
   },
   "HOLDOUT": {
@@ -11,7 +11,7 @@
  },
  "guard": {
   "DEV": {
-   "blocked": 4,
+   "blocked": 5,
    "total": 10
   },
   "HOLDOUT": {
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.45,
+  "runtime_s": 9.99,
   "within_budget": true
  },
  "secondary": {
@@ -462,8 +462,10 @@
     "base": "hybrid",
     "spec": "4.6, 7 handshake",
     "desc": "REVIEWER handshake logged after the first GENERATE send",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "ISO"
+    ]
    },
    {
     "id": "S07a",
@@ -901,8 +903,8 @@
     "spec": "4.6, 15 G-6",
     "desc": "REVIEW when the reviewer handshake came after GENERATE began",
     "stage": "REVIEW",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-6 reviewer handshake was logged after GENERATE began; the window did not sit outside the run"
    },
    {
     "id": "GA13b",
