@@ -36,16 +36,16 @@ def conforming(root):
     w(root, "gate/gate.json", json.dumps({"class": "DELIBERATION", "kind": "answer", "min_crew": 2, "profile": "adaptive"}))
 
     dispatch, capture = [], []
-    def D(stage, seat, did, url=None):
+    def D(stage, seat, did, text, url=None):
         dispatch.append({"run_id": "na-fixture", "stage_id": stage, "seat_id": seat, "provider": "p", "conversation_url": url or f"https://chat.example/{seat}", "tab_id": "t", "displayed_model": "m", "displayed_effort": "high", "prompt_hash": "h", "dispatch_id": did, "expected_reply_slot": "1", "snapshot_hash": "s", "t": "22:00"})
-        capture.append({"dispatch_id": did, "file": f"{stage}/seat-{seat}.md", "completion_signal_observed": True, "start_boundary": "b0", "end_boundary": "b1", "char_count": 100, "byte_hash": "x", "observed_identity": seat, "partial": False})
+        capture.append({"dispatch_id": did, "file": f"{stage}/seat-{seat}.md", "completion_signal_observed": True, "start_boundary": "b0", "end_boundary": "b1", "char_count": len(text), "byte_hash": hashlib.sha256(text.encode()).hexdigest(), "observed_identity": seat, "partial": False})
     seats = {
         "G1": "STAGE 01 GENERATE SEAT G1 TIME 22:10\nDISPATCH d-01-G1\nCANDIDATES\nA. Keep the closer on Fable because merging rewards fidelity.\nCLAIMS\n1. Fable closer used six messages in v10 (sum).\nKNOCKDOWN\nA dies if the closer benchmark shows invention.\nMISSING\nA benchmark for closer fidelity.\n",
         "G2": "STAGE 01 GENERATE SEAT G2 TIME 22:11\nDISPATCH d-01-G2\nCANDIDATES\nA. Move Astra to closer since vendor claims stronger reasoning.\nCLAIMS\n2. Astra scores 98 percent on FrontierMath T4 per vendor page (source).\nKNOCKDOWN\nA dies if reasoning benchmarks do not predict merge fidelity.\nMISSING\nIndependent benchmark.\n",
         "G3": "STAGE 01 GENERATE SEAT G3 TIME 22:12\nDISPATCH d-01-G3\nCANDIDATES\nA. Use Astra as the isolated reviewer and keep Fable closing.\nCLAIMS\n3. The reviewer must not have sat in a round (document).\nKNOCKDOWN\nA dies if Astra is unavailable in chat.\nMISSING\nPlan visibility.\n",
     }
     for s, t in seats.items():
-        D("stage-01-generate", s, f"d-01-{s}")
+        D("stage-01-generate", s, f"d-01-{s}", t)
         sha = w(root, f"stage-01-generate/seat-{s}.md", t)
         L(s, "send", file=f"stage-01-generate/seat-{s}.md", stage="GENERATE", sha=sha)
     check1 = ('CLAIM 1 [G1] "Fable closer used six messages in v10"\n  METHOD     sum\n  ACTION     counted five merges plus one final in v10 page 12\n  RETRIEVED  5 + 1 = 6\n  RESULT     PASSED\n  SETTLE     \n'
@@ -57,8 +57,8 @@ def conforming(root):
     sha = w(root, "stage-01-generate/close.md", close1); L("CLOSER", "send", file="stage-01-generate/close.md", stage="CLOSE", sha=sha)
 
     for s in ["G1", "G2", "G3"]:
-        D("stage-02-fmea", s, f"d-02-{s}")
         t = f"STAGE 02 FMEA SEAT {s} TIME 23:0{s[-1]}\nDISPATCH d-02-{s}\nWRONG\nnone\nMISSING\nfailure visibility of option 2\nKILLS\nOption 2: reviewer would then be Fable which closed nothing; judgement call\nOPEN\nnone\n"
+        D("stage-02-fmea", s, f"d-02-{s}", t)
         sha = w(root, f"stage-02-fmea/seat-{s}.md", t); L(s, "send", file=f"stage-02-fmea/seat-{s}.md", stage="OPERATE", sha=sha)
     check2 = 'CLAIM 5 [G1] "Option 2 leaves no seat outside the rounds"\n  METHOD     document\n  ACTION     read SCHEMA.json registry isolated_after_handshake\n  RETRIEVED  REVIEWER isolated_after_handshake true; option 2 assigns Astra to closer\n  RESULT     PASSED\n  SETTLE     \n  SOURCE     provenance=standards or official technical documentation grade=A quote_present=yes support=SUPPORTED scope="registry field" retrieved=2026-09-09 retraction=unchecked age=ok\n'
     sha = w(root, "stage-02-fmea/check.md", check2); L("DISPATCH", "write", file="stage-02-fmea/check.md", stage="CHECK", sha=sha)

@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 24,
+   "caught": 25,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 23,
+   "caught": 24,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 13.45,
+  "runtime_s": 12.53,
   "within_budget": true
  },
  "secondary": {
@@ -517,8 +517,10 @@
     "base": "hybrid",
     "spec": "7 capture records",
     "desc": "seat file bytes differ from the capture record byte_hash",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CAP-MATCH"
+    ]
    },
    {
     "id": "S09b",
@@ -526,8 +528,10 @@
     "base": "hybrid",
     "spec": "7 capture records",
     "desc": "capture char_count does not match the saved reply",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CAP-MATCH"
+    ]
    },
    {
     "id": "F01a",

@@ -401,6 +401,20 @@ def audit_run(run):
                     if did and did in capmap and (not capmap[did].get("completion_signal_observed") or capmap[did].get("partial")):
                         rep(False, f"CAP-{st}-{f}", "counted seat file has a complete capture record")
         rep(missing == 0, "DISP-2", f"every seat file cites a dispatch record ({missing} missing)")
+        # capture records describe the saved reply (spec 7): a real byte hash, matching the file, and the right length
+        badcap = []
+        for c in caps:
+            p_ = j(c.get("file", ""))
+            if not c.get("file") or not os.path.exists(p_):
+                continue
+            t = read(p_)
+            if not re.fullmatch(r"[0-9a-f]{64}", str(c.get("byte_hash", ""))):
+                badcap.append(f"{c['file']}: byte_hash is not a sha256")
+            elif c["byte_hash"] != hashlib.sha256(t.encode("utf-8")).hexdigest():
+                badcap.append(f"{c['file']}: byte_hash differs from the file")
+            if c.get("char_count") != len(t):
+                badcap.append(f"{c['file']}: char_count {c.get('char_count')} != {len(t)}")
+        rep(len(badcap) == 0, "CAP-MATCH", f"every capture record matches its saved reply ({badcap[:3]})")
         rep(stale == 0, "DISP-3", f"no seat file cites a dispatch from another stage ({stale} stale)")
     # neutrality of packets
     for pk in [j("review", "package.md")] + [j(st, "packet.md") for st in stages]:
