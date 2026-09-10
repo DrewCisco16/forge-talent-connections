@@ -375,10 +375,13 @@ def audit_run(run):
         for sec in DELIV_SECTIONS:
             rep(re.search(rf"^{re.escape(sec)}\b", d, re.M) is not None, f"DELIV-{sec.split()[0]}", f"deliverable has section {sec}")
         check_provenance_in_text(j("final", "DELIVERABLE.md"), ["3 WHY IT SURVIVED"], "final", run=run)
-        rep("PRIVATE DOCUMENT VERIFICATION" in d and not re.search(r"CONTRADICTIONS\s*-", d), "DELIV-14", "section 14 present and empty in DELIVERABLE.md (verifier lives in its own file)")
+        tail = d.split("PRIVATE DOCUMENT VERIFICATION", 1)[1] if "PRIVATE DOCUMENT VERIFICATION" in d else "x"
+        rep("PRIVATE DOCUMENT VERIFICATION" in d and not tail.strip(), "DELIV-14", "section 14 present and empty in DELIVERABLE.md (verifier lives in its own file, I3)")
         if os.path.exists(j("final", "verifier.md")) and os.path.exists(j("final", "DELIVERABLE_ASSEMBLED.md")):
             asm = read(j("final", "DELIVERABLE_ASSEMBLED.md"))
             rep(asm.startswith(d.rstrip()[:200]), "WO-2", "assembled deliverable starts with the unedited DELIVERABLE.md")
+            ver = read(j("final", "verifier.md"))
+            rep(asm.rstrip().endswith(ver.rstrip()) and len(asm) >= len(d) + len(ver.rstrip()), "WO-3", "assembled deliverable is DELIVERABLE.md followed by verifier.md")
     # dispatch and capture records
     def jsonl(pth):
         return [json.loads(l) for l in read(pth).splitlines() if l.strip()] if os.path.exists(pth) else []

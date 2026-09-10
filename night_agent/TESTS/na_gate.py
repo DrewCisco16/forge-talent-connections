@@ -200,6 +200,11 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
             reasons.append("G-8 DELIVERABLE.md missing")
         if os.path.exists(j("final", "verifier.md")):
             reasons.append("G-8 verifier.md already exists")
+        if os.path.exists(j("final", "DELIVERABLE.md")):
+            d = read(j("final", "DELIVERABLE.md"))
+            tail = d.split("PRIVATE DOCUMENT VERIFICATION", 1)[1] if "PRIVATE DOCUMENT VERIFICATION" in d else ""
+            if tail.strip():
+                reasons.append("G-8 DELIVERABLE.md section 14 already has content; the verifier output goes to verifier.md, never into the deliverable (I3)")
 
     elif stage == "DECIDE":  # G-9
         if not record:

@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 25,
+   "caught": 26,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 24,
+   "caught": 25,
    "total": 34
   }
  },
@@ -15,7 +15,7 @@
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 5,
+   "blocked": 6,
    "total": 10
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.53,
+  "runtime_s": 12.28,
   "within_budget": true
  },
  "secondary": {
@@ -220,7 +220,8 @@
     "desc": "deliverable section 2 names an option never created in GENERATE",
     "status": "CAUGHT",
     "rules": [
-     "NOOPT-final"
+     "NOOPT-final",
+     "WO"
     ]
    },
    {
@@ -539,8 +540,11 @@
     "base": "hybrid",
     "spec": "4.8, I3",
     "desc": "verifier output pasted under section 14 of DELIVERABLE.md",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "DELIV",
+     "WO"
+    ]
    },
    {
     "id": "F01b",
@@ -548,8 +552,10 @@
     "base": "hybrid",
     "spec": "4.8, I3",
     "desc": "DELIVERABLE_ASSEMBLED.md lacks the verifier tail",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "WO"
+    ]
    },
    {
     "id": "F02a",
@@ -965,8 +971,8 @@
     "spec": "4.8, I3, 15 G-8",
     "desc": "VERIFY when section 14 of DELIVERABLE.md already has content",
     "stage": "VERIFY",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-8 DELIVERABLE.md section 14 already has content; the verifier output goes to verifier.md, never into the deliverable (I3)"
    }
   ],
   "allows": [

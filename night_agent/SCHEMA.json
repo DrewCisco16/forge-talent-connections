@@ -565,7 +565,7 @@
     "G-5": "OPERATE: previous close.md, no stop reason, operator not already run, operator in the library, operator stages below max_operators",
     "G-6": "REVIEW: last close.md, reviewer handshake exactly once and before the first GENERATE send, no reviewer sends after it",
     "G-7": "FINAL: DELIVERABLE.md absent, kills-all.md and metrics-summary.json present, review checked or NO_OUTSIDE_REVIEW",
-    "G-8": "VERIFY: DELIVERABLE.md present, verifier.md absent",
+    "G-8": "VERIFY: DELIVERABLE.md present with an empty section 14, verifier.md absent",
     "G-9": "DECIDE=KEEP: repeat_value present, delta beyond noise or MIN_DELTA, guardrails within tolerance, constraints checked",
     "G-10": "MERGED lines: provenance tag and PASSED claim ids (post hoc, na_check.py)",
     "G-11": "SEND: unique dispatch_id, observed conversation_url equals registry URL, previous slot for the seat not uncertain, reservation covers the tail; a reply citing an earlier stage's dispatch_id is stale"
