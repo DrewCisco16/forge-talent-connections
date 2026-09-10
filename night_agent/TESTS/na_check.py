@@ -198,6 +198,15 @@ def audit_run(run):
                     opts = set(re.findall(r"^\s*(\d+)[\.\)]\s", m.group(1) if m else "", re.M))
                     new = opts - opts0
                     rep(len(new) == 0, f"NOOPT-{st}", f"no option numbers outside the generate list ({sorted(new)})")
+            # the same wall applies to the review package and the deliverable: no option that GENERATE did not create
+            for rel, sec in (("review/package.md", "OPTIONS STANDING"), ("final/DELIVERABLE.md", "2 WHAT SURVIVED")):
+                if os.path.exists(j(rel)):
+                    txt = read(j(rel))
+                    m = re.search(rf"^{re.escape(sec)}.*?$(.*?)(?=^(?:\d+ )?[A-Z][A-Z \-]{{3,}}\s*$|\Z)", txt, re.S | re.M)
+                    body = m.group(1) if m else ""
+                    opts = set(re.findall(r"^\s*(\d+)[\.\)]\s", body, re.M)) | {n for n in re.findall(r"\bOption (\d+)\b", body)}
+                    new = opts - opts0
+                    rep(len(new) == 0, f"NOOPT-{rel.split('/')[0]}", f"{rel} {sec}: no option numbers outside the generate list ({sorted(new)})")
 
     # reviewer isolation: no send to REVIEWER between handshake and REVIEW stage
     sends = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") in ("send", "prompt")]

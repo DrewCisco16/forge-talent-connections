@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 8,
+   "caught": 9,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 8,
+   "caught": 9,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.54,
+  "runtime_s": 12.85,
   "within_budget": true
  },
  "secondary": {
@@ -218,8 +218,10 @@
     "base": "hybrid",
     "spec": "4.1",
     "desc": "deliverable section 2 names an option never created in GENERATE",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "NOOPT-final"
+    ]
    },
    {
     "id": "O01b",
@@ -227,8 +229,10 @@
     "base": "hybrid",
     "spec": "4.1",
     "desc": "review package OPTIONS STANDING lists an option never created",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "NOOPT-review"
+    ]
    },
    {
     "id": "O02a",
