@@ -1,21 +1,21 @@
 {
  "primary": {
   "DEV": {
-   "caught": 11,
+   "caught": 12,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 11,
+   "caught": 12,
    "total": 34
   }
  },
  "guard": {
   "DEV": {
-   "blocked": 1,
+   "blocked": 2,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 2,
+   "blocked": 3,
    "total": 10
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 10.8,
+  "runtime_s": 12.1,
   "within_budget": true
  },
  "secondary": {
@@ -284,8 +284,10 @@
     "base": "hybrid",
     "spec": "4.4, 15 G-5",
     "desc": "the same operator ran twice in one night",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "OP-ONCE"
+    ]
    },
    {
     "id": "O07b",
@@ -293,8 +295,10 @@
     "base": "hybrid",
     "spec": "6",
     "desc": "more operator stages than gate max_operators",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "OP-MAX"
+    ]
    },
    {
     "id": "O05a",
@@ -779,8 +783,8 @@
     "spec": "6, 15 G-5",
     "desc": "OPERATE when max_operators is already reached",
     "stage": "OPERATE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-5 max_operators 2 already reached (2 operator stages)"
    },
    {
     "id": "GA04b",
@@ -789,8 +793,8 @@
     "spec": "4.4, 15 G-5",
     "desc": "OPERATE with an operator that is not in the library",
     "stage": "OPERATE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-5 operator FOO is not in the SCHEMA operator library"
    },
    {
     "id": "GA05a",

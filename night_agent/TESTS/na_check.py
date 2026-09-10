@@ -19,6 +19,8 @@ CLAIM = re.compile(r"^CLAIM\s+(\S+)\s+\[([^\]]+)\]\s+\"(.*)\"\s*$")
 DELIV_SECTIONS = ["1 THE RESULT", "2 WHAT SURVIVED", "3 WHY IT SURVIVED", "4 OBJECTIVE RESULTS", "5 WHAT DIED AND WHY",
                   "6 TRADE-OFFS", "7 OUTSIDE REVIEW", "8 STILL OPEN", "9 CONFIDENCE", "10 RUN INTEGRITY", "11 EFFICIENCY", "12 NEXT QUESTION"]
 
+SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SCHEMA.json")
+
 results = []
 
 
@@ -173,6 +175,7 @@ def audit_run(run):
     if not os.path.exists(j("log.jsonl")):
         return
     log = [json.loads(l) for l in read(j("log.jsonl")).splitlines() if l.strip()]
+    gate = json.load(open(j("gate/gate.json"))) if os.path.exists(j("gate/gate.json")) else {}
     stages = sorted(d for d in os.listdir(run) if re.match(r"stage-\d\d-", d))
     registry = json.load(open(j("registry.json"))) if os.path.exists(j("registry.json")) else {}
     seat_ids = {s.get("id") for s in registry.get("seats", [])}
@@ -207,6 +210,15 @@ def audit_run(run):
                 check_provenance_in_text(j(st, "close.md"), ["MERGED"], st, run=run, upto=st)
         elif not st.endswith("-direct"):
             rep(False, f"FILE-{st}-close", "close.md exists")
+
+    # operator selection: each operator at most once, inside the library, within the gate's max_operators (spec 4.4, 6)
+    ops = [st.split("-", 2)[2].upper() for st in stages if not st.endswith(("-generate", "-direct"))]
+    library = set((json.load(open(SCHEMA)).get("operators", {}) if os.path.exists(SCHEMA) else {}).keys())
+    rep(len(ops) == len(set(ops)), "OP-ONCE", f"no operator ran twice ({sorted(o for o in set(ops) if ops.count(o) > 1)})")
+    if library:
+        rep(set(ops) <= library, "OP-LIB", f"every operator stage is in the SCHEMA library ({sorted(set(ops) - library)})")
+    max_ops = (gate.get("budget", {}) or {}).get("max_operators", 4) if os.path.exists(j("gate/gate.json")) else 4
+    rep(len(ops) <= int(max_ops), "OP-MAX", f"operator stages {len(ops)} <= max_operators {max_ops}")
 
     # claim ids are unique across the run (otherwise a cited id is ambiguous and CIDP means nothing)
     seen = {}

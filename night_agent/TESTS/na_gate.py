@@ -18,6 +18,7 @@ Exit 0 on ALLOW, 1 on BLOCK. Implements NIGHT_AGENT_SPEC.md section 15. Reads fi
 import sys, os, re, json, argparse
 
 STATUSES = ["PASSED", "FAILED", "JUDGEMENT CALL", "NOT TESTABLE", "BLOCKED", "INCONCLUSIVE"]
+SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SCHEMA.json")
 STAMP = re.compile(r"^STAGE (\d\d) ([A-Z\-]+) SEAT ([A-Za-z0-9]+) TIME (\d\d:\d\d)\s*$")
 CLAIM = re.compile(r"^CLAIM\s+(\S+)\s+\[([^\]]+)\]\s+\"(.*)\"\s*$")
 
@@ -145,6 +146,13 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
             done = [d for d in st if d.lower().endswith("-" + op.lower())]
             if done:
                 reasons.append(f"G-5 operator {op} already run ({done[0]})")
+            library = (jload(SCHEMA, {}) or {}).get("operators", {})
+            if library and op.upper() not in library:
+                reasons.append(f"G-5 operator {op} is not in the SCHEMA operator library")
+            ran = [d for d in st if not d.endswith(("-generate", "-direct"))]
+            max_ops = int((gate.get("budget", {}) or {}).get("max_operators", 4) or 4)
+            if len(ran) >= max_ops:
+                reasons.append(f"G-5 max_operators {max_ops} already reached ({len(ran)} operator stages)")
         else:
             reasons.append("G-5 --op required")
 
