@@ -1,7 +1,7 @@
 {
  "primary": {
   "DEV": {
-   "caught": 35,
+   "caught": 36,
    "total": 36
   },
   "HOLDOUT": {
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.5,
+  "runtime_s": 12.88,
   "within_budget": true
  },
  "secondary": {
@@ -795,8 +795,10 @@
     "base": "hybrid",
     "spec": "1, 2",
     "desc": "experiments were executed with no READY EXECUTOR seat",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXEC-READY"
+    ]
    },
    {
     "id": "G02b",
@@ -806,6 +808,7 @@
     "desc": "gate CLASS EXPERIMENT with no EXECUTOR registered at all",
     "status": "CAUGHT",
     "rules": [
+     "EXEC-READY",
      "LAYOUT-EXPERIMENT"
     ]
    }

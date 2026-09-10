@@ -29,8 +29,8 @@ def conforming(root):
         log.append(d)
 
     w(root, "ask.md", "Should the closer seat be Fable or Astra?\n")
-    w(root, "registry.json", json.dumps({"seats": [{"id": s, "ready": True} for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER"]]}))
-    for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER"]:
+    w(root, "registry.json", json.dumps({"seats": [{"id": s, "ready": True} for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER", "EXECUTOR"]]}))
+    for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER", "EXECUTOR"]:
         L(s, "handshake", stage="REGISTRY")
     w(root, "gate/gate.md", "CLASS - DELIBERATION\n")
     w(root, "gate/gate.json", json.dumps({"class": "DELIBERATION", "kind": "answer", "min_crew": 2, "profile": "adaptive"}))
@@ -102,7 +102,7 @@ def conforming(root):
     w(root, "log.jsonl", "\n".join(json.dumps(l) for l in log) + "\n")
     w(root, "dispatch.jsonl", "\n".join(json.dumps(d) for d in dispatch) + "\n")
     w(root, "capture.jsonl", "\n".join(json.dumps(c) for c in capture) + "\n")
-    w(root, "registry.json", json.dumps({"seats": [{"id": s, "ready": True, "url": f"https://chat.example/{s}", "role": "closer" if s == "CLOSER" else ("generator" if s.startswith("G") else s.lower())} for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER"]]}))
+    w(root, "registry.json", json.dumps({"seats": [{"id": s, "ready": True, "url": f"https://chat.example/{s}", "role": "closer" if s == "CLOSER" else ("generator" if s.startswith("G") else s.lower())} for s in ["G1", "G2", "G3", "G4", "CLOSER", "REVIEWER", "VERIFIER", "EXECUTOR"]]}))
 
 
 FAULTS = {

@@ -484,6 +484,10 @@ def audit_run(run):
     rep(len(fw) <= 1, "FINAL-ONCE", f"DELIVERABLE.md written at most once in the log ({len(fw)})")
     # experiments: KEEP needs a repeat run
     expdir = j("experiments")
+    if os.path.isdir(expdir) or gate.get("class") == "EXPERIMENT":
+        # spec 1, 2: experiments are executed only by a READY EXECUTOR seat; without one the class is HYBRID-NO-EXEC and the loop is a plan
+        execs = [x for x in registry.get("seats", []) if (x.get("role") == "executor" or x.get("id") == "EXECUTOR") and x.get("ready")]
+        rep(len(execs) >= 1, "EXEC-READY", f"a READY EXECUTOR seat is registered for the executed experiments ({len(execs)})")
     if os.path.isdir(expdir):
         xlog = {x.get("id"): x for x in jsonl(os.path.join(expdir, "log.jsonl"))}
         for d in sorted(os.listdir(expdir)):
