@@ -5,7 +5,7 @@
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 4,
+   "caught": 5,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.46,
+  "runtime_s": 11.96,
   "within_budget": true
  },
  "secondary": {
@@ -97,8 +97,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "document claim PASSED, SOURCE line lacks support=",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-3-stage-01-generate"
+    ]
    },
    {
     "id": "E04a",

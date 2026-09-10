@@ -60,6 +60,8 @@ def check_source_lines(claims, tag):
             src = c.get("source", "")
             rep(bool(src), f"SRC-0-{tag}-{c['id']}", "source/document claim has a SOURCE line")
             m = re.search(r"support=([A-Z_]+)", src)
+            if src:
+                rep(m is not None and m.group(1) in SUPPORT_OK, f"SRC-3-{tag}-{c['id']}", "SOURCE line carries a support= status from the six")
             if m:
                 exp = SUPPORT_OK.get(m.group(1))
                 if c["result"] == "PASSED":
