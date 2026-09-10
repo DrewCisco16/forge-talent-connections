@@ -261,6 +261,11 @@ def audit_run(run):
     if reused:
         rep("CONTAMINATION" in flags_all, "FRESH", f"reused conversation(s) {reused} are flagged CONTAMINATION")
 
+    # flag vocabulary (spec 10): a flag the schema does not define is a flag the scorecard cannot show
+    if flags_all and os.path.exists(SCHEMA):
+        known = set(json.load(open(SCHEMA)).get("flags", []))
+        rep(flags_all <= known, "FLAG-VOCAB", f"every recorded flag is a SCHEMA flag ({sorted(flags_all - known)})")
+
     # minimum crew floor (spec 2: two generators plus a closer; below that the night stops with CREW)
     if gate:
         rep(int(gate.get("min_crew", 2)) >= 2, "GATE-MINCREW", f"gate min_crew is at least 2 ({gate.get('min_crew')})")
