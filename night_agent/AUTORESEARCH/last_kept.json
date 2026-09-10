@@ -5,7 +5,7 @@
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 33,
+   "caught": 34,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.95,
+  "runtime_s": 12.63,
   "within_budget": true
  },
  "secondary": {
@@ -764,8 +764,10 @@
     "base": "direct",
     "spec": "DISPATCH 5",
     "desc": "DIRECT stage has two generator replies",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CREW-DIRECT-stage-01-direct"
+    ]
    },
    {
     "id": "G01a",

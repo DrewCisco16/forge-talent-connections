@@ -238,6 +238,8 @@ def audit_run(run):
         gate = json.load(open(j("gate/gate.json")))
         mincrew = 1 if st.endswith("-direct") else gate.get("min_crew", 2)
         rep(len(seats) >= mincrew, f"CREW-{st}", f"{len(seats)} seat replies >= min_crew {mincrew}")
+        if st.endswith("-direct"):  # DISPATCH 5: DIRECT is one generator answering; two replies is a GENERATE without a wall
+            rep(len(seats) == 1, f"CREW-DIRECT-{st}", f"DIRECT stage has exactly one generator reply ({len(seats)})")
         ready_gens = [x for x in registry.get("seats", []) if x.get("ready") and (x.get("role") == "generator" or (not x.get("role") and str(x.get("id", "")).startswith("G")))]
         if ready_gens and not st.endswith("-direct") and len(seats) < len(ready_gens):
             rep("REDUCED_CREW" in flags_all, f"REDUCED-{st}", f"{len(seats)} replies from {len(ready_gens)} READY generators is flagged REDUCED_CREW (spec 7)")
