@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.5,
+  "runtime_s": 12.72,
   "within_budget": true
  },
  "secondary": {
@@ -390,7 +390,7 @@
     "rules": []
    },
    {
-    "id": "S03b",
+    "id": "S10b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "DISPATCH 6",
@@ -588,7 +588,7 @@
     "rules": []
    },
    {
-    "id": "F06b",
+    "id": "F08b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "10",
@@ -642,7 +642,7 @@
     "rules": []
    },
    {
-    "id": "X02b",
+    "id": "X04b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "5 COMPARE",
@@ -678,7 +678,7 @@
     "rules": []
    },
    {
-    "id": "D01b",
+    "id": "D02b",
     "split": "HOLDOUT",
     "base": "direct",
     "spec": "DISPATCH 5",
@@ -741,7 +741,7 @@
     "reason": ""
    },
    {
-    "id": "GA01b",
+    "id": "GA11b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "7, 15 G-11",
@@ -781,7 +781,7 @@
     "reason": ""
    },
    {
-    "id": "GA03b",
+    "id": "GA12b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "5, 15 G-9",
@@ -881,7 +881,7 @@
     "reason": ""
    },
    {
-    "id": "GA08b",
+    "id": "GA13b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "7, 15 G-6",
@@ -901,7 +901,7 @@
     "reason": ""
    },
    {
-    "id": "GA09b",
+    "id": "GA14b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "4.7, 15 G-7",
@@ -921,7 +921,7 @@
     "reason": ""
    },
    {
-    "id": "GA10b",
+    "id": "GA15b",
     "split": "HOLDOUT",
     "base": "hybrid",
     "spec": "4.8, I3, 15 G-8",
