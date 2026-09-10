@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 27,
+   "caught": 28,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 26,
+   "caught": 27,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.66,
+  "runtime_s": 12.96,
   "within_budget": true
  },
  "secondary": {
@@ -585,8 +585,10 @@
     "base": "hybrid",
     "spec": "2, 10",
     "desc": "no review stage and no NO_OUTSIDE_REVIEW flag",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "FLAG-NO-REVIEW"
+    ]
    },
    {
     "id": "F03b",
@@ -594,8 +596,10 @@
     "base": "hybrid",
     "spec": "2, 10",
     "desc": "no verifier file and no NO_VERIFIER flag",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "FLAG-NO-VERIFIER"
+    ]
    },
    {
     "id": "F04a",

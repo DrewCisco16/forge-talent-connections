@@ -374,6 +374,13 @@ def audit_run(run):
                 bad += 1
     rep(bad == 0, "WO-1", f"every hashed file unchanged since its write log ({bad} altered)")
 
+    # a run without an outside review or a verifier is labelled, never silently completed (spec 2, 10)
+    if os.path.exists(j("final", "DELIVERABLE.md")):
+        if not os.path.exists(j("review", "review.md")):
+            rep("NO_OUTSIDE_REVIEW" in flags_all, "FLAG-NO-REVIEW", "no review.md: the run carries NO_OUTSIDE_REVIEW")
+        if not os.path.exists(j("final", "verifier.md")):
+            rep("NO_VERIFIER" in flags_all, "FLAG-NO-VERIFIER", "no verifier.md: the run carries NO_VERIFIER")
+
     # final
     if os.path.exists(j("final", "DELIVERABLE.md")):
         d = read(j("final", "DELIVERABLE.md"))
