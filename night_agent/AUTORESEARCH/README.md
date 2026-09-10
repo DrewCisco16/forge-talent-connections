@@ -47,7 +47,7 @@ REVERT otherwise (`git checkout` of the last kept tree). INCONCLUSIVE for the DE
 
 One mutation per experiment. A mutation is one rule (one checker rule, one guard clause, or one consistency fix across the documents it touches). Where a rule requires the spec, SCHEMA and code to change together, that is one mutation, labelled INTERACTION, because the spec says a guard that disagrees with the spec is a bug in the guard.
 
-Budget: at most 40 experiments; eval must finish inside 120 s. Stop on PLATEAU (three consecutive non-KEEP), BUDGET, or SUFFICIENT (every case caught or blocked, every guardrail at 0, every assertion passing).
+Budget: at most 40 experiments (raised to 48 by obj-007 in log.jsonl, before experiment 33); eval must finish inside 120 s. Stop on PLATEAU (three consecutive non-KEEP), BUDGET, or SUFFICIENT (every case caught or blocked, every guardrail at 0, every assertion passing).
 
 ## The trail
 
