@@ -219,6 +219,9 @@ def audit_run(run):
         rep(set(ops) <= library, "OP-LIB", f"every operator stage is in the SCHEMA library ({sorted(set(ops) - library)})")
     max_ops = (gate.get("budget", {}) or {}).get("max_operators", 4) if os.path.exists(j("gate/gate.json")) else 4
     rep(len(ops) <= int(max_ops), "OP-MAX", f"operator stages {len(ops)} <= max_operators {max_ops}")
+    if gate.get("profile") == "v10-fixed":  # spec 4.4: the fixed profile runs FMEA, IDOV, TRIZ, BAYES in that order
+        fixed = (json.load(open(SCHEMA)).get("profiles", {}).get("v10-fixed", {}).get("order") if os.path.exists(SCHEMA) else None) or ["FMEA", "IDOV", "TRIZ", "BAYES"]
+        rep(ops == fixed[:len(ops)], "OP-FIXED", f"v10-fixed operators ran in the fixed order ({ops} vs {fixed})")
 
     # claim ids are unique across the run (otherwise a cited id is ambiguous and CIDP means nothing)
     seen = {}
