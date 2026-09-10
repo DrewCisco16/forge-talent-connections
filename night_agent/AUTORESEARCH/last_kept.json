@@ -24,14 +24,14 @@
   "bases_not_clean": [],
   "false_blocks": 0,
   "package_check_failures": 0,
-  "package_check_total": 59,
+  "package_check_total": 76,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.44,
+  "runtime_s": 11.98,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 14,
+  "package_assertions_passing": 15,
   "total": 15
  },
  "detail": {
@@ -1186,7 +1186,7 @@
     "id": "PA07",
     "spec": "14",
     "desc": "na_gate.py and na_check.py docstrings carry the SCHEMA version",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA08",

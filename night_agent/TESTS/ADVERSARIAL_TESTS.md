@@ -2,9 +2,9 @@
 
 Two layers. Layer A is executable now (TESTS/na_check.py and TESTS/make_fixture.py). Layer B is a watched-run protocol that requires the real seats; it is specified here so results can be recorded, not claimed.
 
-## Layer A: executable conformance tests (PROVEN BY TEST on 2026-09-10, v11.2)
+## Layer A: executable conformance tests (PROVEN BY TEST on 2026-09-10, v11.3)
 
-Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_check.py --package .`
+Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_check.py --package .` then `python3 AUTORESEARCH/eval.py`
 
 | Test id | Property | Injected fault | Checker rule | Result |
 |---|---|---|---|---|
@@ -29,9 +29,10 @@ Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_chec
 | T-NEUT-1 | Packet neutrality | F19: winner label in the review package | NEUT | CAUGHT |
 | T-GATE-G1..G11 | Transition guards | 23 allow-or-block expectations (see make_fixture.py GUARD_TESTS) | na_gate.py | 23/23 met |
 | T-MUT-1 | Candidate-mutation sensitivity | EVID-2 rejection bypassed in a copy of the checker, oracle fixed | make_fixture.py | F01 escapes that rule, as required |
-| T-PKG | Package consistency | 59 checks on spec, DISPATCH, schema, prompts (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label) | PKG-* | 59/59 PASS |
+| T-PKG | Package consistency | 76 checks on spec, DISPATCH, schema, prompts, template and tests (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label; v11.3 adds flag lists, guard rows, versions, DEPRIORITIZED vocabulary, OPTIONS STANDING) | PKG-* | 76/76 PASS |
+| T-AR | Spec-derived corpus outside the fixture (AUTORESEARCH/holdout_corpus.py) | 70 run-folder faults, 20 transition cases that must block, 18 that must allow, 15 package assertions, DEV/HOLDOUT split by rule family | na_check.py, na_gate.py | 70/70 caught, 20/20 blocked, 0 false failures, 0 false blocks, 15/15 assertions (from 6/70, 1/20, 3 false failures, 1 false block, 3/15 at v11.2) |
 
-Known limits of Layer A: the leak heuristic is a shingle match and cannot detect paraphrased leaks; the provenance check only inspects list-style lines; hash checks require Dispatch to log sha256 on every write (DISPATCH 6 requires it).
+Known limits of Layer A: the leak heuristic is a shingle match and cannot detect paraphrased leaks; the provenance check only inspects list-style lines; hash checks require Dispatch to log sha256 on every write (DISPATCH 6 requires it); the T-AR corpus was written by the same agent that then edited the checker, so in spec section 8 terms it is DEV-grade, and a HOLDOUT set that carries full weight needs a second author who has not read the checker.
 
 ## Layer B: watched-run protocol (NOT YET TESTED)
 

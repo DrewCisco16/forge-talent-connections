@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Night Agent v11 conformance checker.
+"""Night Agent v11.3 conformance checker.
 
 Usage:
   python3 na_check.py <run_folder>            audit one run folder, exit 1 on any FAIL
@@ -575,6 +575,40 @@ def audit_package(pkg):
     # prompt width for the workbook
     for name, txt in prompts.items():
         rep(max(len(l) for l in txt.splitlines()) <= 72, f"PKG-WIDTH-{name}", "prompt lines fit 72 columns")
+    # ---- consistency rules found by the v11.3 autoresearch pass (AUTORESEARCH/RESULTS.md)
+    template = read(os.path.join(pkg, "MORNING_DELIVERABLE_TEMPLATE.md"))
+    body = []
+    skip = False
+    for line in spec.splitlines():  # spec minus change logs, the I1..I11 table and the pilot record, which quote retired words
+        if line.startswith(("## 12.", "## 19.")):
+            skip = True
+        elif line.startswith("## "):
+            skip = False
+        if not skip and not line.startswith("Change log") and "formerly" not in line:
+            body.append(line)
+    body = "\n".join(body)
+    rep("STRUCTURAL" not in body and "structural" not in json.dumps(schema) and "structural" not in template.lower(),
+        "PKG-DEPRI-ALL", "no STRUCTURAL kill vocabulary in the spec body, SCHEMA or the morning template")
+    sec10 = re.search(r"^## 10\..*?(?=^## )", spec, re.S | re.M)
+    sec10 = sec10.group(0) if sec10 else ""
+    rep(all(re.search(rf"\b{f}\b", sec10) for f in schema["flags"]), "PKG-FLAGS-SPEC", "spec section 10 names every SCHEMA flag")
+    m = re.search(r"^10 RUN INTEGRITY.*?flags:([^>]*)>", template, re.S | re.M)
+    listed = set(re.findall(r"[A-Z][A-Z_]+", m.group(1))) if m else set()
+    rep(listed == set(schema["flags"]), "PKG-FLAGS-TEMPLATE", f"morning template flag list equals SCHEMA flags ({sorted(listed ^ set(schema['flags']))})")
+    gate_src = read(os.path.join(pkg, "TESTS", "na_gate.py"))
+    check_src = read(os.path.join(pkg, "TESTS", "na_check.py"))
+    for g in schema.get("transition_guards", {}):
+        if g.startswith("G-"):
+            rep(re.search(rf"^\| {re.escape(g)} \|", spec, re.M) is not None and (g in gate_src or g in check_src), f"PKG-GUARD-{g}", f"{g} has a spec section 15 row and appears in the guard or checker")
+    v = schema["schema_version"]
+    mv = re.search(r"^Version: (\d+\.\d+\.\d+)", spec, re.M)
+    readme = read(os.path.join(pkg, "README.md")).splitlines()[0]
+    rep(bool(mv) and mv.group(1) == v and v in readme and v in disp.splitlines()[0], "PKG-VERSION", f"spec, SCHEMA, README and DISPATCH state version {v}")
+    tag = "v" + ".".join(v.split(".")[:2])
+    rep(tag in gate_src.splitlines()[1] and tag in check_src.splitlines()[1], "PKG-VERSION-TOOLS", f"na_gate.py and na_check.py docstrings carry {tag}")
+    merge = prompts["P4_close.md"].split("If MODE is MERGE", 1)[-1]
+    rep(re.search(r"^OPTIONS STANDING\s+-", merge, re.M) is not None and "CONFLICT, OPTIONS STANDING, METRICS" in disp,
+        "PKG-OPTSTANDING", "P4 MERGE mode writes OPTIONS STANDING and DISPATCH 3.5 expects it")
 
 
 if __name__ == "__main__":

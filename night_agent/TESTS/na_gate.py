@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Night Agent v11.1 transition guard. Prints ALLOW or BLOCK with reasons.
+"""Night Agent v11.3 transition guard. Prints ALLOW or BLOCK with reasons.
 
 Usage:
   python3 na_gate.py <run> GATE

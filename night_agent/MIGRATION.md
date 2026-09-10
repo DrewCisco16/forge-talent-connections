@@ -1,4 +1,4 @@
-# Migration from Night Agent v10 to v11.2
+# Migration from Night Agent v10 to v11.3
 
 Ordered. Each step names what stops being true. No legacy behaviour is carried forward "for fidelity".
 
@@ -16,3 +16,4 @@ Ordered. Each step names what stops being true. No legacy behaviour is carried f
 
 What must never be preserved from v10: an edited proof file, a bare PASSED, an unnamed non-negotiable, a prompt count in prose, a vendor benchmark presented as independent, a rule that contradicts another rule.
 12. Pilot integration (v11.2): before the first v11.2 night, write architecture/criterion.json and the gate's SPENDING_PERMISSION and PAYLOAD_AUTHORIZATION; confirm Dispatch writes dispatch.jsonl and capture.jsonl and runs `na_gate.py SEND` before every send; confirm captures come from message boundaries; retire the words STRUCTURAL kill from every file (na_check PKG-DEPRI fails otherwise). The pilot's D-LINEAR, D-LEDGER and D-TWOTRACK alternatives enter the paired comparison as named arms once their definitions are copied from the pilot package.
+13. v11.3 (autoresearch pass): P4 MERGE mode now writes a seventh section, OPTIONS STANDING, and the METRICS field structural_kills is renamed deprioritized (P4, SCHEMA stage_record, ledger, architecture_run_line); registry.json seat records carry fresh and prior_history; gate.json OBJECTIVES and experiments/baseline.json carry direction, without which G-9 blocks every KEEP; SCHEMA states gain DIRECT. Guards G-2 to G-9 and G-11 block more than in v11.2 (Section 15 rows), so a Dispatch skill file generated from v11.2 must be regenerated. The three WORKBOOKS PDFs were built from v11.2 prompts and are STALE for P4 until rebuilt with WORKBOOKS/build/ (reportlab and the font folder are required and were not available where v11.3 was produced).
