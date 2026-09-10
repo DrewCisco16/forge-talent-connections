@@ -105,6 +105,8 @@ def check_evidence_file(path, tag):
 
 
 # ------------------------------------------------------------------ provenance in merge / final
+# Guard G-10 (spec 15): every MERGED line carries a provenance tag and cites claim ids that are PASSED in a check
+# file of this or an earlier stage. It is enforced here, post hoc, by the PROV, CID and CIDP rules below.
 CIDS = re.compile(r"\{([^}]*)\}")
 
 
