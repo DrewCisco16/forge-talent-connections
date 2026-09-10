@@ -329,6 +329,17 @@ def audit_run(run):
                 leaks += 1
         rep(leaks == 0, "ISO-1", f"no shared 12-word sequences across generate files beyond prompt boilerplate ({leaks} suspicious pairs)")
 
+    # every file Dispatch produced has a log record (DISPATCH 6: one line per action, file written, sha256)
+    logged_files = {l.get("file") for l in log if l.get("file")}
+    unlogged = []
+    for top in stages + ["review", "final"]:
+        if os.path.isdir(j(top)):
+            for f in sorted(os.listdir(j(top))):
+                rel = f"{top}/{f}"
+                if os.path.isfile(j(rel)) and rel not in logged_files:
+                    unlogged.append(rel)
+    rep(len(unlogged) == 0, "LOG-ALL", f"every stage, review and final file has a log record ({unlogged})")
+
     # write-once: file hashes recorded in log must match disk
     hashed = [l for l in log if l.get("sha256") and l.get("file")]
     bad = 0

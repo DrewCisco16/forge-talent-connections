@@ -5,7 +5,7 @@
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 19,
+   "caught": 21,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 13.02,
+  "runtime_s": 13.16,
   "within_budget": true
  },
  "secondary": {
@@ -407,8 +407,10 @@
     "base": "hybrid",
     "spec": "DISPATCH 6",
     "desc": "a seat file exists with no log record of its write",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "LOG-ALL"
+    ]
    },
    {
     "id": "S04a",
@@ -564,8 +566,10 @@
     "base": "hybrid",
     "spec": "2, 10",
     "desc": "no verifier file and no NO_VERIFIER flag",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "LOG-ALL"
+    ]
    },
    {
     "id": "F04a",

@@ -69,6 +69,7 @@ def conforming(root):
     sha = w(root, "review/package.md", pkg); L("DISPATCH", "write", file="review/package.md", stage="REVIEW", sha=sha)
     L("REVIEWER", "send", file="review/review.md", stage="REVIEW")
     w(root, "review/review.md", "HITS\n1. Claim 1 arithmetic: five merges plus one final is six, but a reserve of one is budget not usage. Check: read spec 2.\nGAPS\n1. Cost of the reviewer seat not stated. Settle: count messages.\nHOLDS\n1. Claim 5 holds: isolation requires an outside seat.\nOPEN\nnone\n")
+    L("DISPATCH", "write", file="review/check-review.md", stage="CHECK_REVIEW")
     w(root, "review/check-review.md", 'CLAIM H1 [R] "Reserve is budget, not usage"\n  METHOD     document\n  ACTION     read spec section 2 and DISPATCH 1.5\n  RETRIEVED  "Reserve two closer messages beyond the plan"\n  RESULT     PASSED\n  SETTLE     \n  SOURCE     provenance=standards or official technical documentation grade=A quote_present=yes support=SUPPORTED scope="DISPATCH 1.5" retrieved=2026-09-09 retraction=unchecked age=ok\nCLAIM G1 [R] "Reviewer message cost not stated"\n  METHOD     sum\n  ACTION     counted reviewer sends in the plan\n  RETRIEVED  1 send, plus 1 possible re-prompt\n  RESULT     PASSED\n  SETTLE     \n')
     deliv = "\n".join([
         "1 THE RESULT", "Keep Fable as closer; use Astra as the isolated reviewer.",
@@ -87,7 +88,7 @@ def conforming(root):
     sha = w(root, "final/DELIVERABLE.md", deliv); L("CLOSER", "send", file="final/DELIVERABLE.md", stage="FINAL", sha=sha)
     ver = "CONTRADICTIONS\nnone\nCONFIRMED\n1. Claim 3 confirmed by NIGHT_AGENT_SPEC.md section 4.6\nNOT COVERED\nClaim 1\nMATERIAL OMISSIONS\nnone\n"
     w(root, "final/verifier.md", ver); L("VERIFIER", "send", file="final/verifier.md", stage="VERIFY")
-    w(root, "final/DELIVERABLE_ASSEMBLED.md", deliv + "\n" + ver)
+    w(root, "final/DELIVERABLE_ASSEMBLED.md", deliv + "\n" + ver); L("DISPATCH", "write", file="final/DELIVERABLE_ASSEMBLED.md", stage="DELIVER")
     # experiments (a HYBRID distinguishing test) with a valid KEEP
     w(root, "experiments/baseline.json", json.dumps({"metric": "runtime_s", "baseline_value": 10.0, "noise": 0.3, "runs": 2}))
     w(root, "experiments/exp-001/record.json", json.dumps({"id": "exp-001", "hypothesis": "caching halves runtime", "delta": -4.0, "noise": 0.3,
