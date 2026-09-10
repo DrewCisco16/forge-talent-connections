@@ -1198,6 +1198,13 @@ def classify_source(identifier: str) -> SourceClass:
     if not ident:
         return SourceClass.INADMISSIBLE
 
+    # ASTRA-15. A DOI IS A DOI HOWEVER IT IS WRITTEN. "doi:", "DOI: ",
+    # "https://doi.org/" and "https://dx.doi.org/" are the forms models
+    # actually write, and every one of them was INADMISSIBLE because the
+    # pattern below anchors on the bare "10." prefix. A dissertation's real
+    # citations were being refused for their punctuation.
+    ident = _DOI_PREFIX.sub("", ident).strip()
+
     low = ident.lower()
 
     if any(h in low for h in _PREPRINT_HOSTS):
@@ -1216,6 +1223,10 @@ def classify_source(identifier: str) -> SourceClass:
             return SourceClass.EMPIRICAL_DATA
         return SourceClass.PEER_REVIEWED
     return SourceClass.INADMISSIBLE
+
+
+_DOI_PREFIX = re.compile(
+    r"^(?:doi\s*:\s*|https?://(?:dx\.)?doi\.org/)", re.IGNORECASE)
 
 
 class SourceAdmissibilityGate:
@@ -1880,6 +1891,10 @@ class PassDivergence:
     different fixes, and "seat_1 failed" cannot distinguish them. Recovering
     the distinction otherwise costs a second paid run.
     """
+    nesting_warning: str | None = None
+    """ASTRA-02: not unanimous, but every claim set nests inside another.
+    Padding, reported by its own name; collapse_warning keeps meaning
+    unanimity. Declared last so positional construction is unchanged."""
 
 
 def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDivergence:
@@ -1922,6 +1937,13 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
         jaccards.append(1.0 if not union else len(a & b) / len(union))
     mean_j = sum(jaccards) / len(jaccards)
     unanimous = len(set(sets)) == 1
+    # ASTRA-02, mirrored from convergence.nested(): padding one seat with
+    # extra claims must not switch the collapse warning off.
+    # A silent seat's empty set is inside every set; silence is reported by
+    # its own name, so it is excluded here.
+    nested_sets = (not unanimous and not silent
+                   and not any(not x for x in sets)
+                   and all(a <= b or b <= a for a, b in itertools.combinations(sets, 2)))
 
     warning = None
     if unanimous and not silent:
@@ -1932,9 +1954,19 @@ def measure_divergence(p: Pass, responses: Sequence[SeatResponse]) -> PassDiverg
             f"agree exactly. Treat the agreement as evidence the seats share a "
             f"failure mode and the panel is worth ~1 effective seat."
         )
+    nesting = None
+    if nested_sets:
+        nesting = (
+            f"The {len(sets)} seats' claim sets NEST on '{p.name}': every "
+            f"smaller set is contained in a larger one, so they agree on every "
+            f"shared claim and differ only by what one seat added. Extra claims "
+            f"on one seat do not make it independent. Treat this as a "
+            f"monoculture signal with padding, not as disagreement."
+        )
     return PassDivergence(
         p.id, p.name, len(responses), [r.seat_id for r in responding], errored,
         len(set(sets)), mean_j, unanimous, silent, warning, seat_errors,
+        nesting_warning=nesting,
     )
 
 

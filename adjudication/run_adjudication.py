@@ -95,6 +95,17 @@ class AdjudicationAnswer:
     holes: list[Hole] = field(default_factory=list)
     audit_head: str | None = None
     audit_path: str | None = None
+    audit_verified: bool = False
+    """Whether the run's own audit chain verified at the end of the run.
+
+    THE CHAIN WAS WRITTEN AND NEVER READ BACK. Every run appended to a hash
+    chain built to detect tampering and truncation, and no run path ever
+    called verify() on it -- the scope audit said step 12 was built, and the
+    only thing built was the function. A chain nobody verifies is a log with
+    a longer name. Now every run verifies before it reports, and a chain that
+    does not verify is a hole: the run cannot commit."""
+    audit_check: str = ""
+    """What the verification found, in words, for the report."""
     conduct: Any = None
     """ConductLedger: which seat asserted what that a gate ruled false."""
     escalated: list[Claim] = field(default_factory=list)
@@ -415,6 +426,13 @@ def collect_holes(
                 "the seats agreed completely, which is what a shared failure "
                 "mode looks like; change seat composition and re-run this pass",
             ))
+        if div.nesting_warning:
+            holes.append(Hole(
+                "nesting warning",
+                f"{res.pass_name}: {div.nesting_warning}",
+                "read the extra claims before crediting the overlap figure; "
+                "padding on one seat is volume, not independence",
+            ))
 
     if not diagnosis.get("measurable", False):
         holes.append(Hole(
@@ -486,6 +504,28 @@ def run_adjudication(
     diagnosis = diagnose_run(results, orch.verdicts, adjudications, total_seeded)
     survivors = orch.survivors(cands)
     eliminated = [c for c in cands if c.eliminated]
+    holes = collect_holes(results, orch, survivors, cands, stop, diagnosis)
+
+    # SOP 9.1 STEP 12, DONE RATHER THAN AVAILABLE. The chain is read back and
+    # verified here, at the end of the run that wrote it. Fail-closed: a
+    # chain that does not verify is not a warning line, it is a hole, and a
+    # run with a hole does not commit. What this proves is bounded and the
+    # report says so: the head is kept in a local sidecar, so it catches a
+    # truncated or edited file, not a sidecar edited alongside it. That is
+    # integrity of the record, not an attestation by anyone else.
+    chain = audit.verify()
+    audit_check = (f"verified, {chain.entries_checked} entries "
+                   f"(local hash chain and sidecar only; not an external "
+                   f"attestation)" if chain.valid
+                   else "FAILED: " + "; ".join(chain.failures))
+    if not chain.valid:
+        holes.insert(0, Hole(
+            "audit chain",
+            f"The run's own audit chain does not verify: "
+            f"{'; '.join(chain.failures)}",
+            "Do not commit from this record. Re-run with a fresh --audit "
+            "path; if the same failure recurs, the log writer is broken and "
+            "no run since the last verified one can be trusted."))
 
     return AdjudicationAnswer(
         artifact_digest=digest(artifact),
@@ -494,9 +534,11 @@ def run_adjudication(
         eliminated=eliminated,
         stop=stop,
         diagnosis=diagnosis,
-        holes=collect_holes(results, orch, survivors, cands, stop, diagnosis),
+        holes=holes,
         audit_head=audit.head,
         audit_path=audit_path,
+        audit_verified=chain.valid,
+        audit_check=audit_check,
         claim_coverage={c.id: orch.claim_coverage(c) for c in cands},
         escalated=list(orch.escalation_queue),
         conduct=conduct,
@@ -815,6 +857,7 @@ def render_report(answer: AdjudicationAnswer) -> str:
     if answer.audit_path:
         add(f"audit log       : {answer.audit_path}")
     add(f"audit head      : {answer.audit_head}")
+    add(f"audit chain     : {answer.audit_check or 'NOT VERIFIED'}")
     add("")
 
     add("-" * 72)
@@ -868,6 +911,8 @@ def render_report(answer: AdjudicationAnswer) -> str:
         overlap = "n/a" if jac is None else f"{jac:.2f}"
         add(f"     seat overlap {overlap}"
             + (f"  [{div.collapse_warning}]" if div.collapse_warning else ""))
+        if div.nesting_warning:
+            add(f"     PADDING: {div.nesting_warning}")
         if div.seats_errored:
             add(f"     SEAT ERROR: {', '.join(div.seats_errored)}")
             # WHY, not just WHICH. Printing only the seat ids destroyed the
