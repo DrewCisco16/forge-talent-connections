@@ -1,3 +1,4 @@
 # eval scratch
 .eval-scratch/
+.eval-scratch-result.json
 __pycache__/
