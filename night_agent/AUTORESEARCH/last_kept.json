@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 23,
+   "caught": 24,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 22,
+   "caught": 23,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 13.33,
+  "runtime_s": 13.45,
   "within_budget": true
  },
  "secondary": {
@@ -495,8 +495,10 @@
     "base": "hybrid",
     "spec": "2 minimum crew",
     "desc": "gate min_crew below the spec floor of 2 and a one-reply stage",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "GATE-MINCREW"
+    ]
    },
    {
     "id": "S08b",
@@ -504,8 +506,10 @@
     "base": "hybrid",
     "spec": "2 minimum crew",
     "desc": "gate min_crew below the spec floor of 2",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "GATE-MINCREW"
+    ]
    },
    {
     "id": "S09a",

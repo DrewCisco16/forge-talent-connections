@@ -240,6 +240,10 @@ def audit_run(run):
     if reused:
         rep("CONTAMINATION" in flags_all, "FRESH", f"reused conversation(s) {reused} are flagged CONTAMINATION")
 
+    # minimum crew floor (spec 2: two generators plus a closer; below that the night stops with CREW)
+    if gate:
+        rep(int(gate.get("min_crew", 2)) >= 2, "GATE-MINCREW", f"gate min_crew is at least 2 ({gate.get('min_crew')})")
+
     # gate record enumerations (spec 1, 4.4): CLASS and PROFILE must be values the schema defines
     if gate and os.path.exists(SCHEMA):
         sc = json.load(open(SCHEMA))
