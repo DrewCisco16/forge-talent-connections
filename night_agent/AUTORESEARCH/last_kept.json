@@ -1,7 +1,7 @@
 {
  "primary": {
   "DEV": {
-   "caught": 6,
+   "caught": 5,
    "total": 36
   },
   "HOLDOUT": {
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.7,
+  "runtime_s": 12.43,
   "within_budget": true
  },
  "secondary": {
@@ -262,10 +262,8 @@
     "base": "hybrid",
     "spec": "4.4, 15 G-5",
     "desc": "the same operator ran twice in one night",
-    "status": "CAUGHT",
-    "rules": [
-     "CIDP-stage-04-fmea-MERGED"
-    ]
+    "status": "MISSED",
+    "rules": []
    },
    {
     "id": "O07b",

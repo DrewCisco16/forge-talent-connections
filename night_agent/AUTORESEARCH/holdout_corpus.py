@@ -462,11 +462,14 @@ def rename_stage(root, old_dir, new_dir, old_name, new_name):
 
 def clone_stage(root, src_dir, dst_dir, src_num, dst_num, src_name, dst_name):
     shutil.copytree(os.path.join(root, src_dir), os.path.join(root, dst_dir))
+    # a repeated operator would check NEW claims: renumber only the ids this stage defines, everywhere in the clone,
+    # so the repetition itself is the only fault (earlier PASSED ids stay citable)
+    own = re.findall(r"^CLAIM\s+C(\d+)\s", read(os.path.join(root, dst_dir, "check.md")), re.M)
     for fn in os.listdir(os.path.join(root, dst_dir)):
         p = os.path.join(root, dst_dir, fn)
         s = read(p).replace(f"STAGE {src_num} {src_name}", f"STAGE {dst_num} {dst_name}").replace(f"d-{src_num}-", f"d-{dst_num}-")
-        # a repeated operator would check new claims; give the clone fresh claim ids so only the repetition itself is the fault
-        s = re.sub(r"\bC(\d+)\b", lambda m: f"C{int(m.group(1)) + 100}", s)
+        for n in own:
+            s = re.sub(rf"\bC{n}\b", f"C{int(n) + 100}", s)
         write(p, s)
     disp = [json.loads(l) for l in read(os.path.join(root, "dispatch.jsonl")).splitlines() if l.strip()]
     caps = [json.loads(l) for l in read(os.path.join(root, "capture.jsonl")).splitlines() if l.strip()]
