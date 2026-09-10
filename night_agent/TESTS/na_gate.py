@@ -39,13 +39,13 @@ def parse_claims(text):
     for line in text.splitlines():
         m = CLAIM.match(line)
         if m:
-            cur = {"id": m.group(1), "result": "", "retrieved": "", "settle": ""}
+            cur = {"id": m.group(1), "result": "", "retrieved": "", "settle": "", "method": ""}
             claims.append(cur)
             continue
         if cur is None:
             continue
         s = line.strip()
-        for key in ("RETRIEVED", "RESULT", "SETTLE"):
+        for key in ("RETRIEVED", "RESULT", "SETTLE", "METHOD"):
             if s.startswith(key):
                 cur[key.lower()] = s[len(key):].strip()
     return claims
@@ -128,6 +128,8 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
                     reasons.append(f"G-4 claim {c['id']} status {c['result']!r} not one of the six")
                 elif c["result"] in ("PASSED", "FAILED") and not c["retrieved"]:
                     reasons.append(f"G-4 claim {c['id']} {c['result']} without RETRIEVED (bare)")
+                elif c["result"] in ("PASSED", "FAILED") and c["method"] == "none":
+                    reasons.append(f"G-4 claim {c['id']} {c['result']} with METHOD none (no check can have happened)")
                 elif c["result"] not in ("PASSED", "FAILED") and not c["settle"]:
                     reasons.append(f"G-4 claim {c['id']} {c['result']} without SETTLE")
 

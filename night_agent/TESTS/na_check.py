@@ -80,6 +80,8 @@ def check_evidence_file(path, tag):
         if c["result"] in NEED_SETTLE:
             rep(bool(c["settle"]), f"EVID-3-{tag}-{c['id']}", f"{c['result']} has a SETTLE condition")
         rep(bool(PROV.match("[" + c["prov"] + "]")), f"EVID-4-{tag}-{c['id']}", f"provenance tag valid ({c['prov']})")
+        if c["result"] in NEED_RETRIEVED:
+            rep(c["method"] != "none", f"EVID-5-{tag}-{c['id']}", f"{c['result']} has a check method (METHOD none can only be JUDGEMENT CALL)")
     check_source_lines(claims, tag)
     return claims
 
