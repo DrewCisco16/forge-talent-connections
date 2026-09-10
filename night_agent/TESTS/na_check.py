@@ -105,7 +105,7 @@ def passed_claim_ids(run, upto_stage_dir=None):
         if os.path.exists(p):
             ids |= {c["id"] for c in parse_claims(read(p)) if c["result"] == "PASSED"}
     p = os.path.join(run, "review", "check-review.md")
-    if os.path.exists(p):
+    if os.path.exists(p) and upto_stage_dir is None:  # reviewer claims exist only from REVIEW onward, never in a stage close
         ids |= {c["id"] for c in parse_claims(read(p)) if c["result"] == "PASSED"}
     return ids
 
@@ -119,6 +119,9 @@ def check_provenance_in_text(path, section_names, tag, run=None, upto=None):
         lines = [l for l in body.splitlines() if l.strip().startswith(("-", "*", "CLAIM")) or re.match(r"^\s*\d+[\.\)]", l)]
         untagged = [l for l in lines if not PROV.search(l)]
         rep(len(untagged) == 0, f"PROV-{tag}-{sec.split()[0]}", f"{path} {sec}: {len(untagged)} untagged claim line(s)")
+        if sec == "MERGED":
+            early_r = [l for l in lines if "[R]" in l]
+            rep(len(early_r) == 0, f"PROV-R-{tag}", f"{path} MERGED: {len(early_r)} line(s) carry [R] before REVIEW ran")
         if allowed is not None and sec in ("MERGED", "3 WHY IT SURVIVED"):
             nocid = [l for l in lines if not CIDS.search(l)]
             rep(len(nocid) == 0, f"CID-{tag}-{sec.split()[0]}", f"{path} {sec}: {len(nocid)} line(s) without claim ids in braces")
@@ -212,7 +215,9 @@ def audit_run(run):
         names = re.findall(r"(Sol|Gemini|Grok|Magistral|Fable|Astra|GPT|Claude|Mistral)", pk)
         rep(len(names) == 0, "ISO-4", f"review package has attribution stripped ({len(names)} model-name hits)")
     if os.path.exists(j("review", "check-review.md")):
-        check_evidence_file(j("review", "check-review.md"), "review")
+        rc = check_evidence_file(j("review", "check-review.md"), "review")
+        notr = [c["id"] for c in rc if c["prov"] != "R"]
+        rep(len(notr) == 0, "REV-PROV", f"every check-review claim carries [R] ({notr})")
 
     # generate wall leak heuristic: identical unusual 12-word sequences across seat files
     if stages:

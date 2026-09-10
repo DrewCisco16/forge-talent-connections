@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 5,
+   "caught": 7,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 6,
+   "caught": 7,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.43,
+  "runtime_s": 12.2,
   "within_budget": true
  },
  "secondary": {
@@ -152,8 +152,10 @@
     "base": "hybrid",
     "spec": "3, 4.6",
     "desc": "[R] provenance in a stage MERGED before REVIEW ran",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "PROV-R-stage-02-fmea"
+    ]
    },
    {
     "id": "E07b",
@@ -161,8 +163,10 @@
     "base": "hybrid",
     "spec": "3, 4.6",
     "desc": "check-review claim tagged with a generator id instead of [R]",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "REV-PROV"
+    ]
    },
    {
     "id": "E08a",
@@ -170,8 +174,10 @@
     "base": "hybrid",
     "spec": "3",
     "desc": "stage MERGED cites a review-stage claim id before REVIEW",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CIDP-stage-02-fmea-MERGED"
+    ]
    },
    {
     "id": "E08b",
