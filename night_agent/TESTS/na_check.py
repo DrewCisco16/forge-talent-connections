@@ -467,6 +467,11 @@ def audit_run(run):
         d_ = read(j("final", "DELIVERABLE.md"))
         cls = re.findall(r"\b(KEEP_FOR_DEVELOPMENT|REVERT|PARTIAL_REPORT)\b", d_)
         rep(len(set(cls)) == 1, "CLASS-1", f"exactly one classification in the deliverable ({sorted(set(cls))})")
+        if os.path.exists(j("ledger.json")):  # spec 17: exactly one classification, recorded identically in the ledger
+            lc = json.load(open(j("ledger.json"))).get("classification")
+            rep(lc in ("KEEP_FOR_DEVELOPMENT", "REVERT", "PARTIAL_REPORT"), "CLASS-2", f"ledger classification is one of the three ({lc!r})")
+            if len(set(cls)) == 1:
+                rep(lc == cls[0], "CLASS-3", f"ledger classification equals the deliverable's ({lc} vs {cls[0]})")
     # final written exactly once
     fw = [l for l in log if l.get("file") == "final/DELIVERABLE.md" and l.get("action") in ("send", "write")]
     rep(len(fw) <= 1, "FINAL-ONCE", f"DELIVERABLE.md written at most once in the log ({len(fw)})")
