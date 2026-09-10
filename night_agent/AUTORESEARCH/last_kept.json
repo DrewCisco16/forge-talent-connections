@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 9.99,
+  "runtime_s": 11.83,
   "within_budget": true
  },
  "secondary": {
