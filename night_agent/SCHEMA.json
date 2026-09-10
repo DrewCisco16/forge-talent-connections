@@ -1,0 +1,706 @@
+{
+  "schema_version": "11.3.0",
+  "derived_from": "NIGHT_AGENT_SPEC.md",
+  "classes": [
+    "DIRECT",
+    "DELIBERATION",
+    "EXPERIMENT",
+    "HYBRID",
+    "HYBRID-NO-EXEC"
+  ],
+  "kinds": [
+    "answer",
+    "solve",
+    "strategy",
+    "build"
+  ],
+  "profiles": {
+    "adaptive": {
+      "operator_selection": "spec 4.4 table",
+      "max_operators_default": 4
+    },
+    "v10-fixed": {
+      "operator_selection": "fixed",
+      "order": [
+        "FMEA",
+        "IDOV",
+        "TRIZ",
+        "BAYES"
+      ],
+      "max_operators_default": 4,
+      "purpose": "BASELINE arm for architecture experiments"
+    }
+  },
+  "states": [
+    "INIT",
+    "REGISTRY",
+    "GATE",
+    "DIRECT",
+    "GENERATE",
+    "CHECK",
+    "CLOSE",
+    "SELECT",
+    "OPERATE",
+    "BASELINE",
+    "PROPOSE",
+    "EXECUTE",
+    "MEASURE",
+    "DECIDE",
+    "REVIEW",
+    "CHECK_REVIEW",
+    "FINAL",
+    "VERIFY",
+    "DELIVER",
+    "PARTIAL",
+    "ABORT",
+    "DONE"
+  ],
+  "transitions": {
+    "INIT": [
+      "REGISTRY"
+    ],
+    "REGISTRY": [
+      "GATE",
+      "ABORT"
+    ],
+    "GATE": [
+      "GENERATE",
+      "BASELINE",
+      "DIRECT",
+      "ABORT"
+    ],
+    "GENERATE": [
+      "CHECK"
+    ],
+    "OPERATE": [
+      "CHECK"
+    ],
+    "CHECK": [
+      "CLOSE",
+      "FINAL"
+    ],
+    "CLOSE": [
+      "SELECT"
+    ],
+    "SELECT": [
+      "OPERATE",
+      "REVIEW",
+      "PARTIAL"
+    ],
+    "BASELINE": [
+      "PROPOSE"
+    ],
+    "PROPOSE": [
+      "EXECUTE"
+    ],
+    "EXECUTE": [
+      "MEASURE"
+    ],
+    "MEASURE": [
+      "DECIDE"
+    ],
+    "DECIDE": [
+      "PROPOSE",
+      "REVIEW",
+      "PARTIAL"
+    ],
+    "REVIEW": [
+      "CHECK_REVIEW",
+      "FINAL"
+    ],
+    "CHECK_REVIEW": [
+      "FINAL"
+    ],
+    "FINAL": [
+      "VERIFY",
+      "DELIVER"
+    ],
+    "VERIFY": [
+      "DELIVER"
+    ],
+    "DELIVER": [
+      "DONE"
+    ],
+    "PARTIAL": [
+      "DONE"
+    ],
+    "DIRECT": [
+      "CHECK"
+    ]
+  },
+  "stop_reasons": [
+    "CREW",
+    "HARD_STOP",
+    "BUDGET",
+    "NONE_STANDING",
+    "SUFFICIENT",
+    "MARGINAL",
+    "EXHAUSTED",
+    "PLATEAU",
+    "OVERFIT_RISK",
+    "ABORT"
+  ],
+  "statuses": [
+    "PASSED",
+    "FAILED",
+    "JUDGEMENT CALL",
+    "NOT TESTABLE",
+    "BLOCKED",
+    "INCONCLUSIVE"
+  ],
+  "statuses_requiring_retrieved": [
+    "PASSED",
+    "FAILED"
+  ],
+  "statuses_requiring_settle": [
+    "JUDGEMENT CALL",
+    "NOT TESTABLE",
+    "BLOCKED",
+    "INCONCLUSIVE"
+  ],
+  "merge_eligible_status": "PASSED",
+  "earned_kill_status": "FAILED",
+  "provenance_tags": {
+    "generator": "[G<n>] or [<n>]",
+    "reviewer": "[R]",
+    "experiment": "[X-<id>]",
+    "document": "[D]",
+    "operator_supplied": "[OP]"
+  },
+  "operators": {
+    "EXPERIMENT": {
+      "precondition": "class in (HYBRID, EXPERIMENT) and executor registered and >=2 options differ on a MEASURABLE PREDICTION",
+      "kills": "options whose predictions fail when executed"
+    },
+    "FMEA": {
+      "description": "FMEA, FTA, FMEDA. What goes wrong later, and would we notice in time?",
+      "precondition": "options_standing >= 1",
+      "kills": "failures that are real but invisible"
+    },
+    "IDOV": {
+      "description": "IDOV. Can this be built, measured, tested?",
+      "precondition": "kind in (build, solve, strategy)",
+      "kills": "answers that survive on paper only"
+    },
+    "BAYES": {
+      "description": "Bayesian, MCMC. What evidence would move us and how much?",
+      "precondition": "options_standing >= 2 or open has item without settle condition",
+      "kills": "answers needing a number nobody can derive"
+    },
+    "TRIZ": {
+      "description": "CST, TRIZ, Zero Defects. Knock-on effects and the contradiction at the centre.",
+      "precondition": "options_standing >= 2",
+      "kills": "answers that split the difference"
+    }
+  },
+  "flags": [
+    "DEPRIORITIZED_GT_EARNED",
+    "EMPTY_OPEN_LIST",
+    "ALL_CLEAN",
+    "REDUCED_CREW",
+    "NO_OUTSIDE_REVIEW",
+    "NO_VERIFIER",
+    "NO_EXECUTOR",
+    "REVIEW_UNCHECKABLE",
+    "CLOSER_SWAPPED",
+    "PROVISIONAL",
+    "LEAK_SUSPECTED",
+    "GATE_DEFAULTED",
+    "CONTAMINATION",
+    "CAPTURE_PARTIAL",
+    "PAYLOAD_BLOCKED"
+  ],
+  "registry": {
+    "seats": [
+      {
+        "id": "G1",
+        "role": "generator",
+        "model": "INHERITED, UNVERIFIED default: GPT-5.6 Sol",
+        "backup_closer": true
+      },
+      {
+        "id": "G2",
+        "role": "generator",
+        "model": "INHERITED, UNVERIFIED default: Gemini 3.1 Pro"
+      },
+      {
+        "id": "G3",
+        "role": "generator",
+        "model": "INHERITED, UNVERIFIED default: Grok"
+      },
+      {
+        "id": "G4",
+        "role": "generator",
+        "model": "INHERITED, UNVERIFIED default: Mistral Magistral"
+      },
+      {
+        "id": "CLOSER",
+        "role": "closer",
+        "model": "INHERITED, UNVERIFIED default: Claude Fable 5.1 high"
+      },
+      {
+        "id": "REVIEWER",
+        "role": "reviewer",
+        "model": "INHERITED, UNVERIFIED default: GPT-6 Astra xhigh",
+        "isolated_after_handshake": true
+      },
+      {
+        "id": "VERIFIER",
+        "role": "verifier",
+        "model": "new chat in the operator's Claude Project"
+      },
+      {
+        "id": "EXECUTOR",
+        "role": "executor",
+        "model": "optional tool-capable seat",
+        "optional": true
+      }
+    ],
+    "seat_record": {
+      "id": "",
+      "role": "",
+      "url": "",
+      "model": "",
+      "ready": false,
+      "handshake_time": "",
+      "retired": false,
+      "fresh": true,
+      "prior_history": "",
+      "failed_stages": []
+    }
+  },
+  "gate_record": {
+    "ask": "verbatim",
+    "class": "",
+    "class_basis": "",
+    "kind": "",
+    "success_criteria": "",
+    "hard_constraints": [],
+    "available_ground_truth": [],
+    "objectives": [
+      {
+        "name": "",
+        "direction": "",
+        "procedure": "",
+        "not_measured": "",
+        "gaming": "",
+        "guardrail": "",
+        "tolerance": ""
+      }
+    ],
+    "budget": {
+      "max_calls": 0,
+      "max_operators": 4,
+      "max_experiments": 8,
+      "max_wait_min": 10,
+      "reviewer_wait_min": 10,
+      "min_delta": null,
+      "plateau_k": 3,
+      "experiment_budget_s": null
+    },
+    "hard_stop": "",
+    "profile": "adaptive",
+    "min_crew": 2,
+    "backup_closer": "G1",
+    "planned_calls": 0,
+    "spending_permission": "none|<explicit>",
+    "priority_order": [
+      "correctness",
+      "evidence integrity",
+      "reproducibility",
+      "cost and time"
+    ],
+    "payload_authorization": "default: no local paths, hashes, telemetry, quotas, or non-public project details to external seats; project documents only to VERIFIER",
+    "rollback_hash": ""
+  },
+  "claim_record": {
+    "id": "",
+    "prov": "",
+    "text": "",
+    "method": "sum|source|command|document|experiment|none",
+    "action": "",
+    "retrieved": "",
+    "result": "one of statuses",
+    "settle": "",
+    "provenance_type": "government|peer-reviewed|standards or official technical documentation|institutional|practitioner context|local execution|operator report|model hypothesis",
+    "evidence_grade": "A|B|C",
+    "quotation_present": "yes|no",
+    "support_status": "SUPPORTED|PARTIAL|CONTRADICTED|UNSUPPORTED|UNVERIFIED|NOT_FOUND",
+    "supported_scope": "",
+    "locator": "",
+    "retrieved_at": "",
+    "retraction_check": "checked|unchecked",
+    "version_status": "",
+    "age_flag": "ok|flag"
+  },
+  "claim_record_text_format": [
+    "CLAIM <id> [<prov>] \"<text>\"",
+    "  METHOD     <method>",
+    "  ACTION     <what Dispatch did>",
+    "  RETRIEVED  <evidence, required for PASSED and FAILED>",
+    "  RESULT     <status>",
+    "  SETTLE     <what would settle it, required unless PASSED or FAILED>",
+    "  SOURCE     provenance=<type> grade=<A|B|C> quote_present=<yes|no> support=<status> scope=\"<scope>\" retrieved=<ts> retraction=<checked|unchecked> age=<ok|flag>   (source and document claims only)"
+  ],
+  "stage_record": {
+    "stage": "",
+    "operator": "",
+    "seats_replied": [],
+    "seats_failed": [],
+    "complete": "seats_replied >= min_crew and check.md exists and close.md exists",
+    "metrics": {
+      "options_created": 0,
+      "options_standing": 0,
+      "claims_total": 0,
+      "claims_checkable": 0,
+      "passed": 0,
+      "failed": 0,
+      "judgement": 0,
+      "not_testable": 0,
+      "blocked": 0,
+      "inconclusive": 0,
+      "earned_kills": 0,
+      "deprioritized": 0,
+      "decision_changed": false,
+      "model_calls": 0,
+      "elapsed_s": 0,
+      "tokens": null
+    }
+  },
+  "experiment_record": {
+    "id": "",
+    "hypothesis": "",
+    "primary_change": "",
+    "expected_effect": "",
+    "metric": "",
+    "direction": "lower|higher",
+    "baseline_value": null,
+    "procedure": "",
+    "environment": "",
+    "versions": {},
+    "inputs": "",
+    "configuration": "",
+    "seed": null,
+    "constraints_checked": [],
+    "guardrails": [
+      {
+        "name": "",
+        "baseline": null,
+        "value": null,
+        "tolerance": null
+      }
+    ],
+    "result_value": null,
+    "delta": null,
+    "noise": null,
+    "repeat_value": null,
+    "evidence": "raw output path",
+    "artifact_hash": "",
+    "decision": "KEEP|REVERT|INCONCLUSIVE",
+    "interaction": false,
+    "timestamp": "",
+    "cost": {
+      "runs": 0,
+      "elapsed_s": 0
+    },
+    "budget_s": null,
+    "git_commit": "",
+    "within_budget": true
+  },
+  "status_record": {
+    "run": "",
+    "stage": "",
+    "step": "",
+    "started": "",
+    "last_complete": "",
+    "next": "",
+    "stop_reason": null,
+    "sends_used": 0,
+    "sends_reserved_for_tail": 0,
+    "experiments_used": 0,
+    "caps_known": {},
+    "flags": []
+  },
+  "log_record": {
+    "t": "",
+    "seat": "",
+    "action": "",
+    "result": "",
+    "file": ""
+  },
+  "ledger": {
+    "run": "",
+    "class": "",
+    "profile": "",
+    "stages": [],
+    "stop_reason": "",
+    "options_created": 0,
+    "options_standing": 0,
+    "earned_kills": 0,
+    "review_hits_passed": 0,
+    "review_hits_failed": 0,
+    "holds_accepted": 0,
+    "verifier_contradictions": 0,
+    "verifier_confirmed": 0,
+    "seats_failed": [],
+    "closer_swaps": 0,
+    "model_calls": 0,
+    "elapsed_s": 0,
+    "flags": [],
+    "morning_usefulness_1_to_5": null,
+    "tonights_question": "",
+    "classification": "",
+    "deprioritized": 0,
+    "rollback_hash_verified": null
+  },
+  "architecture_run_line": {
+    "run": "",
+    "date": "",
+    "profile": "",
+    "generators": 0,
+    "benchmark_task": "",
+    "correct": null,
+    "unsupported_claims": 0,
+    "doc_contradictions": 0,
+    "planted_faults_caught": 0,
+    "planted_faults_total": 0,
+    "earned_kills": 0,
+    "deprioritized": 0,
+    "review_hits_passed": 0,
+    "verifier_contradictions": 0,
+    "model_calls": 0,
+    "elapsed_s": 0,
+    "usefulness": null
+  },
+  "files": {
+    "run_root": "runs/na-NNN/",
+    "write_once": true,
+    "overwrite_allowed": [
+      "status.json"
+    ],
+    "append_only": [
+      "log.jsonl",
+      "metrics.jsonl",
+      "experiments/log.jsonl",
+      "dispatch.jsonl",
+      "capture.jsonl"
+    ],
+    "layout": [
+      "ask.md",
+      "registry.json",
+      "gate/gate.md",
+      "gate/gate.json",
+      "stage-01-generate/seat-<id>.md",
+      "stage-01-generate/check.md",
+      "stage-01-generate/close.md",
+      "stage-NN-<operator>/seat-<id>.md",
+      "stage-NN-<operator>/check.md",
+      "stage-NN-<operator>/close.md",
+      "stage-01-direct/seat-<id>.md",
+      "stage-01-direct/check.md",
+      "experiments/baseline.json",
+      "experiments/exp-NNN/proposal.md",
+      "experiments/exp-NNN/output.txt",
+      "experiments/exp-NNN/record.json",
+      "experiments/log.jsonl",
+      "review/package.md",
+      "review/review.md",
+      "review/check-review.md",
+      "final/kills-all.md",
+      "final/metrics-summary.json",
+      "final/DELIVERABLE.md",
+      "final/verifier.md",
+      "final/DELIVERABLE_ASSEMBLED.md",
+      "ledger.json",
+      "status.json",
+      "log.jsonl",
+      "metrics.jsonl",
+      "NOTE.md",
+      "experiments/exp-NNN/repeat.txt",
+      "dispatch.jsonl",
+      "capture.jsonl",
+      "rollback/<artifact>.bytes",
+      "rollback/hash.txt"
+    ],
+    "stamp_line": "STAGE <NN> <NAME> SEAT <id> TIME <hh:mm>",
+    "architecture_history": [
+      "architecture/runs.jsonl",
+      "architecture/decisions.jsonl",
+      "architecture/criterion.json",
+      "architecture/model-capability-ledger.jsonl"
+    ]
+  },
+  "deliverable_sections": [
+    "1 THE RESULT",
+    "2 WHAT SURVIVED",
+    "3 WHY IT SURVIVED",
+    "4 OBJECTIVE RESULTS",
+    "5 WHAT DIED AND WHY",
+    "6 TRADE-OFFS",
+    "7 OUTSIDE REVIEW",
+    "8 STILL OPEN",
+    "9 CONFIDENCE",
+    "10 RUN INTEGRITY",
+    "11 EFFICIENCY",
+    "12 NEXT QUESTION",
+    "13 VERIFY BEFORE RELYING (conditional)",
+    "14 PRIVATE DOCUMENT VERIFICATION (appended by Dispatch as a separate file)"
+  ],
+  "precedence": [
+    "NIGHT_AGENT_SPEC.md",
+    "DISPATCH.md",
+    "PROMPTS/",
+    "SCHEMA.json",
+    "TESTS/ (na_gate.py, na_check.py)",
+    "WORKBOOKS/",
+    "skill file (generated)"
+  ],
+  "merged_line_format": "<claim text> [<prov>]... {C<id>,...}   every cited id must be PASSED in a check file of this or an earlier stage",
+  "transition_guards": {
+    "tool": "TESTS/na_gate.py",
+    "G-1": "GATE: ask.md present; READY generators >= min_crew; READY closer",
+    "G-2": "GENERATE/BASELINE/DIRECT: gate.json with CLASS, and CLASS enters that state (DIRECT -> DIRECT; DELIBERATION, HYBRID, HYBRID-NO-EXEC -> GENERATE; EXPERIMENT, HYBRID -> BASELINE)",
+    "G-3": "CHECK: >= min_crew seat files whose stamp names this stage and a READY registered seat and whose capture record says completion_signal_observed and not partial; a DIRECT stage needs one",
+    "G-4": "CLOSE: check.md present, six statuses only, RETRIEVED on PASSED/FAILED, METHOD not none on PASSED/FAILED, support=SUPPORTED grade=A on a PASSED source or document claim, SETTLE on the other four",
+    "G-5": "OPERATE: previous close.md, no stop reason, operator not already run, operator in the library, operator stages below max_operators",
+    "G-6": "REVIEW: last close.md, REVIEWER seat READY, reviewer handshake exactly once and before the first GENERATE send, no reviewer sends after it",
+    "G-7": "FINAL: DELIVERABLE.md absent, kills-all.md present and carrying every KILLS entry of every close, metrics-summary.json present and valid JSON, review checked or NO_OUTSIDE_REVIEW",
+    "G-8": "VERIFY: DELIVERABLE.md present with an empty section 14, a READY VERIFIER seat, verifier.md absent",
+    "G-9": "DECIDE=KEEP: repeat_value present, metric direction known (lower or higher), delta an improvement in that direction beyond noise or MIN_DELTA, repeat run improving beyond the same threshold, within_budget, guardrails within tolerance, constraints checked",
+    "G-10": "MERGED lines: provenance tag and PASSED claim ids (post hoc, na_check.py)",
+    "G-11": "SEND: seat READY and registered, REVIEWER only in the review stage, unique dispatch_id, observed conversation_url equals registry URL, previous slot for the seat not uncertain, reservation covers the tail; a reply citing an earlier stage's dispatch_id is stale"
+  },
+  "benchmark": {
+    "dev": [
+      "BT-1",
+      "BT-2",
+      "BT-3",
+      "BT-4"
+    ],
+    "holdout": [
+      "BT-5",
+      "BT-6",
+      "BT-7",
+      "BT-8"
+    ],
+    "rule": "mutations selected on DEV only; promotion decided on HOLDOUT only; one HOLDOUT task replaced after every promotion",
+    "paired_design": "candidate and baseline on the same task, seed, registry; alternate order night by night; unit of evidence is the paired difference"
+  },
+  "architecture_criterion_record": {
+    "criterion_id": "",
+    "written_before_first_paired_run": true,
+    "primary_metric": "planted_faults_caught_rate then correctness",
+    "guardrails": [
+      "unsupported_claims",
+      "doc_contradictions"
+    ],
+    "guardrail_tolerance": {},
+    "min_paired_runs": 8,
+    "interval": "90 percent bootstrap percentile over paired differences",
+    "non_inferiority_margin": null,
+    "cost_margin_calls_pct": null,
+    "note": "margins are operator-set defaults with no dataset behind them yet; they are fixed before results are seen"
+  },
+  "architecture_decision_record": {
+    "id": "",
+    "date": "",
+    "candidate": "",
+    "baseline": "v10-fixed",
+    "split": "HOLDOUT",
+    "paired_runs": 0,
+    "mean_diff": null,
+    "ci_low": null,
+    "ci_high": null,
+    "method": "bootstrap percentile 90",
+    "guardrails_ok": null,
+    "calls_delta_pct": null,
+    "criterion_id": "",
+    "decision": "KEEP|REVERT|INCONCLUSIVE",
+    "runs": []
+  },
+  "support_to_status": {
+    "SUPPORTED": "PASSED (grade A in scope)",
+    "CONTRADICTED": "FAILED",
+    "NOT_FOUND": "FAILED (citation claim)",
+    "PARTIAL": "INCONCLUSIVE",
+    "UNSUPPORTED": "INCONCLUSIVE",
+    "UNVERIFIED": "BLOCKED"
+  },
+  "dispatch_record": {
+    "run_id": "",
+    "stage_id": "",
+    "seat_id": "",
+    "provider": "",
+    "conversation_url": "",
+    "tab_id": "",
+    "displayed_model": "",
+    "displayed_effort": "",
+    "prompt_hash": "",
+    "dispatch_id": "unique",
+    "expected_reply_slot": "",
+    "snapshot_hash": "",
+    "t": ""
+  },
+  "capture_record": {
+    "dispatch_id": "",
+    "file": "",
+    "completion_signal_observed": true,
+    "start_boundary": "",
+    "end_boundary": "",
+    "char_count": 0,
+    "byte_hash": "",
+    "observed_identity": "",
+    "partial": false
+  },
+  "classification": [
+    "KEEP_FOR_DEVELOPMENT",
+    "REVERT",
+    "PARTIAL_REPORT"
+  ],
+  "architecture_label": [
+    "PROPOSED_PROTOCOL",
+    "PROMOTED"
+  ],
+  "capability_observation": {
+    "task_family": "",
+    "provider": "",
+    "displayed_model": "",
+    "displayed_effort": "",
+    "date": "",
+    "role": "",
+    "prompt_hash": "",
+    "response_hash": "",
+    "evidence": "",
+    "finding_severity": "",
+    "confirmed": false,
+    "correction": "",
+    "false_allegation": false,
+    "completion": "",
+    "effort": "",
+    "kind": "model mistake|executor packet error|capture truncation|contribution"
+  },
+  "verification_manifest": {
+    "verification_id": "unique",
+    "suite_ids": [],
+    "case_ids": [],
+    "expected": {},
+    "observed": {},
+    "return_codes": {},
+    "runtime_s": 0,
+    "skipped": 0,
+    "errors": 0,
+    "candidate_hashes": {
+      "na_gate.py": "",
+      "na_check.py": ""
+    },
+    "input_hash_before": "",
+    "input_hash_after": "",
+    "complete": true,
+    "t": ""
+  },
+  "open_design_alternatives": [
+    "D-LINEAR",
+    "D-LEDGER",
+    "D-TWOTRACK"
+  ]
+}
