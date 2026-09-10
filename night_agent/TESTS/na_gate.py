@@ -93,6 +93,10 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
     elif stage in ("GENERATE", "BASELINE", "DIRECT"):  # G-2
         if not gate or not gate.get("class"):
             reasons.append("G-2 gate/gate.json missing or has no CLASS")
+        else:
+            allowed = {"GENERATE": ("DELIBERATION", "HYBRID", "HYBRID-NO-EXEC"), "DIRECT": ("DIRECT",), "BASELINE": ("EXPERIMENT", "HYBRID")}[stage]
+            if gate.get("class") not in allowed:
+                reasons.append(f"G-2 CLASS {gate.get('class')} does not enter {stage} (allowed: {', '.join(allowed)})")
 
     elif stage == "CHECK":  # G-3
         if not stage_dir or not os.path.isdir(j(stage_dir)):

@@ -1,21 +1,21 @@
 {
  "primary": {
   "DEV": {
-   "caught": 14,
+   "caught": 15,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 14,
+   "caught": 16,
    "total": 34
   }
  },
  "guard": {
   "DEV": {
-   "blocked": 2,
+   "blocked": 3,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 3,
+   "blocked": 4,
    "total": 10
   }
  },
@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.41,
+  "runtime_s": 12.5,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 5,
+  "package_assertions_passing": 6,
   "total": 15
  },
  "detail": {
@@ -328,8 +328,10 @@
     "base": "hybrid",
     "spec": "1, 5 DISPATCH",
     "desc": "gate CLASS is DIRECT but GENERATE and operator stages exist",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "LAYOUT-DIRECT"
+    ]
    },
    {
     "id": "O06b",
@@ -337,8 +339,10 @@
     "base": "direct",
     "spec": "1, 4",
     "desc": "gate CLASS is DELIBERATION but the run has only a DIRECT stage",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "LAYOUT-GENERATE"
+    ]
    },
    {
     "id": "S01a",
@@ -719,8 +723,10 @@
     "base": "hybrid",
     "spec": "1",
     "desc": "gate CLASS EXPERIMENT with no EXECUTOR registered at all",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "LAYOUT-EXPERIMENT"
+    ]
    }
   ],
   "guards": [
@@ -811,8 +817,8 @@
     "spec": "1, 15 G-2",
     "desc": "GENERATE when the gate class is DIRECT",
     "stage": "GENERATE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-2 CLASS DIRECT does not enter GENERATE (allowed: DELIBERATION, HYBRID, HYBRID-NO-EXEC)"
    },
    {
     "id": "GA05b",
@@ -821,8 +827,8 @@
     "spec": "1, 15 G-2",
     "desc": "DIRECT when the gate class is DELIBERATION",
     "stage": "DIRECT",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-2 CLASS DELIBERATION does not enter DIRECT (allowed: DIRECT)"
    },
    {
     "id": "GA06a",
@@ -1064,7 +1070,7 @@
     "id": "PA02",
     "spec": "1, DISPATCH 5",
     "desc": "SCHEMA states and GATE transitions include DIRECT",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA03",

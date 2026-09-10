@@ -217,6 +217,15 @@ def audit_run(run):
         rep(gate.get("class") in sc.get("classes", []), "GATE-CLASS", f"gate CLASS is one of the schema classes ({gate.get('class')!r})")
         rep(gate.get("profile") in sc.get("profiles", {}), "GATE-PROFILE", f"gate PROFILE is one of the schema profiles ({gate.get('profile')!r})")
 
+    # the run layout follows the gate class (spec 1, 4, 5; DISPATCH 3, 4, 5)
+    cls = gate.get("class")
+    if cls == "DIRECT":
+        rep(stages == ["stage-01-direct"], "LAYOUT-DIRECT", f"DIRECT run has exactly stage-01-direct ({stages})")
+    elif cls in ("DELIBERATION", "HYBRID", "HYBRID-NO-EXEC"):
+        rep(bool(stages) and stages[0] == "stage-01-generate", "LAYOUT-GENERATE", f"{cls} run starts with stage-01-generate ({stages[:1]})")
+    elif cls == "EXPERIMENT":
+        rep(not stages and os.path.exists(j("experiments", "baseline.json")), "LAYOUT-EXPERIMENT", f"EXPERIMENT run has a baseline and no evidence stages ({stages})")
+
     # operator selection: each operator at most once, inside the library, within the gate's max_operators (spec 4.4, 6)
     ops = [st.split("-", 2)[2].upper() for st in stages if not st.endswith(("-generate", "-direct"))]
     library = set((json.load(open(SCHEMA)).get("operators", {}) if os.path.exists(SCHEMA) else {}).keys())

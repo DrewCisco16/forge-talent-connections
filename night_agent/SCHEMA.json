@@ -35,6 +35,7 @@
     "INIT",
     "REGISTRY",
     "GATE",
+    "DIRECT",
     "GENERATE",
     "CHECK",
     "CLOSE",
@@ -65,7 +66,7 @@
     "GATE": [
       "GENERATE",
       "BASELINE",
-      "OPERATE",
+      "DIRECT",
       "ABORT"
     ],
     "GENERATE": [
@@ -75,7 +76,8 @@
       "CHECK"
     ],
     "CHECK": [
-      "CLOSE"
+      "CLOSE",
+      "FINAL"
     ],
     "CLOSE": [
       "SELECT"
@@ -121,6 +123,9 @@
     ],
     "PARTIAL": [
       "DONE"
+    ],
+    "DIRECT": [
+      "CHECK"
     ]
   },
   "stop_reasons": [
@@ -552,7 +557,7 @@
   "transition_guards": {
     "tool": "TESTS/na_gate.py",
     "G-1": "GATE: ask.md present; READY generators >= min_crew; READY closer",
-    "G-2": "GENERATE/BASELINE/DIRECT: gate.json with CLASS",
+    "G-2": "GENERATE/BASELINE/DIRECT: gate.json with CLASS, and CLASS enters that state (DIRECT -> DIRECT; DELIBERATION, HYBRID, HYBRID-NO-EXEC -> GENERATE; EXPERIMENT, HYBRID -> BASELINE)",
     "G-3": "CHECK: >= min_crew stamped seat files whose capture record says completion_signal_observed and not partial; a DIRECT stage needs one",
     "G-4": "CLOSE: check.md present, six statuses only, RETRIEVED on PASSED/FAILED, METHOD not none on PASSED/FAILED, support=SUPPORTED grade=A on a PASSED source or document claim, SETTLE on the other four",
     "G-5": "OPERATE: previous close.md, no stop reason, operator not already run, operator in the library, operator stages below max_operators",
