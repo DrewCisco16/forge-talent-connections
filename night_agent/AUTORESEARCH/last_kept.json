@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.38,
+  "runtime_s": 11.5,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 10,
+  "package_assertions_passing": 11,
   "total": 15
  },
  "detail": {
@@ -1150,7 +1150,7 @@
     "id": "PA01",
     "spec": "4.3, 8, 10",
     "desc": "no STRUCTURAL kill vocabulary outside the history sections (spec 8, SCHEMA, P4, template)",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA02",

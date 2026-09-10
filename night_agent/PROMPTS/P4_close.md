@@ -18,7 +18,7 @@ OPEN    - every JUDGEMENT CALL, NOT TESTABLE, BLOCKED, INCONCLUSIVE
           item, each with what would settle it.
 METRICS - one line: options_created, options_standing, claims_total,
           claims_checkable, passed, failed, judgement, not_testable,
-          blocked, inconclusive, earned_kills, structural_kills.
+          blocked, inconclusive, earned_kills, deprioritized.
 
 If MODE is MERGE, write exactly these seven sections.
 
@@ -42,8 +42,8 @@ CONFLICT - where the reviewers disagreed and the check could not settle
 OPTIONS STANDING - every option that still stands after this stage,
            DEPRIORITIZED ones included, numbered exactly as in the
            LIST close. This is what the next stage receives.
-METRICS  - one line, same fields as LIST mode, plus deprioritized and
-           decision_changed (yes/no: did MERGED change materially).
+METRICS  - one line, same fields as LIST mode, plus decision_changed
+           (yes/no: did MERGED change materially).
 
 Do not add analysis of your own. Do not invent new options. Do not rank.
 If two options survive, say two survive.

@@ -16,7 +16,7 @@ Written by the closer (sections 1 to 13, once) and assembled by Dispatch with th
 <EXPERIMENT or HYBRID: baseline (value, noise, environment), each experiment id, hypothesis, delta, guardrails, KEEP / REVERT / INCONCLUSIVE. Else: not applicable>
 
 5 WHAT DIED AND WHY
-<every option killed across all stages, the claim that killed it, EARNED or STRUCTURAL>
+<every option killed across all stages and the FAILED claim or hard constraint that killed it (every kill is EARNED); then DEPRIORITIZED options, still standing, with the reasons>
 
 6 TRADE-OFFS
 <conflicts between surviving options or between objectives, stated, not resolved by arithmetic>
@@ -31,7 +31,7 @@ Written by the closer (sections 1 to 13, once) and assembled by Dispatch with th
 <High / Medium / Low per surviving option, with the reason>
 
 10 RUN INTEGRITY
-<earned vs structural counts; stages run in order; STOP_REASON; seats failed or retired; closer swaps; review ran yes/no; flags: DEPRIORITIZED_GT_EARNED, EMPTY_OPEN_LIST, ALL_CLEAN, REDUCED_CREW, NO_OUTSIDE_REVIEW, NO_VERIFIER, NO_EXECUTOR, REVIEW_UNCHECKABLE, CLOSER_SWAPPED, PROVISIONAL, LEAK_SUSPECTED, GATE_DEFAULTED, CONTAMINATION, CAPTURE_PARTIAL, PAYLOAD_BLOCKED>
+<earned kills vs deprioritized counts; stages run in order; STOP_REASON; seats failed or retired; closer swaps; review ran yes/no; flags: DEPRIORITIZED_GT_EARNED, EMPTY_OPEN_LIST, ALL_CLEAN, REDUCED_CREW, NO_OUTSIDE_REVIEW, NO_VERIFIER, NO_EXECUTOR, REVIEW_UNCHECKABLE, CLOSER_SWAPPED, PROVISIONAL, LEAK_SUSPECTED, GATE_DEFAULTED, CONTAMINATION, CAPTURE_PARTIAL, PAYLOAD_BLOCKED>
 
 11 EFFICIENCY
 <model calls, elapsed time, experiments run, tokens where reported>
