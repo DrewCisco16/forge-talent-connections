@@ -1,17 +1,17 @@
 {
  "primary": {
   "DEV": {
-   "caught": 28,
+   "caught": 29,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 27,
+   "caught": 28,
    "total": 34
   }
  },
  "guard": {
   "DEV": {
-   "blocked": 5,
+   "blocked": 6,
    "total": 10
   },
   "HOLDOUT": {
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.96,
+  "runtime_s": 13.2,
   "within_budget": true
  },
  "secondary": {
@@ -243,7 +243,8 @@
     "desc": "KILLS entry names no FAILED claim and no constraint",
     "status": "CAUGHT",
     "rules": [
-     "KILL-EARNED-stage-03-idov"
+     "KILL-EARNED-stage-03-idov",
+     "KILLSALL-COMPLETE-final"
     ]
    },
    {
@@ -254,7 +255,8 @@
     "desc": "KILLS entry cites a claim that is PASSED, not FAILED",
     "status": "CAUGHT",
     "rules": [
-     "KILL-EARNED-stage-03-idov"
+     "KILL-EARNED-stage-03-idov",
+     "KILLSALL-COMPLETE-final"
     ]
    },
    {
@@ -287,6 +289,7 @@
     "desc": "the same operator ran twice in one night",
     "status": "CAUGHT",
     "rules": [
+     "KILLSALL-COMPLETE-final",
      "OP-ONCE"
     ]
    },
@@ -607,8 +610,10 @@
     "base": "hybrid",
     "spec": "4.7, I10",
     "desc": "kills-all.md omits a KILLS line from a close",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "KILLSALL-COMPLETE-final"
+    ]
    },
    {
     "id": "F04b",
@@ -616,8 +621,10 @@
     "base": "hybrid",
     "spec": "4.7, I10",
     "desc": "kills-all.md missing although the final was written",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "KILLSALL-final"
+    ]
    },
    {
     "id": "F05a",
@@ -949,8 +956,8 @@
     "spec": "4.7, 15 G-7",
     "desc": "FINAL when kills-all.md omits a KILLS line from a close",
     "stage": "FINAL",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-7 kills-all.md omits a KILLS entry of stage-02-fmea: - Option 3 killed by claim C7 FAILED (sampling can"
    },
    {
     "id": "GA14b",

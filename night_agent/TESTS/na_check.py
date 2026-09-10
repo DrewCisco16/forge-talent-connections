@@ -153,6 +153,27 @@ def check_kills_earned(path, tag, run, upto):
     rep(len(bad) == 0, f"KILL-EARNED-{tag}", f"{path} KILLS: every entry names a FAILED claim or a hard constraint ({bad})")
 
 
+def kills_entries(text):
+    m = re.search(r"^KILLS\b[^\n]*\n(.*?)(?=^(?:\d+ )?[A-Z][A-Z \-]{3,}\s*$|\Z)", text, re.S | re.M)
+    body = m.group(1) if m else ""
+    return [l.strip() for l in body.splitlines() if l.strip().startswith(("-", "*")) or re.match(r"^\s*\d+[\.\)]", l)]
+
+
+def check_kills_all(run, stages, tag="final"):
+    """kills-all.md is every KILLS section of every close, concatenated by Dispatch (spec 4.7, I10)."""
+    p = os.path.join(run, "final", "kills-all.md")
+    rep(os.path.exists(p), f"KILLSALL-{tag}", "final/kills-all.md exists")
+    if not os.path.exists(p):
+        return
+    ka = read(p)
+    missing = []
+    for st in stages:
+        cp = os.path.join(run, st, "close.md")
+        if os.path.exists(cp):
+            missing += [e for e in kills_entries(read(cp)) if e not in ka]
+    rep(len(missing) == 0, f"KILLSALL-COMPLETE-{tag}", f"kills-all.md carries every KILLS entry of every close ({missing[:2]})")
+
+
 def check_provenance_in_text(path, section_names, tag, run=None, upto=None):
     text = read(path)
     allowed = passed_claim_ids(run, upto) if run else None
@@ -383,6 +404,8 @@ def audit_run(run):
 
     # final
     if os.path.exists(j("final", "DELIVERABLE.md")):
+        if not direct:
+            check_kills_all(run, stages)
         d = read(j("final", "DELIVERABLE.md"))
         for sec in DELIV_SECTIONS:
             rep(re.search(rf"^{re.escape(sec)}\b", d, re.M) is not None, f"DELIV-{sec.split()[0]}", f"deliverable has section {sec}")

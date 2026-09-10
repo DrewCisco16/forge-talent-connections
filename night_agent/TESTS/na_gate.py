@@ -190,6 +190,16 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
         for f in ("kills-all.md", "metrics-summary.json"):
             if not os.path.exists(j("final", f)):
                 reasons.append(f"G-7 final/{f} missing")
+        if os.path.exists(j("final", "kills-all.md")):
+            ka = read(j("final", "kills-all.md"))
+            for d in stages(run):
+                cp = j(d, "close.md")
+                if os.path.exists(cp):
+                    m = re.search(r"^KILLS\b[^\n]*\n(.*?)(?=^(?:\d+ )?[A-Z][A-Z \-]{3,}\s*$|\Z)", read(cp), re.S | re.M)
+                    for l in (m.group(1) if m else "").splitlines():
+                        e = l.strip()
+                        if (e.startswith(("-", "*")) or re.match(r"^\d+[\.\)]", e)) and e not in ka:
+                            reasons.append(f"G-7 kills-all.md omits a KILLS entry of {d}: {e[:50]}")
         has_review = os.path.exists(j("review", "review.md")) and os.path.exists(j("review", "check-review.md"))
         flags = set(status.get("flags", [])) | set((jload(j("ledger.json"), {}) or {}).get("flags", []))
         if not has_review and "NO_OUTSIDE_REVIEW" not in flags:

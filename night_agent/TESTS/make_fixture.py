@@ -71,6 +71,8 @@ def conforming(root):
     w(root, "review/review.md", "HITS\n1. Claim 1 arithmetic: five merges plus one final is six, but a reserve of one is budget not usage. Check: read spec 2.\nGAPS\n1. Cost of the reviewer seat not stated. Settle: count messages.\nHOLDS\n1. Claim 5 holds: isolation requires an outside seat.\nOPEN\nnone\n")
     L("DISPATCH", "write", file="review/check-review.md", stage="CHECK_REVIEW")
     w(root, "review/check-review.md", 'CLAIM H1 [R] "Reserve is budget, not usage"\n  METHOD     document\n  ACTION     read spec section 2 and DISPATCH 1.5\n  RETRIEVED  "Reserve two closer messages beyond the plan"\n  RESULT     PASSED\n  SETTLE     \n  SOURCE     provenance=standards or official technical documentation grade=A quote_present=yes support=SUPPORTED scope="DISPATCH 1.5" retrieved=2026-09-09 retraction=unchecked age=ok\nCLAIM G1 [R] "Reviewer message cost not stated"\n  METHOD     sum\n  ACTION     counted reviewer sends in the plan\n  RETRIEVED  1 send, plus 1 possible re-prompt\n  RESULT     PASSED\n  SETTLE     \n')
+    sha = w(root, "final/kills-all.md", "KILLS stage-01-generate\nnone\nKILLS stage-02-fmea\n- Option 2 killed by hard constraint (the reviewer must sit outside the rounds), established by claim 5, EARNED\n"); L("DISPATCH", "write", file="final/kills-all.md", stage="FINAL", sha=sha)
+    sha = w(root, "final/metrics-summary.json", "{}"); L("DISPATCH", "write", file="final/metrics-summary.json", stage="FINAL", sha=sha)
     deliv = "\n".join([
         "1 THE RESULT", "Keep Fable as closer; use Astra as the isolated reviewer.",
         "2 WHAT SURVIVED", "- Option 1: Fable closes, Astra reviews. [G1][G3] {C1,C3,C5}",

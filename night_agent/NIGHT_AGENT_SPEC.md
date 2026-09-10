@@ -276,7 +276,7 @@ DISPATCH.md is prose and prose is forgettable under compaction. Every stage tran
 | G-4 | to CLOSE of a stage | check.md missing, a PASSED or FAILED line without RETRIEVED, a PASSED or FAILED line whose METHOD is none, a PASSED source or document claim whose SOURCE line does not say support=SUPPORTED grade=A, a status outside the six, or an OPEN status without SETTLE |
 | G-5 | to OPERATE(op) | previous close.md missing, a stop reason already recorded, op already run tonight, op not in the SCHEMA operator library, or max_operators already reached |
 | G-6 | to REVIEW | last close.md missing, reviewer handshake count not exactly one, the handshake logged after the first GENERATE send, or any reviewer send logged after the handshake |
-| G-7 | to FINAL | final/DELIVERABLE.md already exists, or kills-all.md or metrics-summary.json missing, or neither (review.md and check-review.md) nor the NO_OUTSIDE_REVIEW flag present |
+| G-7 | to FINAL | final/DELIVERABLE.md already exists, kills-all.md or metrics-summary.json missing, kills-all.md missing any KILLS entry of any close, or neither (review.md and check-review.md) nor the NO_OUTSIDE_REVIEW flag present |
 | G-8 | to VERIFY | DELIVERABLE.md missing, verifier.md already exists, or section 14 of DELIVERABLE.md already has content |
 | G-9 | DECIDE = KEEP | record.json lacks repeat_value, or delta is not beyond noise (or MIN_DELTA when noise unknown), or any guardrail exceeds tolerance, or any hard constraint unchecked |
 | G-10 | any MERGED line | no provenance tag, or a cited claim id that is not PASSED in a check file of this or an earlier stage (enforced post hoc by na_check.py PROV rules) |
