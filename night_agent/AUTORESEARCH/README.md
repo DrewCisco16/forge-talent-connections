@@ -53,7 +53,7 @@ Budget: at most 40 experiments (raised to 48 by obj-007 in log.jsonl, before exp
 
 - `baseline.json`: the measurement before any mutation.
 - `log.jsonl`: one line per experiment: id, hypothesis, files touched, before and after numbers, decision, commit.
-- git: every KEEP is a commit whose message starts with the experiment id and states the hypothesis. A REVERT leaves no commit; the log line is its record.
+- git: every KEEP is a commit whose message starts with the experiment id and states the hypothesis. A REVERT or INCONCLUSIVE restores the last kept tree and commits only its log line, so the trail is complete in git as well as in log.jsonl.
 - `RESULTS.md`: the table and the honest labels, written at the end.
 
 ## Labels

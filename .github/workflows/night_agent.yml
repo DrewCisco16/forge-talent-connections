@@ -1,0 +1,71 @@
+name: night_agent
+
+# The Night Agent package's non-AI verification layer. Nothing here calls a
+# model or spends money: it reads files and runs the package's own checker,
+# guard and fixture suite, then the autoresearch corpus. Same posture as
+# adjudication.yml: a push that breaks the machine-checkable layer goes red.
+on:
+  push:
+    branches: [main]
+    paths: ["night_agent/**", ".github/workflows/night_agent.yml"]
+  pull_request:
+    paths: ["night_agent/**", ".github/workflows/night_agent.yml"]
+
+concurrency:
+  group: night-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: night_agent
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The package audits itself: statuses, nevers, prompt references, widths,
+      # flag lists, guard rows, versions. Stdlib only.
+      - name: Package consistency
+        run: python3 TESTS/na_check.py --package .
+
+      # The package's own fixture: a conforming run must pass, every injected
+      # fault must be caught, every guard expectation met, and bypassing a
+      # rejection branch in a copy of the checker must let its fault escape.
+      - name: Fixture suite
+        run: python3 TESTS/make_fixture.py "${RUNNER_TEMP}/na_fixture"
+
+      # The spec-derived corpus the v11.3 pass was measured on. Every case must
+      # still be caught or blocked, nothing conforming may fail or be blocked,
+      # and every package assertion must hold; otherwise the number in
+      # AUTORESEARCH/RESULTS.md is no longer true and the step says so.
+      - name: Autoresearch corpus
+        run: |
+          python3 AUTORESEARCH/eval.py --out "${RUNNER_TEMP}/na_eval" --json "${RUNNER_TEMP}/na_eval.json"
+          python3 - <<'EOF'
+          import json, os
+          r = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "na_eval.json")))
+          p, g, gr, s = r["primary"], r["guard"], r["guardrails"], r["secondary"]
+          bad = []
+          for split in ("DEV", "HOLDOUT"):
+              if p[split]["caught"] != p[split]["total"]:
+                  bad.append(f"faults {split} {p[split]['caught']}/{p[split]['total']}")
+              if g[split]["blocked"] != g[split]["total"]:
+                  bad.append(f"guards {split} {g[split]['blocked']}/{g[split]['total']}")
+          for k in ("false_fail_lines_on_clean_bases", "false_blocks", "package_check_failures", "legacy_suite_exit", "corpus_errors"):
+              if gr[k]:
+                  bad.append(f"{k}={gr[k]}")
+          if s["package_assertions_passing"] != s["total"]:
+              bad.append(f"assertions {s['package_assertions_passing']}/{s['total']}")
+          if bad:
+              raise SystemExit("autoresearch corpus regressed: " + "; ".join(bad))
+          print("autoresearch corpus: every case holds")
+          EOF
