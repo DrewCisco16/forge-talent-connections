@@ -549,6 +549,12 @@ def strip_verify(root):
     jsonl_map(root, "log.jsonl", lambda rows: [r for r in rows if r.get("file") not in ("final/DELIVERABLE_ASSEMBLED.md", "final/verifier.md")])
 
 
+def log_file(root, rel, seat="DISPATCH", action="write", stage="DELIVER"):
+    with open(os.path.join(root, "log.jsonl"), "a") as f:
+        f.write(json.dumps({"t": "2026-09-10T05:59:00", "seat": seat, "action": action, "result": "OK", "file": rel, "stage": stage,
+                            "sha256": sha_file(os.path.join(root, rel))}) + "\n")
+
+
 def R(fn):
     """Apply a mutation then re-sign log and captures (the fault is in what Dispatch wrote, not tampering after the write)."""
     def inner(root):
@@ -668,7 +674,8 @@ FAULTS = [
     ("F03a", "DEV", "hybrid", "2, 10", "no review stage and no NO_OUTSIDE_REVIEW flag",
      R(remove_review)),
     ("F03b", "HOLDOUT", "hybrid", "2, 10", "no verifier file and no NO_VERIFIER flag",
-     R(lambda r: (strip_verify(r), write(os.path.join(r, "final/DELIVERABLE_ASSEMBLED.md"), read(os.path.join(r, "final/DELIVERABLE.md")))))),
+     R(lambda r: (strip_verify(r), write(os.path.join(r, "final/DELIVERABLE_ASSEMBLED.md"), read(os.path.join(r, "final/DELIVERABLE.md"))),
+                  log_file(r, "final/DELIVERABLE_ASSEMBLED.md")))),
     ("F04a", "DEV", "hybrid", "4.7, I10", "kills-all.md omits a KILLS line from a close",
      R(lambda r: edit(r, "final/kills-all.md", "- Option 3 killed by claim C7 FAILED (sampling cannot reject every malformed row), EARNED\n", ""))),
     ("F04b", "HOLDOUT", "hybrid", "4.7, I10", "kills-all.md missing although the final was written",

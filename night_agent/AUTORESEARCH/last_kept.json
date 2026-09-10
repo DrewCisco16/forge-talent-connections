@@ -5,7 +5,7 @@
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 21,
+   "caught": 20,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 13.16,
+  "runtime_s": 11.15,
   "within_budget": true
  },
  "secondary": {
@@ -566,10 +566,8 @@
     "base": "hybrid",
     "spec": "2, 10",
     "desc": "no verifier file and no NO_VERIFIER flag",
-    "status": "CAUGHT",
-    "rules": [
-     "LOG-ALL"
-    ]
+    "status": "MISSED",
+    "rules": []
    },
    {
     "id": "F04a",
