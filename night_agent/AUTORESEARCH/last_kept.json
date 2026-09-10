@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 13,
+   "caught": 14,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 13,
+   "caught": 14,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.37,
+  "runtime_s": 12.41,
   "within_budget": true
  },
  "secondary": {
@@ -688,8 +688,10 @@
     "base": "hybrid",
     "spec": "1",
     "desc": "gate CLASS is not one of the five classes",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "GATE-CLASS"
+    ]
    },
    {
     "id": "G01b",
@@ -697,8 +699,10 @@
     "base": "hybrid",
     "spec": "1, 4.4",
     "desc": "gate PROFILE is not adaptive or v10-fixed",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "GATE-PROFILE"
+    ]
    },
    {
     "id": "G02a",

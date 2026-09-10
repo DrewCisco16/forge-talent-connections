@@ -211,6 +211,12 @@ def audit_run(run):
         elif not st.endswith("-direct"):
             rep(False, f"FILE-{st}-close", "close.md exists")
 
+    # gate record enumerations (spec 1, 4.4): CLASS and PROFILE must be values the schema defines
+    if gate and os.path.exists(SCHEMA):
+        sc = json.load(open(SCHEMA))
+        rep(gate.get("class") in sc.get("classes", []), "GATE-CLASS", f"gate CLASS is one of the schema classes ({gate.get('class')!r})")
+        rep(gate.get("profile") in sc.get("profiles", {}), "GATE-PROFILE", f"gate PROFILE is one of the schema profiles ({gate.get('profile')!r})")
+
     # operator selection: each operator at most once, inside the library, within the gate's max_operators (spec 4.4, 6)
     ops = [st.split("-", 2)[2].upper() for st in stages if not st.endswith(("-generate", "-direct"))]
     library = set((json.load(open(SCHEMA)).get("operators", {}) if os.path.exists(SCHEMA) else {}).keys())
