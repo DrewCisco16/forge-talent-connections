@@ -192,6 +192,8 @@ def audit_run(run):
     registry = json.load(open(j("registry.json"))) if os.path.exists(j("registry.json")) else {}
     seat_ids = {s.get("id") for s in registry.get("seats", [])}
     direct = bool(stages) and stages[0].endswith("-direct")  # DISPATCH 5: one generator, check, final; no close, no review
+    flags_all = set((json.load(open(j("ledger.json"))) if os.path.exists(j("ledger.json")) else {}).get("flags", []))
+    flags_all |= set((json.load(open(j("status.json"))) if os.path.exists(j("status.json")) else {}).get("flags", []))
 
     # stamps and headings
     for st in stages:
@@ -213,6 +215,9 @@ def audit_run(run):
         gate = json.load(open(j("gate/gate.json")))
         mincrew = 1 if st.endswith("-direct") else gate.get("min_crew", 2)
         rep(len(seats) >= mincrew, f"CREW-{st}", f"{len(seats)} seat replies >= min_crew {mincrew}")
+        ready_gens = [x for x in registry.get("seats", []) if x.get("ready") and (x.get("role") == "generator" or (not x.get("role") and str(x.get("id", "")).startswith("G")))]
+        if ready_gens and not st.endswith("-direct") and len(seats) < len(ready_gens):
+            rep("REDUCED_CREW" in flags_all, f"REDUCED-{st}", f"{len(seats)} replies from {len(ready_gens)} READY generators is flagged REDUCED_CREW (spec 7)")
         if os.path.exists(j(st, "check.md")):
             check_evidence_file(j(st, "check.md"), st)
         else:
@@ -231,8 +236,6 @@ def audit_run(run):
             rep(False, f"FILE-{st}-close", "close.md exists")
 
     # reused conversations (spec 7): a seat whose window carries prior history is never independent; the run must say CONTAMINATION
-    flags_all = set((json.load(open(j("ledger.json"))) if os.path.exists(j("ledger.json")) else {}).get("flags", []))
-    flags_all |= set((json.load(open(j("status.json"))) if os.path.exists(j("status.json")) else {}).get("flags", []))
     reused = [x.get("id") for x in registry.get("seats", []) if x.get("fresh") is False]
     if reused:
         rep("CONTAMINATION" in flags_all, "FRESH", f"reused conversation(s) {reused} are flagged CONTAMINATION")

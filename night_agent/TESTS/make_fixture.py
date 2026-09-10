@@ -95,7 +95,7 @@ def conforming(root):
                                                           "repeat_value": 6.1, "constraints_checked": ["output hash unchanged"],
                                                           "guardrails": [{"name": "output_hash_changed", "baseline": 0, "value": 0, "tolerance": 0}],
                                                           "decision": "KEEP"}))
-    w(root, "status.json", json.dumps({"run": "na-fixture", "stage": "DONE", "step": "deliver", "started": "22:00", "last_complete": "final/DELIVERABLE_ASSEMBLED.md", "next": "none"}))
+    w(root, "status.json", json.dumps({"run": "na-fixture", "stage": "DONE", "step": "deliver", "started": "22:00", "last_complete": "final/DELIVERABLE_ASSEMBLED.md", "next": "none", "flags": ["REDUCED_CREW"]}))
     w(root, "log.jsonl", "\n".join(json.dumps(l) for l in log) + "\n")
     w(root, "dispatch.jsonl", "\n".join(json.dumps(d) for d in dispatch) + "\n")
     w(root, "capture.jsonl", "\n".join(json.dumps(c) for c in capture) + "\n")
