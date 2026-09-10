@@ -263,8 +263,10 @@
       "model": "",
       "ready": false,
       "handshake_time": "",
-      "failed_stages": [],
-      "retired": false
+      "retired": false,
+      "fresh": true,
+      "prior_history": "",
+      "failed_stages": []
     }
   },
   "gate_record": {

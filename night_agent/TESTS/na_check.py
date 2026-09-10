@@ -230,6 +230,13 @@ def audit_run(run):
         elif not st.endswith("-direct"):
             rep(False, f"FILE-{st}-close", "close.md exists")
 
+    # reused conversations (spec 7): a seat whose window carries prior history is never independent; the run must say CONTAMINATION
+    flags_all = set((json.load(open(j("ledger.json"))) if os.path.exists(j("ledger.json")) else {}).get("flags", []))
+    flags_all |= set((json.load(open(j("status.json"))) if os.path.exists(j("status.json")) else {}).get("flags", []))
+    reused = [x.get("id") for x in registry.get("seats", []) if x.get("fresh") is False]
+    if reused:
+        rep("CONTAMINATION" in flags_all, "FRESH", f"reused conversation(s) {reused} are flagged CONTAMINATION")
+
     # gate record enumerations (spec 1, 4.4): CLASS and PROFILE must be values the schema defines
     if gate and os.path.exists(SCHEMA):
         sc = json.load(open(SCHEMA))
