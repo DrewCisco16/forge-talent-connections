@@ -1,0 +1,1111 @@
+{
+ "primary": {
+  "DEV": {
+   "caught": 3,
+   "total": 36
+  },
+  "HOLDOUT": {
+   "caught": 3,
+   "total": 34
+  }
+ },
+ "guard": {
+  "DEV": {
+   "blocked": 0,
+   "total": 10
+  },
+  "HOLDOUT": {
+   "blocked": 1,
+   "total": 10
+  }
+ },
+ "guardrails": {
+  "false_fail_lines_on_clean_bases": 0,
+  "bases_not_clean": [],
+  "false_blocks": 1,
+  "package_check_failures": 0,
+  "package_check_total": 59,
+  "legacy_suite_exit": 0,
+  "corpus_errors": 0,
+  "runtime_s": 7.66,
+  "within_budget": true
+ },
+ "secondary": {
+  "package_assertions_passing": 3,
+  "total": 15
+ },
+ "detail": {
+  "faults": [
+   {
+    "id": "E01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "METHOD none but RESULT PASSED (model agreement written as evidence)",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "METHOD none but RESULT FAILED",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "source claim PASSED with evidence_grade B",
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-1-stage-01-generate"
+    ]
+   },
+   {
+    "id": "E02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "document claim PASSED with evidence_grade C",
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-1-stage-01-generate"
+    ]
+   },
+   {
+    "id": "E03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "source claim PASSED with no SOURCE line",
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-0-stage-01-generate"
+    ]
+   },
+   {
+    "id": "E03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "document claim PASSED, SOURCE line lacks support=",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E04a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "claim id reused across stages with different text",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E04b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "claim id duplicated inside one check file",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E05a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "source PASSED with support=NOT_FOUND",
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-1-stage-01-generate"
+    ]
+   },
+   {
+    "id": "E05b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "document PASSED with support=CONTRADICTED",
+    "status": "CAUGHT",
+    "rules": [
+     "SRC-1-stage-01-generate"
+    ]
+   },
+   {
+    "id": "E07a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3, 4.6",
+    "desc": "[R] provenance in a stage MERGED before REVIEW ran",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E07b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3, 4.6",
+    "desc": "check-review claim tagged with a generator id instead of [R]",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E08a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "stage MERGED cites a review-stage claim id before REVIEW",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E08b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "stage 02 MERGED cites a claim first checked in stage 03",
+    "status": "CAUGHT",
+    "rules": [
+     "CIDP-stage-02-fmea-MERGED"
+    ]
+   },
+   {
+    "id": "E09a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "MERGED line with empty claim-id braces",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "E09b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3",
+    "desc": "MERGED line with whitespace-only claim-id braces",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.1",
+    "desc": "deliverable section 2 names an option never created in GENERATE",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.1",
+    "desc": "review package OPTIONS STANDING lists an option never created",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.3",
+    "desc": "KILLS entry names no FAILED claim and no constraint",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.3",
+    "desc": "KILLS entry cites a claim that is PASSED, not FAILED",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.3",
+    "desc": "MERGE close missing the DEPRIORITIZED section",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.3",
+    "desc": "LIST close (after GENERATE) contains a MERGED section",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O04a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.4, 15 G-5",
+    "desc": "the same operator ran twice in one night",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O04b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "6",
+    "desc": "more operator stages than gate max_operators",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O05a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.4",
+    "desc": "v10-fixed profile skipped IDOV (FMEA then TRIZ)",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O05b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.4",
+    "desc": "v10-fixed profile ran IDOV before FMEA",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O06a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "1, 5 DISPATCH",
+    "desc": "gate CLASS is DIRECT but GENERATE and operator stages exist",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "O06b",
+    "split": "HOLDOUT",
+    "base": "direct",
+    "spec": "1, 4",
+    "desc": "gate CLASS is DELIBERATION but the run has only a DIRECT stage",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "DISPATCH 3.1",
+    "desc": "GENERATE seat file missing the KNOCKDOWN heading",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "DISPATCH 3.5",
+    "desc": "OPERATE seat file missing the WRONG heading",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7 stamp",
+    "desc": "stamp names a different operator than the stage folder",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "2, 7",
+    "desc": "stamp names a seat id that is not in the registry",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7",
+    "desc": "a seat that is not READY in the registry has a reply file counted in a stage",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "DISPATCH 6",
+    "desc": "a seat file exists with no log record of its write",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S04a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.6",
+    "desc": "review.md missing the HOLDS heading",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S04b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.8",
+    "desc": "verifier.md missing the NOT COVERED heading",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S05a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7 reused conversations",
+    "desc": "REVIEWER window is a reused conversation and no CONTAMINATION flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S05b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "7 reused conversations",
+    "desc": "a GENERATE seat is a reused conversation and no CONTAMINATION flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S06a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.6, 7 handshake",
+    "desc": "REVIEWER handshake logged after the first GENERATE send",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S07a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7 reduced crew",
+    "desc": "an OPERATE stage has fewer replies than READY generators and no REDUCED_CREW flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S07b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "7 reduced crew",
+    "desc": "GENERATE has fewer replies than READY generators and no REDUCED_CREW flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S08a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "2 minimum crew",
+    "desc": "gate min_crew below the spec floor of 2 and a one-reply stage",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S08b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "2 minimum crew",
+    "desc": "gate min_crew below the spec floor of 2",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S09a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7 capture records",
+    "desc": "seat file bytes differ from the capture record byte_hash",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "S09b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "7 capture records",
+    "desc": "capture char_count does not match the saved reply",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.8, I3",
+    "desc": "verifier output pasted under section 14 of DELIVERABLE.md",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.8, I3",
+    "desc": "DELIVERABLE_ASSEMBLED.md lacks the verifier tail",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.8",
+    "desc": "verifier CONTRADICTION recorded but no PROVISIONAL flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.8",
+    "desc": "verifier CONTRADICTION (parenthesis numbering) but no PROVISIONAL flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "2, 10",
+    "desc": "no review stage and no NO_OUTSIDE_REVIEW flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "2, 10",
+    "desc": "no verifier file and no NO_VERIFIER flag",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F04a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.7, I10",
+    "desc": "kills-all.md omits a KILLS line from a close",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F04b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.7, I10",
+    "desc": "kills-all.md missing although the final was written",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F05a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.7 P6 order",
+    "desc": "deliverable sections out of order",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F06a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "17",
+    "desc": "ledger classification is not one of the three",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F06b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "10",
+    "desc": "ledger carries a flag name the schema does not define",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F07a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "17",
+    "desc": "ledger classification disagrees with the deliverable",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "F07b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "17",
+    "desc": "deliverable classification disagrees with the ledger",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "5 COMPARE",
+    "desc": "KEEP with the delta in the wrong direction for a lower-is-better metric",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "5 COMPARE",
+    "desc": "KEEP whose repeat run is worse than baseline",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "5 EXECUTE",
+    "desc": "KEEP on a run that exceeded the experiment budget",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "5 COMPARE",
+    "desc": "KEEP with a guardrail beyond tolerance",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "5 LOG",
+    "desc": "experiment record with no line in experiments/log.jsonl",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "X03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "5 LOG",
+    "desc": "experiment log decision disagrees with record.json",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "D01a",
+    "split": "DEV",
+    "base": "direct",
+    "spec": "DISPATCH 5, P9",
+    "desc": "DIRECT seat file missing the CLAIMS heading",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "D01b",
+    "split": "HOLDOUT",
+    "base": "direct",
+    "spec": "DISPATCH 5",
+    "desc": "DIRECT stage has two generator replies",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "G01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "1",
+    "desc": "gate CLASS is not one of the five classes",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "G01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "1, 4.4",
+    "desc": "gate PROFILE is not adaptive or v10-fixed",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "G02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "1, 2",
+    "desc": "experiments were executed with no READY EXECUTOR seat",
+    "status": "MISSED",
+    "rules": []
+   },
+   {
+    "id": "G02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "1",
+    "desc": "gate CLASS EXPERIMENT with no EXECUTOR registered at all",
+    "status": "MISSED",
+    "rules": []
+   }
+  ],
+  "guards": [
+   {
+    "id": "GA01a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.6, 15 G-11",
+    "desc": "send to REVIEWER during an operator stage",
+    "stage": "SEND",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA01b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "7, 15 G-11",
+    "desc": "send to a seat that is not READY",
+    "stage": "SEND",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA02a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "5, 15 G-9",
+    "desc": "KEEP with delta in the wrong direction",
+    "stage": "DECIDE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA02b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "5, 15 G-9",
+    "desc": "KEEP whose repeat run does not improve on baseline",
+    "stage": "DECIDE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA03a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "5, 15 G-9",
+    "desc": "KEEP on a run that exceeded the per-experiment budget",
+    "stage": "DECIDE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA03b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "5, 15 G-9",
+    "desc": "KEEP with a guardrail beyond tolerance",
+    "stage": "DECIDE",
+    "status": "BLOCKED",
+    "reason": "G-9 KEEP with guardrail output_hash_changed beyond tolerance"
+   },
+   {
+    "id": "GA04a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "6, 15 G-5",
+    "desc": "OPERATE when max_operators is already reached",
+    "stage": "OPERATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA04b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.4, 15 G-5",
+    "desc": "OPERATE with an operator that is not in the library",
+    "stage": "OPERATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA05a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "1, 15 G-2",
+    "desc": "GENERATE when the gate class is DIRECT",
+    "stage": "GENERATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA05b",
+    "split": "HOLDOUT",
+    "base": "direct",
+    "spec": "1, 15 G-2",
+    "desc": "DIRECT when the gate class is DELIBERATION",
+    "stage": "DIRECT",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA06a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "7, 15 G-3",
+    "desc": "CHECK counting seat files whose stamp stage number mismatches the folder",
+    "stage": "CHECK",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA06b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "2, 15 G-3",
+    "desc": "CHECK counting seat files stamped with seat ids not in the registry",
+    "stage": "CHECK",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA07a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "3, 15 G-4",
+    "desc": "CLOSE with a PASSED source claim whose SOURCE says support=PARTIAL",
+    "stage": "CLOSE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA07b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "3, 15 G-4",
+    "desc": "CLOSE with a METHOD none claim marked PASSED",
+    "stage": "CLOSE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA08a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.6, 15 G-6",
+    "desc": "REVIEW when the reviewer handshake came after GENERATE began",
+    "stage": "REVIEW",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA08b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "7, 15 G-6",
+    "desc": "REVIEW when the REVIEWER seat is not READY",
+    "stage": "REVIEW",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA09a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.7, 15 G-7",
+    "desc": "FINAL when kills-all.md omits a KILLS line from a close",
+    "stage": "FINAL",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA09b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.7, 15 G-7",
+    "desc": "FINAL when metrics-summary.json is not valid JSON",
+    "stage": "FINAL",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA10a",
+    "split": "DEV",
+    "base": "hybrid",
+    "spec": "4.8, 15 G-8",
+    "desc": "VERIFY when no VERIFIER seat is READY",
+    "stage": "VERIFY",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "GA10b",
+    "split": "HOLDOUT",
+    "base": "hybrid",
+    "spec": "4.8, I3, 15 G-8",
+    "desc": "VERIFY when section 14 of DELIVERABLE.md already has content",
+    "stage": "VERIFY",
+    "status": "ALLOWED",
+    "reason": ""
+   }
+  ],
+  "allows": [
+   {
+    "id": "AL01",
+    "base": "hybrid",
+    "stage": "GATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL02",
+    "base": "hybrid",
+    "stage": "GENERATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL03",
+    "base": "hybrid",
+    "stage": "CHECK",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL04",
+    "base": "hybrid",
+    "stage": "CHECK",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL05",
+    "base": "hybrid",
+    "stage": "CLOSE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL06",
+    "base": "hybrid",
+    "stage": "CLOSE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL07",
+    "base": "hybrid",
+    "stage": "CLOSE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL08",
+    "base": "hybrid",
+    "stage": "OPERATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL09",
+    "base": "hybrid",
+    "stage": "REVIEW",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL10",
+    "base": "hybrid",
+    "stage": "FINAL",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL11",
+    "base": "hybrid",
+    "stage": "VERIFY",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL12",
+    "base": "hybrid",
+    "stage": "DECIDE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL13",
+    "base": "hybrid",
+    "stage": "SEND",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL14",
+    "base": "direct",
+    "stage": "GATE",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL15",
+    "base": "direct",
+    "stage": "DIRECT",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL16",
+    "base": "direct",
+    "stage": "CHECK",
+    "status": "FALSE_BLOCK",
+    "reason": "G-3 1 complete stamped seat files < MIN_CREW 2"
+   },
+   {
+    "id": "AL17",
+    "base": "direct",
+    "stage": "FINAL",
+    "status": "ALLOWED",
+    "reason": ""
+   },
+   {
+    "id": "AL18",
+    "base": "direct",
+    "stage": "VERIFY",
+    "status": "ALLOWED",
+    "reason": ""
+   }
+  ],
+  "package_assertions": [
+   {
+    "id": "PA01",
+    "spec": "4.3, 8, 10",
+    "desc": "no STRUCTURAL kill vocabulary outside the history sections (spec 8, SCHEMA, P4, template)",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA02",
+    "spec": "1, DISPATCH 5",
+    "desc": "SCHEMA states and GATE transitions include DIRECT",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA03",
+    "spec": "15, 19",
+    "desc": "spec section 15 has a G-11 row",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA04",
+    "spec": "10",
+    "desc": "flag list in spec section 10 equals SCHEMA flags",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA05",
+    "spec": "10",
+    "desc": "flag list in the morning template equals SCHEMA flags",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA06",
+    "spec": "4.3, DISPATCH 3.5",
+    "desc": "OPTIONS STANDING is an output section of the MERGE close in P4, spec 4.3 and DISPATCH 3.5",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA07",
+    "spec": "14",
+    "desc": "na_gate.py and na_check.py docstrings carry the SCHEMA version",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA08",
+    "spec": "15",
+    "desc": "every SCHEMA guard has a spec section 15 row and appears in the guard or checker code",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA09",
+    "spec": "17",
+    "desc": "QA_REPORT, VALIDATION_STATUS and ADVERSARIAL_TESTS counts equal the fixture suite sizes",
+    "status": "PASS"
+   },
+   {
+    "id": "PA10",
+    "spec": "14",
+    "desc": "spec, SCHEMA, README and DISPATCH state the same version",
+    "status": "PASS"
+   },
+   {
+    "id": "PA11",
+    "spec": "4.3",
+    "desc": "the six MERGE close sections are named in P4, DISPATCH and spec 4.3",
+    "status": "PASS"
+   },
+   {
+    "id": "PA12",
+    "spec": "5, 15",
+    "desc": "G-9 names the metric direction in SCHEMA and spec",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA13",
+    "spec": "DISPATCH 5, 15",
+    "desc": "G-3 names the DIRECT one-seat exception in SCHEMA and spec",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA14",
+    "spec": "DISPATCH 3.7",
+    "desc": "DISPATCH 3.7 does not repeat the kills-all sentence",
+    "status": "FAIL"
+   },
+   {
+    "id": "PA15",
+    "spec": "TESTS",
+    "desc": "make_fixture.py docstring no longer says eleven variants",
+    "status": "FAIL"
+   }
+  ],
+  "legacy": [
+   "19 of 19 injected faults caught",
+   "23 of 23 guard expectations met",
+   "OK    mutation sensitivity: bypassing EVID-2 in the candidate makes F01 escape that rule (0 EVID-2 fails after mutation)"
+  ],
+  "package_check_fail_lines": []
+ }
+}

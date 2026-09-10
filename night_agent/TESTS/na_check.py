@@ -138,6 +138,9 @@ def audit_run(run):
         return
     log = [json.loads(l) for l in read(j("log.jsonl")).splitlines() if l.strip()]
     stages = sorted(d for d in os.listdir(run) if re.match(r"stage-\d\d-", d))
+    registry = json.load(open(j("registry.json"))) if os.path.exists(j("registry.json")) else {}
+    seat_ids = {s.get("id") for s in registry.get("seats", [])}
+    direct = bool(stages) and stages[0].endswith("-direct")  # DISPATCH 5: one generator, check, final; no close, no review
 
     # stamps and headings
     for st in stages:
@@ -150,7 +153,7 @@ def audit_run(run):
                 rep(m.group(1) == st[6:8], f"STAMP-MATCH-{st}-{s}", "stamp stage number matches folder")
         # completeness
         gate = json.load(open(j("gate/gate.json")))
-        mincrew = gate.get("min_crew", 2)
+        mincrew = 1 if st.endswith("-direct") else gate.get("min_crew", 2)
         rep(len(seats) >= mincrew, f"CREW-{st}", f"{len(seats)} seat replies >= min_crew {mincrew}")
         if os.path.exists(j(st, "check.md")):
             check_evidence_file(j(st, "check.md"), st)
@@ -163,11 +166,11 @@ def audit_run(run):
                 rep(re.search(rf"^{h}\b", close, re.M) is not None, f"CLOSE-{st}-{h}", f"close.md has heading {h}")
             if "MERGED" in need:
                 check_provenance_in_text(j(st, "close.md"), ["MERGED"], st, run=run, upto=st)
-        else:
+        elif not st.endswith("-direct"):
             rep(False, f"FILE-{st}-close", "close.md exists")
 
     # no new options after generate
-    if stages:
+    if stages and not direct:
         gen_close = j(stages[0], "close.md")
         if os.path.exists(gen_close):
             opts0 = set(re.findall(r"^\s*(\d+)[\.\)]\s", re.split(r"^KILLS", read(gen_close), 1, re.M)[0], re.M))
@@ -184,7 +187,8 @@ def audit_run(run):
     sends = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") in ("send", "prompt")]
     before_review = [l for l in sends if l.get("stage") not in ("REVIEW", "REGISTRY") and l.get("action") != "handshake"]
     hs = [l for l in log if l.get("seat") == "REVIEWER" and l.get("action") == "handshake"]
-    rep(len(hs) == 1, "ISO-3", f"reviewer handshaked exactly once ({len(hs)})")
+    if "REVIEWER" in seat_ids:
+        rep(len(hs) == 1, "ISO-3", f"reviewer handshaked exactly once ({len(hs)})")
     rep(len(before_review) == 0, "ISO-2", f"reviewer received no run content before REVIEW ({len(before_review)} violations)")
 
     # review package must not contain seat files or kills
