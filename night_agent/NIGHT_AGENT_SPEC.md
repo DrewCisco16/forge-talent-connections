@@ -278,7 +278,7 @@ DISPATCH.md is prose and prose is forgettable under compaction. Every stage tran
 | G-6 | to REVIEW | last close.md missing, reviewer handshake count not exactly one, the handshake logged after the first GENERATE send, or any reviewer send logged after the handshake |
 | G-7 | to FINAL | final/DELIVERABLE.md already exists, kills-all.md or metrics-summary.json missing, kills-all.md missing any KILLS entry of any close, or neither (review.md and check-review.md) nor the NO_OUTSIDE_REVIEW flag present |
 | G-8 | to VERIFY | DELIVERABLE.md missing, verifier.md already exists, or section 14 of DELIVERABLE.md already has content |
-| G-9 | DECIDE = KEEP | record.json lacks repeat_value, or delta is not beyond noise (or MIN_DELTA when noise unknown), or any guardrail exceeds tolerance, or any hard constraint unchecked |
+| G-9 | DECIDE = KEEP | record.json lacks repeat_value, the metric direction is unknown, delta is not an improvement in that direction beyond noise (or MIN_DELTA when noise unknown), the repeat run does not improve on the baseline beyond the same threshold, the run exceeded EXPERIMENT_BUDGET_S, any guardrail exceeds tolerance, or any hard constraint unchecked |
 | G-10 | any MERGED line | no provenance tag, or a cited claim id that is not PASSED in a check file of this or an earlier stage (enforced post hoc by na_check.py PROV rules) |
 
 The guards implement the spec; they do not extend it. A guard that disagrees with the spec is a bug in the guard.

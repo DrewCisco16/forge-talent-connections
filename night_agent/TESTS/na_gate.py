@@ -52,6 +52,49 @@ def parse_claims(text):
     return claims
 
 
+def keep_defects(rec, base, gate):
+    """Why a KEEP would be wrong (spec 5 COMPARE and DECIDE, guard G-9). Empty list means the KEEP is sound."""
+    out = []
+    noise = rec.get("noise", base.get("noise"))
+    min_delta = (gate.get("budget", {}) or {}).get("min_delta")
+    thr = noise if noise is not None else min_delta
+    direction = rec.get("direction") or base.get("direction")
+    if not direction:
+        for o in gate.get("objectives", []) or []:
+            if o.get("name") == (rec.get("metric") or base.get("metric")):
+                direction = o.get("direction")
+    if direction not in ("lower", "higher"):
+        out.append("metric direction unknown (record, baseline.json or gate objectives must say lower or higher)")
+    delta = rec.get("delta")
+    if delta is None:
+        out.append("no delta")
+    elif thr is None:
+        out.append("noise unknown and no MIN_DELTA set")
+    else:
+        improved = (delta < 0) if direction == "lower" else (delta > 0) if direction == "higher" else False
+        if direction in ("lower", "higher") and not improved:
+            out.append(f"delta {delta} is not an improvement for a {direction}-is-better metric")
+        elif abs(delta) <= abs(thr):
+            out.append(f"delta {delta} not beyond noise/min_delta {thr}")
+    if rec.get("repeat_value") is None:
+        out.append("no repeat run (repeat_value null)")
+    elif rec.get("baseline_value", base.get("baseline_value")) is not None and thr is not None and direction in ("lower", "higher"):
+        bv = rec.get("baseline_value", base.get("baseline_value"))
+        rdelta = rec["repeat_value"] - bv
+        rimp = (rdelta < 0) if direction == "lower" else (rdelta > 0)
+        if not rimp or abs(rdelta) <= abs(thr):
+            out.append(f"repeat run {rec['repeat_value']} does not improve on baseline {bv} beyond {thr}")
+    if rec.get("within_budget") is False:
+        out.append("run exceeded EXPERIMENT_BUDGET_S (must be INCONCLUSIVE)")
+    for g in rec.get("guardrails", []) or []:
+        if g.get("value") is not None and g.get("baseline") is not None and g.get("tolerance") is not None:
+            if abs(g["value"] - g["baseline"]) > abs(g["tolerance"]):
+                out.append(f"guardrail {g.get('name')} beyond tolerance")
+    if not rec.get("constraints_checked"):
+        out.append("no hard constraints checked")
+    return out
+
+
 def log_lines(run):
     p = os.path.join(run, "log.jsonl")
     if not os.path.exists(p):
@@ -225,24 +268,7 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
             if rec is None:
                 reasons.append("G-9 record.json missing")
             elif rec.get("decision") == "KEEP":
-                if rec.get("repeat_value") is None:
-                    reasons.append("G-9 KEEP without a repeat run (repeat_value null)")
-                noise = rec.get("noise", base.get("noise"))
-                min_delta = (gate.get("budget", {}) or {}).get("min_delta")
-                delta = rec.get("delta")
-                thr = noise if noise is not None else min_delta
-                if delta is None:
-                    reasons.append("G-9 KEEP without delta")
-                elif thr is None:
-                    reasons.append("G-9 KEEP with noise unknown and no MIN_DELTA set")
-                elif abs(delta) <= abs(thr):
-                    reasons.append(f"G-9 KEEP delta {delta} not beyond noise/min_delta {thr}")
-                for g in rec.get("guardrails", []) or []:
-                    if g.get("value") is not None and g.get("baseline") is not None and g.get("tolerance") is not None:
-                        if abs(g["value"] - g["baseline"]) > abs(g["tolerance"]):
-                            reasons.append(f"G-9 KEEP with guardrail {g.get('name')} beyond tolerance")
-                if not rec.get("constraints_checked"):
-                    reasons.append("G-9 KEEP with no hard constraints checked")
+                reasons += ["G-9 KEEP: " + d for d in keep_defects(rec, base, gate)]
     elif stage == "SEND":  # G-11
         if not seat:
             reasons.append("G-11 --seat required")

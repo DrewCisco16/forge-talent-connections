@@ -92,8 +92,8 @@ def conforming(root):
     w(root, "final/verifier.md", ver); L("VERIFIER", "send", file="final/verifier.md", stage="VERIFY")
     w(root, "final/DELIVERABLE_ASSEMBLED.md", deliv + "\n" + ver); L("DISPATCH", "write", file="final/DELIVERABLE_ASSEMBLED.md", stage="DELIVER")
     # experiments (a HYBRID distinguishing test) with a valid KEEP
-    w(root, "experiments/baseline.json", json.dumps({"metric": "runtime_s", "baseline_value": 10.0, "noise": 0.3, "runs": 2}))
-    w(root, "experiments/exp-001/record.json", json.dumps({"id": "exp-001", "hypothesis": "caching halves runtime", "delta": -4.0, "noise": 0.3,
+    w(root, "experiments/baseline.json", json.dumps({"metric": "runtime_s", "direction": "lower", "baseline_value": 10.0, "noise": 0.3, "runs": 2}))
+    w(root, "experiments/exp-001/record.json", json.dumps({"id": "exp-001", "hypothesis": "caching halves runtime", "metric": "runtime_s", "baseline_value": 10.0, "delta": -4.0, "noise": 0.3,
                                                           "repeat_value": 6.1, "constraints_checked": ["output hash unchanged"],
                                                           "guardrails": [{"name": "output_hash_changed", "baseline": 0, "value": 0, "tolerance": 0}],
                                                           "decision": "KEEP"}))

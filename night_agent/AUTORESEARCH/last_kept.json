@@ -1,21 +1,21 @@
 {
  "primary": {
   "DEV": {
-   "caught": 32,
+   "caught": 34,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 30,
+   "caught": 32,
    "total": 34
   }
  },
  "guard": {
   "DEV": {
-   "blocked": 6,
+   "blocked": 8,
    "total": 10
   },
   "HOLDOUT": {
-   "blocked": 6,
+   "blocked": 7,
    "total": 10
   }
  },
@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.99,
+  "runtime_s": 10.84,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 6,
+  "package_assertions_passing": 7,
   "total": 15
  },
  "detail": {
@@ -687,8 +687,10 @@
     "base": "hybrid",
     "spec": "5 COMPARE",
     "desc": "KEEP with the delta in the wrong direction for a lower-is-better metric",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-SOUND-exp"
+    ]
    },
    {
     "id": "X01b",
@@ -696,8 +698,10 @@
     "base": "hybrid",
     "spec": "5 COMPARE",
     "desc": "KEEP whose repeat run is worse than baseline",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-SOUND-exp"
+    ]
    },
    {
     "id": "X02a",
@@ -705,8 +709,10 @@
     "base": "hybrid",
     "spec": "5 EXECUTE",
     "desc": "KEEP on a run that exceeded the experiment budget",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-SOUND-exp"
+    ]
    },
    {
     "id": "X04b",
@@ -714,8 +720,10 @@
     "base": "hybrid",
     "spec": "5 COMPARE",
     "desc": "KEEP with a guardrail beyond tolerance",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "EXP-SOUND-exp"
+    ]
    },
    {
     "id": "X03a",
@@ -826,8 +834,8 @@
     "spec": "5, 15 G-9",
     "desc": "KEEP with delta in the wrong direction",
     "stage": "DECIDE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-9 KEEP: delta 4.0 is not an improvement for a lower-is-better metric"
    },
    {
     "id": "GA02b",
@@ -836,8 +844,8 @@
     "spec": "5, 15 G-9",
     "desc": "KEEP whose repeat run does not improve on baseline",
     "stage": "DECIDE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-9 KEEP: repeat run 10.4 does not improve on baseline 10.0 beyond 0.3"
    },
    {
     "id": "GA03a",
@@ -846,8 +854,8 @@
     "spec": "5, 15 G-9",
     "desc": "KEEP on a run that exceeded the per-experiment budget",
     "stage": "DECIDE",
-    "status": "ALLOWED",
-    "reason": ""
+    "status": "BLOCKED",
+    "reason": "G-9 KEEP: run exceeded EXPERIMENT_BUDGET_S (must be INCONCLUSIVE)"
    },
    {
     "id": "GA12b",
@@ -857,7 +865,7 @@
     "desc": "KEEP with a guardrail beyond tolerance",
     "stage": "DECIDE",
     "status": "BLOCKED",
-    "reason": "G-9 KEEP with guardrail output_hash_changed beyond tolerance"
+    "reason": "G-9 KEEP: guardrail output_hash_changed beyond tolerance"
    },
    {
     "id": "GA04a",
@@ -1199,7 +1207,7 @@
     "id": "PA12",
     "spec": "5, 15",
     "desc": "G-9 names the metric direction in SCHEMA and spec",
-    "status": "FAIL"
+    "status": "PASS"
    },
    {
     "id": "PA13",

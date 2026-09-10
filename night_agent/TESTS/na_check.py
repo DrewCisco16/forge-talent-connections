@@ -32,6 +32,8 @@ DELIV_SECTIONS = ["1 THE RESULT", "2 WHAT SURVIVED", "3 WHY IT SURVIVED", "4 OBJ
                   "6 TRADE-OFFS", "7 OUTSIDE REVIEW", "8 STILL OPEN", "9 CONFIDENCE", "10 RUN INTEGRITY", "11 EFFICIENCY", "12 NEXT QUESTION"]
 
 SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SCHEMA.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from na_gate import keep_defects  # one definition of a sound KEEP, shared by the guard and the checker  # noqa: E402
 
 results = []
 
@@ -490,6 +492,9 @@ def audit_run(run):
                 if rec.get("decision") == "KEEP":
                     rep(rec.get("repeat_value") is not None, f"EXP-KEEP-{d}", "KEEP has a repeat run")
                     rep(bool(rec.get("constraints_checked")), f"EXP-CONS-{d}", "KEEP has hard constraints checked")
+                    base_ = json.load(open(os.path.join(expdir, "baseline.json"))) if os.path.exists(os.path.join(expdir, "baseline.json")) else {}
+                    defects = keep_defects(rec, base_, gate)
+                    rep(len(defects) == 0, f"EXP-SOUND-{d}", f"KEEP improves beyond noise in the metric's direction on both runs, within budget, guardrails held ({defects})")
                 rep(rec.get("decision") in ("KEEP", "REVERT", "INCONCLUSIVE"), f"EXP-DEC-{d}", f"decision is one of three ({rec.get('decision')})")
     # architecture decisions: paired floor and predefined criterion
     ad = os.path.join(run, "..", "..", "architecture", "decisions.jsonl")
