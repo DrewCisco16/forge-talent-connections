@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Builds a conforming synthetic run folder (fixture) and eleven fault-injected
-variants, runs na_check.py on each, and reports whether the injected fault was
-caught. This proves the CHECKER, not the night. Nothing here talks to a model.
+"""Builds a conforming synthetic run folder (fixture) and one fault-injected
+variant per entry in FAULTS, runs na_check.py on each, and reports whether the
+injected fault was caught; then runs na_gate.py against GUARD_TESTS and a
+candidate-mutation sensitivity test. This proves the CHECKER and the GUARD,
+not the night. Nothing here talks to a model.
 
 Usage: python3 make_fixture.py <out_dir>
 """

@@ -27,11 +27,11 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 11.5,
+  "runtime_s": 13.64,
   "within_budget": true
  },
  "secondary": {
-  "package_assertions_passing": 11,
+  "package_assertions_passing": 12,
   "total": 15
  },
  "detail": {
@@ -1234,7 +1234,7 @@
     "id": "PA15",
     "spec": "TESTS",
     "desc": "make_fixture.py docstring no longer says eleven variants",
-    "status": "FAIL"
+    "status": "PASS"
    }
   ],
   "legacy": [
