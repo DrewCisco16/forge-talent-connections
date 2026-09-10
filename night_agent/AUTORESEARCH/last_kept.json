@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 26,
+   "caught": 27,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 25,
+   "caught": 26,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.28,
+  "runtime_s": 12.66,
   "within_budget": true
  },
  "secondary": {
@@ -563,8 +563,10 @@
     "base": "hybrid",
     "spec": "4.8",
     "desc": "verifier CONTRADICTION recorded but no PROVISIONAL flag",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "PROVISIONAL"
+    ]
    },
    {
     "id": "F02b",
@@ -572,8 +574,10 @@
     "base": "hybrid",
     "spec": "4.8",
     "desc": "verifier CONTRADICTION (parenthesis numbering) but no PROVISIONAL flag",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "PROVISIONAL"
+    ]
    },
    {
     "id": "F03a",

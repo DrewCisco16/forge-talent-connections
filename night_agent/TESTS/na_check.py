@@ -326,6 +326,11 @@ def audit_run(run):
         check_headings(j("review", "review.md"), "review", "review")
     if os.path.exists(j("final", "verifier.md")):
         check_headings(j("final", "verifier.md"), "verifier", "verifier")
+        vt = read(j("final", "verifier.md"))
+        m = re.search(r"^CONTRADICTIONS\b[^\n]*\n(.*?)(?=^[A-Z][A-Z ]{3,}\s*$|\Z)", vt, re.S | re.M)
+        items = [l for l in (m.group(1) if m else "").splitlines() if re.match(r"^\s*(\d+[\.\)]|[-*])\s*\S", l) and l.strip().lower() not in ("- none", "* none")]
+        if items:
+            rep("PROVISIONAL" in flags_all, "PROVISIONAL", f"{len(items)} verifier CONTRADICTION(s) mark the run PROVISIONAL (spec 4.8)")
     if os.path.exists(j("review", "check-review.md")):
         rc = check_evidence_file(j("review", "check-review.md"), "review")
         notr = [c["id"] for c in rc if c["prov"] != "R"]
