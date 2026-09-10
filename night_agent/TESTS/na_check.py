@@ -409,6 +409,8 @@ def audit_run(run):
         d = read(j("final", "DELIVERABLE.md"))
         for sec in DELIV_SECTIONS:
             rep(re.search(rf"^{re.escape(sec)}\b", d, re.M) is not None, f"DELIV-{sec.split()[0]}", f"deliverable has section {sec}")
+        pos = [m.start() for sec in DELIV_SECTIONS for m in [re.search(rf"^{re.escape(sec)}\b", d, re.M)] if m]
+        rep(pos == sorted(pos), "DELIV-ORDER", "deliverable sections appear in P6 order")
         check_provenance_in_text(j("final", "DELIVERABLE.md"), ["3 WHY IT SURVIVED"], "final", run=run)
         tail = d.split("PRIVATE DOCUMENT VERIFICATION", 1)[1] if "PRIVATE DOCUMENT VERIFICATION" in d else "x"
         rep("PRIVATE DOCUMENT VERIFICATION" in d and not tail.strip(), "DELIV-14", "section 14 present and empty in DELIVERABLE.md (verifier lives in its own file, I3)")
