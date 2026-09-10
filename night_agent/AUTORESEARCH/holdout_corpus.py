@@ -854,7 +854,9 @@ def pa_flags_spec_eq_schema(p):
 def pa_flags_template_eq_schema(p):
     s = json.load(open(os.path.join(p, "SCHEMA.json")))
     t = read(os.path.join(p, "MORNING_DELIVERABLE_TEMPLATE.md"))
-    toks = _flag_tokens(_section(t, r"^10 RUN INTEGRITY", r"^\d+ [A-Z]"), s["flags"])
+    sec = _section(t, r"^10 RUN INTEGRITY", r"^\d+ [A-Z]")
+    listed = sec.split("flags:", 1)[1] if "flags:" in sec else ""
+    toks = _flag_tokens(listed, s["flags"])
     return set(s["flags"]) <= toks and toks <= set(s["flags"])
 
 
