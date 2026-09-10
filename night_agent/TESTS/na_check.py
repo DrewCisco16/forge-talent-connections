@@ -16,6 +16,18 @@ NEED_SETTLE = {"JUDGEMENT CALL", "NOT TESTABLE", "BLOCKED", "INCONCLUSIVE"}
 PROV = re.compile(r"\[(G?\d+|R|X-[A-Za-z0-9\-]+|D|OP)\]")
 STAMP = re.compile(r"^STAGE (\d\d) ([A-Z\-]+) SEAT ([A-Za-z0-9]+) TIME (\d\d:\d\d)\s*$")
 CLAIM = re.compile(r"^CLAIM\s+(\S+)\s+\[([^\]]+)\]\s+\"(.*)\"\s*$")
+REPLY_HEADINGS = {"generate": ["CANDIDATES", "CLAIMS", "KNOCKDOWN", "MISSING"], "direct": ["ANSWER", "CLAIMS", "OPEN"],
+                  "operate": ["WRONG", "MISSING", "KILLS", "OPEN"], "review": ["HITS", "GAPS", "HOLDS", "OPEN"],
+                  "verifier": ["CONTRADICTIONS", "CONFIRMED", "NOT COVERED", "MATERIAL OMISSIONS"]}
+
+
+def check_headings(path, kind, tag):
+    """A reply is saved only if every heading its prompt requires is present (DISPATCH 3.1, 3.5, 3.6, 3.8, 5)."""
+    txt = read(path)
+    missing = [h for h in REPLY_HEADINGS[kind] if re.search(rf"^{re.escape(h)}\b", txt, re.M) is None]
+    rep(len(missing) == 0, f"HEAD-{tag}", f"{path}: required headings present ({missing})")
+
+
 DELIV_SECTIONS = ["1 THE RESULT", "2 WHAT SURVIVED", "3 WHY IT SURVIVED", "4 OBJECTIVE RESULTS", "5 WHAT DIED AND WHY",
                   "6 TRADE-OFFS", "7 OUTSIDE REVIEW", "8 STILL OPEN", "9 CONFIDENCE", "10 RUN INTEGRITY", "11 EFFICIENCY", "12 NEXT QUESTION"]
 
@@ -190,6 +202,7 @@ def audit_run(run):
             rep(bool(m), f"STAMP-{st}-{s}", f"line 1 is a stamp ({first[:40]!r})")
             if m:
                 rep(m.group(1) == st[6:8], f"STAMP-MATCH-{st}-{s}", "stamp stage number matches folder")
+            check_headings(j(st, s), "generate" if st.endswith("-generate") else "direct" if st.endswith("-direct") else "operate", f"{st}-{s}")
         # completeness
         gate = json.load(open(j("gate/gate.json")))
         mincrew = 1 if st.endswith("-direct") else gate.get("min_crew", 2)
@@ -285,6 +298,10 @@ def audit_run(run):
         rep(leak is None, "ISO-2b", "review package contains no seat file stamp and no KILLS section")
         names = re.findall(r"(Sol|Gemini|Grok|Magistral|Fable|Astra|GPT|Claude|Mistral)", pk)
         rep(len(names) == 0, "ISO-4", f"review package has attribution stripped ({len(names)} model-name hits)")
+    if os.path.exists(j("review", "review.md")):
+        check_headings(j("review", "review.md"), "review", "review")
+    if os.path.exists(j("final", "verifier.md")):
+        check_headings(j("final", "verifier.md"), "verifier", "verifier")
     if os.path.exists(j("review", "check-review.md")):
         rc = check_evidence_file(j("review", "check-review.md"), "review")
         notr = [c["id"] for c in rc if c["prov"] != "R"]

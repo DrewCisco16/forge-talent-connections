@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 15,
+   "caught": 18,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 16,
+   "caught": 18,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 12.72,
+  "runtime_s": 12.85,
   "within_budget": true
  },
  "secondary": {
@@ -350,8 +350,10 @@
     "base": "hybrid",
     "spec": "DISPATCH 3.1",
     "desc": "GENERATE seat file missing the KNOCKDOWN heading",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "HEAD-stage-01-generate-seat-G1.md"
+    ]
    },
    {
     "id": "S01b",
@@ -359,8 +361,10 @@
     "base": "hybrid",
     "spec": "DISPATCH 3.5",
     "desc": "OPERATE seat file missing the WRONG heading",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "HEAD-stage-02-fmea-seat-G1.md"
+    ]
    },
    {
     "id": "S02a",
@@ -404,8 +408,10 @@
     "base": "hybrid",
     "spec": "4.6",
     "desc": "review.md missing the HOLDS heading",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "HEAD-review"
+    ]
    },
    {
     "id": "S04b",
@@ -413,8 +419,10 @@
     "base": "hybrid",
     "spec": "4.8",
     "desc": "verifier.md missing the NOT COVERED heading",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "HEAD-verifier"
+    ]
    },
    {
     "id": "S05a",
@@ -674,8 +682,10 @@
     "base": "direct",
     "spec": "DISPATCH 5, P9",
     "desc": "DIRECT seat file missing the CLAIMS heading",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "HEAD-stage-01-direct-seat-G1.md"
+    ]
    },
    {
     "id": "D02b",
