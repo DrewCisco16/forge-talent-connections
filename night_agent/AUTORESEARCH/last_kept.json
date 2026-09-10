@@ -1,11 +1,11 @@
 {
  "primary": {
   "DEV": {
-   "caught": 10,
+   "caught": 11,
    "total": 36
   },
   "HOLDOUT": {
-   "caught": 10,
+   "caught": 11,
    "total": 34
   }
  },
@@ -27,7 +27,7 @@
   "package_check_total": 59,
   "legacy_suite_exit": 0,
   "corpus_errors": 0,
-  "runtime_s": 8.72,
+  "runtime_s": 9.5,
   "within_budget": true
  },
  "secondary": {
@@ -262,8 +262,10 @@
     "base": "hybrid",
     "spec": "4.3",
     "desc": "MERGE close missing the DEPRIORITIZED section",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CLOSE-stage-02-fmea-DEPRIORITIZED"
+    ]
    },
    {
     "id": "O03b",
@@ -271,8 +273,10 @@
     "base": "hybrid",
     "spec": "4.3",
     "desc": "LIST close (after GENERATE) contains a MERGED section",
-    "status": "MISSED",
-    "rules": []
+    "status": "CAUGHT",
+    "rules": [
+     "CLOSE-stage-01-generate-NOMERGE"
+    ]
    },
    {
     "id": "O04a",

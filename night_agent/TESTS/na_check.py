@@ -197,9 +197,11 @@ def audit_run(run):
             rep(False, f"FILE-{st}-check", "check.md exists")
         if os.path.exists(j(st, "close.md")):
             close = read(j(st, "close.md"))
-            need = ["OPTIONS", "KILLS", "OPEN", "METRICS"] if st.endswith("generate") else ["MERGED", "KILLS", "OPEN", "CONFLICT", "METRICS"]
+            need = ["OPTIONS", "KILLS", "OPEN", "METRICS"] if st.endswith("generate") else ["MERGED", "KILLS", "DEPRIORITIZED", "OPEN", "CONFLICT", "METRICS"]
             for h in need:
                 rep(re.search(rf"^{h}\b", close, re.M) is not None, f"CLOSE-{st}-{h}", f"close.md has heading {h}")
+            if st.endswith("generate"):  # P4 LIST mode: the closer lists, it does not merge
+                rep(re.search(r"^MERGED\b", close, re.M) is None, f"CLOSE-{st}-NOMERGE", "LIST-mode close has no MERGED section")
             check_kills_earned(j(st, "close.md"), st, run, st)
             if "MERGED" in need:
                 check_provenance_in_text(j(st, "close.md"), ["MERGED"], st, run=run, upto=st)
