@@ -125,11 +125,11 @@ def gate_scope(root: Path, base: str) -> str | None:
 
 
 def _count_pattern(root: Path, pattern: str, ref: str | None) -> int:
-    cmd = ["git", "grep", "-o", "-E", pattern]
+    cmd = ["git", "grep", "-o", "-E"]
     if ref:
-        cmd += [ref, "--", f"{PACKAGE}/*.py"]
+        cmd += ["-e", pattern, ref, "--", f"{PACKAGE}/*.py"]
     else:
-        cmd += ["--untracked", "--", f"{PACKAGE}/*.py"]
+        cmd += ["--untracked", "-e", pattern, "--", f"{PACKAGE}/*.py"]
     r = sh(cmd, root, check=False)
     if r.returncode not in (0, 1):
         raise RuntimeError(f"git grep failed: {r.stderr.strip()}")
