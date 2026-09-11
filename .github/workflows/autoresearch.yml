@@ -1,0 +1,120 @@
+name: autoresearch
+
+# The overnight loop as a button. Actions -> autoresearch -> Run workflow,
+# from the GitHub app on a phone, the same way adjudicate.yml works. The
+# GitHub-hosted runner is the cloud container: nothing at home has to be on.
+#
+# Secret required: CLAUDE_CODE_OAUTH_TOKEN, created on any signed-in machine
+# with `claude setup-token` (Pro and Max subscriptions) and stored under
+# Settings -> Secrets and variables -> Actions.
+#
+# Permissions for the agent come from autoresearch/settings.json: a scoped
+# allowlist. The runner has no GPU and needs none; the score is coverage.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Run tag; the branch becomes autoresearch/<tag>"
+        required: true
+        type: string
+      max_iter:
+        description: "Attempt cap for the night"
+        default: "40"
+        type: string
+      patience:
+        description: "Stop after this many consecutive attempts without improvement"
+        default: "8"
+        type: string
+      model:
+        description: "Claude model id"
+        default: "claude-opus-5"
+        type: string
+      confirm:
+        description: "Type RUN. Anything else stops before the first attempt."
+        required: true
+        type: string
+
+# One writer, ever. A second button press queues behind the first.
+concurrency:
+  group: autoresearch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  night:
+    if: inputs.confirm == 'RUN'
+    runs-on: ubuntu-latest
+    # GitHub-hosted jobs stop at 360 minutes; leave room for the publish step.
+    timeout-minutes: 345
+    env:
+      TAG: ${{ inputs.tag }}
+      MAX_ITER: ${{ inputs.max_iter }}
+      PATIENCE: ${{ inputs.patience }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: adjudication/requirements-dev.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r adjudication/requirements-dev.txt
+
+      - name: Start the run branch and record the baseline
+        run: |
+          case "$TAG" in *[!A-Za-z0-9._-]*) echo "bad tag"; exit 1 ;; esac
+          git config user.name "autoresearch"
+          git config user.email "autoresearch@users.noreply.github.com"
+          git checkout -b "autoresearch/$TAG"
+          printf '{"commit": "%s", "max_iter": %d, "patience": %d}\n' \
+            "$(git rev-parse HEAD)" "$MAX_ITER" "$PATIENCE" > autoresearch/.base
+          python autoresearch/score.py --record baseline --push
+
+      - name: Run the loop
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          settings: autoresearch/settings.json
+          prompt: |
+            Read program.md at the repository root and run its loop until
+            autoresearch/score.py prints STOP. You are on branch
+            autoresearch/${{ inputs.tag }} and the baseline row is already
+            recorded. The command python on PATH has every dependency installed.
+          claude_args: |
+            --model ${{ inputs.model }}
+            --permission-mode acceptEdits
+
+      - name: Publish results
+        if: always()
+        run: |
+          git push -u origin HEAD || echo "push failed; results are in the artifact"
+          {
+            echo "## autoresearch/$TAG"
+            echo
+            echo '```'
+            cat autoresearch/results.tsv
+            echo '```'
+            if [ -f autoresearch/NIGHT-SUMMARY.md ]; then
+              echo
+              cat autoresearch/NIGHT-SUMMARY.md
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autoresearch-${{ inputs.tag }}
+          path: |
+            autoresearch/results.tsv
+            autoresearch/NIGHT-SUMMARY.md
+          if-no-files-found: ignore

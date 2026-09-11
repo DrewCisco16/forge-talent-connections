@@ -28,5 +28,5 @@ adjudication/.spend-by-day.json
 # autoresearch run state: per-run, per-machine, never repository content.
 autoresearch/.base
 autoresearch/.coverage.json
-autoresearch/night-*.log
+autoresearch/night-*
 autoresearch/.venv/
