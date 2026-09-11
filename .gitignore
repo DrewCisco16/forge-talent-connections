@@ -24,3 +24,9 @@ adjudication/canaries.json
 # copies could resolve the day's total DOWNWARD, which silently raises the
 # effective ceiling. A missing file already reads as zero spent.
 adjudication/.spend-by-day.json
+
+# autoresearch run state: per-run, per-machine, never repository content.
+autoresearch/.base
+autoresearch/.coverage.json
+autoresearch/night-*.log
+autoresearch/.venv/
