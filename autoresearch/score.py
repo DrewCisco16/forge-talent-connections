@@ -168,12 +168,18 @@ _ERRORS_RX = re.compile(r"(\d+)\s+errors?")
 
 
 def count_tests(adj: Path) -> tuple[int | None, str]:
-    r = sh([py(), "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], adj, check=False)
+    # pyproject already sets -q; a second -q would hide the summary line.
+    r = sh([py(), "-m", "pytest", "--collect-only", "-p", "no:cacheprovider"], adj, check=False)
     tail = "\n".join(r.stdout.splitlines()[-3:])
     m = _COLLECT_RX.search(r.stdout)
-    if r.returncode != 0 or _ERRORS_RX.search(tail) or not m:
+    if r.returncode != 0 or _ERRORS_RX.search(tail):
         return None, (r.stdout.strip() or r.stderr.strip())[-2000:]
-    return int(m.group(1)), tail
+    if m:
+        return int(m.group(1)), tail
+    per_file = [int(n) for n in re.findall(r"^\S+\.py: (\d+)$", r.stdout, flags=re.MULTILINE)]
+    if per_file:
+        return sum(per_file), tail
+    return None, (r.stdout.strip() or r.stderr.strip())[-2000:]
 
 
 def _test_files_at(root: Path, ref: str) -> list[str]:
@@ -203,7 +209,7 @@ def make_frozen_dir(root: Path, adj: Path, base: str) -> Path:
 
 
 def run_pytest(cwd: Path, extra: list[str]) -> subprocess.CompletedProcess:
-    return sh([py(), "-m", "pytest", "-q", "-p", "no:cacheprovider", *extra], cwd, check=False)
+    return sh([py(), "-m", "pytest", "-p", "no:cacheprovider", *extra], cwd, check=False)
 
 
 def _pytest_tail(r: subprocess.CompletedProcess) -> str:
