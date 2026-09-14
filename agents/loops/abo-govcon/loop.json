@@ -1,0 +1,49 @@
+{
+  "name": "abo-govcon-compliance",
+  "lane": "ABO",
+  "loop_type": "optimization",
+  "node": "Surface Pro 8",
+  "counsel_cleared": false,
+  "counsel_cleared_note": "BLOCKED. Set to true only when contracts counsel has answered the four questions in agents/07-guardrails.md section 2, in writing. Record the date here. Professional verification required.",
+  "metric": {
+    "computed_by": "script",
+    "script": "agents/loops/abo-govcon/metric.py",
+    "direction": "lower_is_better",
+    "terms": [
+      "3 * shall_statements_with_no_mapped_response",
+      "2 * section_M_factors_with_no_mapped_response",
+      "2 * section_L_instructions_violated",
+      "1 * cross_reference_errors"
+    ],
+    "note": "all terms derive from deterministic Pass-1 extraction. MODEL-ONLY rows are never counted."
+  },
+  "evaluation": { "max_seconds": 120, "deterministic": true },
+  "cheat_paths": [
+    {
+      "path": "Keyword-stuff the response so the matcher finds every shall-statement",
+      "defence": "per-section length ceiling, verbatim-quote checks, and the G6 human sample"
+    },
+    {
+      "path": "Restate the requirement as the response - matches the string, answers nothing",
+      "defence": "the G6 sample is specifically looking for this pattern"
+    },
+    {
+      "path": "Map one paragraph to twenty requirements so counts fall without content",
+      "defence": "max-requirements-per-response-block cap enforced in the harness"
+    }
+  ],
+  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "held_out": {
+    "exists": true,
+    "visible_to_loop": false,
+    "description": "A human reads a random 10% sample of mapped rows and asks of each: does this actually respond to the requirement? A failed sample voids the entire run, not part of it."
+  },
+  "immutable_paths": [
+    "solicitation/**",
+    "agents/loops/abo-govcon/program.md",
+    "agents/loops/abo-govcon/loop.json",
+    "agents/loops/abo-govcon/metric.py"
+  ],
+  "limits": { "max_iterations": 100, "max_wall_clock_hours": 4, "max_spend_usd": 20 },
+  "stop_early_if": "score reaches 0; the G6 sample then decides whether that is real"
+}

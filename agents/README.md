@@ -44,6 +44,9 @@ Read [`01-operating-model.md`](01-operating-model.md) next.
 | [`08-measurement.md`](08-measurement.md) | How you will know whether this returned time. Instrument first, claim later |
 | [`09-rollout-90-day.md`](09-rollout-90-day.md) | One 90-day sprint, three 30-day gates, each with a stop condition |
 | [`10-open-questions.md`](10-open-questions.md) | Everything this design needs but does not know. Unresolved by design |
+| [`11-autoresearch-loops.md`](11-autoresearch-loops.md) | The four Karpathy-style loops. Which lanes can support a real one, which must be hybrids, and why |
+| [`12-browser-and-remote-control.md`](12-browser-and-remote-control.md) | Claude driving local Chrome, ChatGPT running remote. **The logged-in-profile risk** |
+| [`loops/`](loops/) | Per-lane `program.md`, loop specs, and `loop_guard.py` — the fail-closed gate in front of every loop |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
 | [`../.claude/agents/`](../.claude/agents/) | Runnable Claude Code subagent definitions |

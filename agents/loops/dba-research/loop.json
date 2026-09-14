@@ -1,0 +1,30 @@
+{
+  "name": "dba-falsification",
+  "lane": "DBA",
+  "loop_type": "falsification",
+  "node": "HP Envy 17",
+  "metric": {},
+  "diagnostics": [
+    "open_holes_count",
+    "unresolved_citations_count",
+    "contradicted_claims_count"
+  ],
+  "diagnostics_note": "Reported, never optimised toward. The loop may not close a hole by deciding it does not matter, nor reduce contradictions by dropping the contradiction.",
+  "stopping_condition": "One complete round producing zero new kills. Not 'it reads well now'.",
+  "mechanical_gates": [
+    "adjudication/citation_gate.py",
+    "adjudication/doi_resolver.py",
+    "adjudication/quote_gate.py",
+    "retraction check"
+  ],
+  "mechanical_gates_note": "These run BEFORE any model judgement. The ordering is the safety property, per night_loop.py.",
+  "engine": "adjudication/ five-seat blinded elimination. Not reimplemented.",
+  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "immutable_paths": [
+    "adjudication/**",
+    "agents/loops/dba-research/program.md",
+    "agents/loops/dba-research/loop.json"
+  ],
+  "limits": { "max_iterations": 5, "max_wall_clock_hours": 6, "max_spend_usd": 17 },
+  "limits_note": "Spend ceiling matches adjudicate.yml's bound. Manual dispatch only - do not schedule against the paid vendor path."
+}
