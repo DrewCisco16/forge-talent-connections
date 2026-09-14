@@ -24,3 +24,7 @@ adjudication/canaries.json
 # copies could resolve the day's total DOWNWARD, which silently raises the
 # effective ceiling. A missing file already reads as zero spent.
 adjudication/.spend-by-day.json
+
+safe-strategy/build/emoji/
+__pycache__/
+*.pyc
