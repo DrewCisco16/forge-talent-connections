@@ -8,6 +8,7 @@
 | Know where everything stands | [`STATE.md`](STATE.md) |
 | Start the two-week time baseline | [`agents/cards/baseline.md`](agents/cards/baseline.md) |
 | Prove a browser route before trusting it | [`agents/cards/smoke.md`](agents/cards/smoke.md) |
+| See every agent and what it does | [`agents/ROSTER.md`](agents/ROSTER.md) |
 | Pick which agent to deploy next | [`agents/cards/README.md`](agents/cards/README.md) |
 | Fill out a mission before a run | [`agents/mission-template.md`](agents/mission-template.md) |
 | Understand why the system is shaped this way | [`agents/01-operating-model.md`](agents/01-operating-model.md) |
