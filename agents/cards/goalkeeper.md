@@ -33,7 +33,18 @@ ANNUAL     did the year's goals hold, and what does next year inherit
 2  EVERY AGENT TRACES TO AT LEAST ONE GOAL.
    An agent serving no goal is review burden and failure surface with no
    offsetting benefit. Flag it for trimming.
+
+3  WIP CAP: at most ONE active goal per lane, THREE in total.
+   Little's Law: WIP = throughput x cycle time. At fixed throughput, more
+   concurrent goals lengthen every one of them and finish no more. This is
+   arithmetic, not an opinion. Breaching it feels like progress and is not.
 ```
+
+**The two gates.** `X1` (a goal is written) and `X3` (a review was run) are
+**multiplicative**, not additive: if either is zero, goal attainment is
+structurally zero regardless of how many agents exist. `scripts/goal_throughput.py`
+evaluates both and **refuses to report an attainment figure while either is
+open** — see `../23-idov-goal-attainment.md` §2.2.
 
 ### HARD RULE — GOALKEEPER does not author goals
 

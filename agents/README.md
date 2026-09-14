@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 7.0 |
+| **Version** | 8.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -82,6 +82,7 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`21-triz-zerodefects-goals.md`](21-triz-zerodefects-goals.md)** | **v6. Assumption audit, TRIZ trimming, Zero Escaped Defects, and the goal gap that ranks first in the register** |
 | **[`analysis/goal-ledger.md`](analysis/goal-ledger.md)** | **Empty, and that is the finding. Fill this before adding anything** |
 | **[`22-dmadv-patent-allowance.md`](22-dmadv-patent-allowance.md)** | **v7. DMADV for patent-allowance readiness, five new IP agents, and why no allowance probability is produced** |
+| **[`23-idov-goal-attainment.md`](23-idov-goal-attainment.md)** | **v8. IDOV. The transfer function, its two multiplicative gates, the WIP cap, and why Y = 0 today** |
 | [`analysis/`](analysis/) | The machine-readable failure register the numbers come from |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |

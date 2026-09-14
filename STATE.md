@@ -50,6 +50,15 @@ question, up to three approved public sources. Fill
 | abo-govcon | **REFUSED** | counsel |
 | panel-economics | **REFUSED** | seat 3 model id |
 
+## Goal attainment — the transfer function
+
+```
+Y = X1 * X3 * f(...)      X1 goals written = 0      X3 review run = 0
+Y = 0.  Structurally zero, not low. 29 agents multiply zero.
+```
+Close both gates in ~30 minutes: write three goals, run one review.
+`python3 scripts/goal_throughput.py`
+
 ## Measurement
 
 **Baseline: NOT STARTED.** Day 90 cannot be answered until it is. No claim about

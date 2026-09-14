@@ -13,6 +13,7 @@
 | Pick which agent to deploy next | [`agents/cards/README.md`](agents/cards/README.md) |
 | Fill out a mission before a run | [`agents/mission-template.md`](agents/mission-template.md) |
 | Understand why the system is shaped this way | [`agents/01-operating-model.md`](agents/01-operating-model.md) |
+| See whether your goals can be reached at all | [`agents/23-idov-goal-attainment.md`](agents/23-idov-goal-attainment.md) — run `python3 scripts/goal_throughput.py` |
 | See how it could fail and what plugs each hole | [`agents/19-inversion-analysis.md`](agents/19-inversion-analysis.md) |
 | Cut deep-thinking cost | [`agents/14-panel-economics.md`](agents/14-panel-economics.md) → then run `calibrate.py` |
 | Prepare an invention for filing | [`agents/22-dmadv-patent-allowance.md`](agents/22-dmadv-patent-allowance.md) — **put disclosures in a PRIVATE repo first** |

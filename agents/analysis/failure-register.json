@@ -591,6 +591,76 @@
       "control": "disclosure template in PRIORART B5; private store decision still open",
       "rung": 3,
       "detected": false
+    },
+    {
+      "id": "FM-42",
+      "item": "goal system",
+      "function": "have something to advance",
+      "mode": "X1 gate open - no goal is written down",
+      "effect": "goal attainment is structurally zero; every agent multiplies zero",
+      "S": 9,
+      "O": 9,
+      "D": 2,
+      "class": "safe",
+      "control": "goal_throughput.py evaluates the gate and refuses an attainment figure while open",
+      "rung": 1,
+      "detected": true
+    },
+    {
+      "id": "FM-43",
+      "item": "goal system",
+      "function": "detect a stalled goal",
+      "mode": "X3 gate open - no review cadence is executed",
+      "effect": "a dead goal and a live one are indistinguishable until the period ends",
+      "S": 8,
+      "O": 9,
+      "D": 3,
+      "class": "safe",
+      "control": "goal_throughput.py gate check; GOALKEEPER cadence",
+      "rung": 1,
+      "detected": true
+    },
+    {
+      "id": "FM-44",
+      "item": "operator",
+      "function": "finish things",
+      "mode": "too many concurrent active goals; WIP exceeds throughput",
+      "effect": "every goal takes proportionally longer and none finishes sooner; feels like progress",
+      "S": 6,
+      "O": 8,
+      "D": 5,
+      "class": "safe",
+      "control": "GOALKEEPER invariant 3 WIP cap; enforced per lane by goal_throughput.py",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-45",
+      "item": "agents in aggregate",
+      "function": "return net time",
+      "mode": "an agent's review burden (X7) exceeds the time it returns (X6)",
+      "effect": "net negative contribution while appearing productive",
+      "S": 7,
+      "O": 6,
+      "D": 6,
+      "class": "safe",
+      "control": "STEWARD review-minutes metric; sixty-second artifact rule; X6 and X7 measured separately",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-46",
+      "item": "operator",
+      "function": "redeploy returned time",
+      "mode": "time freed by agents goes into building more system rather than into judgment work",
+      "effect": "the stated objective is never served even when the system works",
+      "S": 7,
+      "O": 8,
+      "D": 7,
+      "class": "safe",
+      "control": "BASELINE category JUDGMENT; the day-30 question 3 in 23 section 4.3",
+      "rung": 3,
+      "detected": false
     }
   ]
 }
