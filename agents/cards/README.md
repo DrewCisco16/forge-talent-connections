@@ -36,8 +36,9 @@ field is blank, that agent does not run. Blank limits authorize nothing (p.2).
 | 23 | [canary](canary.md) | per agent | month 2, once agents have a record | ready |
 | 24 | [baseline](baseline.md) | cross-lane | **today** | ready |
 | 25 | [redactor](redactor.md) | any | **live now** | **GATED** |
+| 26 | **[goalkeeper](goalkeeper.md)** | cross-lane | **after the goal ledger has entries** | 🔵 |
 
-## Why 25 cards and one running agent
+## Why 26 cards, 24 agents, and one running agent
 
 A card is a **contract**, not a process. Writing 25 costs nothing and makes each
 deployment fast and safe. Running 25 at once would violate your own Playbook

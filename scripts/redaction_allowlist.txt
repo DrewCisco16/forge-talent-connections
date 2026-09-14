@@ -31,3 +31,10 @@ adjudication/test_suite.py :: carrier-or-account-number,embedded-reference-numbe
 adjudication/test_night_loop.py :: carrier-or-account-number,embedded-reference-number,generic-bearer
 adjudication/candidates-q4.json :: carrier-or-account-number,embedded-reference-number
 adjudication/eval/seeded-defects.json :: carrier-or-account-number,embedded-reference-number
+
+# The failure register enumerates failure MODES, so it names marking classes by
+# design (the marking names appear in a mode label, not as markings on content)  # redaction-guard: allow - describes the class without reproducing a banner
+# mode, not marked material). JSON re-serialisation puts each field on its own
+# line, so an inline marker cannot ride on the value. Only the marking rule is
+# suppressed; every credential, key, phone and account rule stays armed.
+agents/analysis/failure-register.json :: cui-marking

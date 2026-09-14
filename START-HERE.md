@@ -4,6 +4,7 @@
 
 | What do you want to do right now? | Go here |
 |---|---|
+| **Write down what you are actually trying to achieve** | **[`agents/analysis/goal-ledger.md`](agents/analysis/goal-ledger.md)** — empty. 20 minutes. Highest-value act available |
 | **Run something today** | **[`agents/cards/briefer.md`](agents/cards/briefer.md)** — 25 min, $0, public sources, no counsel gate |
 | Know where everything stands | [`STATE.md`](STATE.md) |
 | Start the two-week time baseline | [`agents/cards/baseline.md`](agents/cards/baseline.md) |

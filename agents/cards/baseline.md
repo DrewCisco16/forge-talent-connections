@@ -1,7 +1,9 @@
-# BASELINE — agent card
+# BASELINE — protocol card
 
 > Capture two weeks of unmodified time data, so "did this help" has an answer
 > instead of an impression.
+
+> **PROTOCOL, not an agent.** No agent performs this. It is you, a timer, and fourteen days. It kept an agent card by mistake until the TRIZ trim in `../21-triz-zerodefects-goals.md` §2.2.
 
 | Lane | Version | Tier | Route | Status |
 |---|---|---|---|---|

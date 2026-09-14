@@ -1,4 +1,4 @@
-# THE 25 AGENTS
+# THE 24 AGENTS AND 2 PROTOCOLS
 
 Every agent, its name, what it does, and its status. One line each.
 Full contract for any of them: [`cards/<name>.md`](cards/).
@@ -21,7 +21,7 @@ fourteen production agents at once.
 | 3 | **ATTESTOR** | Verifies that work an agent *claims* it did produced a real artifact with a plausible timestamp. A claim without an artifact is void | A | 🔵 |
 | 4 | **CANARY** | Monthly: golden sets, a **seeded defect**, and an injection corpus. The seeded defect is the only thing that detects a reviewer gone blind — because a blind reviewer reports clean | B | 🔵 |
 | 5 | **REDACTOR** | Blocks any commit carrying phone numbers, account or order identifiers, SSNs, payment cards, private keys, six vendor key shapes, inline credentials, or CUI/FOUO markings | <!-- redaction-guard: allow - policy text naming the markings --> A | 🟢 |
-| 6 | **BASELINE** | Captures fourteen unmodified days of your time across five categories, so "did this help" has an answer instead of an impression | B | ⚪ |
+| 6 | **GOALKEEPER** | Holds the goal ledger. Every goal has an owner and one next action; every agent traces to a goal. Emits the daily / weekly / monthly / quarterly / annual line. **Never authors a goal** | B | 🔵 |
 | 7 | **STEWARD** | Weekly, per lane: approval rate, **review minutes**, material errors, cost and usage drawn, cost per resolved-correct. Reads transcripts, never run statuses | B | ⚪ |
 | 8 | **SENTINEL** | Watches every dated obligation — response deadlines, **patent bar dates**, committee dates, IRB expiry, key rotation, schedule expiries, the 2026-12-08 rate re-check. Metadata only, never content | B | ⚪ |
 
@@ -47,21 +47,32 @@ drift, invented number, injection. That is why the count above matters.
 | 21 | **ORCHESTRATOR** | Drives the five-window elimination swarm: four thinkers and a closer, the wall at round 1, gates before the merge. **Not the pilot** — your Playbook caps the pilot at two services | B | ⚪ |
 | 22 | **NIGHTWATCH** | The paid five-seat panel. Manual, typed `SPEND`, cost-ceilinged. **Demoted to a calibration instrument** by your own Stage 0 finding | C | ⛔ seat 3 |
 
-## Infrastructure — 3
+## Infrastructure — 2
 
 | # | Agent | What it does | Tier | Status |
 |---|---|---|---|---|
-| 23 | **SMOKE** | Proves a browser or remote route reaches the right host, the right profile and the right page — **and that Stop works** — before any real work is trusted to it | B | ⚪ |
-| 24 | **PARKING** | Captures an idea that is not today's mission in one line and does nothing else with it. Also writes the resume note on every stop | A | ⚪ |
-| 25 | **OPTIMIZER** | Runs a bounded improvement loop: one change, re-run the fixed evaluation, keep or revert. **Pilot mode: 3 variants, 60 minutes, $0, supervised** | B | ⚪ |
+| 23 | **PARKING** | Captures an idea that is not today's mission in one line and does nothing else with it. Also writes the resume note on every stop | A | ⚪ |
+| 24 | **OPTIMIZER** | Runs a bounded improvement loop: one change, re-run the fixed evaluation, keep or revert. **Pilot mode: 3 variants, 60 minutes, $0, supervised** | B | ⚪ |
+
+## Protocols — 2  *(these are not agents; nothing performs them for you)*
+
+| Protocol | What it is | Card |
+|---|---|---|
+| **BASELINE** | Fourteen unmodified days of your own time across five categories. **No agent can do this part** — its own card said so, which is what exposed the category error | [baseline](cards/baseline.md) |
+| **SMOKE** | A five-line checklist proving a browser route hits the right host, profile and page — and that Stop works — before it is trusted | [smoke](cards/smoke.md) |
+
+**Why the reclassification matters:** an agent card implies something will do it
+for you. Nothing will. Calling these agents inflated the count and, worse,
+quietly deferred the two things only you can do.
 
 ---
 
 ## Deploy in this order
 
 ```
-TODAY      BASELINE (you, 14 days)  +  BRIEFER (one run, 25 min, $0)
-THEN       SMOKE -> MAILROOM -> ROUTER -> SENTINEL -> PARKING
+TODAY      FILL THE GOAL LEDGER (20 min, you)  <- highest-value act available
+           BASELINE protocol (you, 14 days)  +  BRIEFER (one run, 25 min, $0)
+THEN       GOALKEEPER -> SMOKE protocol -> MAILROOM -> ROUTER -> SENTINEL -> PARKING
 BUILD      ATTESTOR and CANARY   <- the two open detection gaps
 WEEK 3+    LIBRARIAN · TRACKER · BUILDER + REVIEWER (same day, never apart)
 WEEK 5+    SCOUT (public only) · HARVESTER · STEWARD

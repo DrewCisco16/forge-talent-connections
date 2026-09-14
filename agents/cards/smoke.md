@@ -1,8 +1,10 @@
-# SMOKE — agent card
+# SMOKE — protocol card
 
 > Given a browser or remote route, prove it reaches the right host, the right
 > browser profile and the right page — and that Stop works — before any real
 > work is trusted to it.
+
+> **PROTOCOL, not an agent.** This is a five-line checklist run once per route. It kept an agent card by mistake until the TRIZ trim in `../21-triz-zerodefects-goals.md` §2.2.
 
 | Lane | Version | Tier | Route | Status |
 |---|---|---|---|---|
