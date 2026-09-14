@@ -25,6 +25,10 @@ SIX GATES (agents/11-autoresearch-loops.md section 3):
   G5  rollback automatic and complete
   G6  a held-out check the loop cannot see
 
+BLOCKERS. A spec may declare `blockers`: [{id, what, clear_by, resolved}].
+Any entry not explicitly resolved=true refuses the loop. A blocker you can
+run past is a note, not a blocker.
+
 A HYBRID IS NOT A FAILED LOOP. Falsification and journal loops legitimately have
 no optimisable metric. They are held to different checks, and they are FORBIDDEN
 from declaring an optimisation metric -- claiming one you cannot compute is the
@@ -96,6 +100,15 @@ def check(spec: dict) -> list[str]:
         f.extend(_check_optimization(spec))
     else:
         f.extend(_check_hybrid(spec, loop_type))
+
+    # ---- declared blockers: any unresolved entry stops the loop.
+    # ---- A blocker you can run past is a note, not a blocker.
+    for b in spec.get("blockers") or []:
+        if isinstance(b, dict) and b.get("resolved") is not True:
+            f.append(
+                f"BLOCKED: {b.get('id', '?')} -- {b.get('what', 'no description')}"
+                + (f" | clear it by: {b['clear_by']}" if b.get("clear_by") else "")
+            )
 
     # ---- lane-specific hard blocks
     if lane == "ABO" and spec.get("counsel_cleared") is not True:
@@ -264,6 +277,10 @@ def self_test() -> int:
         ("hybrid claiming an optimisation direction refused",
          {**good_opt, "loop_type": "falsification", "stopping_condition": "no new kills",
           "mechanical_gates": ["citation_gate"]}, False),
+        ("unresolved blocker refused",
+         {**good_opt, "blockers": [{"id": "B1", "what": "stale rate", "resolved": False}]}, False),
+        ("resolved blocker clears",
+         {**good_opt, "blockers": [{"id": "B1", "what": "stale rate", "resolved": True}]}, True),
         ("valid falsification loop clears",
          {**good_opt, "loop_type": "falsification", "metric": {},
           "stopping_condition": "one full round, zero new kills",

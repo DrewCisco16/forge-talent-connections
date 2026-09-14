@@ -1,0 +1,79 @@
+{
+  "name": "panel-economics",
+  "lane": "FORGE",
+  "loop_type": "optimization",
+  "node": "HP Envy 17",
+  "operates_on": "adjudication/ — the engine itself, not a lane's content",
+  "metric": {
+    "computed_by": "script",
+    "script": "agents/loops/panel-economics/metric.py",
+    "direction": "lower_is_better",
+    "objective": "total_cost / resolved_correct_count",
+    "hard_constraints": [
+      "resolved_correct_rate must not fall below the recorded baseline",
+      "not_resolved_rate must not rise above the recorded baseline"
+    ],
+    "per_iteration_inputs": [
+      "adjudication/calibrate.py  -> rho (five calls total)",
+      "adjudication/convergence.py -> verified corrections per round",
+      "adjudication/cost_ledger.py -> actual spend from vendor token counts",
+      "6-question smoke subset with known answers"
+    ],
+    "note": "accuracy.py returns RESOLVED CORRECT / RESOLVED WRONG / NOT RESOLVED. All three are used; folding NOT RESOLVED into either other outcome misreports the instrument."
+  },
+  "evaluation": { "max_seconds": 900, "deterministic": false, "seeded_runs": 3 },
+  "cheat_paths": [
+    {
+      "path": "Resolve fewer questions - a panel that answers nothing has an excellent cost per answer",
+      "defence": "not_resolved_rate is a hard constraint, not a term. A run that raises it is rejected before its cost is scored."
+    },
+    {
+      "path": "Overfit the 6-question smoke subset",
+      "defence": "30-question held-out accuracy set the loop never sees. Divergence voids every iteration since the last held-out run."
+    },
+    {
+      "path": "Weaken a gate so more claims survive and more questions resolve",
+      "defence": "gates are immutable. Reordering permitted, weakening is an automatic rollback and escalation."
+    },
+    {
+      "path": "Lower max_tokens until answers truncate - cost falls, quality falls invisibly",
+      "defence": "truncation is detected and counted as RESOLVED WRONG, never as a saving. test_truncation.py exists."
+    }
+  ],
+  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "held_out": {
+    "exists": true,
+    "visible_to_loop": false,
+    "description": "Full accuracy.py on the 30-question set, once per 20 iterations and at the end, gated by ACCURACY_CONFIRM=yes. Costs $148.80-$504.60. Held-out wins any disagreement with the per-iteration proxy, and voids every iteration since the last held-out run."
+  },
+  "immutable_paths": [
+    "adjudication/accuracy.py",
+    "adjudication/eval/**",
+    "adjudication/stage-zero-questions*.json",
+    "adjudication/cost_ledger.py",
+    "adjudication/rates.json",
+    "adjudication/citation_gate.py",
+    "adjudication/quote_gate.py",
+    "adjudication/doi_resolver.py",
+    "adjudication/predicate.py",
+    "adjudication/test_*.py",
+    "agents/loops/panel-economics/program.md",
+    "agents/loops/panel-economics/loop.json"
+  ],
+  "blockers": [
+    {
+      "id": "B1-seat3-model-id",
+      "what": "rates.json flags seat_3's Mistral model id as UNVERIFIED and notes Magistral is retired. A ceiling computed from an unchecked price bounds nothing.",
+      "clear_by": "Confirm the id in the Mistral console or by a diagnostic call that echoes the served model, then set _model, max_input_tokens and verified_on in rates.json.",
+      "resolved": false
+    },
+    {
+      "id": "B2-rate-staleness",
+      "what": "rates.json says re-check every 90 days. Verified 2026-09-09, so due 2026-12-08.",
+      "clear_by": "Re-read each vendor pricing page, update verified_on.",
+      "resolved": true
+    }
+  ],
+  "limits": { "max_iterations": 60, "max_wall_clock_hours": 12, "max_spend_usd": 60 },
+  "stop_early_if": "15 consecutive iterations with no improvement, or any held-out disagreement"
+}

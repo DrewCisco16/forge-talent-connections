@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0 |
+| **Version** | 2.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -30,6 +30,21 @@ Read [`01-operating-model.md`](01-operating-model.md) next.
 
 ---
 
+## v2 — what changed, in one paragraph
+
+**v1 routed hard problems to the five-seat paid panel. Your own repository had
+already measured that as the wrong call.** `adjudication/one_model.py` records
+Stage 0 baselines of **0.968** and **1.000** on your two task classes against a
+**0.45** threshold, and the instruction *"DO NOT BUILD THE ENSEMBLE. Build one
+model plus gates."* The gates — free, and with errors uncorrelated to the model's
+— were always the valuable layer. v2 inverts the hierarchy into a four-tier
+cascade that cuts deep-thinking spend by roughly **88%**, promotes the browser
+window swarm to the workhorse tier at **zero marginal API cost**, and adds a
+Karpathy loop that optimizes the panel itself against the accuracy harness you
+already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis.md).
+
+---
+
 ## What is in here
 
 | File | What it settles |
@@ -46,7 +61,11 @@ Read [`01-operating-model.md`](01-operating-model.md) next.
 | [`10-open-questions.md`](10-open-questions.md) | Everything this design needs but does not know. Unresolved by design |
 | [`11-autoresearch-loops.md`](11-autoresearch-loops.md) | The four Karpathy-style loops. Which lanes can support a real one, which must be hybrids, and why |
 | [`12-browser-and-remote-control.md`](12-browser-and-remote-control.md) | Claude driving local Chrome, ChatGPT running remote. **The logged-in-profile risk** |
-| [`loops/`](loops/) | Per-lane `program.md`, loop specs, and `loop_guard.py` — the fail-closed gate in front of every loop |
+| [`loops/`](loops/) | **Five** loops — four lanes plus `panel-economics` — with `loop_guard.py`, the fail-closed gate in front of each |
+| **[`13-v2-version-analysis.md`](13-v2-version-analysis.md)** | **v1→v2 defect register. Read this first if you read v1** |
+| **[`14-panel-economics.md`](14-panel-economics.md)** | **The cost fix. Four-tier cascade, ~88% reduction, arithmetic shown** |
+| **[`15-window-swarm.md`](15-window-swarm.md)** | **Five LLMs in Chrome tabs at zero marginal API cost. The workhorse tier** |
+| **[`16-agent-roster-v2.md`](16-agent-roster-v2.md)** | **Sixteen agents. ROUTER, ORCHESTRATOR, OPTIMIZER, HARVESTER, SENTINEL, DILIGENCE** |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
 | [`../.claude/agents/`](../.claude/agents/) | Runnable Claude Code subagent definitions |

@@ -15,6 +15,7 @@ a loop that can rewrite its own objective has no objective.
 | [`abo-govcon/`](abo-govcon/) | **True optimization** | unaddressed-requirement count | after counsel | **A1 contracts counsel** |
 | [`dba-research/`](dba-research/) | Falsification | open holes → 0 (diagnostic only) | yes, cost-gated | none |
 | [`home-decisions/`](home-decisions/) | Decision journal | calibration, over years | **no, by design** | none |
+| [`panel-economics/`](panel-economics/) | **True optimization** | cost per resolved-correct | yes | **seat_3 model id** |
 
 ## Before any loop runs
 
