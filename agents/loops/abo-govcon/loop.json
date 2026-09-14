@@ -17,7 +17,10 @@
     ],
     "note": "all terms derive from deterministic Pass-1 extraction. MODEL-ONLY rows are never counted."
   },
-  "evaluation": { "max_seconds": 120, "deterministic": true },
+  "evaluation": {
+    "max_seconds": 120,
+    "deterministic": true
+  },
   "cheat_paths": [
     {
       "path": "Keyword-stuff the response so the matcher finds every shall-statement",
@@ -32,7 +35,10 @@
       "defence": "max-requirements-per-response-block cap enforced in the harness"
     }
   ],
-  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "rollback": {
+    "automatic": true,
+    "command": "git reset --hard HEAD"
+  },
   "held_out": {
     "exists": true,
     "visible_to_loop": false,
@@ -44,6 +50,24 @@
     "agents/loops/abo-govcon/loop.json",
     "agents/loops/abo-govcon/metric.py"
   ],
-  "limits": { "max_iterations": 100, "max_wall_clock_hours": 4, "max_spend_usd": 20 },
-  "stop_early_if": "score reaches 0; the G6 sample then decides whether that is real"
+  "limits": {
+    "max_iterations": 3,
+    "max_wall_clock_hours": 1,
+    "max_spend_usd": 0
+  },
+  "stop_early_if": "score reaches 0; the G6 sample then decides whether that is real",
+  "production_limits": {
+    "max_iterations": 100,
+    "max_wall_clock_hours": 4,
+    "max_spend_usd": 20
+  },
+  "production_limits_note": "Effective only once pilot.passed is true.",
+  "pilot": {
+    "max_variants": 3,
+    "max_minutes": 60,
+    "max_spend_usd": 0,
+    "supervised": true,
+    "passed": false,
+    "note": "Playbook p.18. Production caps unlock only after a supervised pilot passes. A sentence in a prompt is not a hard budget - the runner needs a tested timeout, attempt counter and spend guard."
+  }
 }

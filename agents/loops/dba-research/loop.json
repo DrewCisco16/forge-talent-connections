@@ -19,12 +19,19 @@
   ],
   "mechanical_gates_note": "These run BEFORE any model judgement. The ordering is the safety property, per night_loop.py.",
   "engine": "adjudication/ five-seat blinded elimination. Not reimplemented.",
-  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "rollback": {
+    "automatic": true,
+    "command": "git reset --hard HEAD"
+  },
   "immutable_paths": [
     "adjudication/**",
     "agents/loops/dba-research/program.md",
     "agents/loops/dba-research/loop.json"
   ],
-  "limits": { "max_iterations": 5, "max_wall_clock_hours": 6, "max_spend_usd": 17 },
+  "limits": {
+    "max_iterations": 5,
+    "max_wall_clock_hours": 6,
+    "max_spend_usd": 17
+  },
   "limits_note": "Spend ceiling matches adjudicate.yml's bound. Manual dispatch only - do not schedule against the paid vendor path."
 }

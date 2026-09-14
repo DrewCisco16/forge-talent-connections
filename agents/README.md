@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 2.1 |
+| **Version** | 3.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -26,7 +26,14 @@ around **what an agent is allowed to hand you, and how long that hand-off is
 permitted to cost you.** Every agent in the roster is assigned a Trust Tier that
 fixes its review cost before it ever runs. That is the whole design.
 
-Read [`01-operating-model.md`](01-operating-model.md) next.
+Read [`01-operating-model.md`](01-operating-model.md) next — or, if you only
+want to run something today, go straight to
+**[`cards/briefer.md`](cards/briefer.md)**, the first agent your Playbook
+recommends.
+
+> **⚠ This repository is PUBLIC** (verified 2026-09-14). Never commit invention
+> disclosures, CUI, client or candidate records, third-party personal data, or
+> secrets. See [`18-playbook-integration.md`](18-playbook-integration.md) §2.
 
 ---
 
@@ -67,6 +74,9 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`15-window-swarm.md`](15-window-swarm.md)** | **Five LLMs in Chrome tabs at zero marginal API cost. The workhorse tier** |
 | **[`16-agent-roster-v2.md`](16-agent-roster-v2.md)** | **Sixteen agents. ROUTER, ORCHESTRATOR, OPTIMIZER, HARVESTER, SENTINEL, DILIGENCE** |
 | **[`17-subscription-economics.md`](17-subscription-economics.md)** | **v2.1. Two Max subscriptions make the two priciest seats free. The constraint becomes rate limits, not dollars** |
+| **[`18-playbook-integration.md`](18-playbook-integration.md)** | **v3. Reconciles with your Operating Playbook. Eleven-item defect register, including a privacy incident** |
+| **[`cards/`](cards/)** | **21 agent cards. One page per agent — open exactly one** |
+| [`mission-template.md`](mission-template.md) | Copy to `mission.md` before any run. Blank limits authorize nothing |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
 | [`../.claude/agents/`](../.claude/agents/) | Runnable Claude Code subagent definitions |

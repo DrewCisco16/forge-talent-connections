@@ -10,14 +10,21 @@
   "executes_transactions": false,
   "stopping_condition": "One pass per open decision per week. Review dates are scheduled, not looped.",
   "honest_metric": "Calibration - how often recorded reasoning proves right for the reason written down. Accumulates over years. There is no weekly number.",
-  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "rollback": {
+    "automatic": true,
+    "command": "git reset --hard HEAD"
+  },
   "immutable_paths": [
     "journal/closed/**",
     "agents/loops/home-decisions/program.md",
     "agents/loops/home-decisions/loop.json"
   ],
   "immutable_paths_note": "Closed journal entries are immutable. Editing what you believed after learning the outcome destroys the only thing the journal is for.",
-  "limits": { "max_iterations": 1, "max_wall_clock_hours": 1, "max_spend_usd": 5 },
+  "limits": {
+    "max_iterations": 1,
+    "max_wall_clock_hours": 1,
+    "max_spend_usd": 5
+  },
   "forbidden": [
     "recommend a specific security, allocation, or transaction",
     "produce a return estimate, probability, or expected value",

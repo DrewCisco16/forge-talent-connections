@@ -74,10 +74,17 @@ def check(spec: dict) -> list[str]:
     # ---- limits: every loop, every type. A loop with no stopping condition
     # ---- is a bill with no stopping condition.
     limits = spec.get("limits") or {}
-    for key in ("max_iterations", "max_wall_clock_hours", "max_spend_usd"):
+    for key in ("max_iterations", "max_wall_clock_hours"):
         val = limits.get(key)
         _require(isinstance(val, (int, float)) and val > 0,
                  "LIMITS", f"'{key}' must be a positive number (got {val!r})", f)
+    # A zero spend cap is legitimate and is the Playbook default: blank
+    # extra-spend approval means no paid calls. It must still be DECLARED --
+    # absent is not the same fact as zero.
+    spend = limits.get("max_spend_usd")
+    _require(isinstance(spend, (int, float)) and spend >= 0,
+             "LIMITS", f"'max_spend_usd' must be declared and >= 0 (got {spend!r}); "
+             "0 means no paid calls, absent means nothing was decided", f)
 
     # ---- rollback (G5): every type. Even a journal must be revertible.
     rb = spec.get("rollback") or {}
@@ -95,6 +102,8 @@ def check(spec: dict) -> list[str]:
         _require(any("program.md" in str(p) for p in immutable), "SPEC",
                  "program.md is not in immutable_paths -- a loop that can rewrite "
                  "its own objective has no objective", f)
+
+    f.extend(_check_schedule(spec))
 
     if loop_type == "optimization":
         f.extend(_check_optimization(spec))
@@ -129,8 +138,72 @@ def check(spec: dict) -> list[str]:
     return f
 
 
-def _check_optimization(spec: dict) -> list[str]:
+PILOT_MAX_VARIANTS = 3
+PILOT_MAX_MINUTES = 60
+
+
+def _check_pilot(spec: dict) -> list[str]:
+    """Playbook p.18. A first run is 3 variants, 60 minutes, no extra spend,
+    supervised. Production caps unlock only after a supervised pilot passes --
+    a sentence in a prompt is not a hard budget."""
     f: list[str] = []
+    pilot = spec.get("pilot")
+    if not isinstance(pilot, dict):
+        f.append("PILOT: optimization loops must declare a 'pilot' block "
+                 "(Playbook p.18: at most 3 variants, 60 minutes, $0 extra, supervised)")
+        return f
+    _require(isinstance(pilot.get("max_variants"), int)
+             and 0 < pilot["max_variants"] <= PILOT_MAX_VARIANTS,
+             "PILOT", f"pilot.max_variants must be 1-{PILOT_MAX_VARIANTS}", f)
+    _require(isinstance(pilot.get("max_minutes"), (int, float))
+             and 0 < pilot["max_minutes"] <= PILOT_MAX_MINUTES,
+             "PILOT", f"pilot.max_minutes must be 1-{PILOT_MAX_MINUTES}", f)
+    _require(pilot.get("max_spend_usd") == 0, "PILOT",
+             "pilot.max_spend_usd must be 0 -- blank extra-spend approval means no paid calls", f)
+    _require(pilot.get("supervised") is True, "PILOT",
+             "pilot.supervised must be true until the timeout, attempt counter and "
+             "spend guard have been tested", f)
+
+    if pilot.get("passed") is not True:
+        lim = spec.get("limits") or {}
+        hours = lim.get("max_wall_clock_hours")
+        if isinstance(lim.get("max_iterations"), int) and lim["max_iterations"] > PILOT_MAX_VARIANTS:
+            f.append("PILOT: pilot.passed is not true, so limits.max_iterations may not "
+                     f"exceed {PILOT_MAX_VARIANTS}. Run the supervised pilot first.")
+        if isinstance(hours, (int, float)) and hours * 60 > PILOT_MAX_MINUTES:
+            f.append("PILOT: pilot.passed is not true, so limits.max_wall_clock_hours may not "
+                     f"exceed {PILOT_MAX_MINUTES/60:.2f}. Run the supervised pilot first.")
+        if lim.get("max_spend_usd", 0) > 0:
+            f.append("PILOT: pilot.passed is not true, so limits.max_spend_usd must be 0.")
+    return f
+
+
+def _check_schedule(spec: dict) -> list[str]:
+    """Playbook p.20. Blank limits or an untested stop mechanism mean no
+    unattended launch."""
+    f: list[str] = []
+    sch = spec.get("schedule")
+    if not isinstance(sch, dict):
+        return f  # unscheduled loops are fine
+    for key, why in (
+        ("expiry", "a schedule with no last-allowed-run does not launch"),
+        ("timezone", "record the timezone, e.g. America/New_York"),
+        ("daily_cap", "declare a daily run/spend cap"),
+        ("disable_location", "write down exactly where the trigger is turned off"),
+    ):
+        _require(bool(sch.get(key)), "SCHEDULE", f"schedule.{key} missing -- {why}", f)
+    _require(sch.get("notification_destination_tested") is True, "SCHEDULE",
+             "the notification destination must be TESTED, not assumed", f)
+    _require(sch.get("manual_run_produced_artifact_and_stopped") is True, "SCHEDULE",
+             "a manual run must have produced the expected artifact and stopped "
+             "before any unattended launch", f)
+    _require(sch.get("self_triggering") is False, "SCHEDULE",
+             "schedule.self_triggering must be explicitly false -- no chains", f)
+    return f
+
+
+def _check_optimization(spec: dict) -> list[str]:
+    f: list[str] = _check_pilot(spec)
     metric = spec.get("metric") or {}
 
     # G1 -- the whole reason the loop can run unattended
@@ -246,6 +319,8 @@ def self_test() -> int:
         "held_out": {"exists": True, "visible_to_loop": False, "description": "d"},
         "immutable_paths": ["tests/**", "program.md", "m.py"],
         "limits": {"max_iterations": 100, "max_wall_clock_hours": 8, "max_spend_usd": 25},
+        "pilot": {"max_variants": 3, "max_minutes": 60, "max_spend_usd": 0,
+                  "supervised": True, "passed": True},
     }
     cases: list[tuple[str, dict, bool]] = [
         ("valid optimisation loop clears", good_opt, True),
@@ -277,6 +352,35 @@ def self_test() -> int:
         ("hybrid claiming an optimisation direction refused",
          {**good_opt, "loop_type": "falsification", "stopping_condition": "no new kills",
           "mechanical_gates": ["citation_gate"]}, False),
+        ("missing pilot block refused",
+         {k: v for k, v in good_opt.items() if k != "pilot"}, False),
+        ("pilot over 3 variants refused",
+         {**good_opt, "pilot": {**good_opt["pilot"], "max_variants": 10}}, False),
+        ("pilot with paid spend refused",
+         {**good_opt, "pilot": {**good_opt["pilot"], "max_spend_usd": 5}}, False),
+        ("unpassed pilot cannot use production caps",
+         {**good_opt, "pilot": {**good_opt["pilot"], "passed": False}}, False),
+        ("unpassed pilot with pilot-sized caps clears",
+         {**good_opt, "pilot": {**good_opt["pilot"], "passed": False},
+          "limits": {"max_iterations": 3, "max_wall_clock_hours": 1, "max_spend_usd": 0}}, True),
+        ("schedule without expiry refused",
+         {**good_opt, "schedule": {"timezone": "America/New_York", "daily_cap": "2/day",
+                                   "disable_location": "x",
+                                   "notification_destination_tested": True,
+                                   "manual_run_produced_artifact_and_stopped": True,
+                                   "self_triggering": False}}, False),
+        ("schedule with untested notification refused",
+         {**good_opt, "schedule": {"expiry": "2026-12-31", "timezone": "America/New_York",
+                                   "daily_cap": "2/day", "disable_location": "x",
+                                   "notification_destination_tested": False,
+                                   "manual_run_produced_artifact_and_stopped": True,
+                                   "self_triggering": False}}, False),
+        ("complete schedule clears",
+         {**good_opt, "schedule": {"expiry": "2026-12-31", "timezone": "America/New_York",
+                                   "daily_cap": "2/day", "disable_location": "claude.ai/code/routines",
+                                   "notification_destination_tested": True,
+                                   "manual_run_produced_artifact_and_stopped": True,
+                                   "self_triggering": False}}, True),
         ("unresolved blocker refused",
          {**good_opt, "blockers": [{"id": "B1", "what": "stale rate", "resolved": False}]}, False),
         ("resolved blocker clears",

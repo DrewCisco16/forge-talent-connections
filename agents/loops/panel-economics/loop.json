@@ -88,9 +88,23 @@
     }
   ],
   "limits": {
+    "max_iterations": 3,
+    "max_wall_clock_hours": 1,
+    "max_spend_usd": 0
+  },
+  "stop_early_if": "15 consecutive iterations with no improvement, or any held-out disagreement",
+  "production_limits": {
     "max_iterations": 60,
     "max_wall_clock_hours": 12,
     "max_spend_usd": 60
   },
-  "stop_early_if": "15 consecutive iterations with no improvement, or any held-out disagreement"
+  "production_limits_note": "Effective only once pilot.passed is true.",
+  "pilot": {
+    "max_variants": 3,
+    "max_minutes": 60,
+    "max_spend_usd": 0,
+    "supervised": true,
+    "passed": false,
+    "note": "Playbook p.18. Production caps unlock only after a supervised pilot passes. A sentence in a prompt is not a hard budget - the runner needs a tested timeout, attempt counter and spend guard."
+  }
 }
