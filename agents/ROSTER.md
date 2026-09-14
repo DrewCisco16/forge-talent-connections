@@ -1,4 +1,4 @@
-# THE 24 AGENTS AND 2 PROTOCOLS
+# THE 29 AGENTS AND 2 PROTOCOLS
 
 Every agent, its name, what it does, and its status. One line each.
 Full contract for any of them: [`cards/<name>.md`](cards/).
@@ -53,6 +53,20 @@ drift, invented number, injection. That is why the count above matters.
 |---|---|---|---|---|
 | 23 | **PARKING** | Captures an idea that is not today's mission in one line and does nothing else with it. Also writes the resume note on every stop | A | ⚪ |
 | 24 | **OPTIMIZER** | Runs a bounded improvement loop: one change, re-run the fixed evaluation, keep or revert. **Pilot mode: 3 variants, 60 minutes, $0, supervised** | B | ⚪ |
+
+## IP prosecution — 5  *(new; the lane had only PRIORART, which searches)*
+
+**Every one of these holds the same boundary: never drafts or amends a claim,
+never opines on patentability, never emits a probability, never decides
+materiality, never contacts the USPTO, never touches a public repository.**
+
+| # | Agent | What it does | Tier | Status |
+|---|---|---|---|---|
+| 25 | **ELIGIBILITY-SCOUT** | Flags §101 risk in draft claims — result-language without a mechanism, reads-on-a-human, organising human activity on a generic computer. **The dominant risk for an AI talent application** | C | 🔵 |
+| 26 | **SPEC-WARDEN** | Mechanical §112 gate: every claim term supported in the spec, every "the X" with an antecedent, every functional element with a disclosed algorithm. **The fully self-inflicted rejection class** | B | 🔵 |
+| 27 | **ART-DELTA** | Element-by-element matrix of each claim against the closest art; names the one element no reference discloses — and writes the likeliest §103 combination **against** you | C | 🔵 |
+| 28 | **IDS-WARDEN** | Dated inventory for the duty of candor, including negative search results. **Escalates immediately on any public activity older than 12 months** — a statutory bar | C | 🔵 |
+| 29 | **INTERVIEW-PREP** | Builds the examiner-interview agenda: the rejection quoted verbatim, where the examiner is right, the distinction, the fallback. **Leaves `[COUNSEL DRAFTS]` for every amendment** | B | 🔵 |
 
 ## Protocols — 2  *(these are not agents; nothing performs them for you)*
 

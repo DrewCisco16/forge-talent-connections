@@ -15,6 +15,7 @@
 | Understand why the system is shaped this way | [`agents/01-operating-model.md`](agents/01-operating-model.md) |
 | See how it could fail and what plugs each hole | [`agents/19-inversion-analysis.md`](agents/19-inversion-analysis.md) |
 | Cut deep-thinking cost | [`agents/14-panel-economics.md`](agents/14-panel-economics.md) → then run `calibrate.py` |
+| Prepare an invention for filing | [`agents/22-dmadv-patent-allowance.md`](agents/22-dmadv-patent-allowance.md) — **put disclosures in a PRIVATE repo first** |
 | Stop everything, now, from your phone | [`agents/07-guardrails.md`](agents/07-guardrails.md) §7 |
 
 ---

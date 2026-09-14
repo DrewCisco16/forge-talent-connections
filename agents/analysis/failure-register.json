@@ -521,6 +521,76 @@
       "control": "Zero Escaped Defects metric; escape count and PONC entry per escape",
       "rung": 2,
       "detected": true
+    },
+    {
+      "id": "FM-37",
+      "item": "patent claims",
+      "function": "survive 35 USC 101",
+      "mode": "claims recite a result rather than a mechanism; AI/talent subject matter reads as organising human activity on a generic computer",
+      "effect": "101 rejection, the dominant basis in this technology; possible final rejection",
+      "S": 8,
+      "O": 7,
+      "D": 5,
+      "class": "dangerous",
+      "control": "ELIGIBILITY-SCOUT flags patterns; counsel decides",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-38",
+      "item": "specification",
+      "function": "support the claims under 112",
+      "mode": "a claim term or functional element lacks spec support or an algorithm",
+      "effect": "112 rejection that cannot be cured without new matter; claim lost",
+      "S": 8,
+      "O": 6,
+      "D": 3,
+      "class": "dangerous",
+      "control": "SPEC-WARDEN mechanical antecedent and support check",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-39",
+      "item": "disclosure record",
+      "function": "preserve the right to file",
+      "mode": "public activity more than 12 months before filing is never inventoried",
+      "effect": "statutory bar; the right is gone and cannot be recovered",
+      "S": 10,
+      "O": 5,
+      "D": 7,
+      "class": "dangerous",
+      "control": "IDS-WARDEN dated activity inventory; escalates immediately",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-40",
+      "item": "duty of candor",
+      "function": "keep a granted patent enforceable",
+      "mode": "material information known to an inventor is never disclosed to counsel",
+      "effect": "a granted patent may be unenforceable; the grant itself becomes worthless",
+      "S": 10,
+      "O": 5,
+      "D": 8,
+      "class": "dangerous",
+      "control": "IDS-WARDEN inventory including negative search results; counsel decides materiality",
+      "rung": 2,
+      "detected": true
+    },
+    {
+      "id": "FM-41",
+      "item": "IP lane",
+      "function": "produce a filing at all",
+      "mode": "the invention disclosure is never written down",
+      "effect": "nothing to file; the most common IP loss of all",
+      "S": 8,
+      "O": 9,
+      "D": 4,
+      "class": "safe",
+      "control": "disclosure template in PRIORART B5; private store decision still open",
+      "rung": 3,
+      "detected": false
     }
   ]
 }

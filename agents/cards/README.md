@@ -37,6 +37,11 @@ field is blank, that agent does not run. Blank limits authorize nothing (p.2).
 | 24 | [baseline](baseline.md) | cross-lane | **today** | ready |
 | 25 | [redactor](redactor.md) | any | **live now** | **GATED** |
 | 26 | **[goalkeeper](goalkeeper.md)** | cross-lane | **after the goal ledger has entries** | 🔵 |
+| 27 | [eligibility-scout](eligibility-scout.md) | FORGE IP | with the first disclosure | 🔵 |
+| 28 | [spec-warden](spec-warden.md) | FORGE IP | with the first disclosure | 🔵 |
+| 29 | [art-delta](art-delta.md) | FORGE IP | after PRIORART runs | 🔵 |
+| 30 | [ids-warden](ids-warden.md) | FORGE IP | **before any filing — bar clock** | 🔵 |
+| 31 | [interview-prep](interview-prep.md) | FORGE IP | on the first office action | 🔵 |
 
 ## Why 26 cards, 24 agents, and one running agent
 

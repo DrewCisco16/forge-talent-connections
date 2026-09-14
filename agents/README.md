@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 6.0 |
+| **Version** | 7.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -81,6 +81,7 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`20-fmea-fta-fmeda.md`](20-fmea-fta-fmeda.md)** | **v5. FMEA, fault-tree cut sets, computed diagnostic coverage, and the agent-count verdict** |
 | **[`21-triz-zerodefects-goals.md`](21-triz-zerodefects-goals.md)** | **v6. Assumption audit, TRIZ trimming, Zero Escaped Defects, and the goal gap that ranks first in the register** |
 | **[`analysis/goal-ledger.md`](analysis/goal-ledger.md)** | **Empty, and that is the finding. Fill this before adding anything** |
+| **[`22-dmadv-patent-allowance.md`](22-dmadv-patent-allowance.md)** | **v7. DMADV for patent-allowance readiness, five new IP agents, and why no allowance probability is produced** |
 | [`analysis/`](analysis/) | The machine-readable failure register the numbers come from |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |

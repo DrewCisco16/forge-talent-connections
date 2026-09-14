@@ -1,0 +1,128 @@
+{
+  "_README": [
+    "Pre-filing readiness checklist for one invention disclosure. Scored by",
+    "scripts/patent_readiness.py.",
+    "",
+    "WHAT THE SCORE IS: a COUNT of checkable pre-filing defects closed, over the",
+    "count applicable. It is a readiness measure. It is NOT a probability of",
+    "allowance, it does not predict an examiner, and it must never be reported as",
+    "one. An allowance probability requires art-unit base-rate data from the USPTO",
+    "plus a registered practitioner's judgement. Neither is in this file.",
+    "",
+    "WHY A CHECKLIST HELPS AT ALL: every item below is a defect an examiner can",
+    "raise that could have been closed before filing. Closing them cannot make an",
+    "unpatentable idea patentable. It removes self-inflicted rejections, which are",
+    "the only kind an applicant controls.",
+    "",
+    "severity: BLOCKING  = do not file until closed",
+    "          MATERIAL  = close or record a counsel-approved reason",
+    "          ADVISORY  = improves the record",
+    "status:   PASS | FAIL | NA | UNKNOWN   (UNKNOWN counts as not closed)",
+    "",
+    "PROFESSIONAL VERIFICATION REQUIRED throughout. A registered patent",
+    "practitioner decides everything here. This file organises evidence for that",
+    "person; it does not substitute for them."
+  ],
+  "disclosure_id": "TEMPLATE",
+  "art_unit_base_rate": {
+    "value": null,
+    "_note": "Fill from USPTO data or counsel. NEVER estimated. The script refuses to compute an allowance probability with or without it."
+  },
+  "ctqs": [
+    {
+      "id": "CTQ-101", "name": "35 USC 101 - eligibility",
+      "_note": "Highest-risk CTQ for a mobile talent application with AI features. Search reported that in USPTO TC working group 2120 (AI and simulation) 77 percent of office actions now include a 101 rejection - UNVERIFIED, snippet only, verify before relying on it.",
+      "items": [
+        {"id": "101-1", "severity": "BLOCKING", "check": "Each independent claim recites a specific technical improvement to computer functionality or to a technical field, not an abstract result", "status": "UNKNOWN"},
+        {"id": "101-2", "severity": "BLOCKING", "check": "Specification expressly describes the technical problem and how the claimed mechanism solves it, in the specification and not only in the claims", "status": "UNKNOWN"},
+        {"id": "101-3", "severity": "MATERIAL", "check": "Claims recite HOW the result is achieved (steps, data structures, ordering) rather than WHAT result is achieved", "status": "UNKNOWN"},
+        {"id": "101-4", "severity": "MATERIAL", "check": "No claim reads on a human performing the method mentally or with pen and paper", "status": "UNKNOWN"},
+        {"id": "101-5", "severity": "MATERIAL", "check": "No claim is a bare method of organising human activity (hiring, matching, scheduling) with generic computer implementation", "status": "UNKNOWN"},
+        {"id": "101-6", "severity": "ADVISORY", "check": "Specification quantifies the technical improvement (latency, accuracy, memory, throughput) with a stated measurement method", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-112A", "name": "35 USC 112(a) - written description and enablement",
+      "items": [
+        {"id": "112a-1", "severity": "BLOCKING", "check": "Every claim term has explicit support in the specification as filed", "status": "UNKNOWN"},
+        {"id": "112a-2", "severity": "BLOCKING", "check": "Specification enables the full scope claimed, including every alternative in a Markush or functional recitation", "status": "UNKNOWN"},
+        {"id": "112a-3", "severity": "MATERIAL", "check": "At least one worked example or algorithm is disclosed for each functional claim element", "status": "UNKNOWN"},
+        {"id": "112a-4", "severity": "MATERIAL", "check": "Any means-plus-function or computer-implemented functional term has a corresponding algorithm disclosed, not just a general-purpose processor", "status": "UNKNOWN"},
+        {"id": "112a-5", "severity": "ADVISORY", "check": "Drawings depict every claimed element referenced by number", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-112B", "name": "35 USC 112(b) - definiteness",
+      "items": [
+        {"id": "112b-1", "severity": "BLOCKING", "check": "Every claim term has proper antecedent basis; no 'the X' without a prior 'a X'", "status": "UNKNOWN"},
+        {"id": "112b-2", "severity": "MATERIAL", "check": "No relative or subjective terms without a definition in the specification (about, substantially, optimal, efficient, relevant)", "status": "UNKNOWN"},
+        {"id": "112b-3", "severity": "MATERIAL", "check": "Claim dependencies are correct and none is circular or references a cancelled claim", "status": "UNKNOWN"},
+        {"id": "112b-4", "severity": "ADVISORY", "check": "Consistent terminology; the same element is not called by two names", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-102", "name": "35 USC 102 - novelty",
+      "items": [
+        {"id": "102-1", "severity": "BLOCKING", "check": "For each independent claim, an element-by-element comparison against the closest known reference exists, in writing", "status": "UNKNOWN"},
+        {"id": "102-2", "severity": "BLOCKING", "check": "At least one claim element is identified that is absent from every reference found, with the absence stated explicitly", "status": "UNKNOWN"},
+        {"id": "102-3", "severity": "MATERIAL", "check": "Search coverage is recorded: databases, date range, classifications, languages", "status": "UNKNOWN"},
+        {"id": "102-4", "severity": "BLOCKING", "check": "Statutory bar check complete: no public disclosure, offer for sale, or public use more than 12 months before the filing date", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-103", "name": "35 USC 103 - non-obviousness",
+      "items": [
+        {"id": "103-1", "severity": "MATERIAL", "check": "The most likely two-reference combination an examiner would assert is identified in advance", "status": "UNKNOWN"},
+        {"id": "103-2", "severity": "MATERIAL", "check": "A written reason why a skilled artisan would NOT have combined them, or why the combination still lacks an element", "status": "UNKNOWN"},
+        {"id": "103-3", "severity": "ADVISORY", "check": "Secondary-consideration evidence gathered where it exists: unexpected results, long-felt need, commercial success, copying", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-CANDOR", "name": "37 CFR 1.56 - duty of disclosure",
+      "_note": "A candor failure is not a rejection. It can render a patent unenforceable. This CTQ is why the checklist is BLOCKING-weighted here.",
+      "items": [
+        {"id": "ids-1", "severity": "BLOCKING", "check": "Every reference known to every inventor and to anyone substantively involved is listed for the IDS", "status": "UNKNOWN"},
+        {"id": "ids-2", "severity": "BLOCKING", "check": "Prior public disclosures, demos, pitch decks, papers, and sales activity are inventoried with dates", "status": "UNKNOWN"},
+        {"id": "ids-3", "severity": "BLOCKING", "check": "Any related application, foreign counterpart, or co-pending case is identified", "status": "UNKNOWN"},
+        {"id": "ids-4", "severity": "MATERIAL", "check": "Search results from every agent-assisted search are preserved and handed to counsel, including negative results", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-SCOPE", "name": "Claim scope calibration",
+      "_note": "Marco, Sarnoff and deGrazia use independent claim LENGTH and COUNT as scope measures, and report that prosecution narrows scope - UNVERIFIED, snippet only. Used here only to justify recording the measures, never to set a target number.",
+      "items": [
+        {"id": "scope-1", "severity": "MATERIAL", "check": "Independent claim word count and independent claim count are recorded before filing", "status": "UNKNOWN"},
+        {"id": "scope-2", "severity": "MATERIAL", "check": "A claim ladder exists: at least one broad, one intermediate, one narrow independent claim or a fallback dependent chain", "status": "UNKNOWN"},
+        {"id": "scope-3", "severity": "MATERIAL", "check": "At least one claim is narrow enough that counsel believes it is allowable over the closest art found", "status": "UNKNOWN"},
+        {"id": "scope-4", "severity": "ADVISORY", "check": "Dependent claims add distinct limitations that could each carry an amendment, not restatements", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-PROSECUTION", "name": "Prosecution strategy set before filing",
+      "_note": "Search reported an empirical study of ~1.1M applications finding examiner interviews reduce office actions from ~3.6 to ~2.0 before allowance, and another reporting up to 9 percentage points higher allowance - UNVERIFIED, snippets only. Recorded as a planned action, not as a predicted gain.",
+      "items": [
+        {"id": "pros-1", "severity": "MATERIAL", "check": "An examiner interview is planned as the default response to the first office action, not as a last resort", "status": "UNKNOWN"},
+        {"id": "pros-2", "severity": "MATERIAL", "check": "Art unit and examiner statistics have been obtained from a real data source before responding", "status": "UNKNOWN"},
+        {"id": "pros-3", "severity": "ADVISORY", "check": "A continuation strategy is decided before the first allowance, not after", "status": "UNKNOWN"},
+        {"id": "pros-4", "severity": "ADVISORY", "check": "Track One or accelerated examination decision made deliberately with its cost stated", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-INVENTORSHIP", "name": "Inventorship and ownership",
+      "items": [
+        {"id": "inv-1", "severity": "BLOCKING", "check": "Every person who contributed to conception of a claimed element is named; nobody is named who did not", "status": "UNKNOWN"},
+        {"id": "inv-2", "severity": "BLOCKING", "check": "Assignment and employment obligations are clear for every named inventor", "status": "UNKNOWN"},
+        {"id": "inv-3", "severity": "MATERIAL", "check": "No AI system is named as an inventor, and AI-assisted contributions are documented for counsel to assess", "status": "UNKNOWN"},
+        {"id": "inv-4", "severity": "BLOCKING", "check": "No contractor, university or government funding obligation attaches without being disclosed to counsel", "status": "UNKNOWN"}
+      ]
+    },
+    {
+      "id": "CTQ-RECORD", "name": "Evidentiary record",
+      "items": [
+        {"id": "rec-1", "severity": "MATERIAL", "check": "Dated invention disclosure exists, written before any public disclosure", "status": "UNKNOWN"},
+        {"id": "rec-2", "severity": "MATERIAL", "check": "Conception and reduction-to-practice dates are documented with corroborating artifacts", "status": "UNKNOWN"},
+        {"id": "rec-3", "severity": "BLOCKING", "check": "The disclosure is stored in a PRIVATE repository or encrypted store, never in a public repository", "status": "UNKNOWN"}
+      ]
+    }
+  ]
+}
