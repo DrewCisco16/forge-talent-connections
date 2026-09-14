@@ -1,5 +1,10 @@
 # 14 — PANEL ECONOMICS
 
+> **Amended by [`17-subscription-economics.md`](17-subscription-economics.md) (v2.1).**
+> The rate card and method below stand. The Tier 1 seat choice (§3) and the
+> objective (§6) are superseded: two of the five seats are subscription-funded,
+> and the binding constraint is rate limits rather than dollars.
+
 Making deep thinking cheap without making it worse. All rates **Repo-Verified**
 from `adjudication/rates.json`, verified by you against vendor pages 2026-09-09.
 
@@ -98,9 +103,12 @@ classes. **What you lose at n=1, stated in your own file:** corroboration
 all panel diagnostics — rho, effective seat count, per-pass divergence, the
 collapse flag. *"At n=1 they are undefined, not zero."*
 
-**Seat choice:** `grok-4.6` at $6.00/MTok output is the cheapest and the obvious
-Tier 1 default. Use `claude-opus-5` when the task is long-context or
-instruction-dense and you will accept ~3× the cost for it.
+**Seat choice — SUPERSEDED by [`17-subscription-economics.md`](17-subscription-economics.md) §2.**
+Under metered pricing `grok-4.6` at $6.00/MTok output was the right default.
+Andrew holds a **$200/month Claude Max subscription**, so `claude-opus-5` is now
+**$0 marginal** — the comparison is $6.00 vs $0.00, and the free option is also
+the more capable model. **Tier 1 default is `claude-opus-5` via Claude Code on
+Max.** The rest of this section stands.
 
 ### Tier 2 — the window swarm. Breadth at zero marginal API cost.
 

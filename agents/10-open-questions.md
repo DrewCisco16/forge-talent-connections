@@ -17,7 +17,7 @@ stop and ask. Do not substitute a plausible value.**
 | A2 | What records must be retained if a CO asks how AI was used in preparing a submission? | MATRIX, CAPTURE | Contracts counsel |
 | A3 | Does your Just4Veterans 1099 agreement restrict tooling, data handling, or disclosure? | All J4V agents | Read the agreement; if silent, ask J4V in writing |
 | A4 | Is this repository (`forge-talent-connections`) public or private? | Whether any invention disclosure, client data, or draft may ever be committed here | Check GitHub settings. **Before the next commit** |
-| A5 | Does "GPT-5.6 Codex" exist, and what are Codex's actual sandbox, network, scheduling and `AGENTS.md` behaviors? | BUILDER's second vendor track | OpenAI's own documentation. **Blocked from this session — `developers.openai.com` returned `EGRESS_BLOCKED`** |
+| A5 | ~~Does GPT-5.6 exist~~ **PARTIALLY CLOSED 2026-09-14:** `gpt-5.6-sol` is Repo-Verified in `adjudication/rates.json` with a vendor source URL and `verified_on: 2026-09-09`, and Andrew holds a $200/month ChatGPT Max subscription (Stated). **Still open:** Codex's sandbox, network policy, scheduling, and `AGENTS.md` behavior | BUILDER's second vendor track | OpenAI's own documentation. `developers.openai.com` remains `EGRESS_BLOCKED` from this session |
 | A6 | Do your DBA research plans involve organizational, client, or contract data? | LIBRARIAN's boundary; possibly IRB | FIU IRB + your chair, before any data touches an agent |
 
 ---
@@ -35,7 +35,7 @@ stop and ask. Do not substitute a plausible value.**
 | B7 | Your dissertation domain, research question, and current reference list | LIBRARIAN. It cannot surveil a domain it has not been given | You |
 | B8 | Which mailboxes map to which lane, and their addresses | MAILROOM ×5 | You |
 | B9 | Whether Gmail or Superhuman is the system of record per mailbox | MAILROOM tool scope | You |
-| B10 | Whether routine **API credentials** (Pro/Max) are available on your plan for keeping keys outside the sandbox | Any routine calling a keyed API | `claude.ai/code` environment settings |
+| ~~B10~~ | ~~Whether routine **API credentials** are available on your plan~~ | — | **CLOSED 2026-09-14.** Andrew holds Claude Max. Docs-Verified: API credentials are available *"on Pro and Max plans"*. Metered keys for seats 2-4 go there, never in environment variables. See `17` §7 |
 
 ---
 

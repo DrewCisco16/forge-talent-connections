@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 2.0 |
+| **Version** | 2.1 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -66,6 +66,7 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`14-panel-economics.md`](14-panel-economics.md)** | **The cost fix. Four-tier cascade, ~88% reduction, arithmetic shown** |
 | **[`15-window-swarm.md`](15-window-swarm.md)** | **Five LLMs in Chrome tabs at zero marginal API cost. The workhorse tier** |
 | **[`16-agent-roster-v2.md`](16-agent-roster-v2.md)** | **Sixteen agents. ROUTER, ORCHESTRATOR, OPTIMIZER, HARVESTER, SENTINEL, DILIGENCE** |
+| **[`17-subscription-economics.md`](17-subscription-economics.md)** | **v2.1. Two Max subscriptions make the two priciest seats free. The constraint becomes rate limits, not dollars** |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
 | [`../.claude/agents/`](../.claude/agents/) | Runnable Claude Code subagent definitions |

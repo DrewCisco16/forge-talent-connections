@@ -3,15 +3,16 @@
   "lane": "FORGE",
   "loop_type": "optimization",
   "node": "HP Envy 17",
-  "operates_on": "adjudication/ — the engine itself, not a lane's content",
+  "operates_on": "adjudication/ \u2014 the engine itself, not a lane's content",
   "metric": {
     "computed_by": "script",
     "script": "agents/loops/panel-economics/metric.py",
     "direction": "lower_is_better",
-    "objective": "total_cost / resolved_correct_count",
+    "objective": "usage_draw_per_resolved_correct (primary); metered_dollar_cost_per_resolved_correct (secondary, for seats 2-4 only)",
     "hard_constraints": [
       "resolved_correct_rate must not fall below the recorded baseline",
-      "not_resolved_rate must not rise above the recorded baseline"
+      "not_resolved_rate must not rise above the recorded baseline",
+      "interactive-work headroom must not fall below 40% of the daily allowance"
     ],
     "per_iteration_inputs": [
       "adjudication/calibrate.py  -> rho (five calls total)",
@@ -19,9 +20,14 @@
       "adjudication/cost_ledger.py -> actual spend from vendor token counts",
       "6-question smoke subset with known answers"
     ],
-    "note": "accuracy.py returns RESOLVED CORRECT / RESOLVED WRONG / NOT RESOLVED. All three are used; folding NOT RESOLVED into either other outcome misreports the instrument."
+    "note": "accuracy.py returns RESOLVED CORRECT / RESOLVED WRONG / NOT RESOLVED. All three are used; folding NOT RESOLVED into either other outcome misreports the instrument.",
+    "objective_note": "v2.1: seats 1 and 5 are subscription-funded at zero marginal dollar cost, so dollars no longer bound the search. Rate limits do -- routines draw down the same subscription pool as interactive work. See agents/17-subscription-economics.md section 4."
   },
-  "evaluation": { "max_seconds": 900, "deterministic": false, "seeded_runs": 3 },
+  "evaluation": {
+    "max_seconds": 900,
+    "deterministic": false,
+    "seeded_runs": 3
+  },
   "cheat_paths": [
     {
       "path": "Resolve fewer questions - a panel that answers nothing has an excellent cost per answer",
@@ -38,9 +44,16 @@
     {
       "path": "Lower max_tokens until answers truncate - cost falls, quality falls invisibly",
       "defence": "truncation is detected and counted as RESOLVED WRONG, never as a saving. test_truncation.py exists."
+    },
+    {
+      "path": "Shift work onto the subscription seats until rate limits throttle Andrew's own interactive sessions - the dollar metric improves while the real resource is exhausted",
+      "defence": "interactive headroom is a hard constraint, not a term. Usage draw is the primary objective precisely so this path cannot be taken."
     }
   ],
-  "rollback": { "automatic": true, "command": "git reset --hard HEAD" },
+  "rollback": {
+    "automatic": true,
+    "command": "git reset --hard HEAD"
+  },
   "held_out": {
     "exists": true,
     "visible_to_loop": false,
@@ -74,6 +87,10 @@
       "resolved": true
     }
   ],
-  "limits": { "max_iterations": 60, "max_wall_clock_hours": 12, "max_spend_usd": 60 },
+  "limits": {
+    "max_iterations": 60,
+    "max_wall_clock_hours": 12,
+    "max_spend_usd": 60
+  },
   "stop_early_if": "15 consecutive iterations with no improvement, or any held-out disagreement"
 }

@@ -57,6 +57,11 @@ on questions landing in the cheapest tier that can actually answer them.
   panel-economics loop optimizes against, and the only way you learn your real
   80/15/5 split.
 - **Tier 3 requires a typed confirmation.** ROUTER proposes; it cannot spend.
+- **ROUTER also holds a usage budget, not only a cost rule** — see
+  [`17-subscription-economics.md`](17-subscription-economics.md) §4. On a Max
+  subscription the scarce resource is rate limits, not dollars: **40% of the daily
+  allowance is reserved for interactive work and agents may never spend it.**
+  Agents stop at their 60% ceiling; you do not.
 
 ---
 
