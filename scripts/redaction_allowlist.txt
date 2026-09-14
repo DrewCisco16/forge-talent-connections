@@ -1,0 +1,33 @@
+# Suppressions for redaction_guard.py. THIS REPOSITORY IS PUBLIC.
+#
+#   path/to/file                      whole file -- needs a strong reason
+#   path/to/file :: rule-a,rule-b     only those rules; everything else stays armed
+#
+# PREFER THE RULE-SCOPED FORM. Blanket-allowlisting a 5,000-line test file to
+# silence one float literal also blinds the credential rules on that file. Name
+# the rules you mean.
+#
+# Never allowlist to get past a commit you are unsure about. A false positive
+# costs one line here with a reason. A false negative costs a third party their
+# privacy on the open internet -- which has already happened once in this repo.
+
+# The guard itself carries every detection pattern and its test specimens.
+scripts/redaction_guard.py
+
+# Pre-existing adjudication code. These files contain large integer and float
+# literals from IEEE-754 precision tests  # redaction-guard: allow - names the specimen class, no literal
+# and DELIBERATE fake-secret specimens used to prove the redaction paths work
+# ("sk-do-not-leak-me-...", "sk-live-DEADBEEF..."). The numeric-identifier rules
+# fire on those literals. Only those two rules are suppressed: every credential,
+# key, CUI and phone rule stays armed on these files.
+adjudication/adjudication_orchestrator.py :: carrier-or-account-number,embedded-reference-number
+# These two also carry deliberate fake credentials as fixtures, so generic-bearer
+# is suppressed on them as well. TRADE-OFF, STATED: these two files are now blind
+# to an inline-assigned credential. Accepted because their purpose includes
+# carrying specimens, and a guard that fires on every run of a file gets disabled
+# wholesale -- which would be worse. The key-shape rules (anthropic, openai,
+# github, aws, google, slack, private-key) remain ARMED on both.
+adjudication/test_suite.py :: carrier-or-account-number,embedded-reference-number,generic-bearer
+adjudication/test_night_loop.py :: carrier-or-account-number,embedded-reference-number,generic-bearer
+adjudication/candidates-q4.json :: carrier-or-account-number,embedded-reference-number
+adjudication/eval/seeded-defects.json :: carrier-or-account-number,embedded-reference-number

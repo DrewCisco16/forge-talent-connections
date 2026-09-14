@@ -57,7 +57,7 @@ a hardware question. Professional verification required."*
 |---|---|
 | Public solicitation documents from SAM.gov | Presumed yes — **confirm** |
 | Your own proposal drafts | **Unknown. Ask counsel.** Depends on clauses and markings |
-| Anything marked CUI, FOUO, or source-selection-sensitive | **Presumed NO until counsel says otherwise** |
+| Anything marked CUI, FOUO, or source-selection-sensitive | **Presumed NO until counsel says otherwise** |  <!-- redaction-guard: allow - policy text naming the marking, not marked material -->
 | Anything under a DFARS 252.204-7012 obligation | **Presumed NO. Specific safeguarding requirements attach.** Counsel |
 | Another company's data held under NDA or a 1099 agreement | **Read the agreement first** |
 | Personnel or candidate PII | **Unknown.** Privacy obligations attach independently |

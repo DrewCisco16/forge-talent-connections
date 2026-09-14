@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 3.0 |
+| **Version** | 4.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -26,10 +26,9 @@ around **what an agent is allowed to hand you, and how long that hand-off is
 permitted to cost you.** Every agent in the roster is assigned a Trust Tier that
 fixes its review cost before it ever runs. That is the whole design.
 
-Read [`01-operating-model.md`](01-operating-model.md) next — or, if you only
-want to run something today, go straight to
-**[`cards/briefer.md`](cards/briefer.md)**, the first agent your Playbook
-recommends.
+**If you only want to run something today, start at [`../START-HERE.md`](../START-HERE.md).**
+For where everything stands right now, [`../STATE.md`](../STATE.md).
+Otherwise read [`01-operating-model.md`](01-operating-model.md) next.
 
 > **⚠ This repository is PUBLIC** (verified 2026-09-14). Never commit invention
 > disclosures, CUI, client or candidate records, third-party personal data, or
@@ -77,6 +76,7 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`18-playbook-integration.md`](18-playbook-integration.md)** | **v3. Reconciles with your Operating Playbook. Eleven-item defect register, including a privacy incident** |
 | **[`cards/`](cards/)** | **21 agent cards. One page per agent — open exactly one** |
 | [`mission-template.md`](mission-template.md) | Copy to `mission.md` before any run. Blank limits authorize nothing |
+| **[`19-inversion-analysis.md`](19-inversion-analysis.md)** | **v4. How this fails, what plugs each hole, what is still open. The three-rung confidence ladder** |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
 | [`../.claude/agents/`](../.claude/agents/) | Runnable Claude Code subagent definitions |

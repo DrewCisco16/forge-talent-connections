@@ -9,7 +9,9 @@ field is blank, that agent does not run. Blank limits authorize nothing (p.2).
 
 | # | Card | Lane | Deploy | Status |
 |---|---|---|---|---|
-| 1 | **[briefer](briefer.md)** | any | **FIRST — Playbook p.15 recommendation** | ready |
+| 0 | **[baseline](baseline.md)** | cross-lane | **START THIS TODAY — 14 days, no agent can do it for you** | ready |
+| 0 | **[redactor](redactor.md)** | any | **already live** — pre-commit hook installed | **GATED** |
+| 1 | **[briefer](briefer.md)** | any | **FIRST agent — Playbook p.15 recommendation** | ready |
 | 2 | [smoke](smoke.md) | any | before any browser route is trusted | ready |
 | 3 | [mailroom](mailroom.md) | ×5 | after briefer proves out | ready |
 | 4 | [router](router.md) | per lane | with mailroom | ready |
@@ -30,11 +32,15 @@ field is blank, that agent does not run. Blank limits authorize nothing (p.2).
 | 19 | [diligence](diligence.md) | HOME | on demand | ready |
 | 20 | [priorart](priorart.md) | FORGE | on demand | ready |
 | 21 | [nightwatch](nightwatch.md) | any | rare, manual, typed SPEND | ready |
+| 22 | [attestor](attestor.md) | any | with the first Tier B agent | ready |
+| 23 | [canary](canary.md) | per agent | month 2, once agents have a record | ready |
+| 24 | [baseline](baseline.md) | cross-lane | **today** | ready |
+| 25 | [redactor](redactor.md) | any | **live now** | **GATED** |
 
-## Why 21 cards and one running agent
+## Why 25 cards and one running agent
 
-A card is a **contract**, not a process. Writing 21 costs nothing and makes each
-deployment fast and safe. Running 21 at once would violate your own Playbook
+A card is a **contract**, not a process. Writing 25 costs nothing and makes each
+deployment fast and safe. Running 25 at once would violate your own Playbook
 (p.23, *"Measure usefulness before adding agents"*) and would make it impossible
 to tell which one is working.
 
@@ -62,3 +68,13 @@ forbidden data · unapproved domain · cost limit · timeout · repeat run.
 - **One controller per browser session. One writer per working tree.**
 - **This repository is PUBLIC.** No disclosures, CUI, client records, or personal
   data — ever. See [`../18-playbook-integration.md`](../18-playbook-integration.md) §2.
+
+## Precedence — a card beats a prompt
+
+`agents/prompts/*.md` and these cards describe some of the same agents. **The
+CARD is authoritative.** A prompt is a paste-able rendering of its card. If they
+disagree, the card is right and the prompt is stale.
+
+Two documents describing one agent is a drift hazard, and drift in an agent
+contract is how an agent quietly stops doing what you think it does
+(`../19-inversion-analysis.md` G1).

@@ -38,7 +38,7 @@ implementation of the wrong thing is the most expensive output you can produce.
 
 ## Never in this repository
 - Secrets, keys, tokens, `.env` contents
-- CUI, FOUO, or source-selection-sensitive material
+- CUI, FOUO, or source-selection-sensitive material  <!-- redaction-guard: allow - policy text naming the marking, not marked material -->
 - Unfiled invention disclosures  <!-- delete this line only if the repo is PRIVATE
      and confirmed as the designated disclosure repository -->
 - Another party's confidential data

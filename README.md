@@ -2,6 +2,8 @@
 
 ## AI agent system
 
+**→ [`START-HERE.md`](START-HERE.md)** · current state: [`STATE.md`](STATE.md)
+
 Design and runnable scaffolding for an agent workforce across the ABO, FORGE
 LINK, Just4Veterans, DBA and personal lanes: **[`agents/`](agents/)**.
 

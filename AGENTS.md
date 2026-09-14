@@ -11,7 +11,7 @@ repository-specific additions. Codex reads this file; `CLAUDE.md` imports it.
 Verified 2026-09-14 (`visibility: "public"`). **Never commit here:**
 
 ```
-invention disclosures or unfiled patent claims   CUI, FOUO, procurement-sensitive material
+invention disclosures or unfiled patent claims   CUI, FOUO, procurement-sensitive material  <!-- redaction-guard: allow - policy text naming the marking, not marked material -->
 client, candidate or personnel records           Just4Veterans data
 third-party personal data                        phone numbers, account or order identifiers
 secrets, keys, tokens, .env contents             personal or family financial data

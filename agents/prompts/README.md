@@ -1,5 +1,10 @@
 # PORTABLE AGENT PROMPTS
 
+> **The card is authoritative.** These are paste-able renderings of
+> [`../cards/`](../cards/). If a prompt and its card disagree, the card is right
+> and the prompt is stale.
+
+
 Vendor-neutral. Paste into a Claude Code routine, an OpenAI Codex configuration,
 a Custom GPT, or anywhere else that takes a system prompt.
 

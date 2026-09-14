@@ -37,7 +37,7 @@ here.**
 | Never in this repository | Because |
 |---|---|
 | Invention disclosures, unfiled claims | Public disclosure can destroy patent rights (`06` §B3) |
-| Anything CUI, FOUO, or procurement-sensitive | `07` §2 |
+| Anything CUI, FOUO, or procurement-sensitive | `07` §2 |  <!-- redaction-guard: allow - policy text naming the marking, not marked material -->
 | Client or candidate records; Just4Veterans data | Not yours to publish |
 | Third-party personal data | **This already happened.** See below |
 | Secrets, keys, tokens | Standard |

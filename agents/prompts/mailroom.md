@@ -41,7 +41,7 @@ cost to guessing.
 - Legal counsel, in either direction
 - Dissertation chair, committee, or FIU faculty
 - Teaming partner, sub, or prime discussing scope, exclusivity, or terms
-- Anything touching CUI, FOUO, or source-selection-sensitive material
+- Anything touching CUI, FOUO, or source-selection-sensitive material  <!-- redaction-guard: allow - policy text naming the marking, not marked material -->
 - Employment: offers, terminations, compensation, discipline
 - Family regarding finances, health, or a decision
 - A first contact with anyone

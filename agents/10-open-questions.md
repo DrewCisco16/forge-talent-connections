@@ -18,6 +18,7 @@ stop and ask. Do not substitute a plausible value.**
 | A3 | Does your Just4Veterans 1099 agreement restrict tooling, data handling, or disclosure? | All J4V agents | Read the agreement; if silent, ask J4V in writing |
 | A4 | Is this repository (`forge-talent-connections`) public or private? | Whether any invention disclosure, client data, or draft may ever be committed here | Check GitHub settings. **Before the next commit** |
 | A5 | ~~Does GPT-5.6 exist~~ **PARTIALLY CLOSED 2026-09-14:** `gpt-5.6-sol` is Repo-Verified in `adjudication/rates.json` with a vendor source URL and `verified_on: 2026-09-09`, and Andrew holds a $200/month ChatGPT Max subscription (Stated). **Still open:** Codex's sandbox, network policy, scheduling, and `AGENTS.md` behavior | BUILDER's second vendor track | OpenAI's own documentation. `developers.openai.com` remains `EGRESS_BLOCKED` from this session |
+| **A7** | **What does FIU's doctoral program actually permit regarding AI use in dissertation research and writing?** Your Playbook flags it (p.23: *"follow your program's actual AI-use and research requirements"*); this system never checked | **The entire DBA lane — LIBRARIAN, TRACKER, the falsification loop** | **Your program handbook, your chair, and FIU's academic-integrity policy. Ask before the next DBA agent runs.** Unrecoverable-class risk |
 | A6 | Do your DBA research plans involve organizational, client, or contract data? | LIBRARIAN's boundary; possibly IRB | FIU IRB + your chair, before any data touches an agent |
 
 ---
