@@ -56,7 +56,7 @@ question, up to three approved public sources. Fill
 Y = X1 * X3 * f(...)      X1 goals written = 0      X3 review run = 0
 Y = 0.  Structurally zero, not low. 29 agents multiply zero.
 ```
-Close both gates in ~30 minutes: write three goals, run one review.
+Close both gates in ~30 minutes: **[`EXECUTE.md`](EXECUTE.md)**, Blocks 1 and 2.
 `python3 scripts/goal_throughput.py`
 
 ## Measurement

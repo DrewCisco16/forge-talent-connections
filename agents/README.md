@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 8.0 |
+| **Version** | 9.0 |
 | **Compiled** | 2026-09-14 |
 | **Response tier** | Full (high-stakes, hard to reverse, commits recurring spend and operating habit) |
 | **Status** | Design + runnable scaffolding. Nothing in here has been run end-to-end yet. |
@@ -83,6 +83,8 @@ already own. Full register: [`13-v2-version-analysis.md`](13-v2-version-analysis
 | **[`analysis/goal-ledger.md`](analysis/goal-ledger.md)** | **Empty, and that is the finding. Fill this before adding anything** |
 | **[`22-dmadv-patent-allowance.md`](22-dmadv-patent-allowance.md)** | **v7. DMADV for patent-allowance readiness, five new IP agents, and why no allowance probability is produced** |
 | **[`23-idov-goal-attainment.md`](23-idov-goal-attainment.md)** | **v8. IDOV. The transfer function, its two multiplicative gates, the WIP cap, and why Y = 0 today** |
+| **[`24-cst-nine-windows-smart.md`](24-cst-nine-windows-smart.md)** | **v9. Boundary critique, Nine Windows, and the stop rule. Two pages, because the plan is the deliverable** |
+| **[`../EXECUTE.md`](../EXECUTE.md)** | **The 30 minutes. Not analysis — a script to follow** |
 | [`analysis/`](analysis/) | The machine-readable failure register the numbers come from |
 | [`context/`](context/) | Canonical device fleet and principal profile that agents load as context |
 | [`prompts/`](prompts/) | Portable, vendor-neutral agent prompts (paste into Codex, a Custom GPT, anywhere) |
