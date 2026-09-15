@@ -263,11 +263,15 @@ def emit(cards: list[Card]) -> str:
     w("Three levels. **You write the top one.**")
     w("")
     w("```")
-    w("        LEVEL 0   the ultimate goal            <- Andrew writes this. No agent may.")
-    w("                         ^")
-    w("        LEVEL 1   four outcomes  A  B  C  D    <- fixed; a fifth would be a synonym")
-    w("                         ^")
-    w(f"        LEVEL 2   {a['agents']} agent goals + {a['protocols']} protocol goals   <- one per card, each measured")
+    w("   LEVEL 0   the ultimate goal          <- Andrew's. Written 2026-09-15.")
+    w("                    ^")
+    w("   LEVEL 0.5 its three components       <- billionaire | philanthropist | Christian")
+    w("                    ^")
+    w("             ====== THE SEAM ======     <- agents stop here. Andrew crosses it.")
+    w("                    ^")
+    w("   LEVEL 1   four outcomes  A B C D     <- what the agent system can produce")
+    w("                    ^")
+    w(f"   LEVEL 2   {a['agents']} agent goals + {a['protocols']} protocols   <- one per card, each measured")
     w("```")
     w("")
     w("---")
@@ -275,7 +279,56 @@ def emit(cards: list[Card]) -> str:
     w("## LEVEL 0 — the ultimate goal")
     w("")
     if a["ultimate_goal_written"]:
-        w("**Status: WRITTEN.** See [`goal-ledger.md`](goal-ledger.md).")
+        w("> ### To become a Christian billionaire philanthropist, in U.S. dollars.")
+        w("")
+        w("**Written by Andrew Francisco, 2026-09-15.** Full entry, its three components and")
+        w("what is still open: [`goal-ledger.md`](goal-ledger.md).")
+        w("")
+        w("`X1` is closed for the first time in this project's life. It had been zero since")
+        w("the beginning, and while it was zero every other input was irrelevant by")
+        w("construction. It is not zero now.")
+        w("")
+        w("### LEVEL 0.5 — it is three goals, and they do not share a clock")
+        w("")
+        w("| | Component | Starts | Served by |")
+        w("|---|---|---|---|")
+        w("| **1** | **Billionaire** — net worth >= $1,000,000,000 USD | decades; tail outcome | ASSET-LINE, CAPTABLE, and every hour that raises owned value |")
+        w("| **2** | **Philanthropist** — deployed, not consumed | **today** | FIRSTFRUITS |")
+        w("| **3** | **Christian** — the means, not only the ends | **every decision** | a gate over all of it; returns only *stop* |")
+        w("")
+        w("**Component 2 is not gated on component 1**, and a system that assumed otherwise")
+        w("would record nothing against a third of the goal for twenty years. **Component 3 is")
+        w("a gate, not a metric** — it cannot be optimised toward, only violated.")
+        w("")
+        w("---")
+        w("")
+        w("## ====== THE SEAM ======")
+        w("")
+        w("**This is the most important line in the document, so it is drawn explicitly rather")
+        w("than left to be assumed.**")
+        w("")
+        w("The four outcomes below are what an agent system can produce: returned time,")
+        w("prevented irreversible loss, detected stalls, compounding reuse. **None of them is")
+        w("a billion dollars, and no sum of them becomes one.** The distance between")
+        w("`A + B + C + D` and the summit is closed by owned equity that a market values —")
+        w("`f · V >= $1e9` — and that is built by Andrew's decisions, not by this repository.")
+        w("")
+        w("```")
+        w("   what agents produce        |    what closes the rest")
+        w("   ------------------------- | -------------------------------")
+        w("   hours returned            |    what is built in those hours")
+        w("   losses that did not occur |    the position that was taken")
+        w("   stalls surfaced early     |    the decision made on the signal")
+        w("   work that got reused      |    the asset it compounded into")
+        w("```")
+        w("")
+        w("An agent system that claimed to cross this seam would be claiming to make Andrew")
+        w("wealthy, which it cannot do and must not imply. **What it can honestly claim is to")
+        w("return the hours and protect the downside of whoever does cross it.**")
+        w("")
+        w("`Evidence label: Assumption` — that returned hours and prevented losses help at all")
+        w("is reasoned, not measured. BASELINE and STEWARD exist to test it. Until they run, it")
+        w("is an assumption, and it is labelled as one.")
     else:
         w("```")
         w("                                                                        ")
@@ -339,6 +392,27 @@ def emit(cards: list[Card]) -> str:
     w(f"and the {nB} defensive cards are a tax rather than insurance. STEWARD measures exactly that,")
     w("weekly, and it is the one number that can falsify this whole architecture.")
     w("")
+    if a["ultimate_goal_written"]:
+        w("### The misalignment this exposes, now that the summit is known")
+        w("")
+        w(f"**The summit is a pure outcome-D goal, and D is the thinnest rung: {nD} of {total} cards.**")
+        w("Net worth of $1,000,000,000 is a compounding outcome — it is reached by owning")
+        w("something that appreciates, never by hours accumulated. Yet this system devotes")
+        w(f"{nB} cards to preventing loss and {nD} to compounding.")
+        w("")
+        w("**That is a real misalignment and adding cards does not fix it.** It cannot be fixed")
+        w("inside this repository at all, because compounding toward the summit happens on the")
+        w("far side of the seam — in what Andrew builds and owns, not in what agents produce.")
+        w("The honest reading of this distribution is:")
+        w("")
+        w("```")
+        w("  the system is correctly shaped to PROTECT a billion-dollar outcome")
+        w("  the system is NOT shaped to PRODUCE one, and cannot be")
+        w("```")
+        w("")
+        w("Which is the right division of labour, provided it is stated. **Stated, it is a")
+        w("design. Unstated, it is a system that looks like progress while producing none.**")
+        w("")
     w("---")
     w("")
 
@@ -476,7 +550,10 @@ def selftest() -> int:
         finally:
             LEDGER = _saved
 
-    check("the live ledger is still open (X1 = 0)", ledger_is_filled() is False)
+    # Was: "the live ledger is still open". Andrew wrote the summit on 2026-09-15,
+    # so this now guards the opposite direction -- that the summit is not silently
+    # lost by an edit or a bad merge, which would reopen X1 without anyone noticing.
+    check("the live ledger carries the summit (X1 = 1)", ledger_is_filled() is True)
 
     # The real repository must pass its own gate on connectivity.
     real = load_cards()
@@ -485,9 +562,33 @@ def selftest() -> int:
     check("no real orphans", not res["orphans"])
     check("every outcome is served by a real card", not res["unserved_outcomes"])
     check("the four outcomes are exactly four", len(OUTCOMES) == 4)
-    # The refusal is load-bearing: the top must stay open until Andrew writes it.
-    check("emit() never invents the ultimate goal",
-          "THIS SLOT IS OPEN" in emit(real) or res["ultimate_goal_written"])
+    # The refusal is load-bearing and must NOT go slack now that the slot is filled.
+    # Point the script at an empty ledger and confirm it still refuses to invent a
+    # summit from the 34 goals beneath it -- the case it will face again on any new
+    # repository, and the one a "goal written" short-circuit would quietly break.
+    with tempfile.TemporaryDirectory() as d:
+        led = Path(d) / "goal-ledger.md"
+        led.write_text("# GOAL LEDGER\n\n| G-Y-01 |  |  |  |\n", encoding="utf-8")
+        _saved = LEDGER
+        try:
+            LEDGER = led
+            out = emit(real)
+            check("with an empty ledger, emit() still refuses to invent a summit",
+                  "THIS SLOT IS OPEN" in out)
+            check("the refusal names whose job it is",
+                  "no agent authors a goal" in out)
+        finally:
+            LEDGER = _saved
+
+    # And with the real ledger, the summit is rendered rather than synthesised:
+    # it must appear together with its attribution, never as a bare assertion.
+    out = emit(real)
+    check("the written summit is rendered with its author",
+          "Written by Andrew Francisco" in out)
+    check("the seam between agent outcomes and the summit is drawn",
+          "THE SEAM" in out)
+    check("no probability is emitted anywhere in the ladder",
+          not re.search(r"\b\d{1,3}(\.\d+)?%\s*(chance|probability|likelihood)", out, re.I))
 
     total = passed + failed
     print(f"goal_ladder: {passed}/{total} passed")

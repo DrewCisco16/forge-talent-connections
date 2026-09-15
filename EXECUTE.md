@@ -9,11 +9,49 @@ pre-written so the only work left is substitution and typing.
 
 ---
 
-## BLOCK 1 — 20 minutes, once. Closes `X1`.
+## ⏱ THE TIME RULE — what "ASAP" means here
+
+Andrew set the time bound as **ASAP**. Implemented literally, that is not a time
+bound — it is the removal of one, and it makes everything slower. Little's Law:
+`WIP = throughput × cycle time`. At fixed throughput, marking everything ASAP
+raises WIP, and cycle time rises proportionally. **Everything urgent finishes
+later than one thing urgent.**
+
+So ASAP is implemented as the three rules that actually produce speed:
+
+```
+1  WIP = 1.      Exactly one goal is MOVING. The rest are parked, not queued.
+2  TODAY.        The next action starts today or it is not the next action.
+3  HARD STOP.    Every block has an end time written before it starts.
+                 At the stop, it stops -- finished or not.
+```
+
+**Rule 3 is the one that makes rule 2 survivable.** An open-ended "start today"
+is what has kept this file unexecuted; a 20-minute block with a stop time is a
+thing a person can actually begin. If the block ends unfinished, that is
+information about the estimate, not a failure — record it and start the next one.
+
+`Little's Law is a theorem, not a citation.` `Evidence label: Empirical Finding`
+for the observation that this file has gone unexecuted across eight rounds — it
+is observable in this repository's own history.
+
+---
+
+## BLOCK 1 — ✅ CLOSED 2026-09-15. `X1 = 1`.
+
+> **Done.** Andrew wrote the Level 0 goal on 2026-09-15: *to become a Christian
+> billionaire philanthropist, in U.S. dollars.* Recorded at `G-Y-01`. Verified:
+> `python3 scripts/goal_throughput.py` reports `X1 = 1`.
+>
+> **`X3` is now the only open gate — go to Block 2.** The rest of this block is
+> kept for the quarter, month and week rows, which are still empty.
 
 **Open** `agents/analysis/goal-ledger.md`. **Replace** the empty rows.
 
-**You need exactly three goals. Not ten. Three.** One year, one quarter, one week.
+**One goal closes the gate** — `goal_throughput.py` line 70 is
+`x1 = 1 if goals else 0`. The year row is written. **The highest-value remaining
+row is the QUARTER**, because a 10-year goal with no 90-day goal under it cannot
+stall visibly: nothing is due soon enough to notice.
 
 ### The shape each must have
 

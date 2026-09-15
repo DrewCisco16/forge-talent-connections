@@ -1,4 +1,4 @@
-# THE 29 AGENTS AND 2 PROTOCOLS
+# THE 32 AGENTS AND 2 PROTOCOLS
 
 Every agent, its name, what it does, **its one goal**, and its status. One entry
 each. Full contract for any of them: [`cards/<name>.md`](cards/).
@@ -80,6 +80,26 @@ materiality, never contacts the USPTO, never touches a public repository.**
 | 27 | **ART-DELTA** | Element-by-element matrix of each claim against the closest art; names the one element no reference discloses — and writes the likeliest §103 combination **against** you <br> **Goal:** Every independent claim has a written delta before it is filed, and the section 103 case against it is already on paper. *(→ B)* | C | 🔵 |
 | 28 | **IDS-WARDEN** | Dated inventory for the duty of candor, including negative search results. **Escalates immediately on any public activity older than 12 months** — a statutory bar <br> **Goal:** Zero statutory bars and zero candor surprises. *(→ B)* | C | 🔵 |
 | 29 | **INTERVIEW-PREP** | Builds the examiner-interview agenda: the rejection quoted verbatim, where the examiner is right, the distinction, the fallback. **Leaves `[COUNSEL DRAFTS]` for every amendment** <br> **Goal:** Every office action gets an interview agenda before a response is drafted. *(→ A)* | B | 🔵 |
+
+## Summit-serving — 3  *(new 2026-09-15; added when the Level 0 goal was written)*
+
+**The ultimate goal was written on 2026-09-15 and it is three goals in one
+sentence** — net worth, deployment, and the means. The roster served the first
+only indirectly and the second not at all. These three close that gap. They do
+**not** close the seam: no agent produces a billion dollars, and none of these
+claims to ([`analysis/goal-ladder.md`](analysis/goal-ladder.md)).
+
+| # | Agent | What it does | Tier | Status |
+|---|---|---|---|---|
+| 30 | **ASSET-LINE** | Classifies every recorded hour as building an owned asset or renting out time, and reports the ratio weekly. Carries the arithmetic showing earned income cannot reach the target — **$500k/yr at 7% for 30 years is ~$47M, about 2%** <br> **Goal:** Make the asset-versus-time split of Andrew's week a number he sees weekly, instead of an impression he forms yearly. *(→ D)* | B | 🔵 |
+| 31 | **CAPTABLE** | Extracts every term that moves Andrew's ownership fraction from any document that creates, transfers or dilutes equity — **before signature, never after**. Never redlines, never opines on whether a term is market <br> **Goal:** No equity leaves Andrew's hands on terms nobody read. *(→ B)* | C | ⛔ counsel |
+| 32 | **FIRSTFRUITS** | Records giving as a stated percentage every period, from the first dollar. **A period with no giving is recorded as 0%, never left blank.** Never moves money, never names a target percentage <br> **Goal:** Giving is measured from the first dollar, not deferred to the billionth. *(→ C)* | C | 🔵 |
+
+**Why only three.** The gap was named precisely — nothing served *philanthropist*,
+nothing protected the ownership fraction `f`, nothing made the asset-versus-hours
+split visible. Three cards close those three holes. **Adding more would be
+answering a question nobody asked**, and outcome D stays thin for a reason that
+cards cannot fix: compounding happens on the far side of the seam.
 
 ## Protocols — 2  *(these are not agents; nothing performs them for you)*
 

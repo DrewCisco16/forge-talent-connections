@@ -4,14 +4,18 @@
 Update it at the end of every session. If this file and a document disagree, fix
 the document.
 
-**Last updated:** 2026-09-15 · **System version:** v10 (goal ladder)
+**Last updated:** 2026-09-15 · **System version:** v11 (Level 0 written; X1 closed)
 
 ---
 
 ## Agents actually running
 
-**None.** Twenty-nine are specified, all 29 now carry a written goal and measure
-([`agents/analysis/goal-ladder.md`](agents/analysis/goal-ladder.md)); zero have run.
+**None.** Thirty-two are specified, all 32 carry a written goal and measure
+([`agents/analysis/goal-ladder.md`](agents/analysis/goal-ladder.md)); **zero have run.**
+
+`FM-47`, opened 2026-09-15: 34 cards carry acceptance tests and 0 have executed.
+Relevance is gated; feasibility is gated by nothing. See
+[`agents/25-realistic-over-relevant.md`](agents/25-realistic-over-relevant.md).
 
 > A goal is not a run. The ladder below is connected and still produces nothing,
 > because connectivity is not execution.
@@ -21,9 +25,13 @@ the document.
 
 ## Next action — one, not a list
 
-**Run [BRIEFER](agents/cards/briefer.md) once.** 25 minutes, $0, one sanitized
-question, up to three approved public sources. Fill
-[`agents/mission-template.md`](agents/mission-template.md) first.
+**Close `X3`: run one review and record it.** 10 minutes —
+[`EXECUTE.md`](EXECUTE.md) Block 2. `X1` closed on 2026-09-15; `X3` is now the
+only thing holding `Y` at zero.
+
+Then **run [BRIEFER](agents/cards/briefer.md) once** (Block 3): 25 minutes, $0,
+one sanitized question, ≤3 approved public sources. That would be the **first
+agent in this system ever to execute** — and the only thing that moves `FM-47`.
 
 ## Decisions waiting on Andrew
 
@@ -55,18 +63,38 @@ question, up to three approved public sources. Fill
 | abo-govcon | **REFUSED** | counsel |
 | panel-economics | **REFUSED** | seat 3 model id |
 
+## The ultimate goal — written 2026-09-15
+
+> **To become a Christian billionaire philanthropist, in U.S. dollars.**
+
+Authored by Andrew. Recorded at `G-Y-01` in
+[`agents/analysis/goal-ledger.md`](agents/analysis/goal-ledger.md). Three
+components on three different clocks: **billionaire** (decades),
+**philanthropist** (today, not gated on the first), **Christian** (a gate over
+every decision, which can only return *stop*).
+
+**Still open on this entry, and Andrew's to close:** the date (2036-09-15 is
+derived from his stated 10-year horizon, not stated by him) and the leading
+indicator — the thing that moves before net worth does.
+
+**No probability of reaching $1B appears anywhere in this repository.** No
+dataset, no comparables, no calculation would support one.
+
 ## Goal attainment — the transfer function
 
 ```
-Y = X1 * X3 * f(...)      X1 goals written = 0      X3 review run = 0
-Y = 0.  Structurally zero, not low. 29 agents multiply zero.
+Y = X1 * X3 * f(...)      X1 goals written = 1  <- CLOSED 2026-09-15
+                          X3 review run    = 0  <- the only gate still open
+Y = 1 * 0 * f(...) = 0.  Still structurally zero. One gate left.
 ```
 
-**What changed in v10 and what did not.** Every agent now has its own goal, its
-own measure, and a roll-up to one of four outcomes — enforced by a gate, not a
-promise. That moved `FM-35` from rung 2 to rung 1. **It did not move `X1`.**
-`X1` is YOUR goal, the one at the top of the ladder, and no agent may write it.
-31 well-formed goals still multiply by zero.
+**What changed in v11.** `X1` closed for the first time in this project's life —
+Andrew wrote the Level 0 goal. `FM-33`, top-ranked at RPN 504 since the FMEA
+pass, fell to 224. Three cards were added to serve the summit's components
+(ASSET-LINE, CAPTABLE, FIRSTFRUITS).
+
+**What did not change: nothing has run.** `Y` is still zero because `X3` is still
+zero, and one review closes it.
 
 Close both gates in ~30 minutes: **[`EXECUTE.md`](EXECUTE.md)**, Blocks 1 and 2.
 `python3 scripts/goal_throughput.py`

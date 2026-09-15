@@ -8,40 +8,71 @@ goal carries no measure.
 Three levels. **You write the top one.**
 
 ```
-        LEVEL 0   the ultimate goal            <- Andrew writes this. No agent may.
-                         ^
-        LEVEL 1   four outcomes  A  B  C  D    <- fixed; a fifth would be a synonym
-                         ^
-        LEVEL 2   29 agent goals + 2 protocol goals   <- one per card, each measured
+   LEVEL 0   the ultimate goal          <- Andrew's. Written 2026-09-15.
+                    ^
+   LEVEL 0.5 its three components       <- billionaire | philanthropist | Christian
+                    ^
+             ====== THE SEAM ======     <- agents stop here. Andrew crosses it.
+                    ^
+   LEVEL 1   four outcomes  A B C D     <- what the agent system can produce
+                    ^
+   LEVEL 2   32 agent goals + 2 protocols   <- one per card, each measured
 ```
 
 ---
 
 ## LEVEL 0 — the ultimate goal
 
+> ### To become a Christian billionaire philanthropist, in U.S. dollars.
+
+**Written by Andrew Francisco, 2026-09-15.** Full entry, its three components and
+what is still open: [`goal-ledger.md`](goal-ledger.md).
+
+`X1` is closed for the first time in this project's life. It had been zero since
+the beginning, and while it was zero every other input was irrelevant by
+construction. It is not zero now.
+
+### LEVEL 0.5 — it is three goals, and they do not share a clock
+
+| | Component | Starts | Served by |
+|---|---|---|---|
+| **1** | **Billionaire** — net worth >= $1,000,000,000 USD | decades; tail outcome | ASSET-LINE, CAPTABLE, and every hour that raises owned value |
+| **2** | **Philanthropist** — deployed, not consumed | **today** | FIRSTFRUITS |
+| **3** | **Christian** — the means, not only the ends | **every decision** | a gate over all of it; returns only *stop* |
+
+**Component 2 is not gated on component 1**, and a system that assumed otherwise
+would record nothing against a third of the goal for twenty years. **Component 3 is
+a gate, not a metric** — it cannot be optimised toward, only violated.
+
+---
+
+## ====== THE SEAM ======
+
+**This is the most important line in the document, so it is drawn explicitly rather
+than left to be assumed.**
+
+The four outcomes below are what an agent system can produce: returned time,
+prevented irreversible loss, detected stalls, compounding reuse. **None of them is
+a billion dollars, and no sum of them becomes one.** The distance between
+`A + B + C + D` and the summit is closed by owned equity that a market values —
+`f · V >= $1e9` — and that is built by Andrew's decisions, not by this repository.
+
 ```
-                                                                        
-        ________________________________________________________        
-                                                                        
-                            THIS SLOT IS OPEN                           
-        ________________________________________________________        
-                                                                        
+   what agents produce        |    what closes the rest
+   ------------------------- | -------------------------------
+   hours returned            |    what is built in those hours
+   losses that did not occur |    the position that was taken
+   stalls surfaced early     |    the decision made on the signal
+   work that got reused      |    the asset it compounded into
 ```
 
-**Status: OPEN.** It is open on purpose, not by oversight.
+An agent system that claimed to cross this seam would be claiming to make Andrew
+wealthy, which it cannot do and must not imply. **What it can honestly claim is to
+return the hours and protect the downside of whoever does cross it.**
 
-I wrote all 31 goals below. I did not write this one and I will not. GOALKEEPER's
-hard rule is that **no agent authors a goal** — and the rule does not get suspended
-for the single goal that determines whether the other 31 point anywhere useful.
-An agent that infers your summit from the rungs it built itself has closed a loop
-with nothing outside it.
-
-So: the 31 goals below are mine. **The goal at the top is yours.** It goes in
-[`goal-ledger.md`](goal-ledger.md), which is empty for exactly this reason.
-
-Until it is written, `X1 = 0`, and `Y = X1 · X3 · f(...)` = 0 — regardless of how
-well-formed everything below is. A perfectly connected ladder against a wall you
-did not choose still gets you onto the wrong roof.
+`Evidence label: Assumption` — that returned hours and prevented losses help at all
+is reasoned, not measured. BASELINE and STEWARD exist to test it. Until they run, it
+is an assumption, and it is labelled as one.
 
 ---
 
@@ -53,9 +84,9 @@ of distinct things this system can produce that are not restatements of each oth
 | | Outcome | Why it is its own outcome | Cards |
 |---|---|---|---|
 | **A** | **time returned** | An hour Andrew does not spend is the only unit this system produces that he cannot buy more of. | 7 |
-| **B** | **nothing irreversible goes wrong** | A send, a submission, a filing, a publication, a merge. These do not have an undo, so their cost is not bounded by their frequency. | 18 |
-| **C** | **no goal stalls unnoticed** | A stall detected in a week costs a week. Detected in a quarter it costs a quarter. Detection latency IS the cost. | 4 |
-| **D** | **work compounds** | The second proposal, the second literature sweep, the second claim chart must cost less than the first, or this is a treadmill with better tooling. | 2 |
+| **B** | **nothing irreversible goes wrong** | A send, a submission, a filing, a publication, a merge. These do not have an undo, so their cost is not bounded by their frequency. | 19 |
+| **C** | **no goal stalls unnoticed** | A stall detected in a week costs a week. Detected in a quarter it costs a quarter. Detection latency IS the cost. | 5 |
+| **D** | **work compounds** | The second proposal, the second literature sweep, the second claim chart must cost less than the first, or this is a treadmill with better tooling. | 3 |
 
 **A and B are in tension, and that is the design.** Every gate that protects B costs
 time from A. The resolution is not balance, it is *asymmetry*: A's losses are bounded
@@ -65,13 +96,13 @@ email, a submitted price). You trade bounded cost for unbounded protection every
 ### What the distribution itself says
 
 ```
-  A  time returned                       7/31  #######
-  B  nothing irreversible goes wrong    18/31  ##################
-  C  no goal stalls unnoticed            4/31  ####
-  D  work compounds                      2/31  ##
+  A  time returned                       7/34  #######
+  B  nothing irreversible goes wrong    19/34  ###################
+  C  no goal stalls unnoticed            5/34  #####
+  D  work compounds                      3/34  ###
 ```
 
-**18 of 31 cards exist to stop a loss. 2 exist to compound a gain.** That is not
+**19 of 34 cards exist to stop a loss. 3 exist to compound a gain.** That is not
 an accident and it is not obviously wrong — an irreversible act has unbounded cost while
 a missed compounding opportunity merely recurs — but it is worth naming plainly, because
 a system built this way has a characteristic failure: **it becomes very safe and produces
@@ -79,8 +110,28 @@ very little.** Outcome D is the thinnest rung on this ladder.
 
 The check against that failure is not adding more D cards. It is outcome A's measure:
 if review minutes are not falling, the B-weighted design is costing more than it saves,
-and the 18 defensive cards are a tax rather than insurance. STEWARD measures exactly that,
+and the 19 defensive cards are a tax rather than insurance. STEWARD measures exactly that,
 weekly, and it is the one number that can falsify this whole architecture.
+
+### The misalignment this exposes, now that the summit is known
+
+**The summit is a pure outcome-D goal, and D is the thinnest rung: 3 of 34 cards.**
+Net worth of $1,000,000,000 is a compounding outcome — it is reached by owning
+something that appreciates, never by hours accumulated. Yet this system devotes
+19 cards to preventing loss and 3 to compounding.
+
+**That is a real misalignment and adding cards does not fix it.** It cannot be fixed
+inside this repository at all, because compounding toward the summit happens on the
+far side of the seam — in what Andrew builds and owns, not in what agents produce.
+The honest reading of this distribution is:
+
+```
+  the system is correctly shaped to PROTECT a billion-dollar outcome
+  the system is NOT shaped to PRODUCE one, and cannot be
+```
+
+Which is the right division of labour, provided it is stated. **Stated, it is a
+design. Unstated, it is a system that looks like progress while producing none.**
 
 ---
 
@@ -96,13 +147,14 @@ weekly, and it is the one number that can falsify this whole architecture.
 | **SCOUT** | Andrew never learns about a fitting opportunity too late, and never reads about one he cannot bid. | Zero missed eligible notices; zero ineligible notices in the queue. |
 | **STEWARD** | Andrew's review minutes fall, week over week. | Review minutes trending down. Two consecutive rising weeks demotes the responsible agent. |
 
-## LEVEL 2 — outcome B: nothing irreversible goes wrong  (18 cards)
+## LEVEL 2 — outcome B: nothing irreversible goes wrong  (19 cards)
 
 | Card | Its goal | Measured by |
 |---|---|---|
 | **ART-DELTA** | Every independent claim has a written delta before it is filed, and the section 103 case against it is already on paper. | Zero claims filed without an element-by-element matrix. |
 | **ATTESTOR** | No claim of completed work enters the record without an artifact behind it. | Zero VOID claims surviving into HARVESTER or STEWARD. |
 | **CANARY** | Catch an agent going bad within one month of it starting. | Zero seeded defects missed. Zero injections obeyed. |
+| **CAPTABLE** | No equity leaves Andrew's hands on terms nobody read. | Every ownership-changing document summarised before signature, never after; zero signatures with an unread term; every position's fully-diluted percentage stated with the date it was computed. |
 | **CAPTURE** | No bid proceeds without the case against it having been made at full strength. | Every brief leads with no-bid. Killing one bad bid a quarter is the return. |
 | **DILIGENCE** | No capital or family decision is made on a number nobody computed. | Every brief states the base rate or says plainly that none exists. Zero recommendations issued. |
 | **ELIGIBILITY-SCOUT** | Zero section 101 rejections that a pre-filing pattern check would have caught. | 101 rejections traceable to result-style claiming = 0. |
@@ -119,19 +171,21 @@ weekly, and it is the one number that can falsify this whole architecture.
 | **SPEC-WARDEN** | Zero section 112 rejections. This class is entirely self-inflicted, so the target is zero. | Antecedent-basis breaks, unsupported claim terms, algorithm-less functional elements: all 0 at filing. |
 | **SYNTH-QA** | No user finds a defect that a synthetic fixture could have found first. | Defects found pre-release / total defects, rising. Zero real candidate records touched. |
 
-## LEVEL 2 — outcome C: no goal stalls unnoticed  (4 cards)
+## LEVEL 2 — outcome C: no goal stalls unnoticed  (5 cards)
 
 | Card | Its goal | Measured by |
 |---|---|---|
 | **BASELINE** *(protocol)* | Give day 90 an answer instead of an impression. | 14 consecutive days captured, five categories, missing days marked MISSING and never interpolated. |
+| **FIRSTFRUITS** | Giving is measured from the first dollar, not deferred to the billionth. | Giving recorded in every period from period 1; zero periods skipped; the percentage stated rather than implied. A period with no giving is recorded as 0%, never as blank. |
 | **GOALKEEPER** | No goal goes unowned and no agent runs without a goal. | Zero orphans in either direction; the cadence line produced every period. |
 | **PARKING** | No second front is ever opened on a day that already has one. | Every stray idea captured in under 10 seconds and acted on by nobody until the weekly review. |
 | **TRACKER** | No research question is silently abandoned. | Every open question carries a status and a written closing condition. |
 
-## LEVEL 2 — outcome D: work compounds  (2 cards)
+## LEVEL 2 — outcome D: work compounds  (3 cards)
 
 | Card | Its goal | Measured by |
 |---|---|---|
+| **ASSET-LINE** | Make the asset-versus-time split of Andrew's week a number he sees weekly, instead of an impression he forms yearly. | Ratio reported every week from the first week; zero weeks interpolated; a week with no data marked MISSING. Two consecutive weeks below Andrew's own stated floor is escalated, not averaged away. |
 | **HARVESTER** | The next proposal starts from a library, not a blank page. | Reuse rate rising quarter over quarter; every item carries its provenance. |
 | **OPTIMIZER** | Only measured improvements are kept. Noise is never banked. | Zero inconclusive results retained; zero goalpost edits; pilot caps respected. |
 

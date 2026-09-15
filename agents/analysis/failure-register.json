@@ -473,12 +473,13 @@
       "mode": "no goal ledger exists; agents are not traceable to any daily, weekly, monthly or yearly goal",
       "effect": "the system optimises its own integrity while goals go unadvanced; effort is spent on what is buildable rather than on what matters",
       "S": 8,
-      "O": 9,
+      "O": 4,
       "D": 7,
       "class": "safe",
-      "control": "NONE until this pass. GOALKEEPER + goal ledger added 2026-09-14",
+      "control": "PARTIALLY CLOSED 2026-09-15: Andrew wrote the Level 0 goal; goal_throughput.py reports X1 = 1. QUARTER/MONTH/WEEK/DAY rows are still empty, so a stall inside the 10-year horizon is still undetectable -- nothing is due soon enough to miss.",
       "rung": 2,
-      "detected": false
+      "detected": false,
+      "residual": "A 10-year goal with no 90-day goal under it cannot stall visibly. The next row that matters is QUARTER."
     },
     {
       "id": "FM-34",
@@ -662,6 +663,21 @@
       "control": "BASELINE category JUDGMENT; the day-30 question 3 in 23 section 4.3",
       "rung": 3,
       "detected": false
+    },
+    {
+      "id": "FM-47",
+      "item": "every agent card",
+      "function": "be deployable, not merely specified",
+      "mode": "a card is relevant, connected and fully specified, and has never been demonstrated to run",
+      "effect": "a growing, well-connected, entirely inert system; effort reads as progress",
+      "S": 7,
+      "O": 9,
+      "D": 6,
+      "class": "safe",
+      "control": "agents/25-realistic-over-relevant.md R1-R4. NOT YET MECHANISED: Relevance is gated by goal_ladder.py; feasibility is gated by nothing. 34/34 cards carry acceptance tests; 0 have been executed.",
+      "rung": 3,
+      "detected": true,
+      "residual": "The strongest evidence for this mode is that it is currently true."
     }
   ]
 }
