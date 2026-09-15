@@ -79,6 +79,13 @@ this stays an inference. It is not a verified fact and is not recorded as one.
 **This raises the stakes on the test below but does not replace it.** Repo
 evidence cannot read a dashboard setting.
 
+**Remedies are prepared and NOT applied:**
+[`agents/26-pages-exposure-mitigations.md`](agents/26-pages-exposure-mitigations.md)
+— four options with the work already done, none activated, because deploying
+is human-only. It also names what **no** option fixes: immutable past
+deployments keep their own copies, and only deleting them in the dashboard
+reaches those.
+
 ---
 
 ### Decision 2 — the exact test
