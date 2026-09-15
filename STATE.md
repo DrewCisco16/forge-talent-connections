@@ -43,11 +43,49 @@ agent in this system ever to execute** — and the only thing that moves `FM-47`
 | 4 | **FIU AI-use policy** for doctoral work | The DBA lane. **Unrecoverable-class risk, never checked** | 2026-09-14 |
 | 5 | **Seat 3 Mistral model id** — 2 minutes in the console | Tier 3 panel + the panel-economics loop | 2026-09-14 |
 
-### Decision 2 — the exact test, now that the URLs are known
+### ⚠ Decision 2 — the repository root IS the website
+
+**Found 2026-09-15, from repo evidence rather than the network.** This changes the
+assessment and `FM-31` is now the top-ranked mode in the register at RPN 512.
+
+```
+REPO ROOT CONTAINS      index.html  ·  styles.css  ·  assets/
+                        committed as 23bdab7, "Initial website upload"
+BUILD CONFIG            NONE. No wrangler.toml, no output-directory setting,
+                        no static-site generator, anywhere in the repo.
+```
+
+`Repo-Verified` — both lines above, checkable with `ls` and `git log`.
+
+`Evidence-Based Inference` — **for that `index.html` to be served as the site
+homepage, which the succeeding Pages deploys indicate, the Pages output directory
+must be the repository root.** And if the output directory is the repository root,
+every static file beneath it is served at its repo path — **`.md` files included.**
+
+**What that would mean, if the inference holds:**
+
+```
+agents/analysis/goal-ledger.md   ->  the Level 0 goal, publicly served
+agents/analysis/*.md, agents/*.md->  the whole design corpus, publicly served
+STATE.md                          ->  this file, including the decisions list
+agents/context/device-fleet.md    ->  redacted at HEAD since 5f12aba, BUT every
+                                      earlier immutable deployment is untouched
+```
+
+`Unknown` — the actual output-directory setting and whether a custom production
+domain is attached. **Both live in the Cloudflare dashboard, not in the repo**, so
+this stays an inference. It is not a verified fact and is not recorded as one.
+
+**This raises the stakes on the test below but does not replace it.** Repo
+evidence cannot read a dashboard setting.
+
+---
+
+### Decision 2 — the exact test
 
 Cloudflare Pages posted its deployment URLs on PR #12 on 2026-09-15. **Both were
 egress-blocked from this session** (`403` at the proxy, via `curl` and `WebFetch`),
-so this remains `Unverified` — but it is no longer vague.
+so the verification is Andrew's to run.
 
 **Step 1 — is repo markdown served at all?** Open:
 

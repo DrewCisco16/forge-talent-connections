@@ -445,13 +445,13 @@
       "mode": "repo markdown served as web pages from immutable deployment URLs",
       "effect": "documents intended as internal become public and durable",
       "S": 8,
-      "O": 6,
+      "O": 8,
       "D": 8,
       "class": "dangerous",
-      "control": "Still NONE, but the test is now exact and 30 seconds: STATE.md 'Decision 2 - the exact test'. Deployment URLs captured from the Cloudflare bot's PR comment 2026-09-15; both egress-blocked from the agent session (403 at the proxy, curl and WebFetch). Human-only: step 2 needs a logged-in dashboard.",
+      "control": "Still NONE. OCCURRENCE RAISED 6 -> 8 on 2026-09-15 from repo evidence: the repository ROOT is a complete static website (index.html, styles.css, assets/, committed 23bdab7 'Initial website upload'), and there is NO build config anywhere in the repo -- no wrangler.toml, no output-directory setting, no static-site generator. For that index.html to be served as the site homepage, which the succeeding Pages deploys indicate, the Pages output directory must be the repository root. If it is, every static file beneath it is served at its repo path, .md included. Test: STATE.md 'Decision 2'.",
       "rung": 3,
       "detected": false,
-      "residual": "The branch preview URL serves the branch HEAD, where the file is already redacted, so it can only answer WHETHER markdown is served -- never what was public before 5f12aba. Only the immutable per-deployment URL for commit 2a51e25 answers that."
+      "residual": "The output-directory setting and any custom production domain live in the Cloudflare dashboard, NOT in the repo, so this stays an inference and not a verified fact. Both egress-blocked from the agent session (403). Human-only: the dashboard needs a login. The branch preview URL serves branch HEAD, where device-fleet.md is redacted, so only the immutable per-deployment URL for commit 2a51e25 can say what was public before 5f12aba."
     },
     {
       "id": "FM-32",

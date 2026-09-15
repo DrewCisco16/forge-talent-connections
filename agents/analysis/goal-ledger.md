@@ -60,9 +60,19 @@ number there would be the exact failure this whole system was built to prevent.
 
 This goal is now published under Andrew's name at a public URL. It is an
 aspiration, not a financial record, so the redaction guard does not block it —
-but it is a disclosure, and a counterparty can read it. **If it should not be
-public, say so and it is removed from HEAD in one commit** (history is a separate
-decision, already open as item 1 in `STATE.md`).
+but it is a disclosure, and a counterparty can read it.
+
+**And it is probably worse than "a public GitHub repo."** Found 2026-09-15: the
+repository root is the FORGE Talent Connections website — `index.html`,
+`styles.css`, `assets/` — and Cloudflare Pages deploys from it with no build
+configuration in the repo. If the Pages output directory is the repo root, which
+is the only way that `index.html` gets served as the homepage, **this file is
+served on the company site**, not merely visible on GitHub. `Evidence-Based
+Inference`, not verified — the setting is in the dashboard. See `STATE.md`
+decision 2.
+
+**If it should not be public, say so and it is removed from HEAD in one commit**
+(history is a separate decision, already open as item 1 in `STATE.md`).
 
 ---
 
