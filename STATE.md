@@ -38,10 +38,49 @@ agent in this system ever to execute** — and the only thing that moves `FM-47`
 | # | Decision | Blocks | Raised |
 |---|---|---|---|
 | 1 | **Git history PII**: squash-merge the PR / authorize a force-rewrite / GitHub Support | Closing the privacy incident | 2026-09-14 |
-| 2 | **Does Cloudflare Pages serve the repo's markdown?** Open a per-deployment URL + `/agents/context/device-fleet.md` | Whether the PII was live on the web | 2026-09-14 |
+| 2 | **Does Cloudflare Pages serve the repo's markdown?** URLs now known — see the two-step test below. **30 seconds, and it is the last unknown in the privacy incident** | Whether the PII was live on the web, or only in git history | 2026-09-14 |
 | 3 | **Contracts counsel** — the four questions in `agents/07-guardrails.md` §2 | The entire ABO lane on non-public data | 2026-09-14 |
 | 4 | **FIU AI-use policy** for doctoral work | The DBA lane. **Unrecoverable-class risk, never checked** | 2026-09-14 |
 | 5 | **Seat 3 Mistral model id** — 2 minutes in the console | Tier 3 panel + the panel-economics loop | 2026-09-14 |
+
+### Decision 2 — the exact test, now that the URLs are known
+
+Cloudflare Pages posted its deployment URLs on PR #12 on 2026-09-15. **Both were
+egress-blocked from this session** (`403` at the proxy, via `curl` and `WebFetch`),
+so this remains `Unverified` — but it is no longer vague.
+
+**Step 1 — is repo markdown served at all?** Open:
+
+```
+https://claude-ai-agent-govcon-workf.forge-talent-connections.pages.dev/agents/context/device-fleet.md
+```
+
+```
+renders or downloads markdown  ->  Pages serves the repo root. Go to step 2.
+404 / not found                ->  Pages serves a build directory only.
+                                   FM-31 closes. The PII was never web-live.
+```
+
+This URL is **safe to open**: it tracks the branch head, where the file has been
+redacted since `5f12aba`.
+
+**Step 2 — only if step 1 renders.** The branch URL always serves the *latest*
+commit, so it cannot tell you what was public in the past. For that, open the
+Cloudflare Pages dashboard → Deployments, find the deployment built from commit
+`2a51e25`, and open **its immutable per-deployment URL** with the same path.
+Those URLs do not move when a later commit redacts the file.
+
+```
+that deployment renders the UNREDACTED file  ->  the data WAS publicly live.
+                                                 Delete the deployment in the
+                                                 dashboard, then treat it as a
+                                                 disclosed-data incident.
+404 / deployment deleted                     ->  not reachable now. Record the
+                                                 date checked and move on.
+```
+
+**No agent can do either step** — both need a logged-in dashboard, and
+authentication is human-only in every version of these instructions.
 
 ## Gates live right now
 

@@ -448,9 +448,10 @@
       "O": 6,
       "D": 8,
       "class": "dangerous",
-      "control": "NONE. Unverified; pages.dev unreachable from this session",
+      "control": "Still NONE, but the test is now exact and 30 seconds: STATE.md 'Decision 2 - the exact test'. Deployment URLs captured from the Cloudflare bot's PR comment 2026-09-15; both egress-blocked from the agent session (403 at the proxy, curl and WebFetch). Human-only: step 2 needs a logged-in dashboard.",
       "rung": 3,
-      "detected": false
+      "detected": false,
+      "residual": "The branch preview URL serves the branch HEAD, where the file is already redacted, so it can only answer WHETHER markdown is served -- never what was public before 5f12aba. Only the immutable per-deployment URL for commit 2a51e25 answers that."
     },
     {
       "id": "FM-32",
