@@ -1,0 +1,74 @@
+{
+  "name": "forge-software-optimization",
+  "lane": "FORGE",
+  "loop_type": "optimization",
+  "node": "ASUS ProArt 16",
+  "metric": {
+    "computed_by": "script",
+    "script": "agents/loops/forge-software/metric.py",
+    "direction": "lower_is_better",
+    "terms": [
+      "w1 * (p95_latency_ms / baseline_p95)",
+      "w2 * (bundle_size_kb / baseline_bundle)",
+      "w3 * (1 - coverage_of_changed_lines)"
+    ],
+    "hard_gate": "all tests pass; any failure rejects the change before scoring"
+  },
+  "evaluation": {
+    "max_seconds": 300,
+    "deterministic": false,
+    "seeded_runs": 5,
+    "note": "latency is noisy; 5 seeded runs averaged, per G3"
+  },
+  "cheat_paths": [
+    {
+      "path": "Weaken or delete a failing test so the correctness gate passes",
+      "defence": "test paths are immutable; any diff touching one is an automatic rollback and escalation"
+    },
+    {
+      "path": "Special-case the benchmark input so the fast path fires only for it",
+      "defence": "held-out benchmark uses different inputs the loop never sees"
+    },
+    {
+      "path": "Move work outside the measured window, deferring it to startup or a later call",
+      "defence": "harness measures total work, not only the windowed segment"
+    }
+  ],
+  "rollback": {
+    "automatic": true,
+    "command": "git reset --hard HEAD"
+  },
+  "held_out": {
+    "exists": true,
+    "visible_to_loop": false,
+    "description": "Weekly human-run benchmark with different inputs, plus an adversarial-reviewer pass over the accumulated diff. Divergence from in-loop results voids the run."
+  },
+  "immutable_paths": [
+    "**/test_*.py",
+    "**/*.test.*",
+    "**/__tests__/**",
+    "agents/loops/forge-software/program.md",
+    "agents/loops/forge-software/loop.json",
+    "agents/loops/forge-software/metric.py"
+  ],
+  "limits": {
+    "max_iterations": 3,
+    "max_wall_clock_hours": 1,
+    "max_spend_usd": 0
+  },
+  "stop_early_if": "20 consecutive iterations with no improvement",
+  "production_limits": {
+    "max_iterations": 200,
+    "max_wall_clock_hours": 8,
+    "max_spend_usd": 25
+  },
+  "production_limits_note": "Effective only once pilot.passed is true.",
+  "pilot": {
+    "max_variants": 3,
+    "max_minutes": 60,
+    "max_spend_usd": 0,
+    "supervised": true,
+    "passed": false,
+    "note": "Playbook p.18. Production caps unlock only after a supervised pilot passes. A sentence in a prompt is not a hard budget - the runner needs a tested timeout, attempt counter and spend guard."
+  }
+}
