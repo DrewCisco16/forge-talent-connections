@@ -672,13 +672,13 @@
       "mode": "a card is relevant, connected and fully specified, and has never been demonstrated to run",
       "effect": "a growing, well-connected, entirely inert system; effort reads as progress",
       "S": 7,
-      "O": 9,
-      "D": 6,
+      "O": 7,
+      "D": 3,
       "class": "safe",
-      "control": "agents/25-realistic-over-relevant.md R1-R4. NOT YET MECHANISED: Relevance is gated by goal_ladder.py; feasibility is gated by nothing. 34/34 cards carry acceptance tests; 0 have been executed.",
-      "rung": 3,
+      "control": "PARTIAL 2026-09-15. 29 of 32 cards now have a RUNNABLE definition (agents/runnable/), generated from the cards themselves so the executable form cannot drift from the reviewed contract. scripts/agent_parity.py --gate is in the pre-commit hook: 13 self-tests, fails on a missing form, an orphan, drift, or a protocol that wrongly acquired one. FIRST EVER AGENT RUN executed the same day (evidence-auditor, against this session's own output).",
+      "rung": 2,
       "detected": true,
-      "residual": "The strongest evidence for this mode is that it is currently true."
+      "residual": "BUILT IS NOT INSTALLED AND INSTALLED IS NOT RUN. Only 4 definitions are live; writing to Claude Code's agents directory is blocked as [Self-Modification] and needs Andrew. Detection improved 6 -> 3 because agent_parity.py now reports the built/installed/run gap by number instead of it being invisible. Occurrence 9 -> 7, not lower: a definition that has never run is still a hypothesis, and 28 of them have never run."
     }
   ]
 }

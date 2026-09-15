@@ -4,17 +4,27 @@
 Update it at the end of every session. If this file and a document disagree, fix
 the document.
 
-**Last updated:** 2026-09-15 · **System version:** v11 (Level 0 written; X1 closed)
+**Last updated:** 2026-09-15 · **System version:** v12 (agents built; first run)
 
 ---
 
 ## Agents actually running
 
-**None.** Thirty-two are specified, all 32 carry a written goal and measure
-([`agents/analysis/goal-ladder.md`](agents/analysis/goal-ladder.md)); **zero have run.**
+```
+specified   32 / 32    cards, goals, measures, acceptance tests
+BUILT       29 / 29    runnable definitions  -> agents/runnable/
+INSTALLED    4 / 32    blocked: writing to the agents dir is [Self-Modification]
+EVER RUN     1         evidence-auditor, 2026-09-15  <- the first, after 8 rounds
+```
 
-`FM-47`, opened 2026-09-15: 34 cards carry acceptance tests and 0 have executed.
-Relevance is gated; feasibility is gated by nothing. See
+**One agent has now run.** `FM-47` fell from RPN 378 to 147 — not because the
+gap closed, but because 29 cards became executable files and
+`scripts/agent_parity.py` now reports the built/installed/run gap **by number**
+instead of it being invisible.
+
+**Built is not installed, and installed is not run.** 28 definitions have still
+never executed, and a definition that has never run is a hypothesis. See
+[`agents/runnable/README.md`](agents/runnable/README.md) and
 [`agents/25-realistic-over-relevant.md`](agents/25-realistic-over-relevant.md).
 
 > A goal is not a run. The ladder below is connected and still produces nothing,
@@ -151,7 +161,8 @@ across 310 blobs: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-r
 | Gate | Status | Evidence |
 |---|---|---|
 | `scripts/redaction_guard.py` | **ACTIVE** — pre-commit hook installed | 35 self-tests; denial live-tested; 171 files scan clean |
-| `scripts/goal_ladder.py --gate` | **ACTIVE** — same pre-commit hook | 24 self-tests; denial live-tested 2026-09-15; 31/31 cards connected |
+| `scripts/goal_ladder.py --gate` | **ACTIVE** — same pre-commit hook | 28 self-tests; denial live-tested 2026-09-15; 34/34 cards connected |
+| `scripts/agent_parity.py --gate` | **ACTIVE** — same pre-commit hook | 13 self-tests; caught its own first orphan; asserts MAILROOM holds no send tool |
 | `agents/loops/harness/loop_guard.py` | ACTIVE | 24 self-tests; clears 3 loops, blocks 2 |
 | `adjudication/` cost ceiling | ACTIVE | checked before the call, not after |
 | Counsel block on ABO | ACTIVE | `loop_guard` refuses `counsel_cleared: false` |
