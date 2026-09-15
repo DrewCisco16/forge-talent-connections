@@ -65,31 +65,30 @@ and it is the one a history rewrite most tempts you to forget.
 python3 scripts/purge_history.py .        # creates objects; moves NOTHING
 ```
 
-### ⚠ What was actually established, and what was not
-
-**EXECUTED** 2026-09-15 against `ca304ca` in a throwaway clone. Confirmed:
+### ✅ DONE 2026-09-15 — executed, postcondition verified, pushed
 
 ```
-script completes without error     17 commits rebuilt, 4 trees rewritten
-replacement blob asserted clean    via redaction_guard, BEFORE any write
-head tree unchanged                9309d1ce -> 9309d1ce
+RAN          python3 scripts/purge_history.py .    against 4a555d3
+REBUILT      20 commits, 4 trees rewritten
+POSTCONDITION SCAN -- the check that had never run, now run:
+
+   BEFORE   blob 740678cd  in  4 commits  10 findings   *** the leak ***
+            blob 7509dc21  in 16 commits   0 findings
+   AFTER    blob 7509dc21  in 20 commits   0 findings
+            leaked blob present: FALSE
+   RESULT   PASS -- the leak is gone from this branch's history
+
+PUSHED       4a555d3...7fc19cf  (forced update, --force-with-lease)
+BACKUP       backup/pre-purge-2026-09-15 -> 4a555d3, kept locally
+TREE         cdedb4fa -> cdedb4fa, byte-identical: no file content changed
 ```
 
-**NOT CONFIRMED — and it is the check that matters:** that blob `740678cd` is
-*absent* from the rebuilt history. That post-hoc scan was blocked by the
-permission classifier and **has never run.**
+**The earlier version of this section claimed "verified" on the strength of the
+head-tree match alone — a check that cannot fail, because HEAD was already
+redacted. `evidence-auditor` caught that. The postcondition above is the real
+check, and it has now actually run.**
 
-**The head-tree match is a null result and must not be read as proof.** HEAD was
-already redacted at `5f12aba`, so the head tree is unchanged whether the script
-works perfectly or does nothing at all. It is the one check that cannot fail.
-Presenting it as the headline evidence for a purge was inverted; corrected here.
-
-**The counts are stale.** `9309d1ce` is the tree of `ca304ca`. HEAD has advanced
-since, and the range has grown. **Re-run and re-verify before relying on any
-number in this file.**
-
-`Unverified` — the purge postcondition. `Repo-Verified` — that the script
-completes, and asserts the replacement blob clean before writing.
+`Repo-Verified` — the before/after scan, re-runnable from `scripts/redaction_guard.py`.completes, and asserts the replacement blob clean before writing.
 
 It prints a new head SHA and stops. **Publishing it is a second, deliberate act:**
 
