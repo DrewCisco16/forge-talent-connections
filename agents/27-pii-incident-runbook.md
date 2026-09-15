@@ -14,9 +14,14 @@ Andrew to decide, when what was needed was the fix prepared and ready to run.
 
 ## What is actually exposed, established rather than assumed
 
-Every blob introduced by this branch was scanned with the repository's own guard
-(`scripts/redaction_guard.py`, used as a library, with the allowlist applied).
-**310 unique blobs. 17 commits. One real leak.**
+Every blob in every tree from the merge-base to `ca304ca` was scanned with the
+repository's own guard (`scripts/redaction_guard.py`, used as a library, with the
+allowlist applied). **310 unique blobs. 17 commits. One real leak.**
+
+Two precisions from the `evidence-auditor` run: the scanned set is every blob in
+every tree in the range, **not** only blobs this branch introduced (those number
+206) — broader than first described, which is the safe direction. And the counts
+are pinned to `ca304ca`; HEAD has advanced, so **re-run before relying on them.**
 
 | Path | Blob | Findings | Verdict |
 |---|---|---|---|
@@ -60,11 +65,31 @@ and it is the one a history rewrite most tempts you to forget.
 python3 scripts/purge_history.py .        # creates objects; moves NOTHING
 ```
 
-Verified 2026-09-15 in a throwaway clone: **17 commits rebuilt, 4 trees changed,
-and the resulting tree hash is byte-identical to the current one**
-(`9309d1ce` → `9309d1ce`). The working tree does not change; only history does.
-The script asserts the replacement blob is clean, via the guard, before it writes
-anything.
+### ⚠ What was actually established, and what was not
+
+**EXECUTED** 2026-09-15 against `ca304ca` in a throwaway clone. Confirmed:
+
+```
+script completes without error     17 commits rebuilt, 4 trees rewritten
+replacement blob asserted clean    via redaction_guard, BEFORE any write
+head tree unchanged                9309d1ce -> 9309d1ce
+```
+
+**NOT CONFIRMED — and it is the check that matters:** that blob `740678cd` is
+*absent* from the rebuilt history. That post-hoc scan was blocked by the
+permission classifier and **has never run.**
+
+**The head-tree match is a null result and must not be read as proof.** HEAD was
+already redacted at `5f12aba`, so the head tree is unchanged whether the script
+works perfectly or does nothing at all. It is the one check that cannot fail.
+Presenting it as the headline evidence for a purge was inverted; corrected here.
+
+**The counts are stale.** `9309d1ce` is the tree of `ca304ca`. HEAD has advanced
+since, and the range has grown. **Re-run and re-verify before relying on any
+number in this file.**
+
+`Unverified` — the purge postcondition. `Repo-Verified` — that the script
+completes, and asserts the replacement blob clean before writing.
 
 It prints a new head SHA and stops. **Publishing it is a second, deliberate act:**
 
@@ -93,6 +118,14 @@ place for `main`. **Merging is human-only.**
 A force-push does not delete anything on GitHub's side. Unreachable objects stay
 fetchable by SHA, and PR diff views can keep serving them. Ready to send:
 
+> ## ⛔ DO NOT SEND UNTIL STEP 1 HAS ACTUALLY RUN
+>
+> The draft below states that the history has been rewritten. **As of this
+> writing it has not been** — step 1 above is marked *prepared, not run*. Sending
+> this first would be a false statement of completed action, to a third party, in
+> a privacy incident. Step 3 tells you to reorder the steps; **this letter is the
+> one thing that must not be reordered.**
+
 ```
 To: GitHub Support -- https://support.github.com/request
 Subject: Remove cached views and unreachable objects containing third-party
@@ -102,6 +135,7 @@ Third-party personal data (phone numbers and account identifiers belonging to
 people who did not consent to publication) was committed to this PUBLIC
 repository in commit 2a51e25, in agents/context/device-fleet.md. It was redacted
 at HEAD in 5f12aba, and the branch history has since been rewritten.
+          ^^^^ EDIT THIS CLAUSE TO MATCH REALITY BEFORE SENDING ^^^^
 
 Please permanently remove the unreachable objects and any cached pull-request
 diff views that still serve the pre-rewrite blob, in particular for PR #12.

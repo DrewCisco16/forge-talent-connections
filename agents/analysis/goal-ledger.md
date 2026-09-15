@@ -16,12 +16,15 @@ downstream of it.
 
 | | Component | Measured by | When it can start |
 |---|---|---|---|
-| **1** | **Billionaire** — net worth ≥ $1,000,000,000 USD | Net worth, computed from owned assets at defensible marks | Decades. Tail outcome |
+| **1** | **Billionaire** — net worth ≥ $1,000,000,000 USD | Net worth, computed from owned assets at defensible marks | Decades. **No base rate exists for this, and none is offered** |
 | **2** | **Philanthropist** — wealth deployed, not consumed | Giving as a stated % of income and of net worth, every period | **Today.** Not gated on #1 |
 | **3** | **Christian** — the means, not only the ends | Zero decisions taken that fail the integrity test, at any ROI | **Every decision, starting now** |
 
-**Component 2 is not gated on component 1.** Proverbs 3:9 says firstfruits, not
-final fruits; Luke 16:10 says faithful with little *first*. A ledger that defers
+**Component 2 is not gated on component 1.** Proverbs 3:9 and Luke 16:10 are the
+warrant Andrew's own stated worldview gives for this, on firstfruits rather than
+final fruits, and on faithfulness with little coming first. `Stated` — paraphrase,
+no translation named and no retrieval performed; **the structural argument below
+stands without them.** A ledger that defers
 all giving until $1B would satisfy one third of this goal and fail the other two
 for the entire duration. So giving is measured from the first dollar
 ([`../cards/firstfruits.md`](../cards/firstfruits.md)).
@@ -62,8 +65,9 @@ This goal is now published under Andrew's name at a public URL. It is an
 aspiration, not a financial record, so the redaction guard does not block it —
 but it is a disclosure, and a counterparty can read it.
 
-**And it is probably worse than "a public GitHub repo."** Found 2026-09-15: the
-repository root is the FORGE Talent Connections website — `index.html`,
+**And it may be worse than "a public GitHub repo."** `Evidence-Based Inference`,
+not verified: the repository root **appears to be** the FORGE Talent Connections
+website — `index.html`,
 `styles.css`, `assets/` — and Cloudflare Pages deploys from it with no build
 configuration in the repo. If the Pages output directory is the repo root, which
 is the only way that `index.html` gets served as the homepage, **this file is

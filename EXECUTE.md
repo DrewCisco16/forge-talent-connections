@@ -31,9 +31,13 @@ is what has kept this file unexecuted; a 20-minute block with a stop time is a
 thing a person can actually begin. If the block ends unfinished, that is
 information about the estimate, not a failure — record it and start the next one.
 
-`Little's Law is a theorem, not a citation.` `Evidence label: Empirical Finding`
-for the observation that this file has gone unexecuted across eight rounds — it
-is observable in this repository's own history.
+`Little's Law is a theorem, not a citation.` `Repo-Verified` that this file is
+still unexecuted: `goal_throughput.py` reports `X3 = 0`, and no review has been
+recorded. **The earlier version of this line claimed "eight consecutive rounds"
+and cited the repo for it. No round counter exists anywhere in this repository**
+— that number was recalled, not verified, and it sat inside a `Repo-Verified`
+fence between two figures that were true. Caught by `evidence-auditor`,
+2026-09-15.
 
 ---
 

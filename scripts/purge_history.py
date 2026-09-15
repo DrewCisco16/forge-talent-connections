@@ -24,10 +24,20 @@ objects. Nothing existing is destroyed, so the original history stays fully
 intact and reachable by its old SHAs until someone deliberately moves a ref. The
 operation is therefore reversible right up to the force-push.
 
-VERIFIED 2026-09-15 in a throwaway clone:
-    17 commits rebuilt, 4 trees changed
-    old tree 9309d1ce == new tree 9309d1ce   <- the working tree does not change
-    replacement blob 7509dc21 asserted clean by redaction_guard before any write
+EXECUTED 2026-09-15 against ca304ca in a throwaway clone. What that established:
+    17 commits rebuilt, 4 trees rewritten      -- the script completes
+    replacement blob 7509dc21 asserted clean   -- before any write
+    old tree 9309d1ce == new tree 9309d1ce     -- A NULL RESULT. See below.
+
+NOT ESTABLISHED, and it is the entire point of the script: that blob 740678cd is
+ABSENT from the rebuilt history. That scan was blocked by the permission
+classifier and has never run.
+
+The head-tree match proves nothing about the purge. HEAD was already redacted at
+5f12aba, so the head tree is unchanged whether this script works perfectly or
+does nothing at all -- the one check that cannot fail. It was first written up as
+the headline evidence, which was inverted; evidence-auditor caught it. The counts
+above are pinned to ca304ca and are stale for any later HEAD.
 
 READ scripts/../agents/27-pii-incident-runbook.md BEFORE RUNNING THIS.
 A history rewrite is necessary here and it is NOT sufficient. The runbook says

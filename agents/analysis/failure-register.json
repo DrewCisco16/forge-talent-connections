@@ -448,7 +448,7 @@
       "O": 8,
       "D": 8,
       "class": "dangerous",
-      "control": "Still NONE. OCCURRENCE RAISED 6 -> 8 on 2026-09-15 from repo evidence: the repository ROOT is a complete static website (index.html, styles.css, assets/, committed 23bdab7 'Initial website upload'), and there is NO build config anywhere in the repo -- no wrangler.toml, no output-directory setting, no static-site generator. For that index.html to be served as the site homepage, which the succeeding Pages deploys indicate, the Pages output directory must be the repository root. If it is, every static file beneath it is served at its repo path, .md included. Test: STATE.md 'Decision 2'.",
+      "control": "Still NONE. OCCURRENCE RAISED 6 -> 8 on 2026-09-15 from repo evidence: the repository ROOT is a complete static website (index.html, styles.css, assets/, committed 23bdab7 'Initial website upload'), and there is NO build config anywhere in the repo -- no wrangler.toml, no output-directory setting, no static-site generator. INFERENCE, not deduction: for that index.html to be served as the homepage the output directory would have to be the repo root. Succeeding Pages deploys are CONSISTENT WITH that but do not establish it -- a deploy of an empty or wrong output directory also succeeds. The O 6->8 uplift rests on this inference and on nothing verified. If it is, every static file beneath it is served at its repo path, .md included. Test: STATE.md 'Decision 2'.",
       "rung": 3,
       "detected": false,
       "residual": "The output-directory setting and any custom production domain live in the Cloudflare dashboard, NOT in the repo, so this stays an inference and not a verified fact. Both egress-blocked from the agent session (403). Human-only: the dashboard needs a login. The branch preview URL serves branch HEAD, where device-fleet.md is redacted, so only the immutable per-deployment URL for commit 2a51e25 can say what was public before 5f12aba."
@@ -679,6 +679,21 @@
       "rung": 2,
       "detected": true,
       "residual": "BUILT IS NOT INSTALLED AND INSTALLED IS NOT RUN. Only 4 definitions are live; writing to Claude Code's agents directory is blocked as [Self-Modification] and needs Andrew. Detection improved 6 -> 3 because agent_parity.py now reports the built/installed/run gap by number instead of it being invisible. Occurrence 9 -> 7, not lower: a definition that has never run is still a hypothesis, and 28 of them have never run."
+    },
+    {
+      "id": "FM-48",
+      "item": "a verification claim",
+      "function": "say what was actually established",
+      "mode": "the check that CANNOT fail is reported as the headline evidence, while the check that matters was never run",
+      "effect": "a fix reads as proven when its whole purpose is unverified; a third party may then be told a completed action that did not happen",
+      "S": 9,
+      "O": 6,
+      "D": 4,
+      "class": "dangerous",
+      "control": "Found by evidence-auditor 2026-09-15 on its first run: purge_history.py's 'old tree == new tree' was a NULL result (HEAD was already redacted, so it holds whether the script works or does nothing) presented as proof of a purge, and the pre-drafted GitHub Support letter asserted a rewrite that had not happened. Corrected in agents/27 and the script docstring; the letter now carries a DO NOT SEND gate. NO MECHANICAL DETECTOR EXISTS.",
+      "rung": 3,
+      "detected": true,
+      "residual": "The only control is an adversarial reader who re-derives instead of reading. That is exactly what caught it, and it is not automatable: distinguishing a null result from a real one requires knowing what the check was FOR."
     }
   ]
 }

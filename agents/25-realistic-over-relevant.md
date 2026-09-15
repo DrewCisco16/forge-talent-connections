@@ -75,7 +75,7 @@ Not a hypothetical. This repository's own record:
 ```
 agents specified ............ 32      agents that have run ......... 0
 cards with acceptance tests . 34      acceptance tests executed .... 0
-EXECUTE.md ("the 30 minutes") open across eight consecutive rounds
+EXECUTE.md ("the 30 minutes") still unexecuted
 ```
 
 Every one of those 34 cards is relevant. **Relevance was never the problem.** The
@@ -155,7 +155,7 @@ The implementation that genuinely produces *as soon as possible*:
 ```
 
 **Rule 3 is what makes rule 2 survivable.** An open-ended "start now" is precisely
-what has left `EXECUTE.md` unexecuted for eight rounds; a 20-minute block with a
+what has left `EXECUTE.md` unexecuted; a 20-minute block with a
 stop time is something a person can actually begin. Recorded in `EXECUTE.md` as
 THE TIME RULE, and already enforced in part by PARKING (`no second front`) and by
 the ledger's DAY section (`one active goal, not a list`).

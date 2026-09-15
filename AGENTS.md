@@ -35,6 +35,29 @@ Preserve the labels: `Stated` · `Bill-Supported` · `Screenshot-Supported` ·
 upgrade a label. A needed `Unknown` blocks the dependent action until Andrew
 answers.**
 
+### Two label sets exist. This is the mapping.
+
+Andrew's standing preferences define their own set — `PDF-Supported`,
+`Empirical Finding`, `Evidence-Based Inference`, `Assumption`, `Unknown` — and
+both sets are legitimate, which `evidence-auditor` correctly flagged on
+2026-09-15 as a live ambiguity. **Neither set outranks the other. What is
+forbidden is using one set's stronger-sounding word for the other set's weaker
+claim.** The rank is what binds:
+
+```
+Empirical Finding        == a computed or measured result, shown and re-runnable
+                            (repo equivalent: Repo-Verified / Docs-Verified)
+Evidence-Based Inference == reasoning FROM evidence, NOT itself evidence
+                            RANKS EXACTLY AS: Inference. Never above it.
+PDF-Supported            == Bill- / Screenshot- / Vendor-Supported
+Assumption, Unknown      == identical in both sets
+```
+
+**`Empirical Finding` requires an actual computation or measurement in hand.** It
+does not mean "this feels well-founded," and an argument reasoned from structure
+is `Inference` however strong it is. Both label sets may be used; a claim carries
+the *lower* of the two ranks when they disagree.
+
 No success percentage, probability, Pwin, confidence interval or expected value
 without a real dataset **and a shown calculation**.
 

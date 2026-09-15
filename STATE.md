@@ -11,7 +11,7 @@ the document.
 ## Agents actually running
 
 ```
-specified   32 / 32    cards, goals, measures, acceptance tests
+specified   32 / 32    agents (34 CARDS incl. 2 protocols, all with goals)
 BUILT       29 / 29    runnable definitions  -> agents/runnable/
 INSTALLED    4 / 32    blocked: writing to the agents dir is [Self-Modification]
 EVER RUN     1         evidence-auditor, 2026-09-15  <- the first, after 8 rounds
@@ -47,13 +47,13 @@ agent in this system ever to execute** — and the only thing that moves `FM-47`
 
 | # | Decision | Blocks | Raised |
 |---|---|---|---|
-| 1 | **Git history PII** — **the fix is now WRITTEN AND VERIFIED, awaiting your go-ahead.** `scripts/purge_history.py`, proven in a throwaway clone: 17 commits rebuilt, identical resulting tree. Every publishing step is blocked in-session as `[Git Destructive]`. **Runbook: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-runbook.md)** | Closing the privacy incident | 2026-09-14 |
+| 1 | **Git history PII** — **the fix is WRITTEN and awaiting your go-ahead.** `scripts/purge_history.py` was *executed* against `ca304ca` in a throwaway clone and completes; **the purge postcondition — that the leaked blob is gone — is `Unverified`, because that scan was blocked.** Every publishing step is blocked in-session as `[Git Destructive]`. **Runbook: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-runbook.md)** | Closing the privacy incident | 2026-09-14 |
 | 2 | **Does Cloudflare Pages serve the repo's markdown?** URLs now known — see the two-step test below. **30 seconds, and it is the last unknown in the privacy incident** | Whether the PII was live on the web, or only in git history | 2026-09-14 |
 | 3 | **Contracts counsel** — the four questions in `agents/07-guardrails.md` §2 | The entire ABO lane on non-public data | 2026-09-14 |
 | 4 | **FIU AI-use policy** for doctoral work | The DBA lane. **Unrecoverable-class risk, never checked** | 2026-09-14 |
 | 5 | **Seat 3 Mistral model id** — 2 minutes in the console | Tier 3 panel + the panel-economics loop | 2026-09-14 |
 
-### ⚠ Decision 2 — the repository root IS the website
+### ⚠ Decision 2 — the repository root is *probably* the site root (inference, untested)
 
 **Found 2026-09-15, from repo evidence rather than the network.** This changes the
 assessment and `FM-31` is now the top-ranked mode in the register at RPN 512.
@@ -160,10 +160,10 @@ across 310 blobs: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-r
 
 | Gate | Status | Evidence |
 |---|---|---|
-| `scripts/redaction_guard.py` | **ACTIVE** — pre-commit hook installed | 35 self-tests; denial live-tested; 171 files scan clean |
-| `scripts/goal_ladder.py --gate` | **ACTIVE** — same pre-commit hook | 28 self-tests; denial live-tested 2026-09-15; 34/34 cards connected |
+| `scripts/redaction_guard.py` | **ACTIVE** — pre-commit hook installed | 35/35 self-tests; denial live-tested; 239 files clean *(run 2026-09-15)* |
+| `scripts/goal_ladder.py --gate` | **ACTIVE** — same pre-commit hook | 28/28 self-tests; denial live-tested; 34/34 cards connected *(run 2026-09-15)* |
 | `scripts/agent_parity.py --gate` | **ACTIVE** — same pre-commit hook | 13 self-tests; caught its own first orphan; asserts MAILROOM holds no send tool |
-| `agents/loops/harness/loop_guard.py` | ACTIVE | 24 self-tests; clears 3 loops, blocks 2 |
+| `agents/loops/harness/loop_guard.py` | ACTIVE | 24/24 self-tests; clears 3 loops, blocks 2 *(run 2026-09-15)* |
 | `adjudication/` cost ceiling | ACTIVE | checked before the call, not after |
 | Counsel block on ABO | ACTIVE | `loop_guard` refuses `counsel_cleared: false` |
 
@@ -220,7 +220,7 @@ time saved is permitted before then — see [BASELINE](agents/cards/baseline.md)
 
 ## Open pull request
 
-`#12` — draft, `mergeable_state: clean`, CI green. Contains the whole system.
+`#12` — draft. Last checked 2026-09-15 ~05:0x UTC: `mergeable_state: clean`, CI green. **Not re-checked since; `Unverified` as of this line.** Contains the whole system.
 
 ## The kill date
 

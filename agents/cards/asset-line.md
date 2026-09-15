@@ -14,33 +14,61 @@
 - **Rolls up to:** outcome D — work compounds
 - **Which serves:** component 1 of the ultimate goal in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md) — *billionaire* — which is reachable only through owned assets, never through hours.
 
-**Why this exists, and the arithmetic behind it.** A net worth target of
-$1,000,000,000 is not reachable by accumulating earned income at any plausible
-rate. Future value of an annual saving `S` compounded at real rate `r` for `n`
-years is `S · [(1+r)^n − 1] / r`. At `S = $500,000`, `r = 0.07`, `n = 30`:
+**Why this exists, and the arithmetic behind it.** Future value of an annual
+saving `S` compounded at real rate `r` for `n` years is `S · [(1+r)^n − 1] / r`.
+At `S = $500,000`, `r = 0.07`, `n = 30`:
 
 ```
-(1.07^30 − 1) / 0.07  =  (7.6123 − 1) / 0.07  =  94.46
-94.46 × $500,000      =  $47,232,000
+(1.07^30 − 1) / 0.07  =  6.612255 / 0.07  =  94.460786
+94.460786 × $500,000  =  $47,230,393      =  4.72% of $1,000,000,000
 ```
 
-That is roughly **$47M — about 2% of the target**, and it assumes saving half a
-million dollars a year for thirty consecutive years. Solving the same expression
-for $1B requires `S = 1e9 × 0.07 / 6.6123 = $10,590,000 saved per year`.
+Solving the same expression for $1B: `S = 1e9 × 0.07 / 6.612255 = $10,586,404`
+saved **every year for thirty years**.
 
-**This is arithmetic, not a forecast, and it carries no probability.** What it
-establishes is structural: the earned-income path is excluded by the numbers, so
-the target is reachable only by owning equity in something that is *valued* —
-`f · V ≥ $1e9`, where `f` is Andrew's ownership fraction and `V` the enterprise
-value. Every hour therefore either raises `f · V` or it does not. **This card
+**The parameters matter, and the conclusion does not generalise past them.** The
+same formula at other rates and horizons:
+
+```
+  r=0.07  n=30   $47,230,393     4.7% of target
+  r=0.10  n=30   $82,247,011     8.2%
+  r=0.10  n=40  $221,296,278    22.1%
+  r=0.12  n=40  $383,545,710    38.4%
+  r=0.15  n=40  $889,545,154    89.0%   <- earned income gets close here
+```
+
+So the honest statement is **not** "unreachable by earned income at any rate."
+It is: **at `r = 0.07` over 30 years, saved earned income reaches under 5% of the
+target; closing that gap by saving alone needs roughly $10.6M a year, or a
+sustained real return in the mid-teens across forty years.** Those are the
+conditions. Whether either is available to Andrew is `Unknown`, and not guessed.
+
+What follows is weaker than "only equity works," and it is what this card acts
+on: **the size of the gap at ordinary savings rates is what makes `f · V` the
+lever worth measuring** — `f` being Andrew's ownership fraction, `V` the
+enterprise value. Every hour either raises `f · V` or it does not. **This card
 makes that split visible weekly.** It does not claim the visible split causes the
 outcome.
 
-`Evidence label: Empirical Finding` for the arithmetic above (computed here, from
-stated inputs, and re-computable). `Assumption` for `r = 0.07` and `S = $500,000`,
-which are illustrative placeholders, **not Andrew's figures** — no personal
-financial data is held in this repository. `Unknown` for `V` and for any revenue
-multiple: those need real comparables, and none has been retrieved.
+`Empirical Finding` for the arithmetic above — computed here, from stated inputs,
+re-computable, and **independently re-derived by `evidence-auditor` on
+2026-09-15**, which is how three errors in the first version were caught.
+`Inference`, conditional on the stated rate and horizon, for the conclusion drawn
+from it. `Assumption` for `r = 0.07` and `S = $500,000`: illustrative
+placeholders, **not Andrew's figures** — no personal financial data is held in
+this repository. `Unknown` for `V` and for any revenue multiple: those need real
+comparables, and none has been retrieved.
+
+**`Professional verification required`.** Illustrative arithmetic, not financial,
+investment or tax advice. A CPA and a financial advisor, not this card.
+
+> **Correction, 2026-09-15.** The first version stated the result as "about 2% of
+> the target" where the arithmetic gives **4.72%** — wrong by a factor of 2.4,
+> **in the direction that strengthened the card's own argument.** It also printed
+> `$47,232,000` and `$10,590,000` behind `=` signs its own expressions do not
+> produce, and claimed the target was unreachable "at any plausible rate," which
+> the table above refutes. All three were caught by the first agent ever run in
+> this system, by re-deriving the numbers instead of reading them.
 
 ### INPUTS
 The time categories BASELINE already captures. Nothing new to record — this card
