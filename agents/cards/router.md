@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | per lane | 1.0 | **A — autonomous** | in-process | ready |
 
+### GOAL
+**Every question is answered at the cheapest tier that can answer it, and agents never spend the headroom Andrew needs for his own work.**
+
+- **Measured by:** Tier log shows the real split; >=40% of daily allowance left unspent by agents, every week.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One question plus its lane and consequence class. Nothing else.
 

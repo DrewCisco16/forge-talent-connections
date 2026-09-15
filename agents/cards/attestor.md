@@ -11,6 +11,13 @@
 Nothing checked. Self-reported completion is the one output class an agent has
 both the motive and the means to get wrong, and it is invisible from the text.
 
+### GOAL
+**No claim of completed work enters the record without an artifact behind it.**
+
+- **Measured by:** Zero VOID claims surviving into HARVESTER or STEWARD.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One completed run's claim set — "tests passed", "file written", "sources
 retrieved", "the brief is at X" — plus the filesystem and run logs.

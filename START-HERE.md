@@ -11,6 +11,7 @@
 | Start the two-week time baseline | [`agents/cards/baseline.md`](agents/cards/baseline.md) |
 | Prove a browser route before trusting it | [`agents/cards/smoke.md`](agents/cards/smoke.md) |
 | See every agent and what it does | [`agents/ROSTER.md`](agents/ROSTER.md) |
+| See what each agent is *for* — its one goal and measure | [`agents/analysis/goal-ladder.md`](agents/analysis/goal-ladder.md) — 31 goals, 4 outcomes, **and one empty slot at the top that only you can fill** |
 | Pick which agent to deploy next | [`agents/cards/README.md`](agents/cards/README.md) |
 | Fill out a mission before a run | [`agents/mission-template.md`](agents/mission-template.md) |
 | Understand why the system is shaped this way | [`agents/01-operating-model.md`](agents/01-operating-model.md) |

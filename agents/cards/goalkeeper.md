@@ -12,6 +12,21 @@ agent system*. Nothing connected an agent to a goal. `FM-33` now ranks first in
 the entire failure register — **not because a goal is at risk, but because
 nothing was watching whether any goal was being advanced at all.**
 
+### GOAL
+**No goal goes unowned and no agent runs without a goal.**
+
+- **Measured by:** Zero orphans in either direction; the cadence line produced every period.
+- **Rolls up to:** outcome C — no goal stalls unnoticed
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
+> **Half of this measure is enforced; half is not, and the difference matters.**
+> *Agent → goal* is a rung-1 gate: `scripts/goal_ladder.py --gate` runs in the
+> pre-commit hook and blocks any card that traces to no outcome
+> ([`../analysis/goal-ladder.md`](../analysis/goal-ladder.md), 31/31 connected).
+> *Goal → agent* — the reverse orphan, a goal nothing advances — **cannot be
+> computed at all**, because the ledger is empty. GOALKEEPER cannot fix that by
+> writing one. It reports the gap and waits. `FM-35` rung 1 · `FM-34` rung 2.
+
 ### INPUTS
 `agents/analysis/goal-ledger.md` — Andrew's own goals, in his own words.
 **GOALKEEPER never writes a goal.** See the hard rule below.

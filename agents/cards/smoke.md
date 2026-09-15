@@ -13,6 +13,13 @@
 **Why this exists:** Playbook pp.10–12 require a smoke test on every route. A
 permission you have not tested is a permission you do not have.
 
+### GOAL
+**No route is trusted before it is tested.**
+
+- **Measured by:** Zero routes used in real work without a recorded smoke test and a confirmed Stop.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One route (A: ChatGPT Remote + Chrome · B: Claude Dispatch · C: Claude Code
 `--chrome`). One approved public documentation URL. One dedicated profile.

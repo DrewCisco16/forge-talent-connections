@@ -21,6 +21,13 @@
 ```
 Otherwise: Tier 0 → Tier 1 → Tier 2 (`14`).
 
+### GOAL
+**Tell Andrew whether his five seats are actually independent - and retire itself if they are not.**
+
+- **Measured by:** Rho computed from a paired sample of >=10 items and reported with its n; zero runs without a typed SPEND. A high rho is a successful run that retires this card.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One `ask` · one lane · one cost ceiling · typed `SPEND`.
 

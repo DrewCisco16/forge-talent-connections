@@ -14,6 +14,13 @@ filing.** An antecedent-basis error is not a judgement call — the word is eith
 introduced earlier or it is not. This is the highest-yield mechanical check in
 the whole patent pipeline.
 
+### GOAL
+**Zero section 112 rejections. This class is entirely self-inflicted, so the target is zero.**
+
+- **Measured by:** Antecedent-basis breaks, unsupported claim terms, algorithm-less functional elements: all 0 at filing.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Draft claims and specification, from the private store.
 

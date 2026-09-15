@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | ABO / J4V (separate instances) | 1.0 | B | cloud routine, nightly | **public data only** |
 
+### GOAL
+**Andrew never learns about a fitting opportunity too late, and never reads about one he cannot bid.**
+
+- **Measured by:** Zero missed eligible notices; zero ineligible notices in the queue.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Public opportunity notices. `agents/prompts/SOURCES-GOVCON.md` must be complete —
 **every value is `FILL-IN` today, and SCOUT must refuse to run while any remains**

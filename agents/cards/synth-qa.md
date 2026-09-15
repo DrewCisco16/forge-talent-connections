@@ -10,6 +10,13 @@
 **Playbook p.5 names this as FORGE LINK's useful first agent, with the boundary
 stated: "No real candidate records in the pilot."**
 
+### GOAL
+**No user finds a defect that a synthetic fixture could have found first.**
+
+- **Measured by:** Defects found pre-release / total defects, rising. Zero real candidate records touched.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Generated synthetic candidate fixtures in `evals/fixtures/`. **Never** production
 data, never a real résumé, never a real applicant record. **PII in a test fixture

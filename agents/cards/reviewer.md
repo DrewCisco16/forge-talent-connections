@@ -9,6 +9,13 @@
 **Deploy the same day as BUILDER, never after.** An unreviewed builder is worse
 than no builder.
 
+### GOAL
+**No agent-authored change reaches Andrew unreviewed.**
+
+- **Measured by:** At least one real defect per five PRs. Zero over five PRs means REVIEWER is suspect, not that the code is clean.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 The diff and the code it touches. **Not** the builder's reasoning, session, or
 PR justification — that anchoring is exactly what it must not have.

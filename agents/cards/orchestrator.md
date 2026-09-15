@@ -11,6 +11,13 @@
 > controller… A second AI service is optional, not mandatory."* Start with
 > [briefer](briefer.md). ORCHESTRATOR is a later capability.
 
+### GOAL
+**Where one model is not enough, produce real divergence instead of false agreement.**
+
+- **Measured by:** Every merged answer names >=1 open hole and what would close it; zero rho figures emitted, zero agreement reported as confirmation.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One sanitized question. **Its lane only.** A swarm Chrome profile holding the AI
 subscriptions **and nothing else**.

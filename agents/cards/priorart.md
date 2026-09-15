@@ -13,6 +13,13 @@
 > repository, or encrypted locally. Never here, never in an issue, a PR title, a
 > commit message, or a published artifact.**
 
+### GOAL
+**Counsel never starts from zero, and never from a search whose gaps are hidden.**
+
+- **Measured by:** Coverage stated on every packet: databases, dates, classifications, languages.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One invention disclosure, from the private store. USPTO full-text and assignment
 data, published applications, non-patent literature (**endpoints Unknown —

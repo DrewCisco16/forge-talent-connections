@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | DBA | 1.0 | B | cloud routine, weekly | ready |
 
+### GOAL
+**No unverified source ever reaches the dissertation.**
+
+- **Measured by:** Zero unresolved DOIs presented. <=5 items a week. Contradicting evidence surfaced first, never buried.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Your dissertation domain, research question and current reference list
 (**Unknown — `10` B7 blocks the first run**). Scholarly indexes only: Crossref,

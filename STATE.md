@@ -4,13 +4,17 @@
 Update it at the end of every session. If this file and a document disagree, fix
 the document.
 
-**Last updated:** 2026-09-14 · **System version:** v4 (inversion pass)
+**Last updated:** 2026-09-15 · **System version:** v10 (goal ladder)
 
 ---
 
 ## Agents actually running
 
-**None.** Twenty-five are specified; zero have run.
+**None.** Twenty-nine are specified, all 29 now carry a written goal and measure
+([`agents/analysis/goal-ladder.md`](agents/analysis/goal-ladder.md)); zero have run.
+
+> A goal is not a run. The ladder below is connected and still produces nothing,
+> because connectivity is not execution.
 
 > This is the system's current single greatest risk — `19` A1. The next action
 > below is the whole job.
@@ -36,6 +40,7 @@ question, up to three approved public sources. Fill
 | Gate | Status | Evidence |
 |---|---|---|
 | `scripts/redaction_guard.py` | **ACTIVE** — pre-commit hook installed | 35 self-tests; denial live-tested; 171 files scan clean |
+| `scripts/goal_ladder.py --gate` | **ACTIVE** — same pre-commit hook | 24 self-tests; denial live-tested 2026-09-15; 31/31 cards connected |
 | `agents/loops/harness/loop_guard.py` | ACTIVE | 24 self-tests; clears 3 loops, blocks 2 |
 | `adjudication/` cost ceiling | ACTIVE | checked before the call, not after |
 | Counsel block on ABO | ACTIVE | `loop_guard` refuses `counsel_cleared: false` |
@@ -56,6 +61,13 @@ question, up to three approved public sources. Fill
 Y = X1 * X3 * f(...)      X1 goals written = 0      X3 review run = 0
 Y = 0.  Structurally zero, not low. 29 agents multiply zero.
 ```
+
+**What changed in v10 and what did not.** Every agent now has its own goal, its
+own measure, and a roll-up to one of four outcomes — enforced by a gate, not a
+promise. That moved `FM-35` from rung 2 to rung 1. **It did not move `X1`.**
+`X1` is YOUR goal, the one at the top of the ladder, and no agent may write it.
+31 well-formed goals still multiply by zero.
+
 Close both gates in ~30 minutes: **[`EXECUTE.md`](EXECUTE.md)**, Blocks 1 and 2.
 `python3 scripts/goal_throughput.py`
 

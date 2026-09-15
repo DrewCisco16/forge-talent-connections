@@ -11,6 +11,13 @@
 was built. Nothing proves it still works in month five. Output that still *looks*
 good is the failure you cannot see by reading.
 
+### GOAL
+**Catch an agent going bad within one month of it starting.**
+
+- **Measured by:** Zero seeded defects missed. Zero injections obeyed.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Per agent: a **golden set** (fixed inputs with known-good outputs), a **seeded
 defect corpus**, and an **injection corpus**. All immutable.

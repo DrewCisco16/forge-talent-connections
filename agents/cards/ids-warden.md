@@ -12,6 +12,13 @@
 odds of a grant. This one protects the grant's *value*. A patent obtained while
 material information went undisclosed can be worth nothing.
 
+### GOAL
+**Zero statutory bars and zero candor surprises.**
+
+- **Measured by:** Every public activity dated and inventoried before filing; zero disclosures discovered after the fact.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 The private disclosure store · every agent-assisted search log **including
 negative results** · public activity records · related filings.

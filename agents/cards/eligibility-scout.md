@@ -15,6 +15,13 @@ that allowance rates for AI-containing applications fell after *Alice*.
 **Both Unverified — snippets only, USPTO unreachable from this session. Verify
 before relying on either.** The direction is consistent enough to design against.
 
+### GOAL
+**Zero section 101 rejections that a pre-filing pattern check would have caught.**
+
+- **Measured by:** 101 rejections traceable to result-style claiming = 0.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Draft claims and specification, **from the private disclosure store only.**
 This repository is public; a disclosure never enters it.

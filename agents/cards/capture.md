@@ -11,6 +11,13 @@
 > Public-award-history research may proceed once counsel confirms scope.
 > **Professional verification required.**
 
+### GOAL
+**No bid proceeds without the case against it having been made at full strength.**
+
+- **Measured by:** Every brief leads with no-bid. Killing one bad bid a quarter is the return.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 **One** opportunity at a time — never batched. The solicitation. Public award
 history and registrations. **Public sources only.**

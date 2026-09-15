@@ -10,6 +10,13 @@
 **Playbook p.5 names this as the DBA lane's useful first agent, paired with the
 evidence matrix.**
 
+### GOAL
+**No research question is silently abandoned.**
+
+- **Measured by:** Every open question carries a status and a written closing condition.
+- **Rolls up to:** outcome C — no goal stalls unnoticed
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Your research questions. LIBRARIAN's weekly output. Your current draft's claims.
 **No organizational, client or contract data** — that raises IRB,

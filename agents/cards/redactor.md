@@ -11,6 +11,13 @@
 anyway. It is now code: `scripts/redaction_guard.py`, **35 self-tests, installed
 as `.git/hooks/pre-commit`, denial live-tested 2026-09-14.**
 
+### GOAL
+**Nothing that must never be published reaches this public repository.**
+
+- **Measured by:** Escaped defects = 0. Currently 0 since E-01.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Staged changes (automatic, every commit) · any outbound draft, artifact,
 screenshot or attachment (on request, before sending).

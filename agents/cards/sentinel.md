@@ -12,6 +12,13 @@ attacked: SENTINEL sees `{lane, title, date, type}` and **nothing else**. It
 cannot read a solicitation, an email body, or a draft. The compromise value of a
 title and a date is near zero; the cost of a blown proposal deadline is total.
 
+### GOAL
+**No dated obligation is ever missed.**
+
+- **Measured by:** Every deadline surfaced at least 10 days out; zero surprises.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Dated obligations only. **No document bodies. No message content.**
 

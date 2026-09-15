@@ -10,6 +10,13 @@
 **Why first:** Playbook p.15 recommends it, it uses only public data, it needs no
 counsel gate, and it is the pattern every other research agent reuses.
 
+### GOAL
+**Replace one research session a week that Andrew would otherwise run himself.**
+
+- **Measured by:** Net time returned (X6 - X7) is positive. If negative, the artifact is wrong.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One sanitized question. Up to **3** approved public source pages, exact domains
 listed in the mission. No credentials, no account data, no restricted material,

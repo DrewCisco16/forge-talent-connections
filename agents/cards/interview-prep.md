@@ -15,6 +15,13 @@ only.** Recorded as a *planned action* whose cost is one phone call, not as a
 predicted gain. Even if the effect is smaller than reported, the downside is an
 hour.
 
+### GOAL
+**Every office action gets an interview agenda before a response is drafted.**
+
+- **Measured by:** Agenda produced for 100% of office actions before any response is drafted; zero responses drafted without one.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 The office action · the current claims · ART-DELTA's matrix · the file history.
 

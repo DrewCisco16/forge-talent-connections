@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | per lane | 2.1 | B | local, supervised first | after a supervised pilot |
 
+### GOAL
+**Only measured improvements are kept. Noise is never banked.**
+
+- **Measured by:** Zero inconclusive results retained; zero goalpost edits; pilot caps respected.
+- **Rolls up to:** outcome D — work compounds
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 A loop spec cleared by `loop_guard.py`. A frozen task set and scorer. A recorded
 baseline. **No spec, no run.**

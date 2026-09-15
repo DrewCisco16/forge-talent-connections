@@ -502,11 +502,12 @@
       "effect": "review burden and failure surface with no offsetting benefit",
       "S": 5,
       "O": 7,
-      "D": 5,
+      "D": 2,
       "class": "safe",
-      "control": "goal ledger invariant: an agent with no goal is trimmed",
-      "rung": 2,
-      "detected": true
+      "control": "scripts/goal_ladder.py --gate, wired into .git/hooks/pre-commit: blocks a commit if any card lacks a ### GOAL block, carries no computable measure, or rolls up to none of the four declared outcomes. 24 self-tests. Denial live-tested 2026-09-15.",
+      "rung": 1,
+      "detected": true,
+      "residual": "Checks CONNECTIVITY, not correctness. The reverse orphan -- a goal with no agent -- still cannot be computed, because the goal ledger is empty. That half of the invariant stays rung 2 until X1 closes."
     },
     {
       "id": "FM-36",

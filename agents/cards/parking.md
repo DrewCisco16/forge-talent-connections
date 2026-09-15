@@ -12,6 +12,13 @@ opening more projects"* and *"Parking space — ideas that are not today's
 mission."* Switching cost is the documented failure mode, and an idea that has
 nowhere to go becomes an open tab.
 
+### GOAL
+**No second front is ever opened on a day that already has one.**
+
+- **Measured by:** Every stray idea captured in under 10 seconds and acted on by nobody until the weekly review.
+- **Rolls up to:** outcome C — no goal stalls unnoticed
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One idea, in any form, at any time. No structure required — that is the point.
 

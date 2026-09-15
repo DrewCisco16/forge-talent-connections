@@ -6,6 +6,13 @@
 |---|---|---|---|---|
 | FORGE | 1.0 | B | Route C, or Codex cloud | ready |
 
+### GOAL
+**Andrew stops writing the mechanical 80% of the talent application.**
+
+- **Measured by:** Specified issue to reviewed draft PR without Andrew writing the first draft. Zero merges.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One repository, one issue labeled `agent:build`, the repo's own conventions.
 **Synthetic fixtures only in v0 — no real candidate records** (Playbook p.5).

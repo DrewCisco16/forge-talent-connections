@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | per lane | 2.1 | B | cloud routine, Sunday evening | ready |
 
+### GOAL
+**Andrew's review minutes fall, week over week.**
+
+- **Measured by:** Review minutes trending down. Two consecutive rising weeks demotes the responsible agent.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Run logs · approval and rejection records · the error ledger · cost and usage
 data · ROUTER's tier log.

@@ -11,6 +11,13 @@
 preparation; this is the document that says *what is new*, in the form an
 examiner argues in.
 
+### GOAL
+**Every independent claim has a written delta before it is filed, and the section 103 case against it is already on paper.**
+
+- **Measured by:** Zero claims filed without an element-by-element matrix.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 Claims from the private store, plus PRIORART's packet — references found **and
 the coverage gaps it declared.**

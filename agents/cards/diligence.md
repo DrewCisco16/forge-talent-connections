@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | HOME | 1.0 | **C, permanently** | cloud, on demand | ready |
 
+### GOAL
+**No capital or family decision is made on a number nobody computed.**
+
+- **Measured by:** Every brief states the base rate or says plainly that none exists. Zero recommendations issued.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One decision, stated by Andrew. **Primary .gov sources only:** SEC.gov and
 EDGAR · FRED · BEA.gov · BLS.gov · Census.gov · IRS.gov · Treasury.gov ·

@@ -9,6 +9,13 @@
 
 **The compounding agent.** Without it every run starts from zero.
 
+### GOAL
+**The next proposal starts from a library, not a blank page.**
+
+- **Measured by:** Reuse rate rising quarter over quarter; every item carries its provenance.
+- **Rolls up to:** outcome D — work compounds
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 The completed run's artifacts and logs — **its own lane only**.
 

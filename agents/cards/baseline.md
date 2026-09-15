@@ -14,6 +14,13 @@ the least satisfying item in the whole build and the one that determines whether
 any of it can be evaluated. **Without it, no honest claim about time saved can
 ever be made** — and your own standard forbids making one anyway.
 
+### GOAL
+**Give day 90 an answer instead of an impression.**
+
+- **Measured by:** 14 consecutive days captured, five categories, missing days marked MISSING and never interpolated.
+- **Rolls up to:** outcome C — no goal stalls unnoticed
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 One tap per work block: category, lane, minutes, time of day. **Crude is fine.
 Consistent is what matters.**

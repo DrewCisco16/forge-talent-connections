@@ -13,6 +13,13 @@
 > (`10` A1). Playbook p.8: *"A local runner alone does not satisfy this
 > boundary."* **Professional verification required.**
 
+### GOAL
+**Zero proposals rejected for non-compliance.**
+
+- **Measured by:** Zero unaddressed shall-statements at submission; zero model-invented rows in the matrix.
+- **Rolls up to:** outcome B — nothing irreversible goes wrong
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 The solicitation and every amendment. **Offline. No network.**
 

@@ -7,6 +7,13 @@
 |---|---|---|---|---|
 | one instance per mailbox (×5) | 1.0 | C → B | connector, cloud routine | ready |
 
+### GOAL
+**Remove the DECIDING from the inbox, not the typing.**
+
+- **Measured by:** Digest read in <=90 seconds; zero sends; >=80% of drafts approved unedited by day 30.
+- **Rolls up to:** outcome A — time returned to Andrew
+- **Which serves:** the goal Andrew writes in [`../analysis/goal-ledger.md`](../analysis/goal-ledger.md). No agent authors that one.
+
 ### INPUTS
 **One mailbox only.** Calendar read for scheduling questions. Nothing from
 another lane. Max 100 threads per run.
