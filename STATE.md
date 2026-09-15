@@ -37,7 +37,7 @@ agent in this system ever to execute** — and the only thing that moves `FM-47`
 
 | # | Decision | Blocks | Raised |
 |---|---|---|---|
-| 1 | **Git history PII**: squash-merge the PR / authorize a force-rewrite / GitHub Support | Closing the privacy incident | 2026-09-14 |
+| 1 | **Git history PII** — **the fix is now WRITTEN AND VERIFIED, awaiting your go-ahead.** `scripts/purge_history.py`, proven in a throwaway clone: 17 commits rebuilt, identical resulting tree. Every publishing step is blocked in-session as `[Git Destructive]`. **Runbook: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-runbook.md)** | Closing the privacy incident | 2026-09-14 |
 | 2 | **Does Cloudflare Pages serve the repo's markdown?** URLs now known — see the two-step test below. **30 seconds, and it is the last unknown in the privacy incident** | Whether the PII was live on the web, or only in git history | 2026-09-14 |
 | 3 | **Contracts counsel** — the four questions in `agents/07-guardrails.md` §2 | The entire ABO lane on non-public data | 2026-09-14 |
 | 4 | **FIU AI-use policy** for doctoral work | The DBA lane. **Unrecoverable-class risk, never checked** | 2026-09-14 |
@@ -126,6 +126,25 @@ that deployment renders the UNREDACTED file  ->  the data WAS publicly live.
 
 **No agent can do either step** — both need a logged-in dashboard, and
 authentication is human-only in every version of these instructions.
+
+### ⚠ E-01 — the PII incident, and the order to work it
+
+**The git rewrite is prepared and verified. It is NOT the most urgent step.**
+
+```
+1  CLOUDFLARE PAGES   if the repo root is the site root, the unredacted file
+                      has been LIVE ON THE OPEN WEB from every immutable
+                      deployment between 2a51e25 and 5f12aba.   <- do this first
+2  GIT HISTORY        scripts/purge_history.py -- written, verified, blocked
+                      on permission. One approval away.
+3  GITHUB SUPPORT     a force-push does not delete GitHub's copy. Request
+                      text is written and ready to send.
+4  NOTIFICATION       counsel's call, not mine.
+```
+
+**A blob in git history needs someone to go looking. A URL on your live company
+website does not.** Full detail, and the scan that found exactly one real leak
+across 310 blobs: [`agents/27-pii-incident-runbook.md`](agents/27-pii-incident-runbook.md).
 
 ## Gates live right now
 
