@@ -1,0 +1,35 @@
+name: forge_talent_connections
+description: FORGE Talent Connections consumer mobile app (walled UI layer).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.13.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # State management: Riverpod. Chosen per build prompt s2; never mixed with Provider.
+  flutter_riverpod: ^2.6.1
+  # Routing: go_router, locked by build prompt s2.
+  go_router: ^14.6.2
+
+  # HTTP client for the live product backend, per the founder's backend
+  # connection files (frontend/forge_api_client.dart uses package:http).
+  http: ^1.2.2
+  # Video playback for the owner's marketing advertisement on A5. First-party
+  # Flutter plugin; added on Andrew's explicit request to play his AI-made ad.
+  video_player: ^2.9.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/heroes/
+    - assets/brand/
+    - assets/media/
+    - assets/flags/
