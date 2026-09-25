@@ -1,0 +1,504 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+@page { size: 6in 10.67in; margin: 0; }
+:root{
+  --ink:#17202A; --soft:#5A6672; --paper:#FFFFFF; --calm:#F4F7F6; --line:#DFE6E4;
+  --go:#1E7A4C; --go-bg:#E6F3EC; --care:#B5651D; --care-bg:#FBF0E2;
+  --stop:#A32036; --stop-bg:#FBE9EC;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"DejaVu Sans","Noto Color Emoji",sans-serif;color:var(--ink);
+  background:var(--paper);-webkit-font-smoothing:antialiased}
+.page{width:6in;height:10.67in;padding:26px 24px 20px;page-break-after:always;
+  position:relative;display:flex;flex-direction:column;background:var(--paper)}
+.page:last-child{page-break-after:auto}
+
+/* ---------- cover ---------- */
+.hero{background:var(--ink);color:#fff;margin:-26px -24px 0;padding:38px 24px 30px}
+.kicker{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:#8FA6A0;font-weight:700}
+.hero h1{font-size:31px;line-height:1.06;font-weight:700;margin:12px 0 10px}
+.hero p{font-size:13px;line-height:1.5;color:#C7D3D0}
+.big-emoji{font-size:38px;line-height:1;margin-bottom:6px}
+
+h2{font-size:19px;font-weight:700;line-height:1.15;margin:0}
+h3{font-size:13.5px;font-weight:700;margin:0 0 5px}
+p,li{font-size:12.5px;line-height:1.55}
+.small{font-size:11px;line-height:1.5;color:var(--soft)}
+.tiny{font-size:9.5px;line-height:1.45;color:var(--soft)}
+
+/* ---------- vendor header ---------- */
+.vhead{margin:-26px -24px 16px;padding:24px;color:#fff}
+.vnum{font-size:10px;letter-spacing:.16em;font-weight:700;text-transform:uppercase;opacity:.85}
+.vhead h2{font-size:26px;margin:8px 0 6px;color:#fff}
+.vhead .sub{font-size:12px;color:rgba(255,255,255,.88);line-height:1.45}
+.vemoji{font-size:30px;line-height:1}
+
+/* ---------- steps ---------- */
+.step{display:flex;gap:11px;padding:9.5px 0;border-bottom:1px solid var(--line)}
+.step:last-of-type{border-bottom:none}
+.cbwrap{flex:none;width:26px;padding-top:1px}
+.cb{display:block;width:23px;height:23px;border:2.2px solid var(--ink);border-radius:5px;background:#fff}
+.sbody{flex:1;min-width:0}
+.sn{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin-bottom:3px}
+.act{font-size:13px;line-height:1.42;font-weight:700}
+.act .lit{background:#FFF3C4;padding:0 3px;border-radius:2px}
+.know{margin-top:6px;background:var(--go-bg);border-left:3px solid var(--go);
+  padding:6px 9px;border-radius:0 4px 4px 0;font-size:10.5px;line-height:1.45;color:#125836}
+.know b{color:var(--go)}
+
+/* ---------- notices ---------- */
+.note{border-left:4px solid;padding:10px 12px;border-radius:0 5px 5px 0;margin:12px 0}
+.note.stop{border-color:var(--stop);background:var(--stop-bg)}
+.note.care{border-color:var(--care);background:var(--care-bg)}
+.note.go{border-color:var(--go);background:var(--go-bg)}
+.note .lab{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px}
+.note.stop .lab{color:var(--stop)} .note.care .lab{color:var(--care)} .note.go .lab{color:var(--go)}
+.note p{font-size:11px;line-height:1.5}
+
+/* ---------- model box ---------- */
+.model{background:var(--calm);border:1.5px solid var(--line);border-radius:7px;padding:12px;margin:12px 0}
+.model .cap{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--soft)}
+.model .name{font-size:16px;font-weight:700;margin:5px 0 4px}
+.tf{display:block;height:26px;border:1.6px dashed #9FB0AC;border-radius:5px;background:#fff;margin-top:7px}
+.tflabel{font-size:9.5px;color:var(--soft);margin-top:5px}
+
+.done{margin-top:auto;padding:12px;border-radius:7px;background:var(--go-bg);
+  border:1.6px solid var(--go);text-align:center}
+.done .t{font-size:14px;font-weight:700;color:var(--go)}
+.done .s{font-size:10.5px;color:#125836;margin-top:3px;line-height:1.4}
+
+.foot{margin-top:auto;padding-top:10px;display:flex;justify-content:space-between;align-items:center;
+  border-top:1px solid var(--line);padding-top:7px}
+.foot .p{font-size:9.5px;color:var(--soft);font-weight:700}
+.dots{display:flex;gap:4px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dot.on{background:var(--ink)}
+
+.checklist{margin:10px 0}
+.crow{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)}
+.crow:last-child{border-bottom:none}
+.crow .t{font-size:12px;line-height:1.4;font-weight:700}
+.crow .d{font-size:10.5px;color:var(--soft);line-height:1.4;margin-top:2px}
+ul{padding-left:16px} li{margin-bottom:5px}
+.cost{font-size:10.5px;color:var(--soft);margin-top:8px;line-height:1.45}
+</style></head><body>
+
+<!-- ============ COVER ============ -->
+
+<!-- ============ COVER ============ -->
+<div class="page">
+  <div class="hero">
+    <div class="big-emoji">&#128273;</div>
+    <div class="kicker">FORGE Talent Connections</div>
+    <h1>Get Your 5 AI Keys</h1>
+    <p>One page per company. Tick each box as you go.<br>You cannot get lost &mdash; every step tells you how to know it worked.</p>
+  </div>
+
+  <div class="note stop">
+    <span class="lab">&#128721; The one rule &mdash; read this twice</span>
+    <p><b>Never type or paste a key into this PDF.</b> Not in a box, not in a note. Keys go in ONE place only: the <b>.env</b> file on your computer.</p>
+    <p style="margin-top:6px">Never email a key. Never screenshot a key. Never put one in a chat window.</p>
+  </div>
+
+  <h2 style="margin-top:6px">&#128203; What you'll do 5 times</h2>
+  <p class="small" style="margin:6px 0 4px">The same 4 things at every company. That's the whole job.</p>
+  <div class="checklist">
+    <div class="crow"><div style="font-size:17px">1&#65039;&#8419;</div><div><div class="t">Make an account</div><div class="d">Use the same email every time.</div></div></div>
+    <div class="crow"><div style="font-size:17px">2&#65039;&#8419;</div><div><div class="t">Add a payment card</div><div class="d">Most need one before a key will work.</div></div></div>
+    <div class="crow"><div style="font-size:17px">3&#65039;&#8419;</div><div><div class="t">Create the key &amp; paste it into .env</div><div class="d">Paste it the SECOND you see it. Most sites never show it again.</div></div></div>
+    <div class="crow"><div style="font-size:17px">4&#65039;&#8419;</div><div><div class="t">Copy the model name</div><div class="d">Write it in the box on that page. This one is safe to write down.</div></div></div>
+  </div>
+
+  <div class="note care">
+    <span class="lab">&#9888;&#65039; If you only remember one thing</span>
+    <p>The key is shown <b>once</b>. Have your <b>.env</b> file already open before you tap "create". Paste, save, then carry on.</p>
+  </div>
+
+  <div class="note go">
+    <span class="lab">&#9989; How you'll know you're finished</span>
+    <p>All 5 pages ticked, then the checker on the last page prints <b>PROFILES OK</b>. That is the finish line. Nothing else is needed.</p>
+  </div>
+
+  <div class="foot"><span class="p">START HERE</span>
+    <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+</div>
+
+<div class="page">
+  <div class="vhead" style="background:#10806A">
+    <div class="vemoji">💬</div>
+    <div class="vnum">Seat 1 of 5 &middot; goes in ADJ_SEAT_1_API_KEY</div>
+    <h2>ChatGPT</h2>
+    <div class="sub">by OpenAI &nbsp;•&nbsp; platform.openai.com</div>
+  </div>
+  
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s1_1"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 1 &middot; Go to the keys page</div>
+          <div class="act">Open <span class="lit">platform.openai.com/api-keys</span> in Safari and sign in. This is the <b>developer</b> site, not the ChatGPT chat site.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You see a page titled <b>API keys</b> with a "Create new secret key" button — not a chat box.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s1_2"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 2 &middot; Add money first</div>
+          <div class="act">Tap <span class="lit">Settings</span> → <span class="lit">Billing</span> and add a card. Add credit — the smallest allowed is $5.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your balance shows a dollar amount above $0.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s1_3"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 3 &middot; Open your .env file NOW</div>
+          <div class="act">Before the next step, open your <span class="lit">.env</span> file and put your cursor after <span class="lit">ADJ_SEAT_1_API_KEY=</span></div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env file is open and waiting. Do not skip this.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s1_4"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 4 &middot; Create and paste immediately</div>
+          <div class="act">Tap <span class="lit">Create new secret key</span>. The key appears ONCE. Copy it and paste it into .env <b>right now</b>. Save the file.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env line reads ADJ_SEAT_1_API_KEY=sk-... and the file is saved.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s1_5"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 5 &middot; Write down the model name</div>
+          <div class="act">Find the model list on their site. Look for <b>GPT-5.6 Sol</b> and copy its exact ID text.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You have the exact ID copied — write it in the box below.</div>
+        </div>
+      </div>
+  <div class="model">
+    <span class="cap">🎯 Use this model</span>
+    <div class="name">GPT-5.6 Sol</div>
+    <p class="small">OpenAI's newest flagship. This is the one you picked — good pick.</p>
+    <span class="tf" data-tf="m1"></span>
+    <div class="tflabel">✍️ Write the exact model ID here (this is NOT secret — safe to write)</div>
+    <div class="cost">💵 Reported at about $5 per million words in, $30 out. Confirm on their pricing page.</div>
+  </div>
+  <div class="done">
+    <div class="t">🛑 STOP — ChatGPT is finished</div>
+    <div class="s">Every box on this page ticked? Then there is nothing else to do here.<br>Turn the page.</div>
+  </div>
+  <div class="foot"><span class="p">SEAT 1 OF 5</span><div class="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+</div>
+<div class="page">
+  <div class="vhead" style="background:#2C6BC4">
+    <div class="vemoji">✨</div>
+    <div class="vnum">Seat 2 of 5 &middot; goes in ADJ_SEAT_2_API_KEY</div>
+    <h2>Gemini</h2>
+    <div class="sub">by Google &nbsp;•&nbsp; aistudio.google.com</div>
+  </div>
+  
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s2_1"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 1 &middot; Go to the website</div>
+          <div class="act">Open <span class="lit">aistudio.google.com</span> and sign in with your Google Workspace account.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You are inside <b>Google AI Studio</b> and see your email top-right.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s2_2"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 2 &middot; Find the key button</div>
+          <div class="act">Tap <span class="lit">Get API key</span> — usually top-left or in the menu.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> A panel opens showing API keys, probably empty.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s2_3"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 3 &middot; Open your .env file NOW</div>
+          <div class="act">Open <span class="lit">.env</span> and put your cursor after <span class="lit">ADJ_SEAT_2_API_KEY=</span></div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env file is open and waiting.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s2_4"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 4 &middot; Create and paste immediately</div>
+          <div class="act">Tap <span class="lit">Create API key</span>, then copy it and paste into .env <b>right now</b>. Save.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env line reads ADJ_SEAT_2_API_KEY=AIza... and is saved.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s2_5"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 5 &middot; Pick the Pro model — not Flash</div>
+          <div class="act">Open their model list. Find the <b>Pro</b> tier (the most capable one, not "Flash"). Copy its exact ID.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> The ID you copied contains the word <b>pro</b>, not <b>flash</b>.</div>
+        </div>
+      </div>
+  <div class="model">
+    <span class="cap">🎯 Use this model</span>
+    <div class="name">Gemini Pro (NOT Flash)</div>
+    <p class="small">⚠️ CHANGE FROM YOUR PICK. You said Flash. Flash is the fast, cheap tier — it will miss things and its misses will look like the whole panel's misses. Pick the <b>Pro</b> tier instead.</p>
+    <span class="tf" data-tf="m2"></span>
+    <div class="tflabel">✍️ Write the exact model ID here (this is NOT secret — safe to write)</div>
+    <div class="cost">💵 Google has a free tier that works without a card. Paid pricing is on their site.</div>
+  </div>
+  <div class="done">
+    <div class="t">🛑 STOP — Gemini is finished</div>
+    <div class="s">Every box on this page ticked? Then there is nothing else to do here.<br>Turn the page.</div>
+  </div>
+  <div class="foot"><span class="p">SEAT 2 OF 5</span><div class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+</div>
+<div class="page">
+  <div class="vhead" style="background:#E07B18">
+    <div class="vemoji">🌊</div>
+    <div class="vnum">Seat 3 of 5 &middot; goes in ADJ_SEAT_3_API_KEY</div>
+    <h2>Mistral</h2>
+    <div class="sub">by Mistral AI &nbsp;•&nbsp; console.mistral.ai</div>
+  </div>
+  
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s3_1"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 1 &middot; Go to the website</div>
+          <div class="act">Open <span class="lit">console.mistral.ai</span> and sign up or sign in.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You are on a dashboard, not the marketing homepage.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s3_2"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 2 &middot; Add a payment card</div>
+          <div class="act">Find <span class="lit">Billing</span> and add a card. Mistral needs this before a key will work.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Billing shows a card on file.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s3_3"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 3 &middot; Open your .env file NOW</div>
+          <div class="act">Open <span class="lit">.env</span> and put your cursor after <span class="lit">ADJ_SEAT_3_API_KEY=</span></div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env file is open and waiting.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s3_4"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 4 &middot; Create and paste immediately</div>
+          <div class="act">Go to <span class="lit">API Keys</span> and create one. Copy and paste into .env <b>right now</b>. Save.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env line reads ADJ_SEAT_3_API_KEY=... and is saved.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s3_5"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 5 &middot; Write down the model name</div>
+          <div class="act">In their model list find <b>Magistral Medium</b> and copy its exact ID.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You have the exact ID copied.</div>
+        </div>
+      </div>
+  <div class="model">
+    <span class="cap">🎯 Use this model</span>
+    <div class="name">Magistral Medium</div>
+    <p class="small">This is Mistral's <b>reasoning</b> model — it thinks step by step before answering. That is exactly the job here, so it beats their general 'Large' model for this.</p>
+    <span class="tf" data-tf="m3"></span>
+    <div class="tflabel">✍️ Write the exact model ID here (this is NOT secret — safe to write)</div>
+    <div class="cost">💵 Pay per use. Price is on their pricing page.</div>
+  </div>
+  <div class="done">
+    <div class="t">🛑 STOP — Mistral is finished</div>
+    <div class="s">Every box on this page ticked? Then there is nothing else to do here.<br>Turn the page.</div>
+  </div>
+  <div class="foot"><span class="p">SEAT 3 OF 5</span><div class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div></div>
+</div>
+<div class="page">
+  <div class="vhead" style="background:#333B47">
+    <div class="vemoji">🛰️</div>
+    <div class="vnum">Seat 4 of 5 &middot; goes in ADJ_SEAT_4_API_KEY</div>
+    <h2>Grok</h2>
+    <div class="sub">by xAI &nbsp;•&nbsp; console.x.ai</div>
+  </div>
+  
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s4_1"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 1 &middot; Go to the website</div>
+          <div class="act">Open <span class="lit">console.x.ai</span> and sign up or sign in.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You are on the xAI <b>Console</b>, not the Grok chat app.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s4_2"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 2 &middot; Check your credit</div>
+          <div class="act">Look at Billing. New accounts are reported to start with free credit.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You can see a credit balance or a card on file.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s4_3"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 3 &middot; Open your .env file NOW</div>
+          <div class="act">Open <span class="lit">.env</span> and put your cursor after <span class="lit">ADJ_SEAT_4_API_KEY=</span></div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env file is open and waiting.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s4_4"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 4 &middot; Create and paste immediately</div>
+          <div class="act">Tap <span class="lit">API Keys</span> in the left menu, create a key, copy and paste into .env <b>right now</b>. Save.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your key starts with <b>xai-</b>. If it does not, it is not an xAI key.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s4_5"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 5 &middot; Write down the model name</div>
+          <div class="act">In their model list find <b>Grok 4.3</b> and copy its exact ID.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You have the exact ID copied.</div>
+        </div>
+      </div>
+  <div class="model">
+    <span class="cap">🎯 Use this model</span>
+    <div class="name">Grok 4.3</div>
+    <p class="small">xAI's current flagship. Thinking is switched on by default, which is what you want here.</p>
+    <span class="tf" data-tf="m4"></span>
+    <div class="tflabel">✍️ Write the exact model ID here (this is NOT secret — safe to write)</div>
+    <div class="cost">💵 New accounts are reported to get $25 free credit to start. Then pay per use.</div>
+  </div>
+  <div class="done">
+    <div class="t">🛑 STOP — Grok is finished</div>
+    <div class="s">Every box on this page ticked? Then there is nothing else to do here.<br>Turn the page.</div>
+  </div>
+  <div class="foot"><span class="p">SEAT 4 OF 5</span><div class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot"></span></div></div>
+</div>
+<div class="page">
+  <div class="vhead" style="background:#C05A37">
+    <div class="vemoji">🧠</div>
+    <div class="vnum">Seat 5 of 5 &middot; goes in ADJ_SEAT_5_API_KEY</div>
+    <h2>Claude</h2>
+    <div class="sub">by Anthropic &nbsp;•&nbsp; platform.claude.com</div>
+  </div>
+  
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s5_1"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 1 &middot; Go to the website</div>
+          <div class="act">Open <span class="lit">platform.claude.com</span> and sign in. This is the <b>developer console</b>, not the Claude chat app.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You see a Console dashboard with billing and keys — not a chat box.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s5_2"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 2 &middot; Add money first</div>
+          <div class="act">Open Billing and add a card plus some credit.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your balance shows an amount above $0.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s5_3"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 3 &middot; Open your .env file NOW</div>
+          <div class="act">Open <span class="lit">.env</span> and put your cursor after <span class="lit">ADJ_SEAT_5_API_KEY=</span></div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env file is open and waiting.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s5_4"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 4 &middot; Create and paste immediately</div>
+          <div class="act">Tap <span class="lit">Get API key</span>, copy it, paste into .env <b>right now</b>. Save.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> Your .env line reads ADJ_SEAT_5_API_KEY=sk-ant-... and is saved.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="cbwrap"><span class="cb" data-cb="s5_5"></span></div>
+        <div class="sbody">
+          <div class="sn">Step 5 &middot; Write down the model name</div>
+          <div class="act">Find <b>Claude Opus 5</b> in their model list and copy its exact ID.</div>
+          <div class="know"><b>✅ You'll know it worked:</b> You have the exact ID copied.</div>
+        </div>
+      </div>
+  <div class="model">
+    <span class="cap">🎯 Use this model</span>
+    <div class="name">Claude Opus 5</div>
+    <p class="small">Your main seat, and the reasoning flagship. The ID is reported to be <span class="lit">claude-opus-5</span> — confirm it on their model page.</p>
+    <span class="tf" data-tf="m5"></span>
+    <div class="tflabel">✍️ Write the exact model ID here (this is NOT secret — safe to write)</div>
+    <div class="cost">💵 Reported at about $5 per million words in, $25 out. Confirm on their pricing page.</div>
+  </div>
+  <div class="done">
+    <div class="t">🛑 STOP — Claude is finished</div>
+    <div class="s">Every box on this page ticked? Then there is nothing else to do here.<br>Turn the page.</div>
+  </div>
+  <div class="foot"><span class="p">SEAT 5 OF 5</span><div class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span></div></div>
+</div>
+<div class="page">
+  <div class="vhead" style="background:#1E7A4C">
+    <div class="vemoji">🏁</div>
+    <div class="vnum">Last page</div>
+    <h2>Finish Line</h2>
+    <div class="sub">Two commands. Then you are done.</div>
+  </div>
+
+  <div class="note care">
+    <span class="lab">⚠️ Before you run anything</span>
+    <p>Your <b>.env</b> file should now have 5 keys and 5 model IDs filled in. No blanks. No quotes around them.</p>
+  </div>
+
+  <div class="step"><div class="cbwrap"><span class="cb" data-cb="f1"></span></div>
+   <div class="sbody"><div class="sn">Step 1 &middot; Check your work</div>
+   <div class="act">Run: <span class="lit">python run_adjudication.py --check-profiles profiles.json</span></div>
+   <div class="know"><b>✅ You'll know it worked:</b> it prints <b>PROFILES OK</b>. This costs nothing — it never touches the internet.</div></div></div>
+
+  <div class="step"><div class="cbwrap"><span class="cb" data-cb="f2"></span></div>
+   <div class="sbody"><div class="sn">Step 2 &middot; If it lists problems</div>
+   <div class="act">Fix them and run it again. It lists <b>every</b> problem at once, so you only go round once.</div>
+   <div class="know"><b>✅ You'll know it worked:</b> the list is empty and you see PROFILES OK.</div></div></div>
+
+  <div class="step"><div class="cbwrap"><span class="cb" data-cb="f3"></span></div>
+   <div class="sbody"><div class="sn">Step 3 &middot; The real run</div>
+   <div class="act">Run the tool on a real piece of work, with all 5 seats and all 5 passes.</div>
+   <div class="know"><b>✅ You'll know it worked:</b> you get an ANSWER section and a HOLES section.</div></div></div>
+
+  <div class="note go">
+    <span class="lab">✅ What the first run is for</span>
+    <p>The first run's job is to <b>measure</b> whether your 5 AIs really think differently. Treat its answer as a first draft, not a verdict. After that you'll know how many seats you actually need.</p>
+  </div>
+
+  <div class="note stop">
+    <span class="lab">🛑 Final safety check</span>
+    <p>Look at this PDF. Is there a key written anywhere on it? There must not be. Keys live only in <b>.env</b>, only on your computer.</p>
+  </div>
+
+  <div class="done" style="background:#E6F3EC">
+    <div class="t">🎉 That's everything</div>
+    <div class="s">5 keys. 5 model names. One green check.<br>There is no step 6. You are done.</div>
+  </div>
+  <div class="foot"><span class="p">FINISHED</span>
+   <div class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span></div></div>
+</div>
+
+<div class="page">
+  <h2 style="margin-bottom:8px">📌 Honest notes</h2>
+  <p class="small">Small print that matters. Read once.</p>
+  <div class="note care" style="margin-top:12px">
+    <span class="lab">⚠️ Where these model names came from</span>
+    <p>The five vendor documentation sites were <b>blocked</b> from this machine, so these names come from web search, not from the vendors' own pages. That is why every page asks you to <b>copy the exact ID off their site</b> rather than trusting a name printed here.</p>
+    <p style="margin-top:6px">If a name here does not match what you see on their site, <b>their site is right</b>.</p>
+  </div>
+  <div class="note care">
+    <span class="lab">⚠️ Google, September 2026</span>
+    <p>Reports mention older Google keys stopping work in September 2026. Keys you create fresh in AI Studio are already the new type, so making a new one now avoids this.</p>
+  </div>
+  <div class="note go">
+    <span class="lab">✅ Why 5 different companies</span>
+    <p>Five models from five companies make <b>different</b> mistakes. Five from one company make the <b>same</b> mistake and agree with each other — which looks like confidence and is not. Your pick of five separate companies is the right instinct.</p>
+  </div>
+  <div class="note stop">
+    <span class="lab">🛑 Prices change</span>
+    <p>Any dollar figure here is what search reported in August 2026. The vendor's own pricing page is the truth.</p>
+  </div>
+  <p class="tiny" style="margin-top:14px">FORGE Talent Connections &middot; Automated Disconfirmation Adjudication &middot; companion to CONNECTING.md and SOP v1.2</p>
+</div>
+</body></html>

@@ -1,0 +1,142 @@
+{
+  "_README": [
+    "NOT AN OPERATOR BASELINE. Read this before reading any number it produces.",
+    "",
+    "These thirty questions come from defects documented in this repository:",
+    "the nine in SOP v1.2 section 12, and the ones found during the five-round",
+    "build. Every answer is verifiable -- from Python's own semantics, from",
+    "arithmetic, or from the manual's own text -- so nothing here is invented.",
+    "",
+    "WHAT IT MEASURES: that stage_zero.py works end to end against real seats.",
+    "",
+    "WHAT IT DOES NOT MEASURE: the BAC baseline for the operator's task class.",
+    "SOP 8.1 step 3 asks for thirty examples from the work this tool will",
+    "actually handle, and SOP 10.1 gives the reason it cannot be substituted:",
+    "leave-one-domain-out R-squared of -2.09. A baseline measured here says",
+    "nothing about a baseline there.",
+    "",
+    "Copy stage-zero-questions.example.json to stage-zero-questions.json and",
+    "put your own thirty in it. That file is the one that decides anything."
+  ],
+  "questions": [
+    {"id": "d01-bool-subclasses-int", "kind": "oneof", "accept": ["yes", "true"],
+     "answer": "yes",
+     "question": "In Python 3, a gate accepts a numeric literal by testing isinstance(value, (int, float)). Does the literal True pass that test? Answer yes or no."},
+
+    {"id": "d01-why", "kind": "oneof", "accept": ["bool", "boolean"],
+     "answer": "bool",
+     "question": "In Python 3, which built-in type is a subclass of int, causing True to satisfy isinstance(x, int)? Answer with the type name only."},
+
+    {"id": "d02-doi-existence", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A gate classifies a citation as 'the right kind of source' from its identifier format alone. Does that establish the cited work EXISTS? Answer yes or no."},
+
+    {"id": "d03-effective-seats", "kind": "numeric", "tolerance": "0.01",
+     "answer": "1.67",
+     "question": "Effective seats n_eff = n / (1 + (n-1) * rho). For n = 5 and rho = 0.5, what is n_eff? Give the number to two decimal places."},
+
+    {"id": "d03-neff-floor", "kind": "numeric", "tolerance": "0.01",
+     "answer": "1.00",
+     "question": "Using n_eff = n / (1 + (n-1) * rho), what is n_eff for n = 3 seats at rho = 1.0? Give the number to two decimal places."},
+
+    {"id": "d03-neff-independent", "kind": "numeric", "tolerance": "0.01",
+     "answer": "5.00",
+     "question": "Using n_eff = n / (1 + (n-1) * rho), what is n_eff for n = 5 seats at rho = 0.0? Give the number to two decimal places."},
+
+    {"id": "d04-negative-population", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A capture-recapture estimator returns -0.5 as an estimated population size. Is a negative population estimate a meaningful quantity? Answer yes or no."},
+
+    {"id": "d05-stop-conjunction", "kind": "oneof", "accept": ["and", "conjunction", "all"],
+     "answer": "and",
+     "question": "A stop rule requires: yields decaying, residual below tolerance, judgment queue empty, and singleton fraction below alarm. Must ALL hold, or is ANY one enough? Answer with one word: 'and' if all must hold, 'or' if any is enough."},
+
+    {"id": "d06-vcy-definition", "kind": "oneof", "accept": ["failures", "failure", "rejections", "rejected", "corrections"],
+     "answer": "failures",
+     "question": "A decay curve is fitted to 'verified corrections found per round'. A correction is a claim a gate found WRONG. Should the curve be fitted to gate passes or gate failures? Answer with one word."},
+
+    {"id": "d06-flat-series", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A decay curve VCY_k = a * exp(-b*k) is fitted to the series 5, 5, 5, 5. Is the fitted decay constant b greater than zero? Answer yes or no."},
+
+    {"id": "d07-in-memory-log", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "An append-only audit log exists only in process memory and is never written to disk. After the process exits, is the audit chain still available for inspection? Answer yes or no."},
+
+    {"id": "d08-mutation-survives", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A test still passes after the protection it claims to check is deleted from the code. Does that test provide evidence the protection works? Answer yes or no."},
+
+    {"id": "d09-field-order", "kind": "numeric", "tolerance": "0",
+     "answer": "3",
+     "question": "A claim line is written as four pipe-separated fields: CLAIM | kind | warrant | text. If the leading word CLAIM is field 1, which field number is the warrant? Give the number."},
+
+    {"id": "f01-rounding-two-cents", "kind": "numeric", "tolerance": "0.001",
+     "answer": "10000.02",
+     "question": "A monthly cost of 1666.67 dollars is billed for exactly 6 months. What is the exact total in dollars? Give the number."},
+
+    {"id": "f01-precision-holds", "kind": "oneof", "accept": ["yes", "true"],
+     "answer": "yes",
+     "question": "A figure is written as '10000 dollars' with no decimal places. Rounded to the nearest whole dollar, does 10000.02 equal that figure? Answer yes or no."},
+
+    {"id": "f01-precision-fails", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A figure is written as '10000.00 dollars', asserting cents. Rounded to the nearest cent, does 10000.02 equal that figure? Answer yes or no."},
+
+    {"id": "f02-floor-div", "kind": "numeric", "tolerance": "0",
+     "answer": "4",
+     "question": "What is floor(30 / 7)? Give the integer."},
+
+    {"id": "f02-min", "kind": "numeric", "tolerance": "0",
+     "answer": "3",
+     "question": "What is min(5, 3, 9)? Give the integer."},
+
+    {"id": "f02-round-half-up", "kind": "numeric", "tolerance": "0",
+     "answer": "3",
+     "question": "Using the schoolroom rule where a half always rounds away from zero, what is 2.5 rounded to the nearest integer? Give the number."},
+
+    {"id": "f02-bankers", "kind": "numeric", "tolerance": "0",
+     "answer": "2",
+     "question": "Python 3's built-in round() uses banker's rounding, rounding a half to the nearest even integer. What does round(2.5) return in Python 3? Give the number."},
+
+    {"id": "f03-self-consistency", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A model states that 5 * 6 = 30 and commits to the figure 30. Code recomputes 5 * 6 and confirms 30. Does that confirmation test whether 6 is the correct value to use? Answer yes or no."},
+
+    {"id": "f04-two-lines-one-seat", "kind": "numeric", "tolerance": "0",
+     "answer": "1",
+     "question": "One person writes the same objection twice in two separate documents. How many independent people have raised that objection? Give the number."},
+
+    {"id": "corroboration-threshold", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Two people independently give DIFFERENT values for the same quantity, 3 and 1. Do they corroborate each other on a single value? Answer yes or no."},
+
+    {"id": "bound-satisfied", "kind": "oneof", "accept": ["yes", "true"],
+     "answer": "yes",
+     "question": "A commitment states a quantity is AT LEAST 12. The computed value is 18. Is the commitment satisfied? Answer yes or no."},
+
+    {"id": "bound-violated", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A commitment states a quantity is AT LEAST 12. The computed value is 11.6. Is the commitment satisfied? Answer yes or no."},
+
+    {"id": "wilson-straddle", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A measured rate is 0.467 with a 95% confidence interval of [0.302, 0.638], tested against a threshold of 0.45. Does the interval exclude the threshold? Answer yes or no."},
+
+    {"id": "blocked-not-failed", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A citation check could not run because the lookup service timed out. Is that evidence the citation is fabricated? Answer yes or no."},
+
+    {"id": "jaccard-disjoint", "kind": "numeric", "tolerance": "0",
+     "answer": "0",
+     "question": "The Jaccard index is the size of the intersection divided by the size of the union. What is the Jaccard index of the sets {a, b} and {c, d}? Give the number."},
+
+    {"id": "jaccard-identical", "kind": "numeric", "tolerance": "0",
+     "answer": "1",
+     "question": "What is the Jaccard index of the set {a, b} with itself? Give the number."},
+
+    {"id": "five-rounds-calls", "kind": "numeric", "tolerance": "0",
+     "answer": "30",
+     "question": "A panel makes 6 API calls per round and runs 5 rounds. How many calls in total? Give the number."}
+  ]
+}

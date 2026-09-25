@@ -1,0 +1,151 @@
+{
+  "_README": [
+    "THIRTY-ONE QUESTIONS FROM THE OPERATOR'S OWN STATED GOALS.",
+    "",
+    "Task class: deciding whether a proposed action, finding, or design",
+    "choice advances or undermines the governance requirements this operator",
+    "has written down.",
+    "",
+    "Every answer is determined by a document the operator authored or",
+    "adopted -- SOP v1.2 (the five passes, the math, the stop rule, the",
+    "do-not-use conditions), the five global rules and fail-closed default,",
+    "the evidence-label standard, and the cost discipline stated in this",
+    "repository. Nothing here is invented: each answer can be checked against",
+    "the section it comes from.",
+    "",
+    "WHAT THIS MEASURES: whether ONE strong model already gets these right.",
+    "If it does -- above roughly 0.45 -- SOP 8.1 step 5 says build one model",
+    "plus deterministic gates and skip the five-seat panel.",
+    "",
+    "WHAT IT DOES NOT MEASURE: a baseline for a DIFFERENT task class. If the",
+    "intended use is talent or staffing decisions rather than governance",
+    "adjudication, that needs its own set (SOP 10.1: leave-one-domain-out",
+    "R-squared = -2.09)."
+  ],
+  "questions": [
+
+    {"id": "g01-fail-closed-default", "kind": "oneof", "accept": ["reject", "deny", "denied", "rejected"],
+     "answer": "reject",
+     "question": "A governed system encounters a record with a missing required field and cannot verify it. Under a fail-closed default, does the system accept or reject? Answer with one word: accept or reject."},
+
+    {"id": "g02-expired-signature", "kind": "oneof", "accept": ["reject", "deny", "denied", "rejected"],
+     "answer": "reject",
+     "question": "A signed decision token presents a valid signature but an expiry timestamp in the past. Under a fail-closed default, is it accepted or rejected? Answer with one word: accept or reject."},
+
+    {"id": "g03-ai-mutating-state", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A probabilistic AI output is proposed to update authoritative governed state without first passing the required validation stage. Is that permitted under a rule that says no probabilistic output mutates governed state without passing validation first? Answer yes or no."},
+
+    {"id": "g04-replay-nondeterminism", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A system is running in replay mode, which is specified to block all nondeterminism. Is an outbound live AI API call permitted during replay? Answer yes or no."},
+
+    {"id": "g05-export-gateway", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A rule states that no export path exists outside the designated export gateway. An engineer proposes a direct database dump to CSV for a partner. Is that permitted? Answer yes or no."},
+
+    {"id": "g06-red-material-in-green-tool", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Under a rule separating sensitive RED material from non-sensitive GREEN automation, may patent claim text be pasted into a general-purpose GREEN automation tool? Answer yes or no."},
+
+    {"id": "g07-probability-without-data", "kind": "oneof", "accept": ["refuse", "decline", "no", "refused"],
+     "answer": "refuse",
+     "question": "Someone asks for the probability that a project succeeds. There is no dataset, no defined outcome variable, and no base rate. Under a standard that forbids inventing statistics, should the answer be a percentage or a refusal? Answer with one word: percentage or refuse."},
+
+    {"id": "g08-evidence-label-unverified", "kind": "oneof", "accept": ["unknown", "assumption"],
+     "answer": "unknown",
+     "question": "Under an evidence-labelling standard with the labels Fact, Inference, Assumption and Unknown, which label applies to a claim that has not been established at all? Answer with one word."},
+
+    {"id": "g09-patentability-conclusion", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Under a standard requiring professional verification for legal and patent matters, may an AI assistant conclude that an invention is patentable? Answer yes or no."},
+
+    {"id": "g10-cost-verify-pricing", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Under a rule that no dollar figure may be invented and costs must be marked for pricing verification, may a monthly cloud cost be stated as a firm number from memory? Answer yes or no."},
+
+    {"id": "s01-passes-that-eliminate", "kind": "numeric", "tolerance": "0",
+     "answer": "4",
+     "question": "A five-pass review process is specified so that the fifth pass calibrates confidence and cannot rule anything out. How many of the five passes can eliminate a candidate? Give the number."},
+
+    {"id": "s02-calibration-pass-removes", "kind": "numeric", "tolerance": "0",
+     "answer": "0",
+     "question": "In a five-pass process where the final pass calibrates confidence and cannot rule anything out, how many candidates may that final pass remove? Give the number."},
+
+    {"id": "s03-tie-not-broken", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "An elimination-only process ends with two candidates surviving and no evidence distinguishing them. Under a rule that nothing is scored, ranked or preferred, should the process pick one? Answer yes or no."},
+
+    {"id": "s04-commit-both-halves", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A rule states an answer is resolved only when ONE candidate survives AND no open questions remain. One candidate survives but thirty items are unresolved. Is the answer resolved? Answer yes or no."},
+
+    {"id": "s05-baseline-gate", "kind": "oneof", "accept": ["one", "1", "single", "one model"],
+     "answer": "one",
+     "question": "A specification says: if a single strong model already scores above roughly 0.45 on the task class, stop and build one model plus deterministic gates instead of a multi-model ensemble. A measured baseline is 0.72. Should you build one model or an ensemble? Answer with one word: one or ensemble."},
+
+    {"id": "s06-sequential-task", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A specification lists strictly sequential tasks as a do-not-use condition for a multi-agent ensemble, citing measured degradation. The task at hand is strictly sequential. Should the ensemble be built? Answer yes or no."},
+
+    {"id": "s07-unworked-queue", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A specification lists 'you will not work the escalation queue' as a do-not-build condition, because unworked judgment items recreate the unverified topology the design exists to avoid. The operator states they will not work the queue. Should the system be built? Answer yes or no."},
+
+    {"id": "s08-unanimity-alarm", "kind": "oneof", "accept": ["alarm", "warning", "concern", "bad"],
+     "answer": "alarm",
+     "question": "Five independent reviewers examining a non-trivial artifact return exactly identical finding sets. Under a specification treating unanimity as a shared-failure-mode signal, is that a confirmation or an alarm? Answer with one word: confirmation or alarm."},
+
+    {"id": "s09-silence-not-collapse", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "Every reviewer on a pass returns an EMPTY finding set, making the sets trivially identical. Should that raise a shared-failure-mode alarm? Answer yes or no."},
+
+    {"id": "s10-blocked-not-evidence", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A verification check could not be performed because the lookup service was unreachable. Is that evidence against the claim being checked? Answer yes or no."},
+
+    {"id": "s11-permissive-resolver", "kind": "oneof", "accept": ["false", "no"],
+     "answer": "false",
+     "question": "A citation resolver cannot reach the source it is asked to verify. To remain fail-closed, should it return true or false? Answer with one word: true or false."},
+
+    {"id": "s12-admissibility-alone", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "One gate answers 'is this the right kind of source'. Another answers 'does this source exist'. Is the first gate alone sufficient to accept a citation? Answer yes or no."},
+
+    {"id": "s13-warrant-vs-proposition", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A supporting calculation is checked and found correct. The sentence it was offered to support says the project is safe to proceed. Does the correct calculation establish that sentence? Answer yes or no."},
+
+    {"id": "s14-corroboration-needs-agreement", "kind": "numeric", "tolerance": "0",
+     "answer": "1",
+     "question": "Corroboration requires independent observers to agree. One reviewer states a figure should be 3 and another states it should be 1. How many observers agree on any single replacement value? Give the number."},
+
+    {"id": "s15-self-corroboration", "kind": "numeric", "tolerance": "0",
+     "answer": "1",
+     "question": "The same reviewer raises the identical objection in two separate rounds. How many independent observers have raised it? Give the number."},
+
+    {"id": "c01-estimate-not-bound", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A cost estimate assumes every reply reaches its configured maximum size. A vendor bills more than that estimate for one call. Does the estimate still bound future calls of the same shape? Answer yes or no."},
+
+    {"id": "c02-halt-on-overrun", "kind": "oneof", "accept": ["stop", "halt", "refuse"],
+     "answer": "stop",
+     "question": "A spend control detects that a completed call cost more than it was authorised for, meaning the estimate the ceiling relies on does not hold. Under a fail-closed budget rule, should the run continue or stop? Answer with one word: continue or stop."},
+
+    {"id": "c03-weaken-control", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A run halts because a spend control fired correctly. Is loosening the spend control an acceptable way to make the run complete? Answer yes or no."},
+
+    {"id": "c04-partial-on-ceiling", "kind": "oneof", "accept": ["partial", "incomplete"],
+     "answer": "partial",
+     "question": "A budget ceiling trips midway through a multi-stage run. The completed work is written out. Should the deliverable be labelled complete or partial? Answer with one word: complete or partial."},
+
+    {"id": "q01-confidence-needs-dataset", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "An operator asks for the percentage confidence that a surviving answer is correct, after one run of one question with no known-correct answer available. Can a defensible percentage be computed from that run? Answer yes or no."},
+
+    {"id": "q02-nothing-refuted-vs-true", "kind": "oneof", "accept": ["no", "false"],
+     "answer": "no",
+     "question": "A candidate answer survives a review process because nothing refuted it. Does surviving unrefuted establish that the answer is true? Answer yes or no."}
+  ]
+}
