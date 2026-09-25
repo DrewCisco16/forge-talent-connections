@@ -12,6 +12,7 @@ import "../widgets/field_box.dart";
 import "../widgets/gold_button.dart";
 import "../widgets/hero_band.dart";
 import "../widgets/phone_scaffold.dart";
+import "../widgets/phoenix_medallion.dart";
 import "../widgets/score_ring.dart";
 import "../widgets/seal_card.dart";
 import "../widgets/social_action.dart";
@@ -70,6 +71,19 @@ class _WidgetGalleryState extends State<WidgetGallery> {
             title: "Design System",
             subtitle: "Every shared widget, every state",
           ),
+
+          section("Phoenix medallion", <Widget>[
+            const Center(child: PhoenixMedallion(height: 96)),
+            const SizedBox(height: ForgeSpacing.gapCard),
+            const MedallionPending(label: "Checking the record"),
+            const SizedBox(height: ForgeSpacing.gapCard),
+            EmptyState(
+              title: "Nothing here yet",
+              body: "Empty is a true answer, not a broken screen.",
+              actionLabel: "Take the First Step",
+              onAction: () {},
+            ),
+          ]),
 
           section("Status chips", <Widget>[
             Wrap(

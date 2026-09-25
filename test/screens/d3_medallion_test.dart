@@ -2,12 +2,12 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:forge_talent_connections/features/trust/d3_sign_in.dart";
 import "package:forge_talent_connections/theme/forge_theme.dart";
-import "package:forge_talent_connections/widgets/burning_flame.dart";
+import "package:forge_talent_connections/widgets/phoenix_medallion.dart";
 
-/// The brand mark burns everywhere it appears full-size: the sign-in
-/// screen carries the same asymmetric flame animation as the splash.
+/// The door pages share one identity mark: the sign-in screen carries the
+/// phoenix medallion, the same mark as the splash and the mission page.
 void main() {
-  testWidgets("sign-in mounts the burning flame behind the mark", (
+  testWidgets("sign-in mounts the phoenix medallion as its mark", (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(440, 2400);
@@ -26,6 +26,6 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(BurningFlame), findsOneWidget);
+    expect(find.byType(PhoenixMedallion), findsOneWidget);
   });
 }

@@ -1,12 +1,11 @@
 import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 
-import "../../mock/fixtures.dart";
 import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/brand_lockup.dart";
-import "../../widgets/burning_flame.dart";
+import "../../widgets/phoenix_medallion.dart";
 import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -33,9 +32,9 @@ class _A1SplashState extends State<A1Splash> {
           const SizedBox(height: 20),
           const Align(alignment: Alignment.centerRight, child: DemoBadge()),
           const SizedBox(height: 10),
-          // The flame burns: spec A1 motion, "flame flicker loop". Static under
-          // reduced motion.
-          const Center(child: BurningFlame(asset: kFlameMark, height: 132)),
+          // The phoenix medallion is the application's identity mark; it
+          // breathes here and holds still under reduced motion.
+          const Center(child: PhoenixMedallion(height: 132)),
           const SizedBox(height: 8),
           // The lockup is one even block, like the marketing sticker:
           // FORGE and TALENT CONNECTIONS fitted to the same width, the gold
