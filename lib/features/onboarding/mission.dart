@@ -42,7 +42,7 @@ class MissionScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 28),
-          const Center(child: PhoenixMedallion(height: 72)),
+          const Center(child: PhoenixMedallion(height: 96)),
           const SizedBox(height: 8),
           const Center(child: BrandLockup(width: 200)),
           const SizedBox(height: 22),

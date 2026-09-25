@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../theme/forge_theme.dart";
 import "../theme/tokens.dart";
+import "phoenix_medallion.dart";
 
 /// A small capitalised section heading.
 class SectionLabel extends StatelessWidget {
@@ -104,16 +105,26 @@ class DemoBadge extends StatelessWidget {
         border: Border.all(color: forge.violet.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(ForgeShape.pillRadius),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      child: Text(
-        "DEMO · SAMPLE DATA",
-        style: TextStyle(
-          fontFamily: ForgeType.bodyFamily,
-          fontSize: ForgeType.chip,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: forge.violet,
-        ),
+      padding: const EdgeInsets.fromLTRB(6, 3, 8, 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // The badge carries the mark: a small shining medallion, no halo.
+          const ExcludeSemantics(
+            child: PhoenixMedallion(height: 14, glow: false, breathing: false),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            "DEMO · SAMPLE DATA",
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.chip,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: forge.violet,
+            ),
+          ),
+        ],
       ),
     );
   }
