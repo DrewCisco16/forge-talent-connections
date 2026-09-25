@@ -63,14 +63,19 @@ section{max-width:1080px;margin:0 auto;padding:64px 18px}
 .nav .btn{min-height:0;padding:8px 18px;font-size:13px}
 
 /* ------------------------------------------------ Live flame */
-.flame-stage{position:relative;display:inline-block;width:118px;margin-bottom:12px}
+.flame-stage{position:relative;display:inline-block;width:158px;margin-bottom:6px}
 .flame-stage::before{
-  content:"";position:absolute;left:50%;top:58%;width:190px;height:190px;
+  content:"";position:absolute;left:50%;top:68%;width:190px;height:190px;
   transform:translate(-50%,-50%);border-radius:50%;
   background:radial-gradient(circle,rgba(227,179,65,.30) 0%,rgba(227,179,65,0) 66%);
 }
 .flame-svg{display:block;width:100%;height:auto;position:relative}
 .flame-outer,.flame-mid,.flame-core,.flame-side,.spark{transform-box:fill-box;transform-origin:50% 100%}
+.wingL,.wingR{transform-box:fill-box}
+.wingR{transform-origin:0% 76%}
+.wingL{transform-origin:100% 76%}
+/* Where the phoenix rests when motion is off or unavailable. */
+.phoenix{transform-box:view-box;transform-origin:50% 50%;transform:translateY(-6px)}
 
 /* ------------------------------------------------ Hero */
 .hero{text-align:center;max-width:1080px;margin:0 auto;padding:56px 18px 64px}
@@ -172,39 +177,53 @@ footer p{margin:0 0 6px}
   .reveal.in{opacity:1;transform:none}
   .hero{animation:heroFade .9s ease-out}
   @keyframes heroFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  .flame-stage::before{animation:glowPulse 3.4s ease-in-out infinite}
+  .flame-stage::before{animation:glowPulse 1.9s ease-in-out infinite}
   @keyframes glowPulse{0%,100%{opacity:.7}50%{opacity:1}}
-  .flame-side-l{animation:swaySideL 2.9s ease-in-out infinite}
+  .phoenix{animation:phoenixRise 5.6s ease-in-out infinite}
+  @keyframes phoenixRise{
+    0%{opacity:0;transform:translateY(74px) scale(.34)}
+    10%{opacity:0;transform:translateY(70px) scale(.38)}
+    28%{opacity:1;transform:translateY(28px) scale(.72)}
+    52%{opacity:1;transform:translateY(-8px) scale(1)}
+    78%{opacity:.85;transform:translateY(-38px) scale(1.04)}
+    96%{opacity:0;transform:translateY(-62px) scale(1.06)}
+    100%{opacity:0;transform:translateY(74px) scale(.34)}
+  }
+  .wingR{animation:flapR .5s ease-in-out infinite alternate}
+  @keyframes flapR{from{transform:rotate(-16deg)}to{transform:rotate(7deg)}}
+  .wingL{animation:flapL .5s ease-in-out infinite alternate}
+  @keyframes flapL{from{transform:rotate(16deg)}to{transform:rotate(-7deg)}}
+  .flame-side-l{animation:swaySideL 1.5s ease-in-out infinite}
   @keyframes swaySideL{
     0%,100%{transform:skewX(0deg) scaleY(1)}
-    45%{transform:skewX(3deg) scaleY(1.06)}
+    45%{transform:skewX(2deg) scaleY(1.05)}
     75%{transform:skewX(-1.5deg) scaleY(.96)}
   }
-  .flame-side-r{animation:swaySideR 3.1s ease-in-out infinite}
+  .flame-side-r{animation:swaySideR 1.6s ease-in-out infinite}
   @keyframes swaySideR{
     0%,100%{transform:skewX(0deg) scaleY(1)}
-    40%{transform:skewX(-3deg) scaleY(1.05)}
+    40%{transform:skewX(-2deg) scaleY(1.045)}
     72%{transform:skewX(1.6deg) scaleY(.955)}
   }
-  .flame-outer{animation:swayOuter 3.6s ease-in-out infinite}
+  .flame-outer{animation:swayOuter 1.9s ease-in-out infinite}
   @keyframes swayOuter{
     0%,100%{transform:skewX(0deg) scaleY(1)}
-    30%{transform:skewX(1.6deg) scaleY(1.015)}
-    60%{transform:skewX(-1.4deg) scaleY(.99)}
+    30%{transform:skewX(2.4deg) scaleY(1.03)}
+    60%{transform:skewX(-2.2deg) scaleY(.975)}
   }
-  .flame-mid{animation:swayMid 2.3s ease-in-out infinite}
+  .flame-mid{animation:swayMid 1.2s ease-in-out infinite}
   @keyframes swayMid{
     0%,100%{transform:skewX(0deg) scaleY(1)}
     35%{transform:skewX(-2.2deg) scaleY(1.045)}
     70%{transform:skewX(1.8deg) scaleY(.965)}
   }
-  .flame-core{animation:swayCore 1.5s ease-in-out infinite}
+  .flame-core{animation:swayCore 0.8s ease-in-out infinite}
   @keyframes swayCore{
     0%,100%{transform:scaleY(1) translateY(0)}
     40%{transform:scaleY(1.09) translateY(-2px)}
     75%{transform:scaleY(.93) translateY(1px)}
   }
-  .spark{opacity:0;animation:sparkRise 2.8s ease-in infinite}
+  .spark{opacity:0;animation:sparkRise 1.7s ease-in infinite}
   .spark.s2{animation-delay:.9s}
   .spark.s3{animation-delay:1.8s}
   @keyframes sparkRise{
@@ -263,6 +282,43 @@ footer p{margin:0 0 6px}
       <circle class="spark s2" cx="88" cy="52" r="2" fill="#FFE9A8"/>
       <circle class="spark s3" cx="70" cy="40" r="1.7" fill="#E3B341"/>
     </g>
+    <!-- The gold phoenix: crest, head, spread wings with three feather
+         tips each, slim body, twin tail plumes. Drawn frontal and
+         symmetric; the wings flap on their own hinges. -->
+    <g id="phoenixBird">
+      <g class="wingL">
+        <path fill="url(#gMid)" d="M76 44 C64 34 54 22 48 6
+          C44 18 46 28 50 36 C42 30 33 26 22 24
+          C27 34 34 42 42 47 C33 47 24 50 15 56
+          C28 60 41 59 52 54 C62 50 72 47 76 44 Z"/>
+      </g>
+      <g class="wingR">
+        <path fill="url(#gMid)" d="M84 44 C96 34 106 22 112 6
+          C116 18 114 28 110 36 C118 30 127 26 138 24
+          C133 34 126 42 118 47 C127 47 136 50 145 56
+          C132 60 119 59 108 54 C98 50 88 47 84 44 Z"/>
+      </g>
+      <path fill="url(#gOuter)" d="M80 92 C74 103 64 110 52 114
+          C62 114 72 110 78 104 C76 114 70 122 60 128
+          C72 124 80 116 80 104 Z"/>
+      <path fill="url(#gOuter)" d="M80 92 C86 103 96 110 108 114
+          C98 114 88 110 82 104 C84 114 90 122 100 128
+          C88 124 80 116 80 104 Z"/>
+      <path fill="url(#gMid)" d="M80 94 C79 103 79 110 80 117
+          C81 110 81 103 80 94 Z"/>
+      <path fill="url(#gCore)" d="M80 28 C76 40 74 50 74 62
+          C74 77 76 87 80 96 C84 87 86 77 86 62
+          C86 50 84 40 80 28 Z"/>
+      <path fill="url(#gCore)" d="M80 15 C76 17 74 20.5 74 24.5
+          A6 6 0 0 0 86 24.5 C86 20.5 84 17 80 15 Z"/>
+      <path fill="url(#gCore)" d="M80 9 L83 15 L80 13.6 L77 15 Z"/>
+      <path fill="url(#gMid)" d="M73.5 13 C70 9 69 4 71.5 0.5
+          C73.5 4 74.5 9 73.5 13 Z"/>
+      <path fill="url(#gMid)" d="M86.5 13 C90 9 91 4 88.5 0.5
+          C86.5 4 85.5 9 86.5 13 Z"/>
+      <path fill="url(#gCore)" d="M80 7 C79 4 79.3 1.5 80 0
+          C80.7 1.5 81 4 80 7 Z"/>
+      </g>
   </defs>
 </svg>
 
@@ -276,9 +332,10 @@ footer p{margin:0 0 6px}
 
 <div class="hero">
   <span class="flame-stage">
-    <svg class="flame-svg" viewBox="0 0 140 156" role="img"
-         aria-label="The FORGE Talent Connections living gold flame">
-      <use href="#forgeFlame"/>
+    <svg class="flame-svg" viewBox="0 0 200 250" role="img"
+         aria-label="A gold phoenix rising from the FORGE Talent Connections living gold flame">
+      <g class="phoenix"><use href="#phoenixBird" x="20" y="0"/></g>
+      <use href="#forgeFlame" x="30" y="94"/>
     </svg>
   </span>
   <h1 class="hero-title">FORGE Talent Connections&trade;</h1>
