@@ -1,3 +1,5 @@
+import "dart:math" as math;
+
 import "package:flutter/material.dart";
 
 import "../mock/fixtures.dart";
@@ -33,49 +35,104 @@ class PhoenixMedallion extends StatefulWidget {
 }
 
 class _PhoenixMedallionState extends State<PhoenixMedallion>
-    with SingleTickerProviderStateMixin {
-  AnimationController? _controller;
+    with TickerProviderStateMixin {
+  AnimationController? _breath;
+  AnimationController? _sheen;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final bool animate =
-        widget.breathing && !MediaQuery.disableAnimationsOf(context);
-    if (animate && _controller == null) {
-      _controller = AnimationController(
+    final bool reduced = MediaQuery.disableAnimationsOf(context);
+    final bool breathe = widget.breathing && !reduced;
+    if (breathe && _breath == null) {
+      _breath = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 2400),
       )..repeat(reverse: true);
-    } else if (!animate && _controller != null) {
-      _controller!.dispose();
-      _controller = null;
+    } else if (!breathe && _breath != null) {
+      _breath!.dispose();
+      _breath = null;
+    }
+    // The shine runs whenever motion is allowed: a light sweep across the
+    // metal and sparkle points on the ring and wing, on a 3.2 second loop.
+    if (!reduced && _sheen == null) {
+      _sheen = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 3200),
+      )..repeat();
+    } else if (reduced && _sheen != null) {
+      _sheen!.dispose();
+      _sheen = null;
     }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _breath?.dispose();
+    _sheen?.dispose();
     super.dispose();
   }
+
+  /// Where the sweep sits for a loop position: it crosses the mark during
+  /// the first 40 percent of the loop and rests off the metal after that.
+  static double _sweepX(double t) => t < 0.4 ? -1.8 + 3.6 * (t / 0.4) : 9;
 
   @override
   Widget build(BuildContext context) {
     final ForgeTheme forge = ForgeTheme.of(context);
     final double width = widget.height * 188 / 227;
 
-    Widget mark = Image.asset(
+    final Widget image = Image.asset(
       kPhoenixMedallion,
       height: widget.height,
       width: width,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
     );
-    final AnimationController? controller = _controller;
-    if (controller != null) {
+
+    // The sheen is painted only where the metal is: srcATop keeps the
+    // gradient inside the medallion's own alpha.
+    Widget shone(double sweepX, double strength) => ShaderMask(
+      blendMode: BlendMode.srcATop,
+      shaderCallback: (Rect r) => LinearGradient(
+        begin: Alignment(sweepX - 0.9, -1),
+        end: Alignment(sweepX + 0.9, 1),
+        colors: <Color>[
+          const Color(0x00FFFFFF),
+          const Color(0xFFFFF6DC).withValues(alpha: 0.18 * strength),
+          Colors.white.withValues(alpha: 0.72 * strength),
+          const Color(0xFFFFF6DC).withValues(alpha: 0.18 * strength),
+          const Color(0x00FFFFFF),
+        ],
+        stops: const <double>[0.0, 0.42, 0.5, 0.58, 1.0],
+      ).createShader(r),
+      child: image,
+    );
+
+    final AnimationController? sheen = _sheen;
+    Widget mark = sheen == null
+        // Reduced motion: one resting highlight, no movement.
+        ? shone(-0.35, 0.55)
+        : AnimatedBuilder(
+            animation: sheen,
+            builder: (BuildContext context, Widget? child) => Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                shone(_sweepX(sheen.value), 1),
+                CustomPaint(
+                  size: Size(width, widget.height),
+                  painter: _SparklePainter(sheen.value),
+                ),
+              ],
+            ),
+          );
+
+    final AnimationController? breath = _breath;
+    if (breath != null) {
       mark = AnimatedBuilder(
-        animation: controller,
+        animation: breath,
         builder: (BuildContext context, Widget? child) => Transform.scale(
-          scale: 1 + 0.022 * Curves.easeInOut.transform(controller.value),
+          scale: 1 + 0.022 * Curves.easeInOut.transform(breath.value),
           child: child,
         ),
         child: mark,
@@ -99,7 +156,7 @@ class _PhoenixMedallionState extends State<PhoenixMedallion>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: <Color>[
-                      forge.gold.withValues(alpha: 0.30),
+                      forge.gold.withValues(alpha: 0.34),
                       forge.gold.withValues(alpha: 0.0),
                     ],
                     stops: const <double>[0.0, 0.68],
@@ -112,6 +169,55 @@ class _PhoenixMedallionState extends State<PhoenixMedallion>
       ),
     );
   }
+}
+
+/// Sparkle points on the metal: four-point stars that bloom and fade on
+/// staggered clocks at fixed places on the ring and the wing.
+class _SparklePainter extends CustomPainter {
+  const _SparklePainter(this.t);
+
+  final double t;
+
+  /// Positions as fractions of the mark, and each star's phase offset.
+  static const List<(double, double, double)> _points =
+      <(double, double, double)>[
+        (0.30, 0.42, 0.00),
+        (0.63, 0.27, 0.36),
+        (0.52, 0.71, 0.62),
+        (0.21, 0.62, 0.84),
+      ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (double fx, double fy, double phase) in _points) {
+      // Each star lives for a fifth of the loop, then rests.
+      final double local = ((t + phase) % 1.0) / 0.22;
+      if (local >= 1) continue;
+      final double a = math.sin(local * math.pi);
+      final double r = size.height * 0.055 * (0.55 + 0.45 * a);
+      final Offset c = Offset(fx * size.width, fy * size.height);
+      final Paint glow = Paint()
+        ..color = const Color(0xFFFFF3C4).withValues(alpha: 0.55 * a)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.6);
+      canvas.drawCircle(c, r * 0.55, glow);
+      final Paint ray = Paint()
+        ..color = Colors.white.withValues(alpha: 0.95 * a)
+        ..strokeWidth = math.max(1, r * 0.16)
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(c - Offset(r, 0), c + Offset(r, 0), ray);
+      canvas.drawLine(c - Offset(0, r), c + Offset(0, r), ray);
+      final Paint diag = Paint()
+        ..color = Colors.white.withValues(alpha: 0.55 * a)
+        ..strokeWidth = math.max(0.8, r * 0.1)
+        ..strokeCap = StrokeCap.round;
+      final double d = r * 0.45;
+      canvas.drawLine(c - Offset(d, d), c + Offset(d, d), diag);
+      canvas.drawLine(c - Offset(d, -d), c + Offset(d, -d), diag);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SparklePainter old) => old.t != t;
 }
 
 /// The pending state: a small medallion breathing beside a label.
