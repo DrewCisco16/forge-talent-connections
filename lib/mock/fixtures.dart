@@ -61,6 +61,10 @@ const int kDrewAvatarIndex = 9;
 /// The flame mark, ready for a dark background.
 const String kFlameMark = "assets/brand/forge_flame.png";
 
+/// The phoenix medallion, the application identity mark, lifted from the
+/// FORGE LINK logo. Transparent, 376 by 454.
+const String kPhoenixMedallion = "assets/brand/forge_phoenix_medallion.png";
+
 /// The FORGE wordmark artwork, in the brand's own lettering.
 const String kWordmark = "assets/brand/forge_wordmark.png";
 

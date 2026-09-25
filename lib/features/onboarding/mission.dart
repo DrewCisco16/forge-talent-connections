@@ -1,11 +1,10 @@
 import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 
-import "../../mock/fixtures.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/brand_lockup.dart";
-import "../../widgets/burning_flame.dart";
+import "../../widgets/phoenix_medallion.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
@@ -43,7 +42,7 @@ class MissionScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 28),
-          const Center(child: BurningFlame(asset: kFlameMark, height: 72)),
+          const Center(child: PhoenixMedallion(height: 72)),
           const SizedBox(height: 8),
           const Center(child: BrandLockup(width: 200)),
           const SizedBox(height: 22),

@@ -1,11 +1,10 @@
 import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 
-import "../../mock/fixtures.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/brand_lockup.dart";
-import "../../widgets/burning_flame.dart";
+import "../../widgets/phoenix_medallion.dart";
 import "../../widgets/field_box.dart";
 import "../../widgets/gold_button.dart";
 import "../../widgets/operator_footer.dart";
@@ -24,9 +23,9 @@ class D3SignIn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const SizedBox(height: 40),
-          // The same asymmetric burn as the splash screen: crown and right
-          // edge alight behind the mark, static glow under reduced motion.
-          const Center(child: BurningFlame(asset: kFlameMark, height: 88)),
+          // The same medallion as the splash, so the door pages share one
+          // identity mark.
+          const Center(child: PhoenixMedallion(height: 96)),
           const SizedBox(height: 10),
           // One even block, like the marketing sticker: both lines fitted
           // to the same width on the mark's axis.

@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../theme/forge_theme.dart";
 import "../theme/tokens.dart";
+import "phoenix_medallion.dart";
 
 /// Renders an asynchronous value fail-closed.
 ///
@@ -30,35 +31,7 @@ class AsyncView<T> extends StatelessWidget {
 
     return value.when(
       data: builder,
-      loading: () => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: forge.textSub,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                pendingLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: ForgeType.bodyFamily,
-                  fontSize: ForgeType.body,
-                  color: forge.textSub,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      loading: () => MedallionPending(label: pendingLabel),
       error: (Object error, StackTrace _) => Container(
         width: double.infinity,
         decoration: BoxDecoration(

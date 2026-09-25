@@ -8,6 +8,7 @@ import "../../models/models.dart";
 import "../../theme/forge_theme.dart";
 import "../../theme/tokens.dart";
 import "../../widgets/async_view.dart";
+import "../../widgets/phoenix_medallion.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
@@ -23,7 +24,14 @@ class B2FindOpportunities extends ConsumerStatefulWidget {
 
 class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
   String _activeFilter = "Skills";
+  final TextEditingController _search = TextEditingController();
   String _query = "";
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   /// Whether one project matches the query, checked field by field. Feeds
   /// the linear search below; presentation-only filtering of data the
@@ -72,6 +80,7 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                   // A live linear search over the served list: every
                   // keystroke re-scans each project sequentially.
                   child: TextField(
+                    controller: _search,
                     onChanged: (String value) => setState(() => _query = value),
                     decoration: InputDecoration(
                       isDense: true,
@@ -197,32 +206,16 @@ class _B2FindOpportunitiesState extends ConsumerState<B2FindOpportunities> {
                   ),
                   const SizedBox(height: ForgeSpacing.gapCard),
                   if (shown.isEmpty)
-                    ForgeCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            "No projects matched your search",
-                            style: TextStyle(
-                              fontFamily: ForgeType.bodyFamily,
-                              fontSize: ForgeType.body,
-                              fontWeight: FontWeight.w700,
-                              color: forge.text,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Nothing is hidden - every project was checked. "
-                            "Clear the search to see all ${items.length}.",
-                            style: TextStyle(
-                              fontFamily: ForgeType.bodyFamily,
-                              fontSize: ForgeType.caption,
-                              height: 1.35,
-                              color: forge.textSub,
-                            ),
-                          ),
-                        ],
-                      ),
+                    EmptyState(
+                      title: "No projects matched your search",
+                      body:
+                          "Nothing is hidden - every project was checked. "
+                          "Clear the search to see all ${items.length}.",
+                      actionLabel: "Clear Search",
+                      onAction: () {
+                        _search.clear();
+                        setState(() => _query = "");
+                      },
                     ),
                   for (final Opportunity o in shown) ...<Widget>[
                     OpportunityCard(
