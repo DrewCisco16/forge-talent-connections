@@ -47,7 +47,7 @@ class _A1SplashState extends State<A1Splash> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Text(
-                  "I am ...",
+                  "I Am ...",
                   style: TextStyle(
                     fontFamily: ForgeType.displayFamily,
                     fontSize: 19,

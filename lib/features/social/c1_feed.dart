@@ -100,7 +100,7 @@ class C1Feed extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        "5-week build streak",
+                        "5-Week Build Streak",
                         style: TextStyle(
                           fontFamily: ForgeType.bodyFamily,
                           fontSize: ForgeType.cardTitle,

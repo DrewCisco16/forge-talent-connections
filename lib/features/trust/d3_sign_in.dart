@@ -33,7 +33,7 @@ class D3SignIn extends StatelessWidget {
           const Center(child: BrandLockup(width: 236)),
           const SizedBox(height: 24),
           Text(
-            "Welcome back.",
+            "Welcome Back.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: ForgeType.displayFamily,
