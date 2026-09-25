@@ -33,9 +33,39 @@ void main() {
     );
     expect(breath, findsOneWidget);
     expect(find.bySemanticsLabel(RegExp("phoenix medallion")), findsOneWidget);
+    // The shine: a sweep painted only on the metal, plus sparkle points.
+    expect(
+      find.descendant(
+        of: find.byType(PhoenixMedallion),
+        matching: find.byType(ShaderMask),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PhoenixMedallion),
+        matching: find.byType(CustomPaint),
+      ),
+      findsWidgets,
+    );
 
     await pump(tester, const PhoenixMedallion(height: 96), reducedMotion: true);
     expect(breath, findsNothing);
+    // Reduced motion keeps one resting highlight and drops the sparkles.
+    expect(
+      find.descendant(
+        of: find.byType(PhoenixMedallion),
+        matching: find.byType(ShaderMask),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PhoenixMedallion),
+        matching: find.byType(CustomPaint),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets("the pending state names what is being checked", (
