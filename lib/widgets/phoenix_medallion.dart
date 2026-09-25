@@ -119,10 +119,13 @@ class _PhoenixMedallionState extends State<PhoenixMedallion>
               alignment: Alignment.center,
               children: <Widget>[
                 shone(_sweepX(sheen.value), 1),
-                CustomPaint(
-                  size: Size(width, widget.height),
-                  painter: _SparklePainter(sheen.value),
-                ),
+                // Below 40 points a star is smaller than a pixel; the
+                // sweep alone carries the shine.
+                if (widget.height >= 40)
+                  CustomPaint(
+                    size: Size(width, widget.height),
+                    painter: _SparklePainter(sheen.value),
+                  ),
               ],
             ),
           );
@@ -143,8 +146,8 @@ class _PhoenixMedallionState extends State<PhoenixMedallion>
       image: true,
       label: "FORGE Talent Connections phoenix medallion",
       child: SizedBox(
-        width: width + widget.height * 0.5,
-        height: widget.height + widget.height * 0.3,
+        width: widget.glow ? width + widget.height * 0.5 : width,
+        height: widget.glow ? widget.height * 1.3 : widget.height,
         child: Stack(
           alignment: Alignment.center,
           children: <Widget>[
