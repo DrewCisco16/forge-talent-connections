@@ -57,6 +57,20 @@ class MissionScreen extends StatelessWidget {
               color: forge.text,
             ),
           ),
+          const SizedBox(height: 8),
+          // The founder's exact tagline, verbatim from the positioning
+          // record. It is a fixed string, not copy to be improved.
+          Text(
+            "Where Talent meets Opportunity through Collaboration.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: ForgeType.bodyFamily,
+              fontSize: ForgeType.body,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+              color: forge.gold,
+            ),
+          ),
           const SizedBox(height: ForgeSpacing.gapSection),
           ForgeCard(
             borderColor: forge.gold.withValues(alpha: 0.55),
@@ -75,7 +89,9 @@ class MissionScreen extends StatelessWidget {
               "An invite-only project collaboration network. Talent builds "
               "proof of real work. Trust is earned through human vouches. "
               "Opportunity arrives as scoped projects with confirmed "
-              "reviewers, joined by invitation.",
+              "reviewers, joined by invitation. What counts here is a "
+              "completed, accepted collaboration and the proof it leaves "
+              "behind.",
             ),
           ),
           const SizedBox(height: ForgeSpacing.gapCard),
@@ -106,6 +122,12 @@ class MissionScreen extends StatelessWidget {
                     "Opportunity",
                     "Sponsors who bring real, scoped projects and stand "
                         "behind their terms.",
+                  ),
+                  (
+                    "Institution",
+                    "Technical and vocational schools, colleges, "
+                        "universities, and defense-related programs that "
+                        "convene Talent around real projects.",
                   ),
                   (
                     "Veteran",

@@ -85,6 +85,19 @@ void main() {
     WidgetTester tester,
   ) async {
     await pumpScreen(tester, const MissionScreen());
+    // The founder's exact tagline, verbatim from the positioning record.
+    expect(
+      find.text("Where Talent meets Opportunity through Collaboration."),
+      findsOneWidget,
+    );
+    // The collaboration promise and the institutional audience.
+    expect(
+      find.textContaining(
+        "a completed, accepted collaboration and the proof it leaves behind",
+      ),
+      findsOneWidget,
+    );
+    expect(find.text("Institution"), findsOneWidget);
     // SectionLabel renders capitalised.
     expect(find.text("THE ROAD AHEAD"), findsOneWidget);
     expect(
