@@ -43,7 +43,7 @@ class B3ProofBuilder extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    "Tell us about yourself",
+                    "Tell Us About Yourself",
                     style: TextStyle(
                       fontFamily: ForgeType.displayFamily,
                       fontSize: 19,

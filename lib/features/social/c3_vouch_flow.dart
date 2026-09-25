@@ -78,7 +78,7 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  "You are attesting",
+                  "You Are Attesting",
                   style: TextStyle(
                     fontFamily: ForgeType.bodyFamily,
                     fontSize: ForgeType.cardTitle,
@@ -205,7 +205,7 @@ class _C3VouchFlowState extends State<C3VouchFlow> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Your vouch is sealed",
+                          "Your Vouch Is Sealed",
                           style: TextStyle(
                             fontFamily: ForgeType.bodyFamily,
                             fontSize: ForgeType.cardTitle,

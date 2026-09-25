@@ -31,7 +31,7 @@ void main() {
   ) async {
     await pump(tester);
     expect(find.textContaining("Sign My Vouch"), findsOneWidget);
-    expect(find.text("Your vouch is sealed"), findsNothing);
+    expect(find.text("Your Vouch Is Sealed"), findsNothing);
   });
 
   testWidgets("signing seals the vouch and links to rewards", (
@@ -41,7 +41,7 @@ void main() {
     // Reduced motion completes the hold on a single press.
     await tester.tap(find.textContaining("Sign My Vouch"));
     await tester.pump();
-    expect(find.text("Your vouch is sealed"), findsOneWidget);
+    expect(find.text("Your Vouch Is Sealed"), findsOneWidget);
     expect(find.text("View Rewards & Referrals"), findsOneWidget);
     // The honest caveat ships with the celebration.
     expect(find.textContaining("never by the tap itself"), findsOneWidget);

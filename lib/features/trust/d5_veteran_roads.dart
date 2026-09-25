@@ -54,7 +54,7 @@ class D5VeteranRoads extends ConsumerWidget {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           Text(
-            "Your service translates.",
+            "Your Service Translates.",
             style: TextStyle(
               fontFamily: ForgeType.displayFamily,
               fontSize: ForgeType.heroTitle,

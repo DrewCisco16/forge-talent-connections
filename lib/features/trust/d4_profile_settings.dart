@@ -43,7 +43,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
-              "Sign out of FORGE Talent Connections?",
+              "Sign Out of FORGE Talent Connections?",
               style: TextStyle(
                 fontFamily: ForgeType.bodyFamily,
                 fontSize: ForgeType.cardTitle,
@@ -60,7 +60,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
                   context.go("/sign-in");
                 },
                 child: Text(
-                  "Sign out",
+                  "Sign Out",
                   style: TextStyle(
                     fontFamily: ForgeType.bodyFamily,
                     fontWeight: FontWeight.w700,
@@ -348,15 +348,15 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           const SectionLabel("Account"),
           const SizedBox(height: ForgeSpacing.gapCard),
           _Row(
-            label: "Personal info",
+            label: "Personal Info",
             onTap: () => context.go("/create-profile"),
           ),
           _Row(
-            label: "Skills & availability",
+            label: "Skills & Availability",
             onTap: () => context.go("/credentials"),
           ),
           _Row(
-            label: "Payout methods",
+            label: "Payout Methods",
             onTap: () =>
                 demoNote(context, "Payout setup arrives with the backend."),
           ),
@@ -364,7 +364,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           const SectionLabel("Privacy & trust"),
           const SizedBox(height: ForgeSpacing.gapCard),
           _Row(
-            label: "Profile visibility",
+            label: "Profile Visibility",
             trailing: "Public",
             onTap: () => demoNote(
               context,
@@ -372,21 +372,21 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             ),
           ),
           _ToggleRow(
-            label: "Verification alerts",
+            label: "Verification Alerts",
             value: _verificationAlerts,
             onChanged: (bool v) => setState(() => _verificationAlerts = v),
           ),
           _ToggleRow(
-            label: "AI match suggestions",
+            label: "AI Match Suggestions",
             value: _matchSuggestions,
             onChanged: (bool v) => setState(() => _matchSuggestions = v),
           ),
           _Row(
-            label: "How FORGE Talent Connections protects you",
+            label: "How FORGE Talent Connections Protects You",
             trailing: "Patent pending",
             onTap: () => context.go("/trust-technology"),
           ),
-          _Row(label: "Data & downloads", onTap: () => context.go("/export")),
+          _Row(label: "Data & Downloads", onTap: () => context.go("/export")),
           _Row(label: "AI Assistant", onTap: () => context.go("/assistant")),
           _Row(
             label: "Proof Builder",
@@ -402,7 +402,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
           ),
           const SizedBox(height: ForgeSpacing.gapSection),
           _Row(
-            label: "Veteran roads",
+            label: "Veteran Roads",
             trailing: "Concept",
             onTap: () => context.go("/roads"),
           ),
@@ -412,7 +412,7 @@ class _D4ProfileSettingsState extends ConsumerState<D4ProfileSettings> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Text(
-                "Sign out",
+                "Sign Out",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: ForgeType.bodyFamily,
