@@ -128,8 +128,33 @@ QUOTE_RE = re.compile(r"[\"“]([^\"”]{4,})[\"”]")
 PAREN_RE = re.compile(r"\(([^()]*)\)")
 
 
+CHECK_CLAUSE = re.compile(r"\b(?:check(?:able)?(?: by)?|verify(?: by)?|settle[sd]? (?:by|with))\s*[:\-]?\s*(.*)$", re.I | re.S)
+RUN_VERBS = re.compile(r"\b(run|grep|time|compare|dump|list|query|build|execute|perf|benchmark|microbenchmark|diff|hash|sha256sum|"
+                       r"invoke|call|test|measure|count)\b", re.I)
+
+
 def method_of(text: str) -> str:
-    """The check method a claim line names (P2: sum, source, command, document, experiment, judgement call)."""
+    """The check method a claim line names (P2: sum, source, command, document, experiment, judgement call).
+
+    Two shapes are read: a parenthetical hint such as '(sum: 5 + 1 = 6)' or '(document: brief.md, "quote")', and a
+    trailing 'Check: ...' clause as real seats write it. A check clause that only names a procedure in prose maps to
+    command; the command checker then asks for the exact command when none is written."""
+    clause = CHECK_CLAUSE.search(text)
+    if clause and not PAREN_RE.search(text):
+        c = clause.group(1)
+        cl = c.lower()
+        if "judgement call" in cl or "judgment call" in cl:
+            return "none"
+        if DOI_RE.search(c) or URL_RE.search(c) or re.search(r"\bcitation\b|\bDOI\b", c):
+            return "source"
+        if re.search(r"\d\s*[+\-*/^x×]\s*\d.*=\s*-?\d", c):
+            return "sum"
+        if re.search(r"\bread(?:ing)?\b.*\b(doc|document|brief|spec|inventory|ddl|schema|contract|notice|policy)\b|\.(md|csv|txt|pdf|json)\b", cl):
+            return "document"
+        if re.search(r"\bexperiment\b|\bharness\b", cl):
+            return "experiment"
+        if RUN_VERBS.search(c):
+            return "command"
     hint = ""
     for p in PAREN_RE.findall(text):
         pl = p.lower()

@@ -27,9 +27,13 @@ def _sdk():
 
 def _options(sdk, **kw):
     """Build ClaudeAgentOptions with only the fields this SDK version knows, so a newer or older SDK does not
-    fail on an unknown keyword; the dropped names are returned for the log."""
+    fail on an unknown keyword; the dropped names are returned for the log. The SDK accepts only a UUID as a
+    pre-assigned session id, so anything else is left for the SDK to assign (the slot id stays in the records)."""
     names = {f.name for f in dataclasses.fields(sdk.ClaudeAgentOptions)}
-    known = {k: v for k, v in kw.items() if k in names}
+    sid = kw.get("session_id")
+    if sid is not None and not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", str(sid)):
+        kw.pop("session_id")
+    known = {k: v for k, v in kw.items() if k in names if v is not None}
     dropped = sorted(set(kw) - names)
     return sdk.ClaudeAgentOptions(**known), dropped
 

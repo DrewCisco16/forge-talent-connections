@@ -8,6 +8,8 @@
 | TESTS/na_check.py, TESTS/na_gate.py | Spec-derived corpus built outside the package fixture: 70 run-folder faults, 20 transition cases, 18 must-allow transitions, 15 package assertions | `python3 AUTORESEARCH/eval.py` | 70 of 70 faults caught, 20 of 20 transitions blocked, 0 false failures on the two conforming runs, 0 false blocks, 15 of 15 assertions; at v11.2 the same corpus measured 6 of 70, 1 of 20, 3 false failures, 1 false block, 3 of 15 (AUTORESEARCH/baseline.json) |
 | TESTS/na_check.py | Fault detection on synthetic run folders | `python3 TESTS/make_fixture.py /tmp/na_fixture` | conforming: 0 FAIL; 20 of 20 injected faults caught (v11.1's fourteen plus duplicate dispatch id, stale-stage reply, incomplete capture counted, quote present but PARTIAL support marked PASSED, winner label in the review package; v11.4 adds an aborted slot counted) |
 | TESTS/na_gate.py | Transition guards G-1 to G-9 and G-11, capture-aware G-3, aborted-slot aware G-11 | 24 allow-or-block expectations in make_fixture.py | 24 of 24 met (the fixture's kill line, final inputs, executor seat, capture hashes, experiment log and REDUCED_CREW flag were corrected in v11.3 so the fixture itself conforms; the suite now exits 1 if the conforming fixture fails) |
+| AGENT/ (SDK runtime, v11.4) | Fake-seat HYBRID and DIRECT nights, resume, nine Layer B fault knobs, 23 unit tests | `python3 -m unittest discover -s AGENT/tests -t .`; `python3 AGENT/run_night.py <root> --ask AGENT/tests/fixtures/ask_hybrid.md --seats fake ...` then `python3 TESTS/na_check.py <root>/runs/na-001`; `python3 AGENT/tests/run_faults.py <out>` | both nights 0 FAIL, all guards ALLOW; resume rewrote nothing; 9 of 9 fault cases behaved; 23 of 23 tests pass |
+| AGENT/seats/sdk_seat.py | Live smoke test (one P0, one P2 on claude-opus-5, 2 USD cap per send) | script in this session's record, 2026-09-26 | READY returned exactly; P2 returned all four headings and twelve claims (87.9 s, SDK estimate 0.1586 USD). Not a night. |
 | TESTS/make_fixture.py | Candidate-mutation sensitivity and verification manifest | a copy of na_check.py with the bare-PASSED rejection bypassed must let fault F01 escape that rule (oracle fixed); a manifest with unique id, case ids, expected outcomes, candidate hashes is written | sensitivity confirmed; manifest written |
 | WORKBOOKS/Night_Agent_v11_Operator_Tablet_Desktop.pdf | Structure and fields | pypdf: 32 pages, 364 fields, 451 widgets all with appearance streams, 0 overlapping widgets, tab order equals reading order, 0 em-dashes, 0 thin pages | PASS |
 | WORKBOOKS/Night_Agent_v11_Operator_Mobile.pdf | Same | 35 pages, 364 fields with identical names to the tablet edition, 451 widgets, 0 overlaps, 0 order issues, 0 em-dashes, 0 thin pages | PASS |
@@ -31,7 +33,7 @@
 - Workbooks split: Operator (34 tablet, 32 mobile) for bedtime and breakfast; Reference Manual (26, tablet) for prompts, roles, setup, spec decisions. Mobile carries the operator core only.
 
 ## Not tested
-- No real seat received any v11 prompt. No night has run. No device test of the PDFs. Layer B watched-run items B1 to B17 remain specified, not executed.
+- No real night has run. Two live sends (P0 and P2) went through the SDK adapter; no live gate, check, close, review, final or verify has. No device test of the PDFs. Layer B watched-run items B1 to B17 remain specified, not executed.
 - The wall-leak heuristic only detects verbatim 12-word overlaps.
 - The bootstrap interval procedure is specified in BENCHMARK_TASKS.md but no runs exist to compute it on.
 

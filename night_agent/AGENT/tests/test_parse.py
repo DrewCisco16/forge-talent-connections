@@ -27,6 +27,11 @@ class ClaimTests(unittest.TestCase):
         self.assertEqual(parse.method_of("tests pass (command: `pytest -q`)"), "command")
         self.assertEqual(parse.method_of("common practice (judgement call, no way to check it)"), "none")
         self.assertEqual(parse.method_of("see https://doi.org/10.1/abc for details"), "source")
+        # the shape a real seat wrote in the live smoke test: a trailing Check clause
+        self.assertEqual(parse.method_of("Output is a pure function of row content. Check: run the importer at two batch sizes and compare sha256sum."), "command")
+        self.assertEqual(parse.method_of("Specialised parsers are fast. Check: Langdale and Lemire, VLDB Journal 28, 2019, DOI 10.1007/s00778-019-00578-5."), "source")
+        self.assertEqual(parse.method_of("No consumer depends on malformed rows. Check: read the consumer inventory doc for the destination table."), "document")
+        self.assertEqual(parse.method_of("There is an agreed definition of malformed. Judgement call, no way to check it without asking."), "none")
 
     def test_claim_fields(self):
         c = parse.claim_from_line(2, 'The lib has strict mode (source: DOI 10.1000/xyz123, "strict mode raises").')
