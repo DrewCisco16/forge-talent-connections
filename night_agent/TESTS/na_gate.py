@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Night Agent v11.3 transition guard. Prints ALLOW or BLOCK with reasons.
+"""Night Agent v11.4 transition guard. Prints ALLOW or BLOCK with reasons.
 
 Usage:
   python3 na_gate.py <run> GATE
@@ -295,7 +295,8 @@ def guard(run, stage, stage_dir=None, op=None, record=None, seat=None):
             if mine:
                 last = mine[-1]
                 cap = captures.get(last.get("dispatch_id"))
-                if cap is None or not cap.get("completion_signal_observed"):
+                # a slot Dispatch closed as aborted (MAX_WAIT reached, crash before capture) is closed, not uncertain (spec 7)
+                if cap is None or not (cap.get("completion_signal_observed") or cap.get("aborted")):
                     reasons.append(f"G-11 seat {seat}: previous slot {last.get('dispatch_id')} has no complete capture")
                 url = seats.get(seat, {}).get("url")
                 if url and last.get("conversation_url") and last.get("conversation_url") != url:

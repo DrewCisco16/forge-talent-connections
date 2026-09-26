@@ -15,4 +15,5 @@ CLAIMS  - numbered. Every factual claim the answer rests on, each with
           least half must be checkable.
 OPEN    - what you are not sure of, and what would settle it.
 
-Do not pad. Do not add claims you cannot state a check for.
+Do not pad. Do not add claims you cannot state a check for. Headings
+exactly as given, alone on their line, plain text.

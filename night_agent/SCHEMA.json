@@ -1,5 +1,5 @@
 {
-  "schema_version": "11.3.0",
+  "schema_version": "11.4.0",
   "derived_from": "NIGHT_AGENT_SPEC.md",
   "classes": [
     "DIRECT",
@@ -266,7 +266,15 @@
       "retired": false,
       "fresh": true,
       "prior_history": "",
-      "failed_stages": []
+      "failed_stages": [],
+      "runtime": "browser|sdk|fake",
+      "provider": "",
+      "effort": ""
+    },
+    "seat_url_scheme": {
+      "browser": "the conversation URL",
+      "sdk": "sdk://<provider>/<model>/<seat id>",
+      "fake": "fake://fake/<seat id>"
     }
   },
   "gate_record": {
@@ -483,7 +491,8 @@
       "metrics.jsonl",
       "experiments/log.jsonl",
       "dispatch.jsonl",
-      "capture.jsonl"
+      "capture.jsonl",
+      "executions.jsonl"
     ],
     "layout": [
       "ask.md",
@@ -520,7 +529,18 @@
       "dispatch.jsonl",
       "capture.jsonl",
       "rollback/<artifact>.bytes",
-      "rollback/hash.txt"
+      "rollback/hash.txt",
+      "stage-01-generate/packet.md",
+      "stage-NN-<operator>/packet.md",
+      "stage-01-direct/packet.md",
+      "<stage>/packet-close.md",
+      "<stage>/rejected-<seat>-<n>.md",
+      "gate/packet.md",
+      "review/packet.md",
+      "final/packet-final.md",
+      "final/packet-verify.md",
+      "executions.jsonl",
+      "executions/<dispatch_id>.txt"
     ],
     "stamp_line": "STAGE <NN> <NAME> SEAT <id> TIME <hh:mm>",
     "architecture_history": [
@@ -553,7 +573,7 @@
     "SCHEMA.json",
     "TESTS/ (na_gate.py, na_check.py)",
     "WORKBOOKS/",
-    "skill file (generated)"
+    "skill file (generated) or runtime AGENT/ (executes DISPATCH.md)"
   ],
   "merged_line_format": "<claim text> [<prov>]... {C<id>,...}   every cited id must be PASSED in a check file of this or an earlier stage",
   "transition_guards": {
@@ -568,7 +588,7 @@
     "G-8": "VERIFY: DELIVERABLE.md present with an empty section 14, a READY VERIFIER seat, verifier.md absent",
     "G-9": "DECIDE=KEEP: repeat_value present, metric direction known (lower or higher), delta an improvement in that direction beyond noise or MIN_DELTA, repeat run improving beyond the same threshold, within_budget, guardrails within tolerance, constraints checked",
     "G-10": "MERGED lines: provenance tag and PASSED claim ids (post hoc, na_check.py)",
-    "G-11": "SEND: seat READY and registered, REVIEWER only in the review stage, unique dispatch_id, observed conversation_url equals registry URL, previous slot for the seat not uncertain, reservation covers the tail; a reply citing an earlier stage's dispatch_id is stale"
+    "G-11": "SEND: seat READY and registered, REVIEWER only in the review stage, unique dispatch_id, observed conversation_url equals registry URL, previous slot for the seat not uncertain (a slot recorded aborted is closed and does not block), reservation covers the tail; a reply citing an earlier stage's dispatch_id is stale"
   },
   "benchmark": {
     "dev": [
@@ -650,7 +670,8 @@
     "char_count": 0,
     "byte_hash": "",
     "observed_identity": "",
-    "partial": false
+    "partial": false,
+    "aborted": false
   },
   "classification": [
     "KEEP_FOR_DEVELOPMENT",

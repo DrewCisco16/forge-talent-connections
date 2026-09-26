@@ -2,7 +2,7 @@
 
 Two layers. Layer A is executable now (TESTS/na_check.py and TESTS/make_fixture.py). Layer B is a watched-run protocol that requires the real seats; it is specified here so results can be recorded, not claimed.
 
-## Layer A: executable conformance tests (PROVEN BY TEST on 2026-09-10, v11.3)
+## Layer A: executable conformance tests (PROVEN BY TEST on 2026-09-26, v11.4)
 
 Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_check.py --package .` then `python3 AUTORESEARCH/eval.py`
 
@@ -27,9 +27,10 @@ Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_chec
 | T-CAP-1 | Incomplete captures never counted | F17: capture marked incomplete for a counted seat | CAP | CAUGHT |
 | T-SRC-1 | Quote presence is not support | F18: SOURCE support=PARTIAL on a PASSED claim | SRC-1 | CAUGHT |
 | T-NEUT-1 | Packet neutrality | F19: winner label in the review package | NEUT | CAUGHT |
-| T-GATE-G1..G11 | Transition guards | 23 allow-or-block expectations (see make_fixture.py GUARD_TESTS) | na_gate.py | 23/23 met |
+| T-CAP-2 | Aborted slots never counted | F20: capture marked aborted while still signalled complete and cited | CAP-ABORT | CAUGHT |
+| T-GATE-G1..G11 | Transition guards | 24 allow-or-block expectations (see make_fixture.py GUARD_TESTS) | na_gate.py | 24/24 met |
 | T-MUT-1 | Candidate-mutation sensitivity | EVID-2 rejection bypassed in a copy of the checker, oracle fixed | make_fixture.py | F01 escapes that rule, as required |
-| T-PKG | Package consistency | 76 checks on spec, DISPATCH, schema, prompts, template and tests (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label; v11.3 adds flag lists, guard rows, versions, DEPRIORITIZED vocabulary, OPTIONS STANDING) | PKG-* | 76/76 PASS |
+| T-PKG | Package consistency | 78 checks on spec, DISPATCH, schema, prompts, template and tests (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label; v11.3 adds flag lists, guard rows, versions, DEPRIORITIZED vocabulary, OPTIONS STANDING) | PKG-* | 78/78 PASS |
 | T-AR | Spec-derived corpus outside the fixture (AUTORESEARCH/holdout_corpus.py) | 70 run-folder faults, 20 transition cases that must block, 18 that must allow, 15 package assertions, DEV/HOLDOUT split by rule family | na_check.py, na_gate.py | 70/70 caught, 20/20 blocked, 0 false failures, 0 false blocks, 15/15 assertions (from 6/70, 1/20, 3 false failures, 1 false block, 3/15 at v11.2) |
 
 Known limits of Layer A: the leak heuristic is a shingle match and cannot detect paraphrased leaks; the provenance check only inspects list-style lines; hash checks require Dispatch to log sha256 on every write (DISPATCH 6 requires it); the T-AR corpus was written by the same agent that then edited the checker, so in spec section 8 terms it is DEV-grade, and a HOLDOUT set that carries full weight needs a second author who has not read the checker.

@@ -32,4 +32,5 @@ OPEN  - what you could not settle either way, and why.
 Do not rewrite the conclusion. Do not propose new options; that closed
 after generation. Do not rank the surviving options. Do not invent a
 hit to seem useful. If you find nothing wrong, say so plainly under
-HITS and make HOLDS carry the weight.
+HITS and make HOLDS carry the weight. Headings exactly as given, alone
+on their line, plain text.

@@ -18,6 +18,8 @@ REVIEW CHECK      <paste check-review.md, or: none>
 EXPERIMENTS       <EXPERIMENT mode: the experiment table; else: none>
 METRICS           <paste metrics-summary.json>
 FLAGS             <paste the flags set so far>
+CLASSIFICATION    <the one word Dispatch computed under spec 17:
+                   KEEP_FOR_DEVELOPMENT, REVERT or PARTIAL_REPORT>
 
 Rules for what you may change.
 - A HIT marked PASSED in the review check is an EARNED kill of the claim
@@ -44,37 +46,35 @@ Rules for what you may change.
   executor. Do not alter it.
 
 Write these sections, in this order, with these names.
-1  THE RESULT           the usable answer or artifact, first
-2  WHAT SURVIVED        the surviving option(s) and the artifact
-3  WHY IT SURVIVED      every PASSED claim holding it up, with its check
+1 THE RESULT            the usable answer or artifact, first
+2 WHAT SURVIVED         the surviving option(s) and the artifact
+3 WHY IT SURVIVED       every PASSED claim holding it up, with its check
                         result, provenance tag, and claim id {C<n>}
-4  OBJECTIVE RESULTS    EXPERIMENT or HYBRID only: baseline, each
-                        experiment, KEEP/REVERT/INCONCLUSIVE,
+4 OBJECTIVE RESULTS     EXPERIMENT or HYBRID only: baseline, each
+                        experiment kept, reverted or inconclusive,
                         guardrails;
                         else: not applicable
-5  WHAT DIED AND WHY    every option killed across all stages and the
+5 WHAT DIED AND WHY     every option killed across all stages and the
                         FAILED claim or hard constraint that killed it;
                         then DEPRIORITIZED options, still standing,
                         with the reasons
-6  TRADE-OFFS           where surviving options or objectives conflict,
+6 TRADE-OFFS            where surviving options or objectives conflict,
                         stated, never resolved by arithmetic
-7  OUTSIDE REVIEW       every HIT, GAP and HOLD verbatim, its check
+7 OUTSIDE REVIEW        every HIT, GAP and HOLD verbatim, its check
                         result, and its disposition: FIXED (say what
                         changed), REJECTED (say why, with the check),
                         or OPEN; then SURVIVING DEFECTS you could not
                         fix, listed plainly
-8  STILL OPEN           judgement calls, NOT TESTABLE, BLOCKED and
+8 STILL OPEN            judgement calls, NOT TESTABLE, BLOCKED and
                         INCONCLUSIVE items, each with what would settle
                         it
-9  CONFIDENCE           High / Medium / Low with the reason, per
+9 CONFIDENCE            High / Medium / Low with the reason, per
                         surviving option
 10 RUN INTEGRITY        earned kills vs deprioritized counts, stages run
                         and stop reason, seats that failed, closer
-                        swaps, whether review ran, flags, and ONE
-                        classification: KEEP_FOR_DEVELOPMENT, REVERT
-                        (any known critical failure), or
-                        PARTIAL_REPORT (incomplete evidence, never an
-                        acceptance)
+                        swaps, whether review ran, flags, and the
+                        CLASSIFICATION word given above, written once
+                        and nowhere else in the file
 11 EFFICIENCY           model calls, elapsed time, experiments run, from
                         METRICS
 12 NEXT QUESTION        the ONE highest-value next question or
@@ -84,5 +84,12 @@ Write these sections, in this order, with these names.
                         question to ask, the source it rests on. Close
                         with: this is analysis, not professional advice.
 
+Write each heading alone on its line: the number, one space, the name,
+nothing else on that line. In section 2 a numbered line is an option
+number from OPTIONS STANDING and nothing else. Where a section has
+nothing to say, write none in lower case. Never write the other two
+classification words anywhere.
+
 Leave section 14 PRIVATE DOCUMENT VERIFICATION as a heading with nothing
-under it. Dispatch appends the verifier output as a separate file.
+under it, as the last line of the file. Dispatch appends the verifier
+output as a separate file.

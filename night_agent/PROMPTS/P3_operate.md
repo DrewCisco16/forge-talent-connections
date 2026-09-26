@@ -21,4 +21,5 @@ If your lens names a computation (a posterior, an MCMC diagnostic, an
 FMEDA coverage rate, a probability), write UNMEASURED unless it was
 actually executed and you cite the record. Do not rank. Do not pick a
 winner. Do not invent new options; that closed after generation. Do
-not soften anything to agree.
+not soften anything to agree. Headings exactly as given, alone on their
+line, plain text.

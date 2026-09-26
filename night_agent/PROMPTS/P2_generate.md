@@ -8,6 +8,9 @@ MUST BE TRUE       <constraints, or write: none given>
 ALREADY RULED OUT  <or write: nothing>
 RECENCY            <recency rule, or write: none given>
 
+Do not quote the ask or these instructions back; refer to the ask.
+Headings exactly as given below, alone on their line, plain text.
+
 Propose TWO TO FOUR genuinely different ways to go. Different in
 structure, not variations on one idea. Include at least one you suspect
 is wrong, because ruling it out is progress. Then assume each one has

@@ -46,4 +46,6 @@ METRICS  - one line, same fields as LIST mode, plus decision_changed
            (yes/no: did MERGED change materially).
 
 Do not add analysis of your own. Do not invent new options. Do not rank.
-If two options survive, say two survive.
+If two options survive, say two survive. Cite claims only by the C ids
+in CHECK RESULTS. Headings exactly as given, alone on their line, plain
+text; where a section is empty write none in lower case.

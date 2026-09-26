@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Night Agent v11.3 conformance checker.
+"""Night Agent v11.4 conformance checker.
 
 Usage:
   python3 na_check.py <run_folder>            audit one run folder, exit 1 on any FAIL
@@ -371,6 +371,10 @@ def audit_run(run):
     # generate wall leak heuristic: identical unusual 12-word sequences across seat files
     if stages:
         seatfiles = [j(stages[0], f) for f in os.listdir(j(stages[0])) if f.startswith("seat-")]
+        packet_sh = set()
+        if os.path.exists(j(stages[0], "packet.md")):  # the filled generator packet (DISPATCH 3.1): its phrases came from Dispatch, not from another seat
+            pw = re.findall(r"[a-z]{3,}", read(j(stages[0], "packet.md")).lower())
+            packet_sh = set(" ".join(pw[i:i + 12]) for i in range(0, max(0, len(pw) - 12)))
         shingles = {}
         for sf in seatfiles:
             words = re.findall(r"[a-z]{3,}", read(sf).lower())
@@ -379,7 +383,7 @@ def audit_run(run):
         leaks = 0
         for a, b in itertools.combinations(seatfiles, 2):
             common = shingles[a] & shingles[b]
-            common = {s for s in common if not s.startswith(("reply with", "do not", "you are one"))}
+            common = {s for s in common if not s.startswith(("reply with", "do not", "you are one"))} - packet_sh
             if len(common) >= 3:
                 leaks += 1
         rep(leaks == 0, "ISO-1", f"no shared 12-word sequences across generate files beyond prompt boilerplate ({leaks} suspicious pairs)")
@@ -466,6 +470,16 @@ def audit_run(run):
             if c.get("char_count") != len(t):
                 badcap.append(f"{c['file']}: char_count {c.get('char_count')} != {len(t)}")
         rep(len(badcap) == 0, "CAP-MATCH", f"every capture record matches its saved reply ({badcap[:3]})")
+        # an aborted slot (spec 7) is closed and never counted: it is partial, has no completion signal, and no seat file cites it
+        cited = set()
+        for st in stages:
+            for f in os.listdir(j(st)):
+                if f.startswith("seat-"):
+                    lines = read(j(st, f)).splitlines()
+                    if len(lines) > 1 and lines[1].startswith("DISPATCH "):
+                        cited.add(lines[1].split()[1])
+        badab = [c.get("dispatch_id") for c in caps if c.get("aborted") and (c.get("completion_signal_observed") or not c.get("partial") or c.get("dispatch_id") in cited)]
+        rep(len(badab) == 0, "CAP-ABORT", f"every aborted capture is partial, unsignalled and uncited ({badab})")
         rep(stale == 0, "DISP-3", f"no seat file cites a dispatch from another stage ({stale} stale)")
     # neutrality of packets
     for pk in [j("review", "package.md")] + [j(st, "packet.md") for st in stages]:
