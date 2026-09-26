@@ -61,6 +61,25 @@ safeMath.random = () => {
   throw new Error("Math.random() is unavailable in workflows");
 };
 
+// Every other road to wall-clock time or randomness is closed too: a script
+// that reaches for globalThis.Date, crypto, performance, or process fails here.
+function forbidden(name) {
+  return new Proxy({}, {
+    get() {
+      throw new Error(`${name} is unavailable in workflows`);
+    },
+  });
+}
+const BLOCKED_GLOBALS = { crypto: forbidden("crypto"), performance: forbidden("performance"), process: forbidden("process") };
+const safeGlobal = new Proxy(globalThis, {
+  get(target, key) {
+    if (key === "Date") return forbiddenDate;
+    if (key === "Math") return safeMath;
+    if (key in BLOCKED_GLOBALS) return BLOCKED_GLOBALS[key];
+    return Reflect.get(target, key);
+  },
+});
+
 /**
  * Run a workflow script. `respond(prompt, opts, index)` supplies each agent's
  * return value (return null to simulate a skipped or dead agent).
@@ -69,6 +88,7 @@ export async function runWorkflow(src, args, respond) {
   const body = src.replace(/^export const meta =/, "const meta =");
   const fn = new AsyncFunction(
     "agent", "parallel", "pipeline", "phase", "log", "args", "budget", "workflow", "Date", "Math",
+    "globalThis", "crypto", "performance", "process",
     body,
   );
   const calls = [];
@@ -100,6 +120,7 @@ export async function runWorkflow(src, args, respond) {
   const result = await fn(
     agent, parallel, pipeline, (t) => phases.push(t), (m) => logs.push(m), args, budget, workflow,
     forbiddenDate, safeMath,
+    safeGlobal, BLOCKED_GLOBALS.crypto, BLOCKED_GLOBALS.performance, BLOCKED_GLOBALS.process,
   );
   return { result, calls, phases, logs };
 }

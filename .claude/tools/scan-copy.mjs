@@ -8,12 +8,13 @@
 //                                       (stored base64 there; decoded only in
 //                                       memory here and never printed)
 //   test/copy/product_language_test.dart recruiting vocabulary (--copy only)
-// The typography rule (no em or en dashes) is the house rule from
-// test/copy/no_em_dash_test.dart.
+// The typography rule (no em or en dashes, including their HTML entities) is
+// the house rule from test/copy/no_em_dash_test.dart.
 //
-// Usage:  node .claude/tools/scan-copy.mjs [--copy] <file>...
-// Exit:   0 clean, 1 findings, 2 could not run (a rule source is missing or
-//         unreadable). Fail closed: a scan that could not load its rules
+// Usage:  node .claude/tools/scan-copy.mjs [--copy] [--root DIR] <file>...
+// Exit:   0 clean, 1 findings, 2 could not run (a rule source is missing,
+//         unreadable, or malformed, or a file could not be read as text).
+//         Fail closed: a scan that could not load its rules or read a file
 //         never reports clean.
 
 import { readFileSync } from "node:fs";
@@ -30,6 +31,8 @@ const DASHES = [
   { char: String.fromCharCode(0x2014), name: "em dash" },
   { char: String.fromCharCode(0x2013), name: "en dash" },
 ];
+const DASH_ENTITY = /&(?:(mdash)|(ndash));|&#0*(?:(8212)|(8211));|&#x0*(?:(2014)|(2013));/gi;
+const BASE64 = /^[A-Za-z0-9+/_-]+={0,2}$/;
 
 export class RuleSourceError extends Error {}
 
@@ -49,11 +52,18 @@ export function loadWalledTerms(root = REPO_ROOT) {
   if (open === -1 || close === -1) {
     throw new RuleSourceError(`${WALLED_SOURCE}: banned list not found`);
   }
-  const encoded = [...src.slice(open, close).matchAll(/["']([A-Za-z0-9+/=]{4,})["']/g)].map((m) => m[1]);
-  if (encoded.length === 0) {
+  // Every quoted entry, whatever its alphabet. An entry this tool cannot
+  // decode stops the scan: dropping it silently would scan that term CLEAN.
+  const entries = [...src.slice(open, close).matchAll(/"([^"]*)"|'([^']*)'/g)].map((m) => m[1] ?? m[2]);
+  if (entries.length === 0) {
     throw new RuleSourceError(`${WALLED_SOURCE}: banned list is empty`);
   }
-  return encoded.map((e) => Buffer.from(e, "base64").toString("utf8").toUpperCase());
+  return entries.map((e, i) => {
+    if (!BASE64.test(e)) throw new RuleSourceError(`${WALLED_SOURCE}: entry #${i + 1} is not base64`);
+    const term = Buffer.from(e.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    if (!term.trim()) throw new RuleSourceError(`${WALLED_SOURCE}: entry #${i + 1} decodes to nothing`);
+    return term.toUpperCase();
+  });
 }
 
 /** The recruiting vocabulary list from the product-language test. */
@@ -69,6 +79,23 @@ export function loadRecruitingWords(root = REPO_ROOT) {
     throw new RuleSourceError(`${LANGUAGE_SOURCE}: banned word list is empty`);
   }
   return words;
+}
+
+/**
+ * Text from a file's bytes, or null when it is not text this tool can read.
+ * A byte-order mark selects UTF-16 or UTF-8; NUL bytes without one mean an
+ * encoding the scan would misread, which must not pass as clean.
+ */
+export function decodeText(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString("utf16le");
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const le = Buffer.from(buf.subarray(2));
+    le.swap16();
+    return le.toString("utf16le");
+  }
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.subarray(3).toString("utf8");
+  if (buf.includes(0)) return null;
+  return buf.toString("utf8");
 }
 
 // Embedded images are base64 noise; a word boundary inside one is not copy.
@@ -91,6 +118,9 @@ export function scanText(text, { path = "", walled = [], recruiting = null } = {
     const line = idx + 1;
     for (const d of DASHES) {
       if (raw.includes(d.char)) findings.push({ line, rule: "dash", detail: d.name });
+    }
+    for (const m of raw.matchAll(DASH_ENTITY)) {
+      findings.push({ line, rule: "dash", detail: `${m[1] || m[3] || m[5] ? "em" : "en"} dash (HTML entity)` });
     }
     const upper = raw.toUpperCase();
     walled.forEach((term, i) => {
@@ -115,28 +145,45 @@ export function scanFiles(paths, { copy = false, root = REPO_ROOT } = {}) {
   const recruiting = copy ? loadRecruitingWords(root) : null;
   const results = [];
   for (const p of paths) {
-    let text;
+    // A path that itself holds a walled term is never printed.
+    const walledIndex = walled.findIndex((t) => p.toUpperCase().includes(t));
+    const shown = walledIndex === -1 ? p : `[path withheld: contains walled term #${walledIndex + 1}]`;
+    let buf;
     try {
-      text = readFileSync(resolve(root, p), "utf8");
+      buf = readFileSync(resolve(root, p));
     } catch (err) {
-      results.push({ path: p, line: 0, rule: "unreadable", detail: err.code ?? err.message });
+      results.push({ path: shown, line: 0, rule: "unreadable", detail: err.code ?? err.message });
       continue;
     }
-    for (const f of scanText(text, { path: p, walled, recruiting })) results.push({ path: p, ...f });
+    const text = decodeText(buf);
+    if (text === null) {
+      results.push({ path: shown, line: 0, rule: "unreadable", detail: "binary or unsupported encoding" });
+      continue;
+    }
+    for (const f of scanText(text, { path: p, walled, recruiting })) results.push({ path: shown, ...f });
   }
   return results;
 }
 
-function main(argv) {
+export function main(argv) {
   const copy = argv.includes("--copy");
-  const paths = argv.filter((a) => a !== "--copy");
+  const rootAt = argv.indexOf("--root");
+  if (rootAt !== -1 && !argv[rootAt + 1]) {
+    console.error("usage: node .claude/tools/scan-copy.mjs [--copy] [--root DIR] <file>...");
+    return 2;
+  }
+  const root = rootAt === -1 ? REPO_ROOT : resolve(argv[rootAt + 1]);
+  // Only --root and its value are options; every other argument is a file.
+  // (Excluding "rootAt + 1" when rootAt is -1 once dropped the first file.)
+  const optionAt = new Set(rootAt === -1 ? [] : [rootAt, rootAt + 1]);
+  const paths = argv.filter((a, i) => a !== "--copy" && !optionAt.has(i));
   if (paths.length === 0) {
-    console.error("usage: node .claude/tools/scan-copy.mjs [--copy] <file>...");
+    console.error("usage: node .claude/tools/scan-copy.mjs [--copy] [--root DIR] <file>...");
     return 2;
   }
   let results;
   try {
-    results = scanFiles(paths, { copy });
+    results = scanFiles(paths, { copy, root });
   } catch (err) {
     if (err instanceof RuleSourceError) {
       console.error(`SCAN NOT RUN: ${err.message}`);

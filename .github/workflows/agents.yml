@@ -2,8 +2,8 @@ name: agents
 
 # The agent layer's own gate: agent definitions and least privilege, the shared
 # Council contract, the Full Council workflow's control flow (run with stubbed
-# agents, so it makes no model call and costs nothing), and the walled-name
-# scan over every file this layer adds. No secrets, no vendor calls.
+# agents, so it makes no model call and costs nothing), the scan tool, and the
+# walled-name scan over every file this layer adds. No secrets, no vendor calls.
 on:
   push:
     branches: [main]
@@ -13,6 +13,7 @@ on:
       - "docs/AI_AGENTS.md"
       - "adjudication/decision_log.py"
       - "adjudication/test_decision_log.py"
+      - "adjudication/eval/**"
       - "test/copy/walled_repo_test.dart"
       - "test/copy/product_language_test.dart"
       - ".github/workflows/agents.yml"
@@ -23,6 +24,7 @@ on:
       - "docs/AI_AGENTS.md"
       - "adjudication/decision_log.py"
       - "adjudication/test_decision_log.py"
+      - "adjudication/eval/**"
       - "test/copy/walled_repo_test.dart"
       - "test/copy/product_language_test.dart"
       - ".github/workflows/agents.yml"
@@ -45,5 +47,18 @@ jobs:
         with:
           node-version: "22"
 
+      # A glob that matches nothing makes `node --test` exit 0 having run zero
+      # tests. A gate that can pass vacuously is not a gate, so the step also
+      # asserts that the suite ran and that nothing failed.
       - name: Agent layer tests
-        run: node --test ".claude/tests/*.test.mjs"
+        run: |
+          set +e
+          out=$(node --test ".claude/tests/*.test.mjs" 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          if [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+          echo "$out" | grep -Eq '^# pass [1-9][0-9]*$' || { echo "::error::no agent-layer tests ran"; exit 1; }
+          echo "$out" | grep -Eq '^# fail 0$' || { echo "::error::the test summary does not report zero failures"; exit 1; }

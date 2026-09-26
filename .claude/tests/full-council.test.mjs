@@ -31,10 +31,13 @@ const GOOD_ARGS = Object.freeze({
   date: "2026-09-26",
 });
 
+// Each distinct source gets its own citation, derived from its link, because
+// identical citations are one source to the deduplication pass.
 function source(over = {}) {
+  const link = over.doi_or_link ?? "10.1000/test.1";
   return {
-    citation: "Author, A. (2025). A study. Venue.",
-    doi_or_link: "10.1000/test.1",
+    citation: `Author, A. (2025). A study at ${link}. Venue.`,
+    doi_or_link: link,
     year: "2025",
     venue: "Venue",
     core_finding: "finding",
@@ -144,7 +147,15 @@ const REFUSALS = [
   ["unknown decision type", { decision_types: ["strategic", "vibes"] }, /unknown decision_types: vibes/],
   ["no decision types", { decision_types: [] }, /decision_types is required/],
   ["green_only not confirmed", { green_only: "yes" }, /green_only/],
-  ["bad date", { date: "26/09/2026" }, /date must be YYYY-MM-DD/],
+  ["bad date", { date: "26/09/2026" }, /date must be a real date/],
+  ["impossible month", { date: "2026-99-99" }, /date must be a real date/],
+  ["year zero", { date: "0000-00-00" }, /date must be a real date/],
+  ["February 30", { date: "2026-02-30" }, /date must be a real date/],
+  ["non-string decision type", { decision_types: [{ toString: 1 }] }, /decision_types must contain only strings/],
+  ["misspelled optional field", { expected_without_counsel: "x" }, /unknown field: expected_without_counsel/],
+  ["operator answer repeated in context", { context: "Background. OPERATOR-ANSWER-SENTINEL: proceed with a small pilot. More." }, /operator_answer is repeated inside context/],
+  ["operator answer repeated in a premise", { premises: ["We think operator-answer-sentinel:   proceed with a small PILOT is right"] }, /operator_answer is repeated inside premises/],
+  ["expected outcome repeated in the question", { question: "Will EXPECTED-SENTINEL modest uptake happen if we launch?" }, /expected_without_council is repeated inside question/],
   ["non-string context", { context: 42 }, /context must be a string/],
 ];
 
@@ -418,4 +429,200 @@ test("the harness itself rejects forbidden nondeterminism", async () => {
   await assert.rejects(runWorkflow(bad, {}, () => null), /Math.random/);
   const bad2 = 'export const meta = { name: "x", description: "y" }\nreturn Date.now()';
   await assert.rejects(runWorkflow(bad2, {}, () => null), /Date.now/);
+});
+
+// ------------------------------------------------------------ review findings
+
+// Every credential shape is built at runtime so no key-shaped literal sits in
+// the repository, and each is tested inline, after a newline, and after a tab,
+// because a pasted .env block puts a key at the start of a line.
+const KEYS = {
+  anthropic: ["sk", "ant", "api03", "a".repeat(24)].join("-"),
+  openai_legacy: ["sk", "b".repeat(40)].join("-"),
+  openai_project: ["sk", "proj", "c".repeat(40)].join("-"),
+  google: "AIza" + "d".repeat(35),
+  xai: ["xai", "e".repeat(40)].join("-"),
+  aws: "AKIA" + "IOSFODNN7EXAMPLE",
+  github_classic: "ghp_" + "f".repeat(36),
+  github_oauth: "gho_" + "g".repeat(36),
+  github_pat: "github_pat_" + "h".repeat(30),
+  slack: ["xoxb", "1234567890", "abcdefghij"].join("-"),
+  stripe: ["sk", "live", "i".repeat(24)].join("_"),
+  pem: ["-----BEGIN", "PGP PRIVATE KEY BLOCK-----"].join(" "),
+  seat_env_line: "ADJ_SEAT_3_API_KEY=" + "j".repeat(32),
+  mistral_env_line: "MISTRAL_API_KEY=" + "k".repeat(32),
+};
+
+for (const [name, key] of Object.entries(KEYS)) {
+  for (const [where, text] of [["inline", `note ${key} end`], ["after a newline", `note\n${key}\nend`], ["after a tab", `note\t${key}`]]) {
+    test(`refuses a ${name} credential ${where}, echoing nothing`, async () => {
+      const { result, calls } = await run({ ...GOOD_ARGS, context: text });
+      assert.equal(result.status, "REFUSED");
+      assert.equal(calls.length, 0);
+      assert.ok(!JSON.stringify(result).includes(key));
+    });
+  }
+}
+
+test("ordinary words that contain key prefixes are not credentials", async () => {
+  const { result } = await run({ ...GOOD_ARGS, context: "A risk-adjusted-return-on-capital model; the task-force-reviewed plan." });
+  assert.equal(result.status, "COMPLETE");
+});
+
+test("a credential placed where values are echoed is never echoed", async () => {
+  const key = KEYS.github_classic;
+  const { result } = await run({ ...GOOD_ARGS, decision_types: ["strategic", key], [key]: 1 });
+  assert.equal(result.status, "REFUSED");
+  assert.ok(!JSON.stringify(result).includes(key));
+  assert.ok(result.problems.some((p) => /value\(s\) not shown|name not shown/.test(p)));
+});
+
+test("a short operator answer is not policed for containment", async () => {
+  const { result } = await run({ ...GOOD_ARGS, operator_answer: "Proceed", context: "We could proceed or wait." });
+  assert.equal(result.status, "COMPLETE");
+});
+
+test("a real leap day is accepted", async () => {
+  const { result } = await run({ ...GOOD_ARGS, date: "2024-02-29" });
+  assert.equal(result.status, "COMPLETE");
+});
+
+test("model text in the brief: dashes normalized, percentages flagged, harness words percentage-free", async () => {
+  const em = String.fromCharCode(0x2014);
+  const loud = chair({
+    confidence: "Unrecognized",
+    final_decision_memo: { ...chair().final_decision_memo, recommended_decision: `Proceed ${em} an 80% chance of success`, strongest_reason_wrong: "Churn could reach 40 percent" },
+  });
+  const { result } = await run(GOOD_ARGS, { chairs: [loud, chair(), chair()] });
+  const lines = result.operator_brief.split("\n");
+  assert.ok(!result.operator_brief.includes(em));
+  for (const line of lines.filter((l) => /%|[0-9]\s*percent/i.test(l))) {
+    assert.match(line, /\[harness: this line quotes a percentage from model text/, line);
+  }
+  assert.ok(lines.some((l) => l.startsWith("Recommended decision: Proceed - an 80% chance")));
+  const clampLine = lines.find((l) => l.startsWith("Confidence: Low (clamped"));
+  assert.ok(clampLine && !clampLine.includes("Unrecognized"), "the clamp must not echo the rejected value");
+});
+
+test("the memo's own confidence line carries the enforced value", async () => {
+  const bold = chair({ confidence: "High", final_decision_memo: { ...chair().final_decision_memo, confidence_and_cap: "High: no cap applies" } });
+  const { result } = await run(GOOD_ARGS, { chairs: [bold, chair(), chair()] });
+  const c1 = result.chairmen[0];
+  assert.equal(c1.confidence_final, "Medium");
+  assert.match(c1.final_decision_memo.confidence_and_cap, /^Medium\. Ceiling Medium/);
+  assert.equal(c1.confidence_and_cap_as_written, "High: no cap applies");
+});
+
+test("a negated professional line elsewhere in the memo does not switch the line off", async () => {
+  const sly = chair({ final_decision_memo: { ...chair().final_decision_memo, strongest_reason_wrong: "No professional verification required here", professional_verification: "none" } });
+  const { result } = await run({ ...GOOD_ARGS, decision_types: ["legal_regulatory", "tax"] }, { chairs: [sly, chair(), chair()] });
+  assert.match(result.chairmen[0].final_decision_memo.professional_verification, /^professional verification required\. none$/);
+  assert.equal(result.chairmen[0].professional_line_added_by_harness, true);
+});
+
+test("one source under many link spellings counts once", async () => {
+  const spellings = [
+    "https://doi.org/10.1000/SAME", "https://www.doi.org/10.1000/same", "doi.org/10.1000/same",
+    "http://dx.doi.org/10.1000/same?utm=x", "doi:10.1000/same", "10.1000/same.",
+  ];
+  const strongTwiceOver = [
+    ...spellings.map((l) => source({ doi_or_link: l, citation: `Variant citation ${l}` })),
+    source({ doi_or_link: "10.1000/weak.1", relevance_class: "Indirect" }),
+    source({ doi_or_link: "10.1000/weak.2", relevance_class: "Indirect" }),
+  ];
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout(strongTwiceOver) });
+  assert.match(result.evidence.dedup_output, /Duplicate sources merged: 5/);
+  assert.equal(result.enforced.confidence_ceiling, "Low");
+});
+
+test("the same work under a publisher link and a citation DOI counts once; two DOIs decide", async () => {
+  const a = source({ doi_or_link: "https://publisher.example/article/42?ref=x", citation: "Author, A. (2025). Title. doi:10.1000/pub.42" });
+  const b = source({ doi_or_link: "10.1000/pub.42" });
+  const c = source({ doi_or_link: "10.1000/other", citation: a.citation.replace("doi:10.1000/pub.42", "") });
+  const d = source({ doi_or_link: "10.1000/third", citation: c.citation });
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout([a, b, c, d]) });
+  assert.match(result.evidence.dedup_output, /Duplicate sources merged: 1/);
+});
+
+test("link-less sources with a long shared prefix stay distinct", async () => {
+  const stem = "Author, A. (2025). An extended study title that runs long enough to share an eighty character prefix";
+  const three = [source({ doi_or_link: "", citation: `${stem} (strong).` }),
+    source({ doi_or_link: "", citation: `${stem} (weak one).`, relevance_class: "Indirect" }),
+    source({ doi_or_link: "", citation: `${stem} (weak two).`, relevance_class: "Indirect" })];
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout(three) });
+  assert.match(result.evidence.dedup_output, /Duplicate sources merged: 0/);
+  assert.equal(result.enforced.confidence_ceiling, "Low");
+});
+
+test("weak project-library evidence caps at Low even beside strong external evidence", async () => {
+  const mix = [source(), ...[1, 2, 3].map((i) => source({ doi_or_link: `lib/${i}.md`, source_type: "project library", relevance_class: "Indirect" }))];
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout(mix) });
+  assert.equal(result.enforced.confidence_ceiling, "Low");
+});
+
+test("every seat block has the same shape, so no harness line marks the Steward", async () => {
+  const { calls } = await run();
+  for (const c of calls.filter((x) => x.opts.agentType === "council-chairman")) {
+    assert.ok(!c.prompt.includes("Seat verdict:"));
+    const blocks = c.prompt.split(/=== Seat [A-E] ===\n/).slice(1);
+    assert.equal(blocks.length, 5);
+    for (const b of blocks) assert.equal(b.split("\n").filter((l) => /^(Zero-Defects self-check|Seat's recommended cap):/.test(l)).length, 2);
+  }
+});
+
+for (const [stage, opts] of [
+  ["Evidence", { scoutOut: {} }],
+  ["Seats", { seats: { "council-contrarian": {} } }],
+  ["Seats", { seats: { "council-executor": { report: "r", key_points: "not a list" } } }],
+  ["Chairmen", { chairs: [chair(), {}, chair()] }],
+  ["Chairmen", { chairs: [chair(), chair({ decision_class: "MAYBE" }), chair()] }],
+]) {
+  test(`a malformed ${stage} result halts instead of crashing (${JSON.stringify(opts).slice(0, 60)})`, async () => {
+    const { result } = await run(GOOD_ARGS, opts);
+    assert.equal(result.status, "HALTED");
+    assert.equal(result.stage, stage);
+  });
+}
+
+test("the workflow source reaches for no clock, randomness, or host API", () => {
+  const code = SRC.replace(/\/\/.*$/gm, "");
+  for (const banned of [/Date\.now/, /new Date\(\s*\)/, /Math\.random/, /\bcrypto\b/, /\bperformance\b/, /\bprocess\./, /\brequire\(/, /\bimport\(/]) {
+    assert.ok(!banned.test(code), `workflow source uses ${banned}`);
+  }
+});
+
+test("the harness closes every other road to time and randomness", async () => {
+  for (const body of ["return globalThis.Date.now()", "return new globalThis.Date().getTime()", "return globalThis.Math.random()",
+    "return crypto.randomUUID()", "return performance.now()", "return process.hrtime()"]) {
+    await assert.rejects(runWorkflow(`export const meta = { name: "x", description: "y" }\n${body}`, {}, () => null), /unavailable in workflows/, body);
+  }
+});
+
+test("weak files sharing a generic citation cannot merge their way to a higher ceiling", async () => {
+  const generic = "Project library document.";
+  const mix = [source(), ...[1, 2, 3].map((i) => source({ doi_or_link: `docs/file-${i}.md`, citation: generic, source_type: "project library", relevance_class: "Indirect" }))];
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout(mix) });
+  assert.equal(result.enforced.confidence_ceiling, "Low");
+});
+
+test("a strong work listed under two links cannot count twice toward the ceiling", async () => {
+  const cite = "Author, B. (2025). The one strong study. Venue.";
+  const twice = [source({ doi_or_link: "https://publisher.example/a", citation: cite }), source({ doi_or_link: "https://mirror.example/a.pdf", citation: cite }),
+    source({ doi_or_link: "10.1000/weak.1", relevance_class: "Indirect" }), source({ doi_or_link: "10.1000/weak.2", relevance_class: "Indirect" })];
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout(twice) });
+  assert.equal(result.enforced.confidence_ceiling, "Low");
+});
+
+test("this repository's own key names are refused even for a short or odd value", async () => {
+  const line = ["ADJ", "SEAT", "3", "API", "KEY=ab!cd"].join("_");
+  const { result, calls } = await run({ ...GOOD_ARGS, context: `pasted:\n${line}` });
+  assert.equal(result.status, "REFUSED");
+  assert.equal(calls.length, 0);
+});
+
+test("plain links match across scheme, www, query, fragment, and trailing slash", async () => {
+  const one = source({ doi_or_link: "https://www.example.org/report?utm=a#part", citation: "Agency (2025). Report, first listing." });
+  const two = source({ doi_or_link: "http://example.org/report/", citation: "Agency (2025). Report, second listing." });
+  const { result } = await run(GOOD_ARGS, { scoutOut: scout([one, two]) });
+  assert.match(result.evidence.dedup_output, /Duplicate sources merged: 1/);
 });

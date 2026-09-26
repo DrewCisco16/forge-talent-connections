@@ -76,7 +76,7 @@ The agent files and `CLAUDE.md` rely on the Kish principle, not on either figure
   ```
 
   Allowed decision types: factual, causal, predictive, strategic, legal_regulatory, tax, compliance, ethical, financial, technical, medical, interpersonal. One run is nine agents: one Scout, five seats, and three Chairmen.
-- **The Decision Log.** From `adjudication/` with its virtual environment: `python decision_log.py template`, then `record --json filled.json` at decision time (the ex ante score locks), `review --json filled.json` at the review date, and `stats --today YYYY-MM-DD`. The log defaults to `adjudication/decisions/`, which is gitignored because operator records can quote sensitive material. A cloud session's container is temporary, so keep the log somewhere durable by your own choice.
+- **The Decision Log.** From `adjudication/` with its virtual environment: `python decision_log.py template`, then `record --json filled.json` at decision time (the ex ante score locks, and the entry is stamped with its UTC write time), `review --json filled.json` at the review date, and `stats --today YYYY-MM-DD`. The log is two files, `decision-log.jsonl` and its `.head` sidecar; keep them together, because a log without its sidecar fails integrity. After each write, keep the printed ANCHOR line somewhere the log's editor cannot change, and pass it back to `verify` or `stats` to detect a truncation even if the sidecar is forged. The log defaults to `adjudication/decisions/`, which is gitignored because operator records can quote sensitive material. A cloud session's container is temporary, so keep both files somewhere durable by your own choice.
 - **The copy and wall scan.** `node .claude/tools/scan-copy.mjs [--copy] <files>` checks any file for dashes, walled internal names (reported by number, never printed), and, with `--copy`, recruiting vocabulary. It reads the rules from the Dart tests, so it never drifts from them.
 
 ## How a Council Run Enforces the Protocol
@@ -92,16 +92,38 @@ The agent files and `CLAUDE.md` rely on the Kish principle, not on either figure
 | A regulated domain without counsel | The professional verification line is added in code | two enforcement tests |
 | A fabricated percentage | No output field holds a probability; the brief is tested to contain no percentage | "the harness-written brief contains no percentage" |
 | A secret in the ask | Refused before any agent runs; the value is never echoed | "refuses a credential-shaped string without echoing it" |
-| Hindsight rewrites the ex ante score | Append-only, hash-chained log with no edit command; tampering exits 2 | decision-log integrity tests |
+| A credential pasted into the ask | Every string, keys included, scanned one at a time for 13 credential shapes (including the five vendors this repository uses and its own key names); refused before any agent runs; no value echoed | 46 credential tests: 45 refusals, inline and at line starts, and one check that ordinary words are not flagged |
+| The operator's answer leaks through another field | An answer of 12 or more characters repeated in the question, context, premises, or base rate is refused | containment tests |
+| A malformed agent result | A Scout, seat, or Chairman result without its required shape halts the run instead of crashing it | five malformed-result tests |
+| Deduplication inflates the ceiling | The ceiling is computed with duplicates merged and again with only exact duplicates merged; the lower stands | dedup and ceiling tests |
+| Hindsight rewrites the ex ante score | Append-only, hash-chained log with no edit command; one lock across the duplicate check and the append; the sidecar is required; an optional anchor detects forged sidecars; tampering exits 2 | decision-log integrity, race, and anchor tests |
 
 ## Verification Performed for This Change
 
 All figures below were measured in the session that built this change.
 
-- **Full Council workflow:** 38 tests pass with stubbed agents, so no model is called. 18 of 18 planted mutations were caught. Two real defects were found before shipping. Chasing a mutation survivor showed that the first seat-order generator, a bare power-of-two LCG, produced far-from-uniform positions. Review showed that a naive role scrub would have turned "stewardship" into nonsense. Both are now pinned by tests.
-- **Decision Log:** 77 tests, 100% line coverage of `decision_log.py`, and 16 of 16 planted mutations caught. One mutation, lowering the success threshold to include "mixed result", survived the first suite and now has a boundary test.
-- **Adjudication suite:** 1,812 tests pass. Coverage rose from 80.61% to 81.40% against the floor of 80. ruff, mypy strict, bandit, and pip-audit are clean.
-- **Agent layer:** `node --test ".claude/tests/*.test.mjs"` runs 54 tests covering definitions, least privilege, the identical Council contract, routing, the walls, and the scan tool. 12 of 12 planted violations were caught. One survived the first version: a typo in an agent name in `CLAUDE.md` slipped past a prefix filter, so the check now requires every routed name to exist.
+- **Full Council workflow:** 111 tests pass with stubbed agents, so no model is called. 41 of 41 planted mutations were caught. Before the first push, chasing a mutation survivor showed that the first seat-order generator, a bare power-of-two LCG, produced far-from-uniform positions, and review showed that a naive role scrub would have turned "stewardship" into nonsense. Both are pinned by tests.
+- **Decision Log:** 105 tests, 100% line coverage of `decision_log.py`, and 29 of 29 planted mutations caught, including removal of the writer lock, which a deterministic race test detects.
+- **Adjudication suite:** 1,840 tests pass. Coverage rose from 80.61% to 81.62% against the floor of 80. ruff, mypy strict, bandit, and pip-audit are clean.
+- **Agent layer:** `node --test ".claude/tests/*.test.mjs"` runs 134 tests: the 111 above plus 23 covering definitions, allowed frontmatter keys, least privilege, the identical Council contract, routing, the walls over every file discovered under `.claude/`, and the scan tool's exit codes. 25 of 25 planted violations were caught. The CI step also fails when no test runs, so an empty glob cannot pass.
+
+### An independent review, and what it changed
+
+After the first push, a blinded adversarial review read the code against its requirements, without the builder's reasoning, and proved each finding with a reproduction it ran. It found 22 defects: 4 High, 9 Medium, 9 Low. Every one was reproduced before it was fixed, and every fix was re-run through the reviewer's own probes:
+
+| Finding | Before | After |
+|---|---|---|
+| A credential at the start of a line (a pasted `.env` block) | not refused; reached all 9 agents | refused before any agent |
+| OpenAI project, Google, xAI, and Mistral key shapes | not recognized | refused |
+| A credential in `decision_types` | repeated in the refusal | never repeated |
+| A decision log emptied to zero bytes | "no decisions recorded", exit 0 | integrity failure, exit 2 |
+| The sidecar deleted and the tail cut | verified; an ex ante score could be rewritten | integrity failure, exit 2 |
+| Two writers recording one id | 59 of 200 two-process trials corrupted the log | 0 of 200 |
+| A lookalike id (trailing newline, full-width digits) | accepted as new | refused |
+| A walled term in a file name, base64url rule entries, UTF-16 files, HTML-entity dashes | printed, skipped, or missed | withheld, decoded, and caught |
+| Tests that passed with the behavior removed | six planted deletions survived | caught |
+
+Fixing it also exposed a defect of the fix itself: the scan tool's new `--root` option silently dropped the first file argument whenever `--root` was absent. A self-scan caught it before any push, and a command-line test now pins it.
 - **Flutter:** NOT RUN. This container has no Flutter toolchain, and this change touches no Dart.
 
 ## First Measurement: The Claim-Auditor Procedure
@@ -126,6 +148,9 @@ The full record, including every item, the key, and the answers, is in `adjudica
 - **Contamination.** The in-sample set was contaminated: the checklist was written with those defect types in view, including holdout item A6.
 
 ## What Is Not Claimed
+
+- **Some restrictions are instructions, not enforcement.** The five checkers that hold Bash are told to use it read-only (the statistician also writes the decision log through its command line), but Bash can write files. Council seats are told to read only repository files, but their Read, Grep, and Glob tools take any path; the operator's pre-committed answer is withheld from every prompt, not from the disk.
+- **The chain is unsigned.** A rewrite that recomputes every hash and the sidecar is invisible without the anchor you recorded elsewhere.
 
 - No success probability for any decision, and no percentage for any agent beyond the single measurement above.
 - No independence between Claude agents. Every agent here is one model family, so agreement among them is consistency, not corroboration. Cross-vendor independence comes only from the adjudication panel (whose independence is unmeasured, per the finding above) or from separate ChatGPT and Gemini reviews via `adjudication/make_review_bundles.py`.

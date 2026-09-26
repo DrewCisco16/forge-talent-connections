@@ -18,46 +18,59 @@ WHAT IT RECORDS. Two events per decision, never more:
 Keeping the two scores in separate, ordered, hash-chained entries is the
 safeguard against hindsight bias that the protocol's FMEA names. The ex ante
 score cannot be revised once the outcome is known: there is no edit command, a
-second decision entry for the same id is refused, and rewriting an entry
-breaks the chain (audit_log.DurableAuditLog).
+second decision entry for the same id is refused (under one lock with the
+append, so two writers cannot both pass the check), and rewriting an entry
+breaks the chain (audit_log.DurableAuditLog). The command line stamps every
+entry with its UTC write time inside the hashed payload, refuses a decision or
+review dated after that time, and counts decisions recorded more than
+LATE_DAYS after their decision date: the lock only protects a score written
+before the outcome was known.
 
 WHAT THE CHAIN PROVES AND DOES NOT. It detects an edited, reordered, spliced,
-or deleted entry, and tail truncation against the head sidecar. It is not
-signed: someone who rewrites the file AND recomputes every hash AND the sidecar
-is not detected. That is the same limit audit_log.py documents.
+or deleted entry. Tail truncation is detected against the head sidecar, which
+is therefore REQUIRED: a log without its sidecar, a sidecar without its log,
+and a log emptied to zero bytes are all integrity failures, never "nothing
+recorded yet". Keep the two files together. The chain is not signed: someone
+who rewrites the file AND recomputes every hash AND the sidecar is not
+detected, the limit audit_log.py documents. `verify` prints an anchor (the head
+hash and the entry count); recorded somewhere the log's editor cannot change
+and passed back with --expect-head and --expect-length, it detects truncation
+even then.
 
 WHAT A PERCENTAGE HERE MEANS. A track record over n reviewed decisions, shown
 with its Wilson interval: never a forecast for the next decision, never a bare
 point estimate. Success is an ex post score of 4 or 5 (met or mostly met the
 target). N/A outcomes are excluded, not counted as failures. An interval wider
-than 30 points is labelled PROVISIONAL. Both thresholds are conventions chosen
-here, not derived; they are named so a disagreement is about a number in the
-open.
+than 30 points is labelled PROVISIONAL. Both thresholds, and LATE_DAYS, are
+conventions chosen here, not derived; they are named so a disagreement is
+about a number in the open.
 
 WHERE THE LOG LIVES. adjudication/decisions/decision-log.jsonl by default, and
 gitignored: operator records can quote sensitive material, the same reason run
 audit logs are not repository content. A cloud container is ephemeral, so
-keeping the log (copied out, or committed as GREEN-only material) is a choice
-the operator makes deliberately.
+keeping the log (copied out with its .head sidecar, or committed as GREEN-only
+material) is a choice the operator makes deliberately.
 
     python decision_log.py template
     python decision_log.py record --json filled-record.json
     python decision_log.py review --json filled-review.json
-    python decision_log.py stats [--today YYYY-MM-DD] [--json]
-    python decision_log.py verify
+    python decision_log.py stats [--today YYYY-MM-DD] [--json] [--expect-head H --expect-length N]
+    python decision_log.py verify [--expect-head H --expect-length N]
 
-Exit codes: 0 done; 1 refused (the input or the request was not valid); 2 the
-log failed its integrity check, so nothing was computed from it.
+Exit codes: 0 done; 1 refused (the input or the request was not valid, nothing
+written); 2 the log failed its integrity check, so nothing was computed from it.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
 import json
 import os
 import re
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
@@ -66,16 +79,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-from audit_log import AuditChainError, AuditEntry, DurableAuditLog  # noqa: E402
+from audit_log import HEAD_SUFFIX, AuditChainError, AuditEntry, DurableAuditLog  # noqa: E402
 from stage_zero import wilson  # noqa: E402
 
 DEFAULT_LOG = os.path.join(HERE, "decisions", "decision-log.jsonl")
 LOG_ID = "full-council-decision-log"
 PLACEHOLDER = "FILL-IN"
+WRITTEN_AT = "_written_at"
+"""Replay attaches each entry's write stamp under this key; input may never carry it."""
 
 SUCCESS_SCORES = frozenset({4, 5})
 PROVISIONAL_WIDTH = 0.30
 """An interval wider than this is PROVISIONAL. A convention, not a derivation."""
+LATE_DAYS = 2
+"""A decision written more than this many days after its decision date is LATE:
+its ex ante score may carry hindsight. A convention, not a derivation."""
 
 DECISION_TYPES = ("factual", "causal", "predictive", "strategic", "legal_regulatory", "tax",
                   "compliance", "ethical", "financial", "technical", "medical", "interpersonal")
@@ -112,8 +130,14 @@ REVIEW_FIELDS = frozenset({
     "implementation_score",
 })
 
-ID_RE = re.compile(r"^D-\d{8}-[a-z0-9][a-z0-9-]{0,39}$")
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# ASCII classes and fullmatch, never \d and $: \d accepts non-ASCII digits and
+# $ accepts a trailing newline, and either would let a lookalike id pass as new.
+ID_RE = re.compile(r"D-[0-9]{8}-[a-z0-9][a-z0-9-]{0,39}")
+DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+PLACEHOLDER_RE = re.compile(
+    r"\bfill[\s_-]?in\b|\btbd\b|\btodo\b|<\s*(?:fill|insert|your|placeholder|tbd|todo)\b[^>]*>",
+    re.IGNORECASE)
+ELLIPSIS_ONLY = re.compile(r"\s*(?:\.{2,}|…)\s*")
 
 
 class Refused(ValueError):
@@ -135,7 +159,7 @@ def _is_text(v: Any) -> bool:
 
 
 def _iso(v: Any) -> dt.date | None:
-    if not (isinstance(v, str) and DATE_RE.match(v)):
+    if not (isinstance(v, str) and DATE_RE.fullmatch(v)):
         return None
     try:
         return dt.date.fromisoformat(v)
@@ -164,14 +188,21 @@ def _enum(v: Any, name: str, allowed: Sequence[str], problems: list[str]) -> Non
         problems.append(f"{name} must be one of: {', '.join(allowed)}")
 
 
-def _placeholders(v: Any, path: str = "") -> list[str]:
-    if isinstance(v, str):
-        return [f"{path or 'value'} still contains {PLACEHOLDER}"] if PLACEHOLDER in v else []
-    if isinstance(v, Mapping):
-        return [p for k, sub in v.items() for p in _placeholders(sub, f"{path}.{k}" if path else str(k))]
-    if isinstance(v, list):
-        return [p for i, sub in enumerate(v) for p in _placeholders(sub, f"{path}[{i}]")]
-    return []
+def _placeholders(value: Any) -> list[str]:
+    """Every string still holding placeholder text. Iterative, so a deeply
+    nested input is refused rather than blowing the recursion limit."""
+    found: list[str] = []
+    stack: list[tuple[str, Any]] = [("", value)]
+    while stack:
+        path, v = stack.pop()
+        if isinstance(v, str):
+            if PLACEHOLDER_RE.search(v) or ELLIPSIS_ONLY.fullmatch(v):
+                found.append(f"{path or 'value'} still contains placeholder text")
+        elif isinstance(v, Mapping):
+            stack.extend((f"{path}.{k}" if path else str(k), sub) for k, sub in v.items())
+        elif isinstance(v, list):
+            stack.extend((f"{path}[{i}]", sub) for i, sub in enumerate(v))
+    return sorted(found)
 
 
 def _shape(p: Any, fields: frozenset[str], what: str) -> list[str]:
@@ -190,7 +221,7 @@ def validate_record(p: Any) -> list[str]:
     if problems:
         return problems
     problems += _placeholders(p)
-    if not (isinstance(p["id"], str) and ID_RE.match(p["id"])):
+    if not (isinstance(p["id"], str) and ID_RE.fullmatch(p["id"])):
         problems.append("id must look like D-20260926-short-slug (lowercase letters, digits, hyphens)")
     day = _date(p["date"], "date", problems)
     due = _date(p["review_date"], "review_date", problems)
@@ -237,89 +268,185 @@ def validate_review(p: Any, decision: Mapping[str, Any]) -> list[str]:
 
 # ---------------------------------------------------------------- the log
 
-def _exists(path: str) -> bool:
-    return os.path.exists(path) and os.path.getsize(path) > 0
+def _present(path: str) -> bool:
+    """True when a complete log exists, False when nothing has been recorded.
+
+    Anything in between is an integrity failure, never "nothing recorded": a
+    sidecar without its log, a log emptied to zero bytes, or a log without its
+    sidecar (without which tail truncation cannot be ruled out).
+    """
+    log_exists = os.path.exists(path)
+    side_exists = os.path.exists(path + HEAD_SUFFIX)
+    if not log_exists and not side_exists:
+        return False
+    if not log_exists:
+        raise IntegrityError(f"{path}: the log is missing but its head sidecar exists; it was deleted or moved without it")
+    if os.path.getsize(path) == 0:
+        raise IntegrityError(f"{path}: the log exists but is empty; a log truncated to nothing is not an empty record")
+    if not side_exists:
+        raise IntegrityError(
+            f"{path}: its head sidecar {os.path.basename(path)}{HEAD_SUFFIX} is missing, so tail truncation "
+            "cannot be ruled out. Keep the two files together; restore both from your copy.")
+    return True
 
 
-def _open_or_create(path: str) -> DurableAuditLog:
-    """The log at `path`, verified on open; created with its genesis if absent."""
+def _open(path: str, clock: Callable[[], str] | None = None) -> DurableAuditLog:
+    """Open a present log, verified on open. Anything untrustworthy is an IntegrityError."""
     try:
-        if not _exists(path):
-            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        return DurableAuditLog(path, run_id=LOG_ID)
-    except (AuditChainError, ValueError, OSError) as exc:
-        # ValueError covers a line that is not JSON. Every one of these means
-        # the record cannot be trusted, so nothing is computed from it.
+        return DurableAuditLog(path, run_id=LOG_ID, clock=clock)
+    except (AuditChainError, ValueError, RecursionError, OSError) as exc:
+        # ValueError covers a line that is not JSON and RecursionError one
+        # nested past the parser's limit. Every one of these means the record
+        # cannot be trusted, so nothing is computed from it.
         raise IntegrityError(f"{path}: {exc}") from exc
+
+
+def _create(path: str, clock: Callable[[], str] | None) -> DurableAuditLog:
+    try:
+        return DurableAuditLog(path, run_id=LOG_ID, clock=clock)
+    except OSError as exc:
+        raise Refused([f"cannot create the log at {path}: {exc}"]) from exc
 
 
 def _open_existing(path: str) -> DurableAuditLog | None:
     """The log at `path`, verified on open, or None when nothing is recorded yet."""
-    return _open_or_create(path) if _exists(path) else None
+    return _open(path) if _present(path) else None
+
+
+def _ensure_dir(path: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    except OSError as exc:
+        raise Refused([f"cannot create the directory for {path}: {exc}"]) from exc
+
+
+@contextlib.contextmanager
+def _writer_lock(path: str) -> Iterator[None]:
+    """One writer at a time across the duplicate check AND the append.
+
+    The chain's own lock covers only the append, so without this two writers
+    could both pass the "already recorded" check on a stale snapshot and both
+    append the same id: a log no later read can ever trust again.
+    """
+    try:
+        fd = os.open(path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError as exc:
+        raise Refused([f"cannot take the writer lock for {path}: {exc}"]) from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _check_anchor(log: DurableAuditLog, head: str | None, length: int | None) -> None:
+    if length is not None and len(log) != length:
+        raise IntegrityError(f"the log holds {len(log)} entries but your recorded anchor says {length}: "
+                             "entries were added or removed since you recorded it")
+    if head is not None and log.head != head:
+        raise IntegrityError(f"the log's head is {log.head[:12]}... but your recorded anchor is {head[:12]}...: "
+                             "the log was truncated or rewritten")
+
+
+def anchor(log: DurableAuditLog) -> str:
+    return f"--expect-head {log.head} --expect-length {len(log)}"
 
 
 def replay(entries: Sequence[AuditEntry]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Decisions and reviews by id, re-validated. Any violation fails closed."""
+    """Decisions and reviews by id, re-validated. Any violation fails closed.
+
+    The write stamp the command line adds ("at") is lifted out before
+    validation and carried under WRITTEN_AT, which no input may supply.
+    """
     decisions: dict[str, dict[str, Any]] = {}
     reviews: dict[str, dict[str, Any]] = {}
     for e in entries[1:]:
-        pid = e.payload.get("id")
+        payload = {k: v for k, v in e.payload.items() if k != "at"}
+        pid = payload.get("id")
         if not isinstance(pid, str):
             raise IntegrityError(f"entry {e.seq}: id is not text: {pid!r}")
         if e.kind == "decision":
             if pid in decisions:
                 raise IntegrityError(f"entry {e.seq}: decision {pid!r} recorded twice; an ex ante record may have been rewritten")
-            bad = validate_record(e.payload)
+            bad = validate_record(payload)
             if bad:
                 raise IntegrityError(f"entry {e.seq}: decision {pid!r} does not validate: {bad[0]}")
-            decisions[pid] = dict(e.payload)
+            decisions[pid] = {**payload, WRITTEN_AT: e.payload.get("at")}
         elif e.kind == "review":
             if pid not in decisions:
                 raise IntegrityError(f"entry {e.seq}: review of {pid!r} has no earlier decision")
             if pid in reviews:
                 raise IntegrityError(f"entry {e.seq}: decision {pid!r} reviewed twice")
-            bad = validate_review(e.payload, decisions[pid])
+            bad = validate_review(payload, decisions[pid])
             if bad:
                 raise IntegrityError(f"entry {e.seq}: review of {pid!r} does not validate: {bad[0]}")
-            reviews[pid] = dict(e.payload)
+            reviews[pid] = {**payload, WRITTEN_AT: e.payload.get("at")}
         else:
             raise IntegrityError(f"entry {e.seq}: unexpected entry kind {e.kind!r}")
     return decisions, reviews
 
 
-def load(path: str) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Decisions and reviews from the log at `path`; empty when no log exists yet."""
+def load(path: str, head: str | None = None, length: int | None = None,
+         ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Decisions and reviews from the log at `path`; empty when no log exists yet.
+
+    With an anchor (head, length) recorded earlier, a log that no longer
+    matches it fails integrity, and so does an absent log.
+    """
     log = _open_existing(path)
-    return ({}, {}) if log is None else replay(log.entries)
+    if log is None:
+        if head is not None or length is not None:
+            raise IntegrityError(f"{path}: an anchor was given but no log exists")
+        return {}, {}
+    _check_anchor(log, head, length)
+    return replay(log.entries)
 
 
-def record(path: str, payload: Any) -> AuditEntry:
+def _stamp(clock: Callable[[], str] | None) -> tuple[Callable[[], str] | None, dt.date | None]:
+    """Read the clock once, so the checks and the entry agree on the time."""
+    if clock is None:
+        return None, None
+    now = clock()
+    return (lambda: now), _iso(now[:10])
+
+
+def record(path: str, payload: Any, clock: Callable[[], str] | None = None) -> AuditEntry:
     """Write a decision and lock its ex ante score. Refuses before touching disk."""
     problems = validate_record(payload)
     if problems:
         raise Refused(problems)
-    log = _open_or_create(path)
-    decisions, _ = replay(log.entries)
-    if payload["id"] in decisions:
-        raise Refused([f"decision {payload['id']} is already recorded; the ex ante record is locked"])
-    return log.append("decision", dict(payload))
+    fixed, today = _stamp(clock)
+    if today is not None and dt.date.fromisoformat(payload["date"]) > today:
+        raise Refused([f"the decision date {payload['date']} is after the write date {today.isoformat()}"])
+    _ensure_dir(path)
+    with _writer_lock(path):
+        log = _open(path, fixed) if _present(path) else _create(path, fixed)
+        decisions, _ = replay(log.entries)
+        if payload["id"] in decisions:
+            raise Refused([f"decision {payload['id']} is already recorded; the ex ante record is locked"])
+        return log.append("decision", dict(payload))
 
 
-def review(path: str, payload: Any) -> AuditEntry:
+def review(path: str, payload: Any, clock: Callable[[], str] | None = None) -> AuditEntry:
     """Write the ex post review of a recorded decision, once."""
-    log = _open_existing(path)
-    if log is None:
+    if not _present(path):
         raise Refused([f"no decision log at {path}: record the decision before reviewing it"])
-    decisions, reviews = replay(log.entries)
-    pid = payload.get("id") if isinstance(payload, Mapping) else None
-    if not isinstance(pid, str) or pid not in decisions:
-        raise Refused([f"no recorded decision with id {pid!r}"])
-    if pid in reviews:
-        raise Refused([f"decision {pid} is already reviewed; a review is written once"])
-    problems = validate_review(payload, decisions[pid])
-    if problems:
-        raise Refused(problems)
-    return log.append("review", dict(payload))
+    fixed, today = _stamp(clock)
+    with _writer_lock(path):
+        log = _open(path, fixed)
+        decisions, reviews = replay(log.entries)
+        pid = payload.get("id") if isinstance(payload, Mapping) else None
+        if not isinstance(pid, str) or pid not in decisions:
+            raise Refused([f"no recorded decision with id {pid!r}"])
+        if pid in reviews:
+            raise Refused([f"decision {pid} is already reviewed; a review is written once"])
+        problems = validate_review(payload, decisions[pid])
+        if problems:
+            raise Refused(problems)
+        if today is not None and dt.date.fromisoformat(payload["reviewed_on"]) > today:
+            raise Refused([f"reviewed_on {payload['reviewed_on']} is after the write date {today.isoformat()}"])
+        return log.append("review", dict(payload))
 
 
 # ---------------------------------------------------------------- statistics
@@ -365,6 +492,8 @@ class Stats:
     overdue: list[str] | None
     not_observable: int
     early_reviews: int
+    late: list[str]
+    unstamped: int
     overall: Rate
     by_confidence: list[Rate]
     by_followed: list[Rate]
@@ -382,12 +511,19 @@ def _tally(values: Sequence[str], keys: Sequence[str]) -> dict[str, int]:
     return {k: sum(1 for v in values if v == k) for k in keys}
 
 
+def _lag_days(d: Mapping[str, Any]) -> int | None:
+    written = d.get(WRITTEN_AT)
+    day = _iso(written[:10]) if isinstance(written, str) else None
+    return None if day is None else (day - dt.date.fromisoformat(d["date"])).days
+
+
 def compute(decisions: Mapping[str, Mapping[str, Any]], reviews: Mapping[str, Mapping[str, Any]],
             today: dt.date | None = None) -> Stats:
     scored = [(decisions[i], r) for i, r in reviews.items() if r["ex_post_score"] != "N/A"]
     overdue = None if today is None else sorted(
         i for i, d in decisions.items()
         if i not in reviews and dt.date.fromisoformat(d["review_date"]) < today)
+    lags = {i: _lag_days(d) for i, d in decisions.items()}
     ex_ante = []
     for score in (5, 4, 3, 2, 1):
         outcomes = [int(r["ex_post_score"]) for d, r in scored if d["ex_ante_score"] == score]
@@ -400,6 +536,8 @@ def compute(decisions: Mapping[str, Mapping[str, Any]], reviews: Mapping[str, Ma
         not_observable=len(reviews) - len(scored),
         early_reviews=sum(1 for i, r in reviews.items()
                           if r["reviewed_on"] < decisions[i]["review_date"]),
+        late=sorted(i for i, lag in lags.items() if lag is not None and lag > LATE_DAYS),
+        unstamped=sum(1 for lag in lags.values() if lag is None),
         overall=_rate("all reviewed decisions", scored),
         by_confidence=[_rate(f"confidence {c}", [(d, r) for d, r in scored if d["confidence"] == c])
                        for c in reversed(CONFIDENCE)],
@@ -430,6 +568,8 @@ def render(s: Stats, path: str, today: dt.date | None = None) -> list[str]:
     out += [head,
             f"  success = ex post score 4 or 5 (met or mostly met the target); "
             f"N/A outcomes excluded: {s.not_observable}; reviewed before the review date: {s.early_reviews}",
+            f"  recorded more than {LATE_DAYS} days after the decision date (hindsight risk): "
+            f"{', '.join(s.late) or 'none'}; write time not recorded: {s.unstamped}",
             "", "  " + s.overall.line(), "  by confidence at decision time:"]
     out += ["    " + r.line() for r in s.by_confidence]
     out += ["  by whether the recommendation was followed:"]
@@ -451,6 +591,7 @@ def as_json(s: Stats) -> dict[str, Any]:
     return {
         "recorded": s.recorded, "reviewed": s.reviewed, "awaiting": s.awaiting,
         "overdue": s.overdue, "not_observable": s.not_observable, "early_reviews": s.early_reviews,
+        "late": s.late, "late_threshold_days": LATE_DAYS, "unstamped": s.unstamped,
         "success_definition": "ex post score 4 or 5; N/A excluded",
         "overall": s.overall.as_dict(),
         "by_confidence": [r.as_dict() for r in s.by_confidence],
@@ -481,12 +622,16 @@ def template() -> dict[str, Any]:
 
 # ---------------------------------------------------------------- command line
 
+def _utc_now() -> str:
+    return dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+
+
 def _read_json(source: str) -> Any:
     try:
         text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
         return json.loads(text)
-    except (OSError, ValueError) as exc:
-        raise Refused([f"cannot read JSON from {source}: {exc}"]) from exc
+    except (OSError, ValueError, RecursionError) as exc:
+        raise Refused([f"cannot read JSON from {source}: {type(exc).__name__}: {str(exc)[:200]}"]) from exc
 
 
 def _parse_today(v: str | None) -> dt.date | None:
@@ -504,24 +649,30 @@ def _cmd_template(_: argparse.Namespace) -> int:
     return 0
 
 
+def _print_anchor(path: str) -> None:
+    print(f"ANCHOR: {anchor(_open(path))}  (keep it somewhere this log's editor cannot change)")
+
+
 def _cmd_record(a: argparse.Namespace) -> int:
     payload = _read_json(a.json_path)
-    entry = record(a.log, payload)
+    entry = record(a.log, payload, clock=_utc_now)
     print(f"RECORDED {payload['id']} as entry {entry.seq}. The ex ante score is now locked. "
           f"Review on or after {payload['review_date']}.")
+    _print_anchor(a.log)
     return 0
 
 
 def _cmd_review(a: argparse.Namespace) -> int:
     payload = _read_json(a.json_path)
-    entry = review(a.log, payload)
+    entry = review(a.log, payload, clock=_utc_now)
     print(f"REVIEWED {payload['id']} as entry {entry.seq}.")
+    _print_anchor(a.log)
     return 0
 
 
 def _cmd_stats(a: argparse.Namespace) -> int:
     today = _parse_today(a.today)
-    decisions, reviews = load(a.log)
+    decisions, reviews = load(a.log, a.expect_head, a.expect_length)
     stats = compute(decisions, reviews, today)
     if a.as_json:
         print(json.dumps(as_json(stats), indent=2))
@@ -533,11 +684,17 @@ def _cmd_stats(a: argparse.Namespace) -> int:
 def _cmd_verify(a: argparse.Namespace) -> int:
     log = _open_existing(a.log)
     if log is None:
+        if a.expect_head is not None or a.expect_length is not None:
+            raise IntegrityError(f"{a.log}: an anchor was given but no log exists")
         print(f"NO LOG at {a.log}: nothing has been recorded, and an absent log is not a verified one.")
         return 1
     verdict = log.verify()
+    if not verdict:
+        raise IntegrityError("; ".join(verdict.failures) or "the chain did not verify")
+    _check_anchor(log, a.expect_head, a.expect_length)
     decisions, reviews = replay(log.entries)
     print(f"VERIFIED: {verdict.entries_checked} entries, {len(decisions)} decisions, {len(reviews)} reviews.")
+    print(f"ANCHOR: {anchor(log)}  (keep it somewhere this log's editor cannot change)")
     return 0
 
 
@@ -556,6 +713,11 @@ class _Parser(argparse.ArgumentParser):
         raise Refused([message])
 
 
+def _anchor_args(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--expect-head", help="head hash from an anchor recorded earlier")
+    sp.add_argument("--expect-length", type=int, help="entry count from an anchor recorded earlier")
+
+
 def _parser() -> argparse.ArgumentParser:
     p = _Parser(prog="decision_log.py",
                 description="The Full Council Decision Log: the only place a success percentage may come from.")
@@ -569,8 +731,10 @@ def _parser() -> argparse.ArgumentParser:
     sp.add_argument("--log", default=DEFAULT_LOG)
     sp.add_argument("--today", help="YYYY-MM-DD, to list overdue reviews")
     sp.add_argument("--json", dest="as_json", action="store_true")
-    sp = sub.add_parser("verify", help="integrity check only")
+    _anchor_args(sp)
+    sp = sub.add_parser("verify", help="integrity check only; prints the anchor")
     sp.add_argument("--log", default=DEFAULT_LOG)
+    _anchor_args(sp)
     return p
 
 

@@ -10,13 +10,15 @@ import io
 import json
 import os
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import decision_log as dl
-from audit_log import DurableAuditLog
+from audit_log import HEAD_SUFFIX, ChainVerdict, DurableAuditLog
 from stage_zero import wilson
 
 
@@ -92,10 +94,10 @@ def test_shipped_template_fails_validation_until_filled() -> None:
     t = dl.template()
     rec_problems = dl.validate_record(t["record"])
     assert rec_problems
-    assert any(dl.PLACEHOLDER in p for p in rec_problems)
+    assert any("placeholder" in p for p in rec_problems)
     rev_problems = dl.validate_review(t["review"], good_record())
     assert rev_problems
-    assert any(dl.PLACEHOLDER in p for p in rev_problems)
+    assert any("placeholder" in p for p in rev_problems)
     assert set(t["record"]) == dl.RECORD_FIELDS
     assert set(t["review"]) == dl.REVIEW_FIELDS
 
@@ -140,7 +142,17 @@ def test_good_fixtures_validate() -> None:
     ({"recommendation_followed": "No", "if_not_followed_what_changed": ""}, r"required when"),
     ({"recommendation_followed": "Partially", "if_not_followed_what_changed": " "}, r"required when"),
     ({"if_not_followed_what_changed": None}, r"must be text"),
-    ({"cap_applied": "FILL-IN later"}, r"still contains FILL-IN"),
+    ({"cap_applied": "FILL-IN later"}, r"still contains placeholder text"),
+    ({"cap_applied": "fill in"}, r"still contains placeholder text"),
+    ({"stakes": "TBD"}, r"still contains placeholder text"),
+    ({"stakes": "todo: write this"}, r"still contains placeholder text"),
+    ({"stakes": "<your stakes here>"}, r"still contains placeholder text"),
+    ({"stakes": "..."}, r"still contains placeholder text"),
+    ({"stakes": "\u2026"}, r"still contains placeholder text"),
+    ({"id": "D-20260926-sponsor-tier\n"}, r"id must look like"),
+    ({"id": "D-\uff12\uff10\uff12\uff16\uff10\uff19\uff12\uff16-sponsor-tier"}, r"id must look like"),
+    ({"date": "2026-09-26\n"}, r"date must be a real date"),
+    ({"date": "\uff12\uff10\uff12\uff16-09-26"}, r"date must be a real date"),
 ])
 def test_record_refusals(over: dict[str, Any], pattern: str) -> None:
     problems = dl.validate_record(good_record(**over))
@@ -165,8 +177,22 @@ def test_placeholder_found_inside_nested_values() -> None:
     rec = good_record(assumption_test_plan={**dict.fromkeys(dl.PLAN_FIELDS, "x"), "owner": "FILL-IN"},
                       load_bearing_premises=["a", "FILL-IN"])
     problems = dl.validate_record(rec)
-    assert "assumption_test_plan.owner still contains FILL-IN" in problems
-    assert "load_bearing_premises[1] still contains FILL-IN" in problems
+    assert "assumption_test_plan.owner still contains placeholder text" in problems
+    assert "load_bearing_premises[1] still contains placeholder text" in problems
+
+
+def test_ordinary_words_are_not_placeholders() -> None:
+    rec = good_record(stakes="Fulfilling the contract", decision="Refilling the pipeline",
+                      strongest_dissent="revenue < cost > margin")
+    assert dl.validate_record(rec) == []
+
+
+def test_deeply_nested_input_is_refused_not_crashed() -> None:
+    deep: Any = "x"
+    for _ in range(5000):
+        deep = [deep]
+    problems = dl.validate_record(good_record(stakes=deep))
+    assert "stakes must be non-empty text" in problems
 
 
 def test_followed_with_note_is_fine() -> None:
@@ -393,7 +419,10 @@ def test_cli_end_to_end(tmp_path: Path, log: str, capsys: pytest.CaptureFixture[
     assert code == 0
     assert set(json.loads(out)) == {"record", "review", "allowed_values"}
 
-    rec = write_json(tmp_path, "rec.json", good_record())
+    # The command line stamps writes with the real clock and refuses future
+    # dates, so this test dates everything today to hold on any run date.
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+    rec = write_json(tmp_path, "rec.json", good_record(date=today, review_date=today))
     code, out, _ = run(["record", "--json", rec, "--log", log], capsys)
     assert code == 0
     assert "ex ante score is now locked" in out
@@ -402,7 +431,7 @@ def test_cli_end_to_end(tmp_path: Path, log: str, capsys: pytest.CaptureFixture[
     assert code == 1
     assert "already recorded" in err
 
-    rev = write_json(tmp_path, "rev.json", good_review())
+    rev = write_json(tmp_path, "rev.json", good_review(reviewed_on=today))
     code, out, _ = run(["review", "--json", rev, "--log", log], capsys)
     assert code == 0
     assert out.startswith("REVIEWED")
@@ -461,3 +490,219 @@ def test_default_log_directory_is_gitignored() -> None:
     ignored = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "adjudication/decisions/" in ignored
     assert os.path.dirname(dl.DEFAULT_LOG).endswith(os.path.join("adjudication", "decisions"))
+
+
+# ---------------------------------------------------------------- the sidecar and the anchor
+
+def _two_decisions(log: str) -> None:
+    dl.record(log, good_record(id="D-20260901-a", date="2026-09-01"))
+    dl.record(log, good_record(id="D-20260902-b", date="2026-09-02"))
+
+
+def test_a_missing_sidecar_is_an_integrity_failure_not_a_fresh_start(log: str) -> None:
+    _two_decisions(log)
+    os.remove(log + HEAD_SUFFIX)
+    lines = Path(log).read_text(encoding="utf-8").splitlines(keepends=True)
+    Path(log).write_text("".join(lines[:-1]), encoding="utf-8")
+    with pytest.raises(dl.IntegrityError, match="sidecar"):
+        dl.load(log)
+    with pytest.raises(dl.IntegrityError, match="sidecar"):
+        dl.record(log, good_record(id="D-20260902-b", date="2026-09-02", ex_ante_score=5))
+
+
+def test_a_log_emptied_to_zero_bytes_is_not_an_empty_record(log: str) -> None:
+    _two_decisions(log)
+    Path(log).write_text("", encoding="utf-8")
+    with pytest.raises(dl.IntegrityError, match="empty"):
+        dl.load(log)
+    with pytest.raises(dl.IntegrityError, match="empty"):
+        dl.record(log, good_record(id="D-20260901-a", date="2026-09-01", ex_ante_score=5))
+
+
+def test_a_sidecar_without_its_log_is_an_integrity_failure(log: str) -> None:
+    _two_decisions(log)
+    os.remove(log)
+    with pytest.raises(dl.IntegrityError, match="missing"):
+        dl.load(log)
+    with pytest.raises(dl.IntegrityError, match="missing"):
+        dl.review(log, good_review(id="D-20260901-a"))
+
+
+def test_the_anchor_catches_a_truncation_with_a_forged_sidecar(log: str) -> None:
+    _two_decisions(log)
+    log_obj = dl._open(log)
+    head, length = log_obj.head, len(log_obj)
+    assert dl.load(log, head, length)[0].keys() == {"D-20260901-a", "D-20260902-b"}
+    # Truncate and forge a sidecar for the survivor: the documented limit of an
+    # unsigned chain, invisible without an anchor ...
+    lines = Path(log).read_text(encoding="utf-8").splitlines(keepends=True)
+    Path(log).write_text("".join(lines[:-1]), encoding="utf-8")
+    survivor = json.loads(lines[-2])["entry_hash"]
+    Path(log + HEAD_SUFFIX).write_text(json.dumps({"head": survivor, "length": length - 1}), encoding="utf-8")
+    assert "D-20260902-b" not in dl.load(log)[0]
+    # ... and caught by the anchor recorded before it.
+    with pytest.raises(dl.IntegrityError, match="anchor says"):
+        dl.load(log, None, length)
+    with pytest.raises(dl.IntegrityError, match="truncated or rewritten"):
+        dl.load(log, head, None)
+
+
+def test_an_anchor_for_an_absent_log_fails(log: str) -> None:
+    with pytest.raises(dl.IntegrityError, match="no log exists"):
+        dl.load(log, "abc", 3)
+
+
+def test_a_deeply_nested_line_in_the_log_is_an_integrity_failure(log: str) -> None:
+    os.makedirs(os.path.dirname(log))
+    Path(log).write_text("[" * 100000 + "]" * 100000 + "\n", encoding="utf-8")
+    Path(log + HEAD_SUFFIX).write_text(json.dumps({"head": "x", "length": 1}), encoding="utf-8")
+    with pytest.raises(dl.IntegrityError):
+        dl.load(log)
+
+
+# ---------------------------------------------------------------- one writer at a time
+
+def test_two_writers_cannot_both_record_one_id(log: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    dl.record(log, good_record(id="D-20260901-seed", date="2026-09-01"))
+    real_replay = dl.replay
+    paused, release = threading.Event(), threading.Event()
+    calls = {"n": 0}
+
+    def slow_replay(entries: Any) -> Any:
+        out = real_replay(entries)
+        calls["n"] += 1
+        if calls["n"] == 1:          # the first writer stops after its duplicate check
+            paused.set()
+            release.wait(timeout=10)
+        return out
+
+    monkeypatch.setattr(dl, "replay", slow_replay)
+    results: list[str] = []
+
+    def writer() -> None:
+        try:
+            dl.record(log, good_record())
+            results.append("recorded")
+        except dl.Refused:
+            results.append("refused")
+
+    first = threading.Thread(target=writer)
+    first.start()
+    assert paused.wait(timeout=10)
+    second = threading.Thread(target=writer)
+    second.start()
+    time.sleep(0.3)                  # without the lock, the second writer finishes here
+    release.set()
+    first.join(timeout=10)
+    second.join(timeout=10)
+    monkeypatch.undo()
+    assert sorted(results) == ["recorded", "refused"]
+    assert "D-20260926-sponsor-tier" in dl.load(log)[0]
+
+
+def test_the_lock_and_the_directory_fail_as_refusals(log: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    os.makedirs(log + ".lock")       # a directory where the lock file must go
+    with pytest.raises(dl.Refused, match="writer lock"):
+        dl.record(log, good_record())
+
+    def no_dirs(*_: Any, **__: Any) -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(dl.os, "makedirs", no_dirs)
+    with pytest.raises(dl.Refused, match="cannot create the directory"):
+        dl.record(log + "-other", good_record())
+
+
+def test_a_log_that_cannot_be_created_is_a_refusal(log: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    def cannot_write(*_: Any, **__: Any) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(dl, "DurableAuditLog", cannot_write)
+    with pytest.raises(dl.Refused, match="cannot create the log"):
+        dl.record(log, good_record())
+
+
+# ---------------------------------------------------------------- write stamps
+
+def _clock(stamp: str) -> Any:
+    return lambda: stamp
+
+
+def test_entries_carry_their_write_time_and_late_records_are_counted(log: str) -> None:
+    dl.record(log, good_record(id="D-20260901-ontime", date="2026-09-01"), clock=_clock("2026-09-02T10:00:00+00:00"))
+    dl.record(log, good_record(id="D-20260901-late", date="2026-09-01"), clock=_clock("2026-09-10T10:00:00+00:00"))
+    dl.record(log, good_record(id="D-20260901-nostamp", date="2026-09-01"))
+    text = Path(log).read_text(encoding="utf-8")
+    assert '"at":"2026-09-10T10:00:00+00:00"' in text
+    decisions, reviews = dl.load(log)
+    assert decisions["D-20260901-late"][dl.WRITTEN_AT] == "2026-09-10T10:00:00+00:00"
+    s = dl.compute(decisions, reviews)
+    assert s.late == ["D-20260901-late"]
+    assert s.unstamped == 1
+    assert "hindsight risk): D-20260901-late" in "\n".join(dl.render(s, log))
+    assert dl.as_json(s)["late"] == ["D-20260901-late"]
+
+
+def test_future_dated_decisions_and_reviews_are_refused(log: str) -> None:
+    with pytest.raises(dl.Refused, match="after the write date"):
+        dl.record(log, good_record(), clock=_clock("2026-09-25T23:59:00+00:00"))
+    dl.record(log, good_record(), clock=_clock("2026-09-26T08:00:00+00:00"))
+    with pytest.raises(dl.Refused, match="after the write date"):
+        dl.review(log, good_review(reviewed_on="2026-11-30"), clock=_clock("2026-10-01T08:00:00+00:00"))
+    dl.review(log, good_review(reviewed_on="2026-10-01"), clock=_clock("2026-10-01T08:00:00+00:00"))
+
+
+def test_a_write_stamp_cannot_be_supplied_as_input(log: str) -> None:
+    assert any("unknown field: at" in p for p in dl.validate_record({**good_record(), "at": "2020-01-01"}))
+    assert any("unknown field: _written_at" in p for p in dl.validate_record({**good_record(), dl.WRITTEN_AT: "x"}))
+
+
+# ---------------------------------------------------------------- verify and the command line
+
+def test_verify_prints_an_anchor_and_honours_it(tmp_path: Path, log: str, capsys: pytest.CaptureFixture[str]) -> None:
+    rec = write_json(tmp_path, "rec.json", good_record())
+    code, out, _ = run(["record", "--json", rec, "--log", log], capsys)
+    assert code == 0
+    assert "ANCHOR: --expect-head " in out
+    code, out, _ = run(["verify", "--log", log], capsys)
+    assert code == 0
+    anchor_args = out.split("ANCHOR: ", 1)[1].split("  (", 1)[0].split()
+    assert run(["verify", "--log", log, *anchor_args], capsys)[0] == 0
+    assert run(["stats", "--log", log, *anchor_args], capsys)[0] == 0
+    rec2 = write_json(tmp_path, "rec2.json", good_record(id="D-20260926-second"))
+    assert run(["record", "--json", rec2, "--log", log], capsys)[0] == 0
+    code, _, err = run(["verify", "--log", log, *anchor_args], capsys)
+    assert code == 2
+    assert "anchor" in err
+    code, _, err = run(["verify", "--log", str(tmp_path / "none.jsonl"), "--expect-length", "2"], capsys)
+    assert code == 2
+    assert "no log exists" in err
+
+
+def test_verify_refuses_a_verdict_that_failed(log: str, capsys: pytest.CaptureFixture[str],
+                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    dl.record(log, good_record())
+    monkeypatch.setattr(DurableAuditLog, "verify",
+                        lambda self, check_sidecar=True: ChainVerdict(False, 2, None, ["planted failure"]))
+    code, _, err = run(["verify", "--log", log], capsys)
+    assert code == 2
+    assert "planted failure" in err
+
+
+def test_cli_stamps_writes_with_the_current_time(tmp_path: Path, log: str, capsys: pytest.CaptureFixture[str]) -> None:
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+    rec = write_json(tmp_path, "rec.json", good_record(id="D-20260926-today", date=today, review_date=today))
+    assert run(["record", "--json", rec, "--log", log], capsys)[0] == 0
+    assert f'"at":"{today}T' in Path(log).read_text(encoding="utf-8")
+    rev = write_json(tmp_path, "rev.json", good_review(id="D-20260926-today", reviewed_on=today))
+    code, out, _ = run(["review", "--json", rev, "--log", log], capsys)
+    assert code == 0
+    assert "ANCHOR:" in out
+
+
+def test_cli_deeply_nested_json_input_is_a_refusal(tmp_path: Path, log: str, capsys: pytest.CaptureFixture[str]) -> None:
+    deep = tmp_path / "deep.json"
+    deep.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+    code, _, err = run(["record", "--json", str(deep), "--log", log], capsys)
+    assert code == 1
+    assert "RecursionError" in err

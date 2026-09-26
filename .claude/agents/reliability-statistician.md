@@ -28,12 +28,14 @@ Run the modules from `adjudication/` with `.venv/bin/python` (create the venv fr
 `adjudication/decision_log.py` keeps the Full Council Decision Log as a hash-chained, append-only file.
 
 - `python decision_log.py template` prints the record and review templates. They fail validation until every field is filled.
-- `python decision_log.py record --json <file>` writes the decision and its ex ante score at decision time. The ex ante score is locked once written: there is no edit command, and a rewritten entry breaks the chain.
-- `python decision_log.py review --json <file>` writes the ex post outcome, attribution, and implementation scores on or after the review date.
-- `python decision_log.py stats [--today YYYY-MM-DD] [--json]` verifies the chain, then reports success rates overall, by confidence tier, and by whether the recommendation was followed, each with k/n and its Wilson interval. Success means an ex post score of 4 or 5.
-- `python decision_log.py verify` checks integrity only. Exit 2 means the log was altered. Report it and do not compute anything from it.
+- `python decision_log.py record --json <file>` writes the decision and its ex ante score at decision time, stamped with the UTC write time. The ex ante score is locked once written: there is no edit command, a second record of the same id is refused under one lock with the append, and a rewritten entry breaks the chain. A decision dated after the write time is refused.
+- `python decision_log.py review --json <file>` writes the ex post outcome, attribution, and implementation scores on or after the review date, never dated after the write time.
+- `python decision_log.py stats [--today YYYY-MM-DD] [--json]` verifies the chain, then reports success rates overall, by confidence tier, and by whether the recommendation was followed, each with k/n and its Wilson interval. Success means an ex post score of 4 or 5. It also lists decisions recorded more than two days after their decision date: their ex ante score may carry hindsight, so say so whenever you quote a rate that includes them.
+- `python decision_log.py verify` checks integrity only and prints an ANCHOR (the head hash and entry count). Exit 2 means the log was altered, emptied, or separated from its sidecar. Report it and do not compute anything from it.
 
-Never backfill or revise an ex ante score after an outcome is known. That is the hindsight bias the split scoring exists to block. The default log path, `adjudication/decisions/`, is gitignored because operator records can quote sensitive material. Cloud containers are ephemeral, so tell the operator where the log lives and that it must be kept (copied out, or committed deliberately as GREEN-only material by the operator's choice).
+The log is two files, `decision-log.jsonl` and `decision-log.jsonl.head`. They travel together: a log without its sidecar is an integrity failure, because tail truncation can no longer be ruled out. After each write, ask the operator to keep the printed ANCHOR somewhere the log's editor cannot change (an email to themselves, a note). Passing it back with `--expect-head` and `--expect-length` detects a truncation even when the sidecar was forged, which the chain alone cannot.
+
+Never backfill or revise an ex ante score after an outcome is known. That is the hindsight bias the split scoring exists to block. The default log path, `adjudication/decisions/`, is gitignored because operator records can quote sensitive material. Cloud containers are ephemeral, so tell the operator where the log lives and that it must be kept (both files copied out, or committed deliberately as GREEN-only material by the operator's choice). A confidence of High is accepted because a cross-vendor Council can reach it; a single-model run cannot, so a High in a single-model record is a finding to raise.
 
 ## Measuring an agent or a panel
 
