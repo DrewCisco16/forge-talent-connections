@@ -1,0 +1,79 @@
+# Template: build the iOS app on a GitHub-hosted macOS runner and upload it
+# to TestFlight. Copy to .github/workflows/build-ios.yml to activate.
+#
+# Repository secrets to add first (Settings, Secrets and variables, Actions):
+#   ASC_API_KEY_P8_BASE64  the App Store Connect API key file, base64 encoded
+#                          (macOS: base64 -i AuthKey_XXXX.p8 | pbcopy)
+#   ASC_API_KEY_ID         the Key ID shown next to that key
+#   ASC_API_ISSUER_ID      the Issuer ID shown at the top of the keys page
+#   APPLE_TEAM_ID          the 10-character Team ID from the developer account
+#
+# Never commit the .p8 file or any certificate. The runner creates the
+# signing certificate and profile on the fly through the API key and throws
+# them away when the job ends.
+
+name: Build iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          cache: true
+
+      - name: Dependencies and checks
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      - name: Write the App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > ~/private_keys/AuthKey_${ASC_API_KEY_ID}.p8
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+
+      - name: Archive and sign
+        run: |
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          flutter build ipa --release \
+            --export-options-plist ExportOptions.plist \
+            --build-number "$GITHUB_RUN_NUMBER"
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload to TestFlight
+        run: |
+          xcrun altool --upload-app --type ios \
+            --file build/ios/ipa/*.ipa \
+            --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+
+      - name: Keep the IPA as a run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-talent-connections-ios
+          path: build/ios/ipa/*.ipa
+          retention-days: 14

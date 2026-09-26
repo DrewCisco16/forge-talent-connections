@@ -46,6 +46,11 @@ flutter run --release -d <device-id>
 One build covers iPhone 16 Pro Max, iPhone 17 Pro Max, and iPad Pro 11.
 Deployment target is iOS 15.0; bundle id `com.forgelink.forgeTalentConnections`.
 
+For a step-by-step guide to putting the demo on a test iPhone, including the
+no-Mac route through TestFlight and the home-screen web app that works
+today, see `docs/IPHONE_DEMO.md`. A GitHub Actions template for a macOS
+build is at `docs/ios/build-ios.yml`.
+
 ## Web demo
 
 ```bash
