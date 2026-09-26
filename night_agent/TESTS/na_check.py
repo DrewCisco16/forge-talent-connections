@@ -620,6 +620,8 @@ def audit_package(pkg):
     rep(bool(mv) and mv.group(1) == v and v in readme and v in disp.splitlines()[0], "PKG-VERSION", f"spec, SCHEMA, README and DISPATCH state version {v}")
     tag = "v" + ".".join(v.split(".")[:2])
     rep(tag in gate_src.splitlines()[1] and tag in check_src.splitlines()[1], "PKG-VERSION-TOOLS", f"na_gate.py and na_check.py docstrings carry {tag}")
+    rep(os.path.exists(os.path.join(pkg, "AGENT", "run_night.py")) and "AGENT/run_night.py" in disp and "sdk://" in disp,
+        "PKG-RUNTIME", "the SDK runtime exists and DISPATCH names it and the sdk:// seat url scheme")
     merge = prompts["P4_close.md"].split("If MODE is MERGE", 1)[-1]
     rep(re.search(r"^OPTIONS STANDING\s+-", merge, re.M) is not None and "CONFLICT, OPTIONS STANDING, METRICS" in disp,
         "PKG-OPTSTANDING", "P4 MERGE mode writes OPTIONS STANDING and DISPATCH 3.5 expects it")

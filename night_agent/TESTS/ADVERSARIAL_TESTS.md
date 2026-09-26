@@ -30,7 +30,7 @@ Run: `python3 TESTS/make_fixture.py /tmp/na_fixture` then `python3 TESTS/na_chec
 | T-CAP-2 | Aborted slots never counted | F20: capture marked aborted while still signalled complete and cited | CAP-ABORT | CAUGHT |
 | T-GATE-G1..G11 | Transition guards | 24 allow-or-block expectations (see make_fixture.py GUARD_TESTS) | na_gate.py | 24/24 met |
 | T-MUT-1 | Candidate-mutation sensitivity | EVID-2 rejection bypassed in a copy of the checker, oracle fixed | make_fixture.py | F01 escapes that rule, as required |
-| T-PKG | Package consistency | 78 checks on spec, DISPATCH, schema, prompts, template and tests (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label; v11.3 adds flag lists, guard rows, versions, DEPRIORITIZED vocabulary, OPTIONS STANDING) | PKG-* | 78/78 PASS |
+| T-PKG | Package consistency | 79 checks on spec, DISPATCH, schema, prompts, template and tests (six statuses, eight nevers, I1 to I11 regressions, prompt references, deliverable sections, em-dash, width, guards, HOLDOUT, claim ids, adaptation label; v11.3 adds flag lists, guard rows, versions, DEPRIORITIZED vocabulary, OPTIONS STANDING) | PKG-* | 79/79 PASS |
 | T-AR | Spec-derived corpus outside the fixture (AUTORESEARCH/holdout_corpus.py) | 70 run-folder faults, 20 transition cases that must block, 18 that must allow, 15 package assertions, DEV/HOLDOUT split by rule family | na_check.py, na_gate.py | 70/70 caught, 20/20 blocked, 0 false failures, 0 false blocks, 15/15 assertions (from 6/70, 1/20, 3 false failures, 1 false block, 3/15 at v11.2) |
 
 Known limits of Layer A: the leak heuristic is a shingle match and cannot detect paraphrased leaks; the provenance check only inspects list-style lines; hash checks require Dispatch to log sha256 on every write (DISPATCH 6 requires it); the T-AR corpus was written by the same agent that then edited the checker, so in spec section 8 terms it is DEV-grade, and a HOLDOUT set that carries full weight needs a second author who has not read the checker.
@@ -38,6 +38,8 @@ Known limits of Layer A: the leak heuristic is a shingle match and cannot detect
 ## Layer B: watched-run protocol (NOT YET TESTED)
 
 Each item states the injection, the expected behaviour from the spec, and what to record. Run with two generators, one closer, one reviewer, on a benchmark task, watched, roughly 30 minutes.
+
+SDK runtime (v11.4): B1, B2, B4, B7, B8, B11, B12, B13 and B19 can be injected into the fake seats with `python3 AGENT/tests/run_faults.py <out>` (knobs `--fault Bn[:seat[:stage]]`), and B10 is `AGENT/tests/test_resume.py`. Passing there proves the runtime's handling of the injected fault against na_check.py; it proves nothing about a real seat, so every item stays NOT YET TESTED against live seats until a watched rehearsal records it.
 
 | Id | Injection | Expected | Record |
 |---|---|---|---|

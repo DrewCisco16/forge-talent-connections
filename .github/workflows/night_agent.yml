@@ -2,7 +2,8 @@ name: night_agent
 
 # The Night Agent package's non-AI verification layer. Nothing here calls a
 # model or spends money: it reads files and runs the package's own checker,
-# guard and fixture suite, then the autoresearch corpus. Same posture as
+# guard and fixture suite, then the autoresearch corpus, then the SDK runtime
+# with fake seats. Same posture as
 # adjudication.yml: a push that breaks the machine-checkable layer goes red.
 on:
   push:
@@ -69,3 +70,19 @@ jobs:
               raise SystemExit("autoresearch corpus regressed: " + "; ".join(bad))
           print("autoresearch corpus: every case holds")
           EOF
+
+      # The SDK runtime (v11.4) with deterministic fake seats: no model, no network, no spend. A full HYBRID night
+      # and a full DIRECT night must pass the checker, and every Layer B fault the fake seats can inject must be
+      # handled as the spec says. Live seats are never exercised here.
+      - name: Runtime unit tests
+        run: python3 -m unittest discover -s AGENT/tests -t . -v
+
+      - name: Fake-seat nights and conformance
+        run: |
+          python3 AGENT/run_night.py "${RUNNER_TEMP}/na_fake" --ask AGENT/tests/fixtures/ask_hybrid.md --seats fake --documents AGENT/tests/fixtures/documents --sandbox AGENT/tests/fixtures/sandbox --net off
+          python3 TESTS/na_check.py "${RUNNER_TEMP}/na_fake/runs/na-001"
+          python3 AGENT/run_night.py "${RUNNER_TEMP}/na_fake" --ask AGENT/tests/fixtures/ask_direct.md --seats fake --documents AGENT/tests/fixtures/documents --net off
+          python3 TESTS/na_check.py "${RUNNER_TEMP}/na_fake/runs/na-002"
+
+      - name: Fake-seat Layer B faults
+        run: python3 AGENT/tests/run_faults.py "${RUNNER_TEMP}/na_faults"
