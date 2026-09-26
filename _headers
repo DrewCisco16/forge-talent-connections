@@ -1,0 +1,34 @@
+# Cloudflare Pages response headers.
+#
+# The entry points revalidate on every visit so a new deploy reaches
+# returning visitors immediately. Everything else keeps Pages' defaults.
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/demo/
+  Cache-Control: no-cache
+
+/demo/index.html
+  Cache-Control: no-cache
+
+/demo/flutter_bootstrap.js
+  Cache-Control: no-cache
+
+/demo/flutter.js
+  Cache-Control: no-cache
+
+/demo/main.dart.js
+  Cache-Control: no-cache
+
+/demo/flutter_service_worker.js
+  Cache-Control: no-cache
+
+/demo/version.json
+  Cache-Control: no-cache
+
+/demo/manifest.json
+  Cache-Control: no-cache
