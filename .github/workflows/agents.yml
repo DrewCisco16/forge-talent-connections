@@ -1,0 +1,49 @@
+name: agents
+
+# The agent layer's own gate: agent definitions and least privilege, the shared
+# Council contract, the Full Council workflow's control flow (run with stubbed
+# agents, so it makes no model call and costs nothing), and the walled-name
+# scan over every file this layer adds. No secrets, no vendor calls.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude/**"
+      - "CLAUDE.md"
+      - "docs/AI_AGENTS.md"
+      - "adjudication/decision_log.py"
+      - "adjudication/test_decision_log.py"
+      - "test/copy/walled_repo_test.dart"
+      - "test/copy/product_language_test.dart"
+      - ".github/workflows/agents.yml"
+  pull_request:
+    paths:
+      - ".claude/**"
+      - "CLAUDE.md"
+      - "docs/AI_AGENTS.md"
+      - "adjudication/decision_log.py"
+      - "adjudication/test_decision_log.py"
+      - "test/copy/walled_repo_test.dart"
+      - "test/copy/product_language_test.dart"
+      - ".github/workflows/agents.yml"
+
+concurrency:
+  group: agents-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Agent layer tests
+        run: node --test ".claude/tests/*.test.mjs"
