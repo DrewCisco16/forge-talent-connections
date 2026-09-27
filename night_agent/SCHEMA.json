@@ -269,7 +269,8 @@
       "failed_stages": [],
       "runtime": "browser|sdk|fake",
       "provider": "",
-      "effort": ""
+      "effort": "",
+      "auth": "key|cli|none"
     },
     "seat_url_scheme": {
       "browser": "the conversation URL",
@@ -427,7 +428,8 @@
     "sends_reserved_for_tail": 0,
     "experiments_used": 0,
     "caps_known": {},
-    "flags": []
+    "flags": [],
+    "cost_usd_estimate": 0.0
   },
   "log_record": {
     "t": "",
@@ -459,7 +461,8 @@
     "tonights_question": "",
     "classification": "",
     "deprioritized": 0,
-    "rollback_hash_verified": null
+    "rollback_hash_verified": null,
+    "cost_usd_estimate": 0.0
   },
   "architecture_run_line": {
     "run": "",

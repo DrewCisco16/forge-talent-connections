@@ -29,6 +29,7 @@ class NightState:
     usable_seats: int = 99
     experiments_max: int = 8
     options_open_settle: list = field(default_factory=list)
+    budget: object = None          # AGENT/budget.py Budget, or None when the night has no total cap
 
 
 def is_checkable(line: str) -> bool:
@@ -54,6 +55,8 @@ def stop_test(st: NightState) -> str | None:
         one_operator = st.ready_generators + 1
         if st.sends_used + one_operator + st.tail_sends > st.max_calls:
             return "BUDGET"
+    if st.budget is not None and st.budget.projected_over(st.ready_generators + 1 + st.tail_sends):
+        return "BUDGET"
     if not st.options_standing:
         return "NONE_STANDING"
     open_checkable = [l for l in st.open_lines if is_checkable(l)]

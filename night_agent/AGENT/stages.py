@@ -9,7 +9,9 @@ import uuid
 from dataclasses import dataclass
 
 from . import assemble, classify, guard, packets, parse
+from .budget import Budget
 from .check import engine
+from .errors import NightStop  # noqa: F401  (re-exported: callers catch stages.NightStop)
 from .check.documents import list_documents, read_document
 from .records import RunFolder, sha_text
 from .selection import NightState, select_operator, stop_test
@@ -22,15 +24,6 @@ EARLIER_MARKER = "\nEARLIER CLAIMS (previous stages; the PASSED ones are already
 
 class StopAfter(Exception):
     """Test hook (--stop-after): the run stops cleanly once the named file exists, as a crash would."""
-
-
-class NightStop(Exception):
-    """The run stops here with a labelled reason (spec 6, 7); never for subject matter."""
-
-    def __init__(self, reason, note):
-        super().__init__(f"{reason}: {note}")
-        self.reason = reason
-        self.note = note
 
 
 @dataclass
@@ -61,6 +54,11 @@ class Night:
         self.closer = "CLOSER"
         self.closer_swaps = 0
         self.started = rf.clock.iso()
+        st = rf.read_json("status.json", {}) or {}
+        self.budget = Budget(cfg.budget_usd, spent=st.get("cost_usd_estimate", 0.0))
+        for seat in crew.values():
+            if hasattr(seat, "budget"):
+                seat.budget = self.budget   # EXECUTOR sessions are charged by the seat itself
 
     # ------------------------------------------------------------------ helpers
     def log(self, seat, action, result="OK", **kw):
@@ -141,9 +139,11 @@ class Night:
         if not is_handshake:
             st = self.rf.read_json("status.json", {}) or {}
             self.rf.status(sends_used=int(st.get("sends_used", 0)) + 1)
+        self.budget.check("send", f"the send to {sid} in {stage_label}")
         reply = seat.send(packet, self.cfg.max_wait_s, slot)
         cost = reply.cost_usd or 0.0
         self.stage_costs[stage_label] = self.stage_costs.get(stage_label, 0.0) + cost
+        self.rf.status(cost_usd_estimate=round(self.budget.charge(cost, "send"), 6))
         assemble.capability_observation(self.root, {
             "task_family": "night", "provider": spec.provider, "displayed_model": spec.model, "displayed_effort": spec.effort,
             "date": self.rf.clock.iso()[:10], "role": spec.role, "prompt_hash": packet.prompt_hash,
@@ -246,7 +246,7 @@ class Night:
             seats.append({"id": sid, "role": spec.role, "url": spec.url, "model": spec.model, "ready": ready,
                           "handshake_time": self.rf.clock.hhmm(), "retired": False, "fresh": True, "prior_history": "",
                           "failed_stages": [], "runtime": spec.runtime, "provider": spec.provider, "effort": spec.effort,
-                          "backup_closer": sid == "G1"})
+                          "auth": self.cfg.auth if spec.runtime == "sdk" else "none", "backup_closer": sid == "G1"})
         import json
         self.rf.write_once("registry.json", json.dumps({"seats": seats}, indent=1), stage="REGISTRY")
         self.status("REGISTRY", "handshakes", "GATE", last_complete="registry.json")
@@ -627,7 +627,8 @@ class Night:
                           executor_ready=self.has_executor(), sends_used=int(st.get("sends_used", 0)), max_calls=int(self.gate["budget"].get("max_calls") or 0) or None,
                           tail_sends=int(st.get("sends_reserved_for_tail", TAIL_SENDS)), max_operators=int(self.gate["budget"].get("max_operators", 4)),
                           measurable_options=self.measurable_options(), hard_stop=self.gate.get("hard_stop") or None, now_hhmm=self.rf.clock.hhmm(),
-                          min_crew=self.min_crew(), usable_seats=len(self.usable_generators("OPERATE")) + (1 if self.seat_ready(self.closer) else 0) - 1)
+                          min_crew=self.min_crew(), usable_seats=len(self.usable_generators("OPERATE")) + (1 if self.seat_ready(self.closer) else 0) - 1,
+                          budget=self.budget)
 
     def select(self):
         """DISPATCH 3.4: stop tests, then the operator table. Returns the operator or None when the loop stops."""
@@ -927,7 +928,7 @@ class Night:
                               holds_accepted=len(re.findall(r"HOLD-ACCEPTED", self.rf.read("review/check-review.md"))) if rc else 0,
                               verifier_contradictions=len(ver.get("CONTRADICTIONS", [])), verifier_confirmed=len(ver.get("CONFIRMED", [])),
                               seats_failed=sorted(self.seats_failed), closer_swaps=self.closer_swaps, model_calls=int(st.get("sends_used", 0)),
-                              elapsed_s=0, flags=flags, classification=classification,
+                              elapsed_s=0, flags=flags, classification=classification, cost_usd_estimate=round(self.budget.spent, 4),
                               next_question=(parse.deliverable_sections(d).get("12 NEXT QUESTION", "").strip().splitlines() or [""])[0])
         self.rf.write_once("ledger.json", json.dumps(led, indent=1), stage="DELIVER")
         assemble.architecture_lines(self.root, led, self.rf.clock.iso()[:10], len(self.ready_generators()))
@@ -954,6 +955,12 @@ class Night:
             return 0
         except NightStop as e:
             self.rf.status(stage="PARTIAL", step="stopped", next="none", stop_reason=e.reason)
+            # a deliverable that exists without its outside review or verifier is labelled, never silently left (spec 2, 10)
+            if self.rf.exists("final/DELIVERABLE.md"):
+                if not self.rf.exists("final/verifier.md"):
+                    self.rf.add_flag("NO_VERIFIER")
+                if not self.rf.exists("review/review.md"):
+                    self.rf.add_flag("NO_OUTSIDE_REVIEW")
             if not self.rf.exists("NOTE.md"):
                 self.rf.write_once("NOTE.md", f"STOP_REASON {e.reason}\n{e.note}\n", stage="PARTIAL")
             self.log("DISPATCH", "stop", result=f"{e.reason}: {e.note}"[:300])

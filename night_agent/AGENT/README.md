@@ -11,13 +11,35 @@ every stage and every send. DISPATCH.md Section 9 is the mapping from browser co
 ```
 export ANTHROPIC_API_KEY=...            # the SDK reads the process environment, not .env
 pip install -r AGENT/requirements.txt   # claude-agent-sdk; the SDK bundles the Claude Code binary
-python3 AGENT/run_night.py <root> --ask ask.md --documents <project docs dir> [--sandbox <artifact dir>] [--hard-stop 06:00]
+python3 AGENT/run_night.py <root> --ask ask.md --documents <project docs dir> [--sandbox <artifact dir>] \
+    [--budget-usd 40] [--hard-stop 06:00]
 ```
 
 `<root>` receives `runs/na-NNN/` (the run folder the checker audits), `architecture/` (runs.jsonl,
 model-capability-ledger.jsonl) and `work/<run>/` (working copies for the EXECUTOR). Every seat is
-`claude-opus-5` unless `--model` or `--model-seat G2=claude-sonnet-5` says otherwise. Without `ANTHROPIC_API_KEY`
-the runtime exits 2; it never falls back to fake seats on its own.
+`claude-opus-5` unless `--model` or `--model-seat G2=claude-sonnet-5` says otherwise.
+
+Credentials: `--auth key` (the default) requires `ANTHROPIC_API_KEY` and exits 2 without it. `--auth cli` uses
+whatever the SDK's Claude Code binary is signed in with (a `claude` login on the machine, or a host that manages
+the provider) and needs no key; the registry records the route in each seat's `auth` field. Either way the
+runtime never falls back to fake seats on its own; a seat that cannot authenticate fails its handshake and the
+night stops with STOP_REASON CREW before any GENERATE spend.
+
+Spend: every text send is capped at 2 USD and every EXECUTOR session at 5 USD by the SDK's own budget option.
+`--budget-usd N` adds a total cap on the night: Dispatch charges the SDK's cost estimate of every call it
+observes (`AGENT/budget.py`) and stops with STOP_REASON BUDGET before the call that would pass the cap, taking
+the most expensive call of that kind so far as the expectation, so the overshoot is at most one per-call cap.
+SELECT also refuses another operator when one operator plus the tail would pass it. The running total is in
+`status.json` and `ledger.json` as `cost_usd_estimate`; it is the SDK's estimate, not an invoice.
+
+The first live night to run was DIRECT on BT-1 (`TESTS/BENCHMARK_TASKS.md`); its records are under
+`EVIDENCE/`. The HYBRID rehearsal on BT-8 has not been run and is the operator's to start, with a cap they choose:
+
+```
+python3 AGENT/run_night.py <root> --ask AGENT/tests/fixtures/ask_hybrid.md \
+    --documents AGENT/tests/fixtures/documents --sandbox AGENT/tests/fixtures/sandbox \
+    --auth cli --budget-usd <cap> --hard-stop <HH:MM> --max-wait-min 10
+```
 
 Afterwards: `python3 TESTS/na_check.py <root>/runs/na-NNN` must exit 0. The deliverable is
 `final/DELIVERABLE_ASSEMBLED.md`; the flags and the classification are in `ledger.json`.

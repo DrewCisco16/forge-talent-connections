@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Night Agent v11.4 SDK runtime: run one night.
 
-    python3 AGENT/run_night.py <root> --ask ask.md [--seats live|fake] [--model ID] [--model-SEAT ID]
-        [--resume runs/na-NNN] [--documents DIR] [--sandbox DIR] [--hard-stop HH:MM] [--max-wait-min N]
-        [--net on|off] [--fault Bn[:seat[:stage]]] [--profile adaptive|v10-fixed] [--stop-after FILE]
+    python3 AGENT/run_night.py <root> --ask ask.md [--seats live|fake] [--model ID] [--model-seat SEAT=ID]
+        [--auth key|cli] [--budget-usd N] [--resume runs/na-NNN] [--documents DIR] [--sandbox DIR]
+        [--hard-stop HH:MM] [--max-wait-min N] [--net on|off] [--fault Bn[:seat[:stage]]]
+        [--profile adaptive|v10-fixed] [--stop-after FILE]
 
-<root> holds runs/na-NNN/ and architecture/. Live is the default and needs ANTHROPIC_API_KEY in the environment
-plus the claude-agent-sdk package; without a key the run exits 2 and never falls back to fake seats silently.
+<root> holds runs/na-NNN/ and architecture/. Live is the default and needs the claude-agent-sdk package plus
+credentials: --auth key (default) requires ANTHROPIC_API_KEY in the environment; --auth cli uses whatever the
+SDK's Claude Code binary is signed in with and requires no key. Without either the run exits 2 and never falls
+back to fake seats silently. --budget-usd caps the night's total SDK cost estimate; the night stops with
+STOP_REASON BUDGET before the call that would pass it (AGENT/budget.py).
 --seats fake runs deterministic seats with provider fake for rehearsal and CI; its deliverable is never a result.
 Exit 0: DONE. 2: cannot start. 3: stopped with a labelled STOP_REASON (NOTE.md). 4: a guard blocked.
 """
@@ -38,13 +42,25 @@ def parse_faults(items):
     return out
 
 
+def startup_problem(cfg, *, has_key: bool, has_sdk: bool) -> str | None:
+    """Why a live run cannot start, or None. Fake mode always starts."""
+    if cfg.seats_mode != "live":
+        return None
+    if not has_sdk:
+        return "live seats need the claude-agent-sdk package: pip install -r AGENT/requirements.txt"
+    if cfg.auth == "key" and not has_key:
+        return ("live seats with --auth key need ANTHROPIC_API_KEY in the environment (the SDK does not read .env). "
+                "Use --auth cli to run with the credentials the Claude Code binary is signed in with, or --seats fake for a rehearsal.")
+    return None
+
+
 def build_crew(cfg, specs):
     crew = {}
     if cfg.seats_mode == "fake":
         from AGENT.seats.fake_seat import FakeSeat, LocalExecutor
         world = {}
         for s in specs:
-            crew[s.id] = LocalExecutor(s, cfg.sandbox_dir) if s.role == "executor" else FakeSeat(s, cfg.faults, world)
+            crew[s.id] = LocalExecutor(s, cfg.sandbox_dir) if s.role == "executor" else FakeSeat(s, cfg.faults, world, cost_usd=cfg.fake_cost_usd)
         return crew
     from AGENT.seats.sdk_seat import SDKExecutorSeat, SDKTextSeat
     for s in specs:
@@ -60,6 +76,9 @@ def main(argv=None) -> int:
     ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--model-seat", action="append", default=[], metavar="SEAT=MODEL")
     ap.add_argument("--effort", default="high")
+    ap.add_argument("--auth", choices=["key", "cli"], default="key")
+    ap.add_argument("--budget-usd", type=float, help="total cap on the night's SDK cost estimates; stops with STOP_REASON BUDGET")
+    ap.add_argument("--fake-cost-usd", type=float, default=0.0, help="test hook: cost estimate every fake seat call reports")
     ap.add_argument("--resume")
     ap.add_argument("--documents")
     ap.add_argument("--sandbox")
@@ -83,16 +102,17 @@ def main(argv=None) -> int:
                     documents_dir=os.path.abspath(a.documents) if a.documents else None,
                     sandbox_dir=os.path.abspath(a.sandbox) if a.sandbox else None, hard_stop=a.hard_stop,
                     max_wait_s=a.max_wait_min * 60, net=a.net == "on", faults=parse_faults(a.fault), profile=a.profile,
-                    resume=a.resume, stop_after=a.stop_after, generators=a.generators, fixed_clock=a.fixed_clock, cli_path=a.cli)
-    if cfg.seats_mode == "live" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("live seats need ANTHROPIC_API_KEY in the environment (the SDK does not read .env). Use --seats fake for a rehearsal.", file=sys.stderr)
+                    resume=a.resume, stop_after=a.stop_after, generators=a.generators, fixed_clock=a.fixed_clock, cli_path=a.cli,
+                    auth=a.auth, budget_usd=a.budget_usd, fake_cost_usd=a.fake_cost_usd)
+    try:
+        import claude_agent_sdk  # noqa: F401
+        has_sdk = True
+    except ImportError:
+        has_sdk = False
+    problem = startup_problem(cfg, has_key=bool(os.environ.get("ANTHROPIC_API_KEY")), has_sdk=has_sdk)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
-    if cfg.seats_mode == "live":
-        try:
-            import claude_agent_sdk  # noqa: F401
-        except ImportError:
-            print("live seats need the claude-agent-sdk package: pip install -r AGENT/requirements.txt", file=sys.stderr)
-            return 2
 
     os.makedirs(os.path.join(cfg.root, "architecture"), exist_ok=True)
     run_id = os.path.basename(a.resume.rstrip("/")) if a.resume else next_run_id(cfg.root)

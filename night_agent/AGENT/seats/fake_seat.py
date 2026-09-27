@@ -150,11 +150,12 @@ def _packet_block(text: str, label: str, next_labels: list) -> str:
 
 
 class FakeSeat:
-    def __init__(self, spec, knobs: dict | None = None, world=None):
+    def __init__(self, spec, knobs: dict | None = None, world=None, cost_usd: float = 0.0):
         self.spec = spec
         self.knobs = knobs or {}
         self.world = world if world is not None else {}
         self.calls = 0
+        self.cost_usd = cost_usd   # test hook: the cost estimate every reply reports (--fake-cost-usd)
 
     def _fault(self, code: str, stage: str) -> bool:
         k = self.knobs.get(code)
@@ -176,7 +177,7 @@ class FakeSeat:
         if self._fault("B1", stage) or self._fault("B9", stage):
             return Reply(text="", completed=False, aborted=True, error="fake seat: no reply within MAX_WAIT", session_id=slot_id, served_model="fake")
         text = getattr(self, "_" + kind.lower(), self._unknown)(packet, stage)
-        return Reply(text=text, completed=True, session_id=slot_id, served_model="fake", cost_usd=0.0,
+        return Reply(text=text, completed=True, session_id=slot_id, served_model="fake", cost_usd=self.cost_usd,
                      usage={"input_tokens": len(packet.text) // 4, "output_tokens": len(text) // 4},
                      start_boundary="fake-first-message", end_boundary="fake-result")
 

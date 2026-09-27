@@ -49,6 +49,9 @@ class RunConfig:
     per_experiment_budget_usd: float = 5.0
     executor_turns: int = 40
     cli_path: str | None = None
+    auth: str = "key"                 # key: ANTHROPIC_API_KEY required; cli: whatever the SDK's Claude Code binary is signed in with
+    budget_usd: float | None = None   # total cap on the SDK cost estimates for the night (AGENT/budget.py); None = no cap
+    fake_cost_usd: float = 0.0        # test hook: what every fake seat call reports as its cost estimate
     generators: int = 4
     fixed_clock: str | None = None    # test hook: ISO timestamp used for every record
 

@@ -57,14 +57,14 @@ def assembled(deliverable: str, verifier: str) -> str:
 
 def ledger(rf, *, class_, profile, stages, stop_reason, options_created, options_standing, earned, deprioritized,
            review_hits_passed, review_hits_failed, holds_accepted, verifier_contradictions, verifier_confirmed,
-           seats_failed, closer_swaps, model_calls, elapsed_s, flags, classification, next_question="") -> dict:
+           seats_failed, closer_swaps, model_calls, elapsed_s, flags, classification, next_question="", cost_usd_estimate=0.0) -> dict:
     return {"run": rf.run_id, "class": class_, "profile": profile, "stages": stages, "stop_reason": stop_reason,
             "options_created": options_created, "options_standing": options_standing, "earned_kills": earned,
             "review_hits_passed": review_hits_passed, "review_hits_failed": review_hits_failed, "holds_accepted": holds_accepted,
             "verifier_contradictions": verifier_contradictions, "verifier_confirmed": verifier_confirmed, "seats_failed": seats_failed,
             "closer_swaps": closer_swaps, "model_calls": model_calls, "elapsed_s": elapsed_s, "flags": flags,
             "morning_usefulness_1_to_5": None, "tonights_question": next_question, "classification": classification,
-            "deprioritized": deprioritized, "rollback_hash_verified": None}
+            "deprioritized": deprioritized, "rollback_hash_verified": None, "cost_usd_estimate": cost_usd_estimate}
 
 
 def architecture_lines(root: str, led: dict, date: str, generators: int, benchmark_task: str = ""):

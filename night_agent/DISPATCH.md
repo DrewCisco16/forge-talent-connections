@@ -145,3 +145,5 @@ The runtime is deterministic Python that executes Sections 0 to 8 with the Claud
 | the wall | a fresh session with no project settings, no tools, and `PROMPTS/S0_system.md` as the whole system prompt |
 | project documents | the VERIFIER packet only |
 | a real night | `--seats live` (the default). `--seats fake` runs deterministic seats with provider `fake` for rehearsal and CI; its deliverable is never handed to the operator as a result |
+| the operator's credentials | `--auth key` requires `ANTHROPIC_API_KEY`; `--auth cli` uses the sign-in of the SDK's Claude Code binary; the registry records the route per seat. A seat that cannot authenticate fails its handshake, and the night stops with CREW before GENERATE |
+| the send budget of the gate | kept as it is, in sends. `--budget-usd` adds a total cap on the SDK's cost estimates: the runtime stops with STOP_REASON BUDGET before the call that would pass it, and SELECT refuses another operator when one operator plus the tail would. The running total is `cost_usd_estimate` in status.json and ledger.json, an estimate, never an invoice |
