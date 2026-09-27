@@ -693,28 +693,39 @@ class Night:
         if not self.rf.exists(f"{sd}/check.md"):
             self.begin_stage("DIRECT")
             guard.require(self.rf, "DIRECT")
-            gens = self.usable_generators("DIRECT")
-            if not gens:
+            if not self.usable_generators("DIRECT"):
                 raise NightStop("CREW", "no usable generator for DIRECT")
-            g = gens[0]
             constraints = "\n".join(self.gate.get("hard_constraints") or []) or "none given"
             p9 = packets.build_p9(self.ask, constraints, "none given")
-            state = {"attempt": 0, "failed": []}
+            saved, g = None, None
+            # DISPATCH 5: a generator that fails twice is FAILED for the stage (spec 7) and the next READY one takes the slot
+            while saved is None and self.usable_generators("DIRECT"):
+                g = self.usable_generators("DIRECT")[0]
+                state = {"attempt": 0, "failed": []}
 
-            def failed_claims_validator(text):
-                # DISPATCH 5: if any claim FAILED, one retry with the failed claims listed; the retry stands as it is
-                state["attempt"] += 1
-                if state["attempt"] > 1:
-                    return []
-                recs = engine.run_check(self.rf, {g: text}, "direct", self.ctx, engine.ClaimIdAllocator(self.rf))
-                state["failed"] = [f"{r.text} ({r.retrieved})" for r in recs if r.result == "FAILED"]
-                return [f"claim FAILED the check: {f}" for f in state["failed"]]
+                def failed_claims_validator(text, g=g, state=state):
+                    # DISPATCH 5: if any claim FAILED, one retry with the failed claims listed; the retry stands as it is
+                    state["attempt"] += 1
+                    if state["attempt"] > 1:
+                        return []
+                    recs = engine.run_check(self.rf, {g: text}, "direct", self.ctx, engine.ClaimIdAllocator(self.rf))
+                    state["failed"] = [f"{r.text} ({r.retrieved})" for r in recs if r.result == "FAILED"]
+                    return [f"claim FAILED the check: {f}" for f in state["failed"]]
 
-            saved = self.ask_seat(g, p9, stage_dir=sd, stage_label="DIRECT", save_as=f"{sd}/seat-{g}.md",
-                                  required_headings=parse.REPLY_HEADINGS["direct"], packet_file=f"{sd}/packet.md", validator=failed_claims_validator,
-                                  reprompt_line=lambda: "These claims FAILED the check; correct or remove them: " + "; ".join(state["failed"]))
+                def reprompt(state=state):
+                    if state["failed"]:
+                        return "These claims FAILED the check; correct or remove them: " + "; ".join(state["failed"])
+                    return ("Your reply lacked the required headings. Use exactly ANSWER, CLAIMS, OPEN, each alone on its line, "
+                            "plain text, nothing else. You have no tools and no files: if the ask needs data that is not in "
+                            "this packet, say so under ANSWER and name it under OPEN.")
+
+                saved = self.ask_seat(g, p9, stage_dir=sd, stage_label="DIRECT", save_as=f"{sd}/seat-{g}.md",
+                                      required_headings=parse.REPLY_HEADINGS["direct"], packet_file=f"{sd}/packet.md",
+                                      validator=failed_claims_validator, reprompt_line=reprompt)
+                if saved is None:
+                    self.log("DISPATCH", "direct-next-generator", result=f"{g} FAILED for DIRECT; the next READY generator takes the slot", stage="DIRECT")
             if saved is None:
-                raise NightStop("CREW", "the DIRECT generator produced no usable reply")
+                raise NightStop("CREW", "no generator produced a usable DIRECT reply")
             self.begin_stage("CHECK")
             guard.require(self.rf, "CHECK", stage_dir=sd)
             recs = engine.run_check(self.rf, {g: self.rf.read(f"{sd}/seat-{g}.md")}, "direct", self.ctx, engine.ClaimIdAllocator(self.rf))

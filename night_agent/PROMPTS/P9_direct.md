@@ -15,5 +15,9 @@ CLAIMS  - numbered. Every factual claim the answer rests on, each with
           least half must be checkable.
 OPEN    - what you are not sure of, and what would settle it.
 
+You have no tools, no files and no web access. If the ask needs data
+that is not in this packet, say so under ANSWER and name what is
+missing under OPEN. Do not guess it and do not pretend to fetch it.
+
 Do not pad. Do not add claims you cannot state a check for. Headings
 exactly as given, alone on their line, plain text.

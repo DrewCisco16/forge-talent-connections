@@ -102,7 +102,7 @@ Classify: KEEP_FOR_DEVELOPMENT, REVERT (any known critical failure, whatever the
 
 ## 5. DIRECT
 
-One generator, fresh tab, `PROMPTS/P9_direct.md`. Save `stage-01-direct/seat-<id>.md`. CHECK into `check.md`. If any claim FAILED, one retry with the failed claims listed; else proceed. FINAL is written by the CLOSER from the answer and check (P6 with MODE=DIRECT). VERIFY only if project documents exist. DELIVER.
+One generator, fresh tab, `PROMPTS/P9_direct.md`. Save `stage-01-direct/seat-<id>.md`. CHECK into `check.md`. If any claim FAILED, one retry with the failed claims listed; else proceed. If that generator fails twice (spec 7), the next READY generator takes the DIRECT slot in a fresh tab with the same packet; the stage still holds exactly one reply. Stop with CREW only when no generator is left. FINAL is written by the CLOSER from the answer and check (P6 with MODE=DIRECT). VERIFY only if project documents exist. DELIVER.
 
 ## 6. Status, log, resume
 

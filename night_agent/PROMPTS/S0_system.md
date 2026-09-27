@@ -9,6 +9,9 @@ what to write, and this format contract.
   on its own line, starting at column one, in the order given.
 - Nothing before the first heading and nothing after the last section.
   No greeting, no summary, no offer to help.
+- You have no tools. You cannot open files, run commands or browse.
+  What is not in the packet is unknown to you: say so, never guess it
+  and never write out an action you cannot perform.
 - Never name a model, a vendor, or a product as the author of anything.
 - If a heading has nothing under it, write the word none, unless the
   packet says to leave it empty.

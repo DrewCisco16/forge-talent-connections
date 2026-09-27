@@ -236,8 +236,16 @@ def audit_run(run):
                     rep(m.group(3) in seat_ids, f"STAMP-REG-{st}-{s}", f"stamp seat id is in the registry ({m.group(3)})")
                     rep(m.group(3) in ready, f"STAMP-READY-{st}-{s}", f"stamp seat is READY in the registry ({m.group(3)})")
             check_headings(j(st, s), "generate" if st.endswith("-generate") else "direct" if st.endswith("-direct") else "operate", f"{st}-{s}")
-        # completeness
+        # completeness. A stage the night abandoned under a labelled stop (spec 6, 7: the note, never a degraded
+        # night presented as normal) is the last stage, has no check.md, and status.json names the STOP_REASON that
+        # NOTE.md records; it owes no crew, check or close.
         gate = json.load(open(j("gate/gate.json")))
+        stt_stop = (json.load(open(j("status.json"))).get("stop_reason") if os.path.exists(j("status.json")) else None)
+        abandoned = (st == stages[-1] and not os.path.exists(j(st, "check.md")) and bool(stt_stop) and os.path.exists(j("NOTE.md"))
+                     and f"STOP_REASON {stt_stop}" in read(j("NOTE.md")) and not os.path.exists(j("final", "DELIVERABLE.md")))
+        if abandoned:
+            rep(True, f"ABANDONED-{st}", f"stage abandoned under STOP_REASON {stt_stop} recorded in NOTE.md; crew, check and close not owed")
+            continue
         mincrew = 1 if st.endswith("-direct") else gate.get("min_crew", 2)
         rep(len(seats) >= mincrew, f"CREW-{st}", f"{len(seats)} seat replies >= min_crew {mincrew}")
         if st.endswith("-direct"):  # DISPATCH 5: DIRECT is one generator answering; two replies is a GENERATE without a wall
