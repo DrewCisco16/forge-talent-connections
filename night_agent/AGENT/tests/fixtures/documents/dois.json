@@ -1,0 +1,10 @@
+{
+ "10.1000/xyz123": {
+  "title": "Strict parsing of delimited text: a survey of reject policies",
+  "year": 2025,
+  "authors": ["Doe", "Roe"],
+  "venue": "Journal of Data Engineering",
+  "url": "https://doi.org/10.1000/xyz123",
+  "text": "Strict mode raises on malformed input and rejects ragged rows before any insert. Sampled validation misses faults in proportion to the sample rate."
+ }
+}

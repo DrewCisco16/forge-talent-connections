@@ -1,0 +1,38 @@
+{
+ "ask": "What is the sum of the twelve monthly figures in figures.csv?\nCLASS: DIRECT",
+ "class": "DIRECT",
+ "class_basis": "operator: The ask is a single arithmetic reduction over a twelve-row column in a document already present in the project, so a lone reader can produce the figure and a reviewer can re-add the column to confirm it. No executor seat exists and no external repeatable measurement procedure is involved, so neither EXPERIMENT nor HYBRID applies, and orchestration beyond one pass plus a check would add nothing.",
+ "kind": "answer",
+ "success_criteria": "A single numeric total is stated, together with the twelve individual monthly figures it was built from, so that a reviewer can re-add the listed values and reach the same total. The count of figures summed is exactly twelve. Any row that is blank, non-numeric, duplicated, or ambiguous as to which column holds the monthly figure is named rather than silently included or dropped. Units or currency are carried through as they appear in the source.",
+ "hard_constraints": [
+  "Twelve monthly figures, no more and no fewer. The source is figures.csv. Output is a sum."
+ ],
+ "available_ground_truth": [
+  "figures.csv, which contains the figures themselves and settles the total by direct re-addition; brief.md, which may define which column or period counts as a monthly figure. I have not read either document, so their actual contents are unknown to me here."
+ ],
+ "objectives": [],
+ "budget": {
+  "max_calls": 32,
+  "max_operators": 1,
+  "max_experiments": 0,
+  "max_wait_min": 10,
+  "reviewer_wait_min": 10,
+  "min_delta": null,
+  "plateau_k": 3,
+  "experiment_budget_s": 600
+ },
+ "hard_stop": "",
+ "profile": "adaptive",
+ "min_crew": 2,
+ "backup_closer": "G1",
+ "planned_calls": 15,
+ "spending_permission": "none",
+ "priority_order": [
+  "correctness",
+  "evidence integrity",
+  "reproducibility",
+  "cost and time"
+ ],
+ "payload_authorization": "default: no local paths, hashes, telemetry, quotas, or non-public project details to external seats; project documents only to VERIFIER",
+ "rollback_hash": ""
+}

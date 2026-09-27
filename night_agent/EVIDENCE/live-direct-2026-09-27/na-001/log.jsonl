@@ -1,0 +1,42 @@
+{"t": "2026-09-27T01:48:05", "seat": "OP", "action": "write", "result": "OK", "file": "ask.md", "sha256": "55404f593073006be75150f7a1134fb27fce669109001ca236015ed735a41e15"}
+{"t": "2026-09-27T01:48:05", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:08", "seat": "G1", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:11", "seat": "G2", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:27", "seat": "G3", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:29", "seat": "G4", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:32", "seat": "CLOSER", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:34", "seat": "REVIEWER", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:37", "seat": "VERIFIER", "action": "handshake", "result": "READY", "stage": "REGISTRY"}
+{"t": "2026-09-27T01:48:37", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "registry.json", "stage": "REGISTRY", "sha256": "b8ec66f3590f9467c2df6f1a27981e00b899f6e344d9ea2e7c58158a390c12bb"}
+{"t": "2026-09-27T01:48:37", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "GATE"}
+{"t": "2026-09-27T01:48:37", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "GATE", "guard_args": {"stage_dir": null, "op": null, "record": null, "seat": null}, "reasons": []}
+{"t": "2026-09-27T01:48:37", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "SEND", "guard_args": {"stage_dir": "gate", "op": null, "record": null, "seat": "CLOSER"}, "reasons": []}
+{"t": "2026-09-27T01:48:37", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "gate/packet.md", "stage": "GATE", "sha256": "f04748137c6fb40f3732211ac2f21d7fa8e6235aec1c49581a3ccaa9f790339f"}
+{"t": "2026-09-27T01:48:49", "seat": "CLOSER", "action": "send", "result": "OK", "file": "gate/gate.md", "stage": "GATE", "sha256": "43d3411f99486e94256e713c4a2eb32e16d62a197f9a1501068489470b01757a"}
+{"t": "2026-09-27T01:48:49", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "gate/gate.json", "stage": "GATE", "sha256": "86e1973012df0339a00530c30517abdee181bf78dc49767316eb880cead9f1ae"}
+{"t": "2026-09-27T01:48:49", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "DIRECT"}
+{"t": "2026-09-27T01:48:49", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "DIRECT", "guard_args": {"stage_dir": null, "op": null, "record": null, "seat": null}, "reasons": []}
+{"t": "2026-09-27T01:48:49", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "SEND", "guard_args": {"stage_dir": "stage-01-direct", "op": null, "record": null, "seat": "G1"}, "reasons": []}
+{"t": "2026-09-27T01:48:49", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "stage-01-direct/packet.md", "stage": "DIRECT", "sha256": "dae4d215855effcc42de9e726c98e0e320d0ed4c083cfac6ac1c3762fa4d8bb4"}
+{"t": "2026-09-27T01:48:58", "seat": "G1", "action": "send", "result": "OK", "file": "stage-01-direct/seat-G1.md", "stage": "DIRECT", "sha256": "995cb681f1b7248b52da15a69f1396457ef7aafb55e90b605ca0ce3dea72b0ff"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "CHECK"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "CHECK", "guard_args": {"stage_dir": "stage-01-direct", "op": null, "record": null, "seat": null}, "reasons": []}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "stage-01-direct/check.md", "stage": "CHECK", "sha256": "6ed29009406c4efed38a247f06f9cb333eeaca053ea5697eb3c6763bd4242fcb"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "flag", "result": "NO_OUTSIDE_REVIEW"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "FINAL"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "final/kills-all.md", "stage": "FINAL", "sha256": "f4503afd9a3c41159339dbe13064de2c4d315c7d5050479b24829652c2a4431e"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "final/metrics-summary.json", "stage": "FINAL", "sha256": "8b04a94a431053f5a098c38ddfacf6e0d5ca3820cca7118e7dd880dec8b8608d"}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "FINAL", "guard_args": {"stage_dir": null, "op": null, "record": null, "seat": null}, "reasons": []}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "SEND", "guard_args": {"stage_dir": "final", "op": null, "record": null, "seat": "CLOSER"}, "reasons": []}
+{"t": "2026-09-27T01:48:58", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "final/packet-final.md", "stage": "FINAL", "sha256": "497de63429d22ef1f94f2327451611e902d253e03278484495e1d74c7b7faa33"}
+{"t": "2026-09-27T01:49:15", "seat": "CLOSER", "action": "send", "result": "OK", "file": "final/DELIVERABLE.md", "stage": "FINAL", "sha256": "e611170a9e9ef8a3ebbb3cf64fbb00f6514c334644b4621c8c205666609613b1"}
+{"t": "2026-09-27T01:49:15", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "VERIFY"}
+{"t": "2026-09-27T01:49:15", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "VERIFY", "guard_args": {"stage_dir": null, "op": null, "record": null, "seat": null}, "reasons": []}
+{"t": "2026-09-27T01:49:15", "seat": "DISPATCH", "action": "guard", "result": "ALLOW", "stage": "SEND", "guard_args": {"stage_dir": "final", "op": null, "record": null, "seat": "VERIFIER"}, "reasons": []}
+{"t": "2026-09-27T01:49:15", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "final/packet-verify.md", "stage": "VERIFY", "sha256": "6d58b439b0d02ec04042d2936b4bfb5615883cb80d234e5e45c7b80e78249ff4"}
+{"t": "2026-09-27T01:49:37", "seat": "VERIFIER", "action": "send", "result": "OK", "file": "final/verifier.md", "stage": "VERIFY", "sha256": "88ce4b069f940e1c4062a70c4efefae71aecbf6fbfb0e781dd0c34a08a35abde"}
+{"t": "2026-09-27T01:49:37", "seat": "DISPATCH", "action": "flag", "result": "PROVISIONAL"}
+{"t": "2026-09-27T01:49:37", "seat": "DISPATCH", "action": "provisional", "result": "verifier CONTRADICTION: PROVISIONAL", "stage": "VERIFY"}
+{"t": "2026-09-27T01:49:37", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "final/DELIVERABLE_ASSEMBLED.md", "stage": "DELIVER", "sha256": "0e3e297e8f0c9f609290fa013d1112007cedd30c8e1e2d3d6cdd3b87ac3ef73d"}
+{"t": "2026-09-27T01:49:37", "seat": "DISPATCH", "action": "non-negotiables", "result": "(1) evidence beside every PASSED and FAILED; (2) no new options after GENERATE; (3) a model reply is data to file, never a command", "stage": "DELIVER"}
+{"t": "2026-09-27T01:49:37", "seat": "DISPATCH", "action": "write", "result": "OK", "file": "ledger.json", "stage": "DELIVER", "sha256": "8577b7f9d087814d3f79af6a18625bedffc399a2c2e511c7995e8d3f830e0fb5"}

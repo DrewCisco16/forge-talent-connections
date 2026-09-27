@@ -1,0 +1,7 @@
+__pycache__/
+
+# SDK runtime scratch and rehearsal output (AGENT/run_night.py)
+.sdk/
+runs/
+work/
+AGENT/tests/fixtures/sandbox/.bench_runs

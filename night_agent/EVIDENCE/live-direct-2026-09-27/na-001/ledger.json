@@ -1,0 +1,31 @@
+{
+ "run": "na-001",
+ "class": "DIRECT",
+ "profile": "adaptive",
+ "stages": [
+  "DIRECT"
+ ],
+ "stop_reason": "",
+ "options_created": 0,
+ "options_standing": 0,
+ "earned_kills": 0,
+ "review_hits_passed": 0,
+ "review_hits_failed": 0,
+ "holds_accepted": 0,
+ "verifier_contradictions": 6,
+ "verifier_confirmed": 2,
+ "seats_failed": [],
+ "closer_swaps": 0,
+ "model_calls": 4,
+ "elapsed_s": 0,
+ "flags": [
+  "NO_OUTSIDE_REVIEW",
+  "PROVISIONAL"
+ ],
+ "morning_usefulness_1_to_5": null,
+ "tonights_question": "Can the full text of figures.csv be pasted into the packet, every row included, so the twelve monthly figures can be identified and added?",
+ "classification": "KEEP_FOR_DEVELOPMENT",
+ "deprioritized": 0,
+ "rollback_hash_verified": null,
+ "cost_usd_estimate": 0.259
+}

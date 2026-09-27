@@ -1,0 +1,21 @@
+{
+ "run": "na-001",
+ "flags": [
+  "NO_OUTSIDE_REVIEW",
+  "PROVISIONAL",
+  "EMPTY_OPEN_LIST"
+ ],
+ "sends_used": 4,
+ "sends_reserved_for_tail": 2,
+ "experiments_used": 0,
+ "caps_known": {
+  "anthropic": false
+ },
+ "stop_reason": null,
+ "stage": "DONE",
+ "step": "deliver",
+ "started": "2026-09-27T01:44:12",
+ "next": "none",
+ "last_complete": "ledger.json",
+ "cost_usd_estimate": 0.261087
+}

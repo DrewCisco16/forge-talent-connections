@@ -1,0 +1,2 @@
+# Live seats only. Fake mode (--seats fake) and the test suite are stdlib.
+claude-agent-sdk==0.2.160

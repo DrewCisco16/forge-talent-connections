@@ -1,0 +1,32 @@
+{
+ "run": "na-001",
+ "class": "DIRECT",
+ "profile": "adaptive",
+ "stages": [
+  "DIRECT"
+ ],
+ "stop_reason": "",
+ "options_created": 0,
+ "options_standing": 0,
+ "earned_kills": 0,
+ "review_hits_passed": 0,
+ "review_hits_failed": 0,
+ "holds_accepted": 0,
+ "verifier_contradictions": 4,
+ "verifier_confirmed": 1,
+ "seats_failed": [],
+ "closer_swaps": 0,
+ "model_calls": 4,
+ "elapsed_s": 0,
+ "flags": [
+  "NO_OUTSIDE_REVIEW",
+  "PROVISIONAL",
+  "EMPTY_OPEN_LIST"
+ ],
+ "morning_usefulness_1_to_5": null,
+ "tonights_question": "What are the contents of figures.csv, and which column header holds the twelve monthly figures?",
+ "classification": "KEEP_FOR_DEVELOPMENT",
+ "deprioritized": 0,
+ "rollback_hash_verified": null,
+ "cost_usd_estimate": 0.2611
+}
