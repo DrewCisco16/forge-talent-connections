@@ -30,8 +30,10 @@ def check_document(claim, documents_dir: str | None, now: str) -> dict:
             if d.rsplit(".", 1)[0].lower() in claim.text.lower():
                 name = d
                 break
+    # DISPATCH 3.2: a document claim's SOURCE support decides its status (UNVERIFIED is BLOCKED, PARTIAL is INCONCLUSIVE),
+    # so a claim that names no document, or names one without quoting it, is never left NOT TESTABLE
     if not docs or not name:
-        return {"result": "NOT TESTABLE", "retrieved": "", "settle": "name the project document (file name) and quote the passage",
+        return {"result": "BLOCKED", "retrieved": "", "settle": "name the project document (file name) and quote the passage",
                 "source": source_line("project document", "C", bool(claim.quote), "UNVERIFIED", "no document named", now), "action": "no document named"}
     text = read_document(documents_dir, name)
     action = f"read {name}"
@@ -39,7 +41,7 @@ def check_document(claim, documents_dir: str | None, now: str) -> dict:
         return {"result": "BLOCKED", "retrieved": "", "settle": f"{name} is not in the project documents; supply it",
                 "source": source_line("project document", "C", bool(claim.quote), "UNVERIFIED", f"{name} missing", now), "action": action}
     if not claim.quote:
-        return {"result": "NOT TESTABLE", "retrieved": "", "settle": f"quote the passage of {name} the claim rests on",
+        return {"result": "INCONCLUSIVE", "retrieved": f"{name} read; the claim quotes no passage of it", "settle": f"quote the passage of {name} the claim rests on",
                 "source": source_line("project document", "B", False, "PARTIAL", f"{name} present, no quote", now), "action": action}
     flat = re.sub(r"\s+", " ", text.lower())
     if re.sub(r"\s+", " ", claim.quote.lower()) in flat:

@@ -595,7 +595,14 @@ class Night:
 
     def open_text(self) -> str:
         lc = self.last_close()
-        return (parse.section_text(lc, "OPEN", parse.MERGE_CLOSE if "MERGED" in lc else parse.LIST_CLOSE).strip() or "none") if lc else "none"
+        if lc:
+            return parse.section_text(lc, "OPEN", parse.MERGE_CLOSE if "MERGED" in lc else parse.LIST_CLOSE).strip() or "none"
+        if self.gate.get("class") == "DIRECT":  # DIRECT has no close: the generator's own OPEN section is the open list
+            for st in self.rf.stages():
+                for f in sorted(os.listdir(os.path.join(self.rf.root, st))):
+                    if f.startswith("seat-"):
+                        return parse.section_text(self.rf.read(f"{st}/{f}"), "OPEN", parse.REPLY_HEADINGS["direct"]).strip() or "none"
+        return "none"
 
     def conflict_text(self) -> str:
         lc = self.last_close()
@@ -842,7 +849,8 @@ class Night:
         if not self.rf.exists("final/metrics-summary.json"):
             import json
             summary = assemble.metrics_summary(self.rf, {"model_calls": int((self.rf.read_json("status.json", {}) or {}).get("sends_used", 0)),
-                                                         "experiments": len(self.rf.read_jsonl("experiments/log.jsonl"))})
+                                                         "experiments": len(self.rf.read_jsonl("experiments/log.jsonl")),
+                                                         "estimated_cost_usd": round(self.budget.spent, 4)})
             self.rf.write_once("final/metrics-summary.json", json.dumps(summary, indent=1), stage="FINAL")
         guard.require(self.rf, "FINAL")
         classification = self.compute_classification()
