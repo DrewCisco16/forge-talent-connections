@@ -11,6 +11,8 @@ Each task has a known outcome and planted faults so a run can be scored mechanic
 | BT-3 | DELIBERATION | "Should the closer seat be a fidelity model or the strongest reasoner?" | judgement-dominated; expected STRUCTURAL_GT_EARNED flag | a fake DOI in the seeded reading list; a vendor benchmark stated as independent | reading list with one fake DOI |
 | BT-4 | HYBRID | "Reduce the runtime of sort_records.py without changing its output." | measured runtime falls, output hash unchanged | a mutation that speeds it up but changes output ordering | script, test, timing harness |
 
+Observed on BT-1 under the SDK runtime (2026-09-27, EVIDENCE/live-direct-2026-09-27/): the DIRECT generator declined to state a sum because project documents reach only the VERIFIER (spec Section 11); the VERIFIER then listed the twelve figures and the total 9420 as CONTRADICTIONS, and the night was PROVISIONAL. As written, the task's known outcome can only appear in the deliverable if the ask itself carries the figures; otherwise BT-1 measures the honesty of the decline and the VERIFIER's catch. The task set is not changed here.
+
 ## HOLDOUT tasks (used only to decide promotion; one replaced after every promotion)
 
 | Id | Class | Ask | Known outcome | Planted faults | Ground truth supplied |

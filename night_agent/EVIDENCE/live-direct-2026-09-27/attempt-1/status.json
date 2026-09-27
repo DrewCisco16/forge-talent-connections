@@ -1,0 +1,23 @@
+{
+ "run": "na-001",
+ "flags": [],
+ "sends_used": 3,
+ "sends_reserved_for_tail": 4,
+ "experiments_used": 0,
+ "caps_known": {
+  "anthropic": false
+ },
+ "stop_reason": "CREW",
+ "stage": "PARTIAL",
+ "step": "stopped",
+ "started": "2026-09-27T01:39:56",
+ "next": "none",
+ "last_complete": "gate/gate.json",
+ "cost_usd_estimate": 0.137132,
+ "seats_failed": {
+  "G1": [
+   "DIRECT"
+  ]
+ },
+ "retired": []
+}
