@@ -35,7 +35,9 @@ const READ_ONLY = new Set([
 // checkers whose job is to run commands hold it, and they are restricted to
 // read-only use by instruction (the statistician also writes the decision log
 // through its command line). That restriction is prompt-level, not enforced.
-const BASH_CHECKERS = new Set(["council-evidence-scout", "gate-runner", "claim-auditor", "guardrail-auditor", "reliability-statistician"]);
+// The evidence scout reads the open web and never needs a shell, so it holds
+// none: web-sourced text must not reach one (see doi-check.test.mjs).
+const BASH_CHECKERS = new Set(["gate-runner", "claim-auditor", "guardrail-auditor", "reliability-statistician"]);
 const COUNCIL_SEATS = ["council-contrarian", "council-first-principles", "council-expansionist", "council-executor", "council-steward", "council-chairman"];
 const COUNCIL = ["council-evidence-scout", ...COUNCIL_SEATS];
 
@@ -80,7 +82,7 @@ test("every agent declares its tools explicitly, from the allowlist", () => {
   }
 });
 
-test("checkers hold no editing tools, and only the five that must run commands hold Bash", () => {
+test("checkers hold no editing tools, and only the four that must run commands hold Bash", () => {
   for (const name of READ_ONLY) {
     const a = byName[name];
     assert.ok(a, `missing agent ${name}`);

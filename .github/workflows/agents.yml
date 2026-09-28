@@ -17,6 +17,9 @@ on:
       - "test/copy/walled_repo_test.dart"
       - "test/copy/product_language_test.dart"
       - ".github/workflows/agents.yml"
+      # The decision-log policy test reads every .gitignore comment.
+      - ".gitignore"
+      - "**/.gitignore"
   pull_request:
     paths:
       - ".claude/**"
@@ -28,6 +31,8 @@ on:
       - "test/copy/walled_repo_test.dart"
       - "test/copy/product_language_test.dart"
       - ".github/workflows/agents.yml"
+      - ".gitignore"
+      - "**/.gitignore"
 
 concurrency:
   group: agents-${{ github.ref }}

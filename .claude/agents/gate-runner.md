@@ -19,13 +19,13 @@ You run the checks whose errors are unrelated to a model's. This repository's SO
 
 ## Select gates by what changed
 
-Find the change set with `git status --porcelain` and `git diff --name-only origin/main...HEAD` (fetch `origin main` first if it is missing). Run every gate set whose paths intersect it, and all of them when asked for a full run.
+Find the change set with `git status --porcelain --untracked-files=all` (so every file inside a new directory is listed, not just the directory) and `git diff --name-only --diff-filter=d origin/main...HEAD` (fetch `origin main` first if it is missing). Leave deleted paths out of every scan. If `origin/main` cannot be fetched, the committed changes cannot be listed: report the run INCOMPLETE, never scan only what `git status` shows. Run every gate set whose paths intersect the change set, and all of them when asked for a full run.
 
 **Flutter app** (`lib/`, `test/`, `assets/`, `pubspec.*`, `analysis_options.yaml`, `tool/`, `web/`): toolchain is pinned by `.fvmrc`; prefer `fvm flutter`, and confirm `flutter --version` reports the pinned version before trusting any result.
 - `flutter analyze`, which must print `No issues found!`
 - `flutter test`, the full suite including goldens and the `test/copy` rules. Goldens are asserted, never updated here.
 
-**Adjudication** (`adjudication/**`), from `adjudication/` with `.venv/bin/` tools, mirroring `.github/workflows/adjudication.yml` exactly:
+**Adjudication** (`adjudication/**`, `.github/workflows/adjudication.yml`, and any `.gitignore` at any depth, whose decision-log rules these tests check), from `adjudication/` with `.venv/bin/` tools, mirroring `.github/workflows/adjudication.yml` exactly:
 - `ruff check .`
 - `mypy`
 - `pytest --cov --cov-report=term-missing --cov-fail-under=80` (the floor only ratchets up; a total that fell is a finding even when it is still above 80)
@@ -33,9 +33,13 @@ Find the change set with `git status --porcelain` and `git diff --name-only orig
 - `pip-audit -r requirements.txt --progress-spinner off` and the same for `requirements-dev.txt` (needs network; a blocked index is NOT RUN, not PASS)
 - the module demos and the demo and profile assertions from the workflow's "Module demos execute" step, asserting the expected exit status AND the sentinel text AND the absence of a traceback, exactly as that step does
 
-**Agent layer** (`.claude/**`, `CLAUDE.md`, `docs/AI_AGENTS.md`): `node --test ".claude/tests/*.test.mjs"`
+**Agent layer** (`.claude/**`, `CLAUDE.md`, `docs/AI_AGENTS.md`, and any `.gitignore`, whose decision-log comment the policy tests read): `node --test ".claude/tests/*.test.mjs"`
 
-**Copy and walls** (any changed text file outside `lib/`, and always `index.html` and `web/` when they change): `node .claude/tools/scan-copy.mjs --copy <files>`. Exit 2 means the scan could not load its rules: that is NOT RUN, never CLEAN.
+**Walls and dashes** (any changed text file outside `lib/`): `node .claude/tools/scan-copy.mjs <files>`.
+
+**Copy** (user-facing copy only: `index.html`, `web/`, and any other public copy that changed): the same command with `--copy`. Do not run `--copy` on files that state or implement the vocabulary rule (the scan tool, its tests, agent definitions, and docs that quote the rule); a finding there is the rule quoting itself, not a violation.
+
+For either scan, exit 2 means the scan could not load its rules or could not read a file: that is NOT RUN for what it could not read, never CLEAN, and any finding it printed still counts.
 
 ## Report
 

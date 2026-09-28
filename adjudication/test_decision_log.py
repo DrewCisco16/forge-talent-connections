@@ -10,6 +10,8 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -490,6 +492,77 @@ def test_default_log_directory_is_gitignored() -> None:
     ignored = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "adjudication/decisions/" in ignored
     assert os.path.dirname(dl.DEFAULT_LOG).endswith(os.path.join("adjudication", "decisions"))
+
+
+def test_the_log_and_its_sidecar_are_gitignored_at_any_depth(tmp_path: Path) -> None:
+    """Asked of git itself, not of the text of .gitignore: a line that is
+    present but negated later, or by a nested .gitignore, still reads as
+    present to the test above. --log can put the log anywhere, so the two
+    file names (and the lock and the sidecar's temp file) must be ignored at
+    every depth, including under directories that carry their own .gitignore.
+    Only the repository's own .gitignore files count: a match that comes from a
+    developer's global excludes or .git/info/exclude is absent in CI."""
+    root = Path(dl.HERE).parent
+    git = shutil.which("git")
+    assert git, "git is required to ask git which paths it ignores"
+    log_name = os.path.basename(dl.DEFAULT_LOG)
+    names = [log_name, log_name + HEAD_SUFFIX, log_name + ".lock", log_name + HEAD_SUFFIX + ".tmp"]
+    dirs = ["", "adjudication/", "adjudication/decisions/", "docs/notes/2026/", "lib/", "android/app/", "ios/Runner/"]
+    paths = [d + n for d in dirs for n in names]
+    no_global = tmp_path / "no-global-excludes"
+    no_global.write_text("", encoding="utf-8")
+    out = subprocess.run(
+        [git, "-c", f"core.excludesFile={no_global}", "-C", str(root), "check-ignore",
+         "--no-index", "--verbose", "--non-matching", *paths],
+        capture_output=True, text=True, timeout=60, check=False)
+    assert out.returncode in (0, 1), out.stderr
+    verdict: dict[str, str] = {}
+    for line in out.stdout.splitlines():
+        rule, _, path = line.partition("\t")
+        verdict[path] = rule
+    for p in paths:
+        rule = verdict.get(p)
+        assert rule is not None, f"git did not report on {p}: {out.stdout}"
+        source, _, rest = rule.partition(":")
+        pattern = rest.partition(":")[2]
+        assert source and not pattern.startswith("!"), (
+            f"{p} is not gitignored ({rule if source else 'no ignore rule matches it'})")
+        assert source.endswith(".gitignore") and not source.startswith(".git/"), (
+            f"{p} is ignored only by {source}, which is not a .gitignore in this repository")
+
+
+def _path_filters(workflow: str) -> list[list[str]]:
+    """Every `paths:` filter in a workflow, inline or block style."""
+    filters: list[list[str]] = []
+    lines = workflow.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^(\s*)paths:\s*(.*)$", line)
+        if not m:
+            continue
+        indent, rest = len(m.group(1)), m.group(2).split("#", 1)[0].strip()
+        if rest.startswith("["):
+            filters.append([e.strip().strip("\"'") for e in rest.strip("[]").split(",") if e.strip()])
+            continue
+        entries = []
+        for nxt in lines[i + 1:]:
+            item = re.match(r"^(\s*)-\s*(.+?)\s*$", nxt)
+            if not item or len(item.group(1)) <= indent - 1:
+                break
+            entries.append(item.group(2).split(" #", 1)[0].strip().strip("\"'"))
+        filters.append(entries)
+    return filters
+
+
+def test_a_gitignore_edit_runs_the_suite_that_checks_the_ignore_rule() -> None:
+    """The ignore-rule tests above live in this suite, and CI runs this suite
+    only when a path in its filter changes. An edit to .gitignore alone that
+    drops the decision-log rule must still run them, or the tests exist and
+    never see the one edit they guard against."""
+    root = Path(dl.HERE).parent
+    workflow = (root / ".github" / "workflows" / "adjudication.yml").read_text(encoding="utf-8")
+    for entries in _path_filters(workflow):
+        assert ".gitignore" in entries, (
+            f"adjudication.yml runs this suite only for {entries}: a change to .gitignore alone runs no test of it")
 
 
 # ---------------------------------------------------------------- the sidecar and the anchor

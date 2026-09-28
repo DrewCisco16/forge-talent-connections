@@ -45,11 +45,12 @@ than 30 points is labelled PROVISIONAL. Both thresholds, and LATE_DAYS, are
 conventions chosen here, not derived; they are named so a disagreement is
 about a number in the open.
 
-WHERE THE LOG LIVES. adjudication/decisions/decision-log.jsonl by default, and
-gitignored: operator records can quote sensitive material, the same reason run
-audit logs are not repository content. A cloud container is ephemeral, so
-keeping the log (copied out with its .head sidecar, or committed as GREEN-only
-material) is a choice the operator makes deliberately.
+WHERE THE LOG LIVES. adjudication/decisions/decision-log.jsonl is the default
+path, and it is gitignored: operator records can quote sensitive material, the
+same reason run audit logs are not repository content. A cloud container is
+ephemeral, so the operator keeps the log by copying both files out together
+(decision-log.jsonl and its .head sidecar) to storage the operator controls
+outside the repository. The log is never committed.
 
     python decision_log.py template
     python decision_log.py record --json filled-record.json

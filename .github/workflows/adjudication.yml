@@ -6,11 +6,13 @@ on:
   # Feature branches are covered by the pull_request trigger. Listing "**" here
   # too ran the whole job twice on the same SHA -- observed on e6afa9c, run
   # numbers 1 and 2, both green, both paid for.
+  # Every .gitignore is listed because the decision-log tests check that none
+  # of them re-includes the log: an edit to any one alone must still run them.
   push:
     branches: [main]
-    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml", ".gitignore", "**/.gitignore"]
   pull_request:
-    paths: ["adjudication/**", ".github/workflows/adjudication.yml"]
+    paths: ["adjudication/**", ".github/workflows/adjudication.yml", ".gitignore", "**/.gitignore"]
 
 # A new push supersedes an in-flight run on the same ref.
 concurrency:
