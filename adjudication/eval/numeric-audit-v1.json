@@ -1,0 +1,300 @@
+{
+ "version": 1,
+ "WARNING": "CONTAINS DELIBERATELY FALSE STATEMENTS (the seeded items). NEVER CITE FROM THIS FILE. Evaluation material only.",
+ "status": "SPENT. Used once, 2026-09-26, for the first claim-auditor measurement. Published, so it is no longer a holdout: a future measurement needs new items.",
+ "what_was_measured": "Whether the claim-auditor procedure flags statements containing a numerical error (a figure that does not follow from its inputs, or a misapplied standard definition) and passes corrected controls.",
+ "method": [
+  "22 statements: 11 seeded defects, each paired with the same statement corrected (controls). Every value computed in Python, not typed.",
+  "Two batches, each holding exactly one member of every pair, so no answer could be found by contrast. Order shuffled; neutral labels.",
+  "Each batch went to a separate general-purpose agent carrying the claim-auditor instructions in its prompt (the registered agent type loads only after a session restart). One run per batch.",
+  "Answers were parsed from the final Sxx lines and scored against this key in code. Both agents reported opening no files."
+ ],
+ "sets": {
+  "fresh": "Six new defect types written for this measurement (percent versus percentage points, annualization, a total that does not sum, compounding, weeks versus months, an unweighted average). Same author as the auditor's checklist, which names several of these types generically: author bias is possible.",
+  "in-sample": "The five arithmetic items and controls from adjudication/seeded_rho.py. CONTAMINATED: the auditor's checklist was written with those defect types in view, including holdout item A6. Not comparable to the five-vendor baseline, which was asked a different question."
+ },
+ "contract": "Evaluation mode. Below are 11 independent statements from working documents, labeled S01 to S11. For each, decide ONE thing: does it contain a numerical error? Count as an error any figure that does not follow from the inputs the statement gives, and any formula that misapplies the standard definition of the quantity it names. Recompute every figure with python3, as your procedure requires. Judge only from the text below: do not open, search, or list any file. End your reply with exactly 11 lines, one per statement, in the form `S01: yes` or `S01: no` (yes means it contains a numerical error). Just before those lines, write `Files opened:` followed by the files you opened, or `none`.",
+ "items": [
+  {
+   "batch": "X",
+   "label": "S01",
+   "item": "A4",
+   "set": "in-sample",
+   "statement": "Contract $677,957 over 36 months. Monthly = $18,832. Three-year total = 18,832 x 36 = $677,952, so we have $5 unallocated.",
+   "has_error": true,
+   "why": "monthly is 18,832.14; the $5 is a rounding artifact",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S02",
+   "item": "A6",
+   "set": "in-sample",
+   "statement": "Probe rule: hold rate 0.60 over 10 probes. Expected failures = 10 x 0.60 = 6, so 3 failures is below expectation.",
+   "has_error": true,
+   "why": "expected failures = 10 x 0.40 = 4",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S03",
+   "item": "F1",
+   "set": "fresh",
+   "statement": "Conversion rose from 4.0% to 5.0% of visitors, a 1% increase in conversion.",
+   "has_error": true,
+   "why": "1 percentage point, a 25% relative increase",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S04",
+   "item": "F2",
+   "set": "fresh",
+   "statement": "Monthly recurring revenue is $12,500, so annual recurring revenue is 12,500 x 10 = $125,000.",
+   "has_error": true,
+   "why": "annual is monthly x 12 = 150,000",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S05",
+   "item": "F5c",
+   "set": "fresh",
+   "statement": "Three contractors at 40 hours per week for a 52-week year work 3 x 40 x 52 = 6,240 hours per year.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S06",
+   "item": "F3c",
+   "set": "fresh",
+   "statement": "Q3 costs: payroll $41,200, software $3,850, rent $6,000. Total Q3 costs = $51,050.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S07",
+   "item": "F6c",
+   "set": "fresh",
+   "statement": "Team A (10 people) averages 8 hours of training and Team B (30 people) averages 4 hours, so the average across all 40 people is (10 x 8 + 30 x 4) / 40 = 5 hours.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S08",
+   "item": "F4",
+   "set": "fresh",
+   "statement": "Revenue grows 10% per year, compounding, for 3 years, so it rises by 30% in total.",
+   "has_error": true,
+   "why": "1.1^3 - 1 = 33.1%",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S09",
+   "item": "A3",
+   "set": "in-sample",
+   "statement": "SBA 504: $850,000 property, 10% down. Down payment $85,000. Loan = 850,000 - 85,000 = $775,000.",
+   "has_error": true,
+   "why": "850,000 - 85,000 = 765,000",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S10",
+   "item": "A1c",
+   "set": "in-sample",
+   "statement": "Bid at $65/hr, 1,800 hrs/yr, 3 estimators. Revenue = 65 x 1800 x 3 = $351,000.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "X",
+   "label": "S11",
+   "item": "A2",
+   "set": "in-sample",
+   "statement": "Gross margin: revenue $351,000, cost $246,000. Margin = (351000-246000)/246000 = 42.7%.",
+   "has_error": true,
+   "why": "margin divides by revenue: 105,000 / 351,000 = 29.9%",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S01",
+   "item": "F6",
+   "set": "fresh",
+   "statement": "Team A (10 people) averages 8 hours of training and Team B (30 people) averages 4 hours, so the average across all 40 people is (8 + 4) / 2 = 6 hours.",
+   "has_error": true,
+   "why": "weighted: (10 x 8 + 30 x 4) / 40 = 5",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S02",
+   "item": "A2c",
+   "set": "in-sample",
+   "statement": "Gross margin: revenue $351,000, cost $246,000. Margin = (351000-246000)/351000 = 29.9%.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S03",
+   "item": "A6c",
+   "set": "in-sample",
+   "statement": "Probe rule: hold rate 0.60 over 10 probes. Expected failures = 10 x 0.40 = 4, so 3 failures is below expectation.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S04",
+   "item": "F1c",
+   "set": "fresh",
+   "statement": "Conversion rose from 4.0% to 5.0% of visitors, an increase of 1 percentage point (25% in relative terms).",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S05",
+   "item": "F4c",
+   "set": "fresh",
+   "statement": "Revenue grows 10% per year, compounding, for 3 years, so it rises by 33.1% in total.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S06",
+   "item": "F2c",
+   "set": "fresh",
+   "statement": "Monthly recurring revenue is $12,500, so annual recurring revenue is 12,500 x 12 = $150,000.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S07",
+   "item": "A3c",
+   "set": "in-sample",
+   "statement": "SBA 504: $850,000 property, 10% down. Down payment $85,000. Loan = 850,000 - 85,000 = $765,000.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S08",
+   "item": "A1",
+   "set": "in-sample",
+   "statement": "Bid at $65/hr, 1,800 hrs/yr, 3 estimators. Revenue = 65 x 1800 x 3 = $315,000.",
+   "has_error": true,
+   "why": "65 x 1800 x 3 = 351,000",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S09",
+   "item": "F3",
+   "set": "fresh",
+   "statement": "Q3 costs: payroll $41,200, software $3,850, rent $6,000. Total Q3 costs = $50,950.",
+   "has_error": true,
+   "why": "41,200 + 3,850 + 6,000 = 51,050",
+   "answer_has_error": true,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S10",
+   "item": "A4c",
+   "set": "in-sample",
+   "statement": "Contract $677,957 over 36 months. Monthly = $18,832.14. Three-year total = 18,832.14 x 36 = $677,957.04, which rounds to the contract value.",
+   "has_error": false,
+   "why": "correct (control)",
+   "answer_has_error": false,
+   "correct": true
+  },
+  {
+   "batch": "Y",
+   "label": "S11",
+   "item": "F5",
+   "set": "fresh",
+   "statement": "Three contractors at 40 hours per week for a 52-week year work 3 x 40 x 12 = 1,440 hours per year.",
+   "has_error": true,
+   "why": "3 x 40 x 52 = 6,240",
+   "answer_has_error": true,
+   "correct": true
+  }
+ ],
+ "results": {
+  "fresh": {
+   "all": {
+    "k": 12,
+    "n": 12,
+    "wilson_95": [
+     0.7575,
+     1.0
+    ]
+   },
+   "defects_detected": {
+    "k": 6,
+    "n": 6,
+    "wilson_95": [
+     0.6097,
+     1.0
+    ]
+   },
+   "controls_passed": {
+    "k": 6,
+    "n": 6,
+    "wilson_95": [
+     0.6097,
+     1.0
+    ]
+   }
+  },
+  "in_sample": {
+   "all": {
+    "k": 10,
+    "n": 10,
+    "wilson_95": [
+     0.7225,
+     1.0
+    ]
+   }
+  },
+  "interval": "Wilson score, 95 percent, stage_zero.wilson"
+ }
+}

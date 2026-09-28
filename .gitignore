@@ -42,6 +42,13 @@ adjudication/run-*.jsonl.head
 # Not repository content.
 adjudication/runs/
 
+# The Full Council decision log (adjudication/decision_log.py) is the
+# operator's own record and can quote sensitive material, so it never enters
+# the repository, like run audit logs. Keep it by copying both files
+# (decision-log.jsonl and its .head sidecar) out together.
+adjudication/decisions/
+decision-log.jsonl*
+
 # Operator-approved command list and canary questions are local policy,
 # not repository content.
 adjudication/approved-commands.json
