@@ -9,6 +9,7 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/operator_footer.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
+import "../../widgets/core_loop_strip.dart";
 
 /// The Mission and Purpose statement.
 ///
@@ -80,6 +81,8 @@ class MissionScreen extends StatelessWidget {
               "vouched for by people who put their own names behind it.",
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          const CoreLoopStrip(),
           const SizedBox(height: ForgeSpacing.gapSection),
           const SectionLabel("What this is"),
           const SizedBox(height: 6),

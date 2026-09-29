@@ -10,6 +10,7 @@ import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 import "../../widgets/status_chip.dart";
+import "../../widgets/ai_output_review.dart";
 
 /// The Talent Signature: strengths drawn only from the verified record.
 ///
@@ -132,6 +133,8 @@ class TalentSignatureScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const AiOutputReview(subject: "this signature"),
           const SizedBox(height: ForgeSpacing.gapSection),
           Text(
             "In this demo the signature is a labelled sample assembled by "

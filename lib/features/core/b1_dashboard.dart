@@ -13,6 +13,7 @@ import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
 import "../../widgets/status_chip.dart";
+import "../../widgets/core_loop_strip.dart";
 
 /// B1 Home dashboard.
 class B1Dashboard extends ConsumerWidget {
@@ -120,6 +121,8 @@ class B1Dashboard extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapCard),
+          const CoreLoopStrip(),
           const SizedBox(height: ForgeSpacing.gapCard),
           // Recognition runs on verified events only: the ladder counts what
           // passed a check, and the streak counts kept commitments - never

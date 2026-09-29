@@ -13,6 +13,7 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/score_ring.dart";
 import "../../widgets/section_label.dart";
+import "../../widgets/ai_output_review.dart";
 
 /// B6 AI match, where a person decides.
 ///
@@ -164,6 +165,8 @@ class _B6AiMatchState extends ConsumerState<B6AiMatch> {
               // Required copy. Ships verbatim.
               body: "It cannot accept, reject, pay, or publish anything. Suggestions never change your record. Only verified actions by people do.",
             ),
+            const SizedBox(height: ForgeSpacing.gapSection),
+            const AiOutputReview(subject: "this suggestion"),
             const SizedBox(height: ForgeSpacing.gapSection),
             Row(
               children: <Widget>[

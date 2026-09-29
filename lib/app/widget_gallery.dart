@@ -17,6 +17,8 @@ import "../widgets/score_ring.dart";
 import "../widgets/seal_card.dart";
 import "../widgets/social_action.dart";
 import "../widgets/status_chip.dart";
+import "../widgets/ai_output_review.dart";
+import "../widgets/core_loop_strip.dart";
 
 /// A gallery of every shared widget in each of its states.
 ///
@@ -83,6 +85,12 @@ class _WidgetGalleryState extends State<WidgetGallery> {
               actionLabel: "Take the First Step",
               onAction: () {},
             ),
+          ]),
+
+          section("Core loop", <Widget>[const CoreLoopStrip()]),
+
+          section("AI output review", <Widget>[
+            const AiOutputReview(subject: "this suggestion"),
           ]),
 
           section("Status chips", <Widget>[
