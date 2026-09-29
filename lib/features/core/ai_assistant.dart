@@ -12,6 +12,7 @@ import "../../widgets/gold_button.dart";
 import "../../widgets/hero_band.dart";
 import "../../widgets/phone_scaffold.dart";
 import "../../widgets/section_label.dart";
+import "../../widgets/ai_output_review.dart";
 
 /// The AI Assistant: help, answers, and premium scholarly research.
 ///
@@ -176,7 +177,12 @@ class AiAssistant extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const FieldBox(label: "Ask anything", hint: "Type your question"),
+          // A clear brief gets a better answer: the goal, who it is for,
+          // and the shape you want back.
+          const FieldBox(
+            label: "Your brief",
+            hint: "Your goal, who it is for, and the format you want",
+          ),
           const SizedBox(height: ForgeSpacing.gapCard),
           GoldButton(
             label: "Ask the Assistant",
@@ -186,6 +192,8 @@ class AiAssistant extends ConsumerWidget {
               "live assistant arrives with the backend.",
             ),
           ),
+          const SizedBox(height: ForgeSpacing.gapSection),
+          const AiOutputReview(subject: "an answer"),
           const SizedBox(height: ForgeSpacing.gapSection),
           Text(
             "In production the assistant runs on Google Cloud Vertex AI "
