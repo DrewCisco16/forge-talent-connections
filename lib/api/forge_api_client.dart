@@ -125,33 +125,7 @@ class ForgeApiClient {
       throw ForgeDenial.transport();
     }
 
-    Map<String, dynamic> decoded;
-    try {
-      final dynamic parsed = jsonDecode(response.body);
-      if (parsed is! Map<String, dynamic>) {
-        throw const FormatException("shape");
-      }
-      decoded = parsed;
-    } catch (_) {
-      throw ForgeDenial(
-        code: "RESPONSE_NOT_UNDERSTOOD",
-        message:
-            "We received a response we could not confirm. "
-            "Nothing was changed.",
-        nextStep: "Please try again.",
-        retryable: false,
-        httpStatus: response.statusCode,
-      );
-    }
-
-    // Strict success window: only 2xx counts. A 1xx or 3xx carrying JSON is
-    // a transport anomaly, never a success (audit finding, 2026-08-29).
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300 ||
-        decoded["status"] == "denied") {
-      throw ForgeDenial.fromBody(response.statusCode, decoded);
-    }
-    return decoded;
+    return _decode(response);
   }
 
   /// Extracts a typed field from a response body; a missing or wrongly
@@ -170,6 +144,53 @@ class ForgeApiClient {
     );
   }
 
+  /// A read from the backend, with the same strict success window and
+  /// denial mapping as a write. Reads may be retried by the caller; this
+  /// method itself never retries.
+  Future<Map<String, dynamic>> get(String path) async {
+    http.Response response;
+    try {
+      response = await _http
+          .get(Uri.parse("$baseUrl$path"), headers: _headers)
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {
+      throw ForgeDenial.transport();
+    }
+    return _decode(response);
+  }
+
+  /// Shared response handling: JSON object or RESPONSE_NOT_UNDERSTOOD; only
+  /// 2xx without a "denied" status counts as success.
+  Map<String, dynamic> _decode(http.Response response) {
+    Map<String, dynamic> decoded;
+    try {
+      // Bytes, decoded as UTF-8 regardless of the declared charset: a server
+      // that omits "charset=utf-8" would otherwise have its text read as
+      // Latin-1 and every non-ASCII character in a record would be garbled.
+      final dynamic parsed = jsonDecode(utf8.decode(response.bodyBytes));
+      if (parsed is! Map<String, dynamic>) {
+        throw const FormatException("shape");
+      }
+      decoded = parsed;
+    } catch (_) {
+      throw ForgeDenial(
+        code: "RESPONSE_NOT_UNDERSTOOD",
+        message:
+            "We received a response we could not confirm. "
+            "Nothing was changed.",
+        nextStep: "Please try again.",
+        retryable: false,
+        httpStatus: response.statusCode,
+      );
+    }
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        decoded["status"] == "denied") {
+      throw ForgeDenial.fromBody(response.statusCode, decoded);
+    }
+    return decoded;
+  }
+
   /// Health, for the live-connection banner. Any failure is simply false.
   Future<bool> isHealthy() async {
     try {
@@ -177,7 +198,7 @@ class ForgeApiClient {
           .get(Uri.parse("$baseUrl/health"))
           .timeout(const Duration(seconds: 5));
       if (r.statusCode != 200) return false;
-      final dynamic body = jsonDecode(r.body);
+      final dynamic body = jsonDecode(utf8.decode(r.bodyBytes));
       return body is Map<String, dynamic> && body["status"] == "ok";
     } catch (_) {
       return false;

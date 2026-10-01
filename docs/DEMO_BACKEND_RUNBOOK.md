@@ -1,5 +1,16 @@
 # Connecting the demo to the live backend
 
+> **Update, 2026-10-01.** The application now carries a full HTTP
+> implementation of its repository contract (`lib/api/http_forge_repository.dart`
+> and `lib/api/forge_json.dart`), selected automatically when a build is
+> compiled with `FORGE_API_BASE_URL`. A matching product backend (FastAPI on
+> Cloud Run, Firestore records, Vertex AI assistant, governed writes forwarded
+> to the governance service) was delivered as the `forge-backend` package, and
+> the step-by-step plan to deploy it, connect it, and run the October tester
+> program is `docs/LAUNCH_RUNBOOK_OCTOBER_2026.md`. The sections below describe
+> the earlier connection package and remain accurate for the governed write
+> path.
+
 This is the operator runbook for wiring the Cloudflare demo site to the
 product backend on Google Cloud Run, so testers on phones exercise real
 backend behavior. The authoritative deployment documents are the ones in the

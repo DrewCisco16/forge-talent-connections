@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../api/forge_api_client.dart";
 import "../api/forge_repository.dart";
+import "../api/http_forge_repository.dart";
 import "../models/models.dart";
 import "fixtures.dart";
 import "mock_repository.dart";
@@ -20,12 +21,21 @@ final StateProvider<DemoScenario> demoScenarioProvider =
 
 /// The repository the app reads through.
 ///
-/// TODO(api): build the production client here. Everything downstream is
-/// already written against the interface, not the mock.
+/// A build compiled with FORGE_API_BASE_URL reads the live product backend
+/// through [HttpForgeRepository]; every other build serves fixtures. The
+/// choice is made once, here, and no screen knows which it got.
 final Provider<ForgeRepository> forgeRepositoryProvider =
     Provider<ForgeRepository>((Ref ref) {
+      if (forgeApiConfigured) {
+        return HttpForgeRepository(ref.watch(forgeApiClientProvider));
+      }
       return MockForgeRepository(ref.watch(demoScenarioProvider));
     });
+
+/// The live client, built once per app. Tests override this provider with a
+/// client whose HTTP layer is fake.
+final Provider<ForgeApiClient> forgeApiClientProvider =
+    Provider<ForgeApiClient>((Ref ref) => ForgeApiClient());
 
 final FutureProvider<UserProfile> profileProvider = FutureProvider<UserProfile>(
   (Ref ref) => ref.watch(forgeRepositoryProvider).loadProfile(),
@@ -187,10 +197,5 @@ final FutureProvider<bool?> backendHealthProvider = FutureProvider<bool?>((
   Ref ref,
 ) async {
   if (!forgeApiConfigured) return null;
-  final ForgeApiClient client = ForgeApiClient();
-  try {
-    return await client.isHealthy();
-  } finally {
-    client.close();
-  }
+  return ref.watch(forgeApiClientProvider).isHealthy();
 });
