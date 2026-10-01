@@ -61,6 +61,19 @@ rm -rf demo && cp -r build/web demo && rm -rf demo/canvaskit
 `demo/canvaskit/` is gitignored: this build fetches the renderer from Google's
 CDN, so the locally emitted copy is dead weight.
 
+To read the live product backend instead of fixtures, add the API address at
+build time; every screen then reads `HttpForgeRepository` and the dashboard
+banner reports the backend's health:
+
+```bash
+flutter build web --release --base-href /demo/ \
+  --dart-define=FORGE_API_BASE_URL=https://api.forgetalentconnections.com
+```
+
+The backend's seed is exported from the fixtures with
+`dart run tool/export_fixtures.dart <dir>`. See
+`docs/LAUNCH_RUNBOOK_OCTOBER_2026.md` for the end-to-end plan.
+
 ## Backend
 
 The app runs entirely on fixtures. `lib/api/forge_repository.dart` declares the
