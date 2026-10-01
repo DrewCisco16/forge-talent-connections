@@ -240,5 +240,179 @@ class ForgeApiClient {
     );
   }
 
+  // ---------------------------------------------------------- record changes
+  //
+  // Each of these asks the backend to change a record under its rules. The
+  // backend may refuse (a ForgeDenial, rendered as given) or record the
+  // change as pending a named human's decision. Nothing here is optimistic:
+  // the screen shows the backend's answer, never an assumed success.
+
+  /// Puts the signed-in person's name behind [toUser]. The backend decides
+  /// whether the basis is a shared verified project; the returned
+  /// `basis_status` says so, and the vouch counts toward the gate only then.
+  Future<Map<String, dynamic>> giveVouch({
+    required String toUser,
+    required String scope,
+    required String text,
+    String? basis,
+  }) => _post("/api/v1/vouches", <String, dynamic>{
+    "to_user": toUser,
+    "scope": scope,
+    "text": text,
+    "basis": basis,
+  });
+
+  /// Applies to a listing. Always pending; a named reviewer decides.
+  Future<Map<String, dynamic>> applyToOpportunity(String opportunityId) =>
+      _post(
+        "/api/v1/opportunities/${Uri.encodeComponent(opportunityId)}/apply",
+        const <String, dynamic>{},
+      );
+
+  /// Submits work for checking. Always pending until a reviewer decides.
+  Future<Map<String, dynamic>> submitDeliverable(String name) => _post(
+    "/api/v1/project-space/deliverables",
+    <String, dynamic>{"name": name},
+  );
+
+  Future<Map<String, dynamic>> _put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    http.Response response;
+    try {
+      response = await _http
+          .put(
+            Uri.parse("$baseUrl$path"),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {
+      throw ForgeDenial.transport();
+    }
+    return _decode(response);
+  }
+
+  // ---------------------------------------------------------- every other feature
+
+  /// Updates the person's own profile facts. Completion is counted by the
+  /// backend from what is on file.
+  Future<Map<String, dynamic>> updateProfile({
+    String? displayName,
+    String? about,
+    List<String>? skills,
+    String? avatarAsset,
+  }) => _put("/api/v1/profile", <String, dynamic>{
+    if (displayName != null) "display_name": displayName,
+    if (about != null) "about": about,
+    if (skills != null) "skills": skills,
+    if (avatarAsset != null) "avatar_asset": avatarAsset,
+  });
+
+  /// Submits a service record for sealing. Pending until a reviewer decides.
+  Future<Map<String, dynamic>> submitVeteranVerification({
+    required String branchId,
+    required String documentName,
+  }) => _post("/api/v1/veteran-verification", <String, dynamic>{
+    "branch_id": branchId,
+    "document_name": documentName,
+  });
+
+  /// Submits a credential for checking. Pending until a reviewer decides.
+  Future<Map<String, dynamic>> addCredential({
+    required String title,
+    String? identifier,
+  }) => _post("/api/v1/credentials", <String, dynamic>{
+    "title": title,
+    "identifier": identifier,
+  });
+
+  Future<Map<String, dynamic>> updateElevatorPitch({
+    String? videoAsset,
+    String? transcript,
+    bool? captionsOn,
+    bool? isAiPresented,
+  }) => _put("/api/v1/elevator-pitch", <String, dynamic>{
+    if (videoAsset != null) "video_asset": videoAsset,
+    if (transcript != null) "transcript": transcript,
+    if (captionsOn != null) "captions_on": captionsOn,
+    if (isAiPresented != null) "is_ai_presented": isAiPresented,
+  });
+
+  Future<Map<String, dynamic>> recordConsent(String version) =>
+      _post("/api/v1/legal/consent", <String, dynamic>{"version": version});
+
+  Future<Map<String, dynamic>> sendMessage({
+    required String text,
+    String? attachmentName,
+  }) => _post("/api/v1/chat/messages", <String, dynamic>{
+    "text": text,
+    "attachment_name": attachmentName,
+  });
+
+  /// Marks notifications read; null marks all of them.
+  Future<Map<String, dynamic>> markNotificationsRead([List<String>? ids]) =>
+      _post("/api/v1/notifications/read", <String, dynamic>{"ids": ids});
+
+  /// The feed's vouch tap: an endorsement, once per post, never a gate vouch.
+  Future<Map<String, dynamic>> endorsePost(String postId) =>
+      _post("/api/v1/feed/endorse", <String, dynamic>{"post_id": postId});
+
+  Future<Map<String, dynamic>> postTalentStory({
+    required String headline,
+    required String caption,
+    List<String> tags = const <String>[],
+    String? videoAsset,
+  }) => _post("/api/v1/talent-stories", <String, dynamic>{
+    "headline": headline,
+    "caption": caption,
+    "tags": tags,
+    "video_asset": videoAsset,
+  });
+
+  /// Asks for a file to leave. Cleared only for verified work; otherwise
+  /// locked with the reason.
+  Future<Map<String, dynamic>> requestExport(String deliverableId) => _post(
+    "/api/v1/export/requests",
+    <String, dynamic>{"deliverable_id": deliverableId},
+  );
+
+  /// Anyone may check a seal. The answer is verified or unknown.
+  Future<Map<String, dynamic>> sealCheck(String fingerprint) => _post(
+    "/api/v1/seal-check",
+    <String, dynamic>{"fingerprint": fingerprint},
+  );
+
+  Future<Map<String, dynamic>> pitchStudioConsent(bool consent) => _post(
+    "/api/v1/pitch-studio/consent",
+    <String, dynamic>{"consent": consent},
+  );
+
+  Future<Map<String, dynamic>> regeneratePortfolioDraft() =>
+      _post("/api/v1/portfolio-draft/regenerate", const <String, dynamic>{});
+
+  Future<Map<String, dynamic>> regenerateTalentSignature() =>
+      _post("/api/v1/talent-signature/regenerate", const <String, dynamic>{});
+
+  Future<Map<String, dynamic>> redeemReferral(String code) =>
+      _post("/api/v1/rewards/referrals", <String, dynamic>{"code": code});
+
+  Future<Map<String, dynamic>> requestDecisionReview(String decisionId) =>
+      _post(
+        "/api/v1/decisions/${Uri.encodeComponent(decisionId)}/review-request",
+        const <String, dynamic>{},
+      );
+
+  Future<Map<String, dynamic>> recomputeMatch(String opportunityId) => _post(
+    "/api/v1/opportunities/${Uri.encodeComponent(opportunityId)}/match/recompute",
+    const <String, dynamic>{},
+  );
+
+  /// Asks the assistant a question. Grounded in the verified record; the
+  /// answer is appended to the transcript and changes nothing else.
+  Future<Map<String, dynamic>> askAssistant(String question) =>
+      _post("/api/v1/assistant/ask", <String, dynamic>{"question": question});
+
   void close() => _http.close();
 }

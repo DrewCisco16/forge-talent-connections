@@ -132,7 +132,9 @@ Progress at a glance
 
 ### Writes, carefully 🔒
 
-- [ ] 🟡 **2.6 Decide about the governance service.** The API forwards every record change to your separate governance service when `FORGE_GOVERNANCE_URL` is set, and refuses changes with an honest 503 denial when it is not. For the October tester program, **leave it unset**: testers can read, sign in, and use the assistant, and nothing in their record can be changed by mistake. Turn it on only once that service is deployed and reviewed.
+- [ ] 🔴 **2.6 Turn record changes on, with the rules.** The backend carries its own governance: two accountable humans open a gate, nobody vouches for themselves or twice, applying and submitting are always pending until a named reviewer decides, every change writes a ledger entry, and denials change nothing. It is switched on by `FORGE_WRITES=local` (the deploy script sets it). What you must add is the reviewer list: Cloud Run, forge-api, Edit and deploy new revision, Variables, `FORGE_REVIEWERS` = the comma-separated user ids of the people allowed to decide (your own id, and one colleague's). With sign-in on, a user id is the Firebase uid shown under Authentication, Users.
+  🧪 In the app, submit a piece of work. ✅ It shows as pending, not verified. Then, signed in as a reviewer, verify it. ✅ It flips to verified and the notification names the reviewer. 🔒 Only people in the reviewer list can decide anything; keep that list to two or three names in October.
+  🟢 The separate governance service, if and when it is deployed, plugs in through `FORGE_GOVERNANCE_URL` without changing anything above.
 - [ ] 🟡 **2.7 Turn the assistant on.** It is already `vertex` in the deploy script. 🧪 In the app, open AI Assistant, ask "What is in my record?" ✅ A short answer grounded in the sample record, ending with the two-human line. 💰 Each question costs a fraction of a cent; the budget alert from 1.11 covers surprises.
 - [ ] 🏁 **Week 2 done.**
 
